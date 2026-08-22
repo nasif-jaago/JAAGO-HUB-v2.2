@@ -43,6 +43,7 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 
 export interface DashboardSidebarProps {
@@ -298,6 +299,25 @@ export function DashboardSidebar({ collapsed }: DashboardSidebarProps) {
               <div className="px-1 text-[10px] uppercase font-bold tracking-wider text-sidebar-muted">
                 DEPARTMENTS
               </div>
+
+              {/* People and Culture (Opens dedicated portal in New Tab) */}
+              <a
+                href="/pnc"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-foreground bg-primary/10 hover:bg-primary/20 border border-primary/30 transition text-left cursor-pointer group shadow-sm mb-1"
+                title="Open People and Culture Portal in New Tab"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <div className="h-5 w-5 rounded-md bg-[#26180E] text-primary font-black text-[9px] flex items-center justify-center flex-shrink-0">
+                    P&amp;C
+                  </div>
+                  <span className="font-bold text-foreground group-hover:text-primary transition">
+                    People and Culture
+                  </span>
+                </div>
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition flex-shrink-0" />
+              </a>
               {[
                 { label: 'Admin & Procurement', icon: Building2 },
                 { label: 'Child Welfare', icon: Star },
