@@ -43,15 +43,14 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
-  ChevronLeft,
 } from 'lucide-react';
 
 export interface DashboardSidebarProps {
   collapsed: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
 }
 
-export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps) {
+export function DashboardSidebar({ collapsed }: DashboardSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -82,26 +81,6 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
         collapsed ? '-translate-x-full lg:translate-x-0 lg:w-20' : 'w-72'
       }`}
     >
-      {/* ── HIDE / UNHIDE SIDEBAR TOGGLE BUTTON ── */}
-      <button
-        onClick={onToggle}
-        type="button"
-        aria-label={collapsed ? 'Unhide sidebar' : 'Hide sidebar'}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        className="absolute -right-3.5 top-20 z-50 flex items-center justify-center group focus:outline-none transition-transform active:scale-90"
-      >
-        <div className="relative flex items-center justify-center w-7 h-16 rounded-full bg-surface border border-border/90 shadow-[0_4px_16px_rgba(0,0,0,0.5)] group-hover:border-primary/80 group-hover:shadow-[0_0_16px_rgba(250,192,10,0.45)] transition-all duration-200 cursor-pointer overflow-hidden">
-          <div className="absolute inset-y-2 w-2 rounded-full bg-gradient-to-b from-amber-500 via-primary to-orange-500 opacity-80 group-hover:opacity-100 group-hover:w-2.5 transition-all duration-200" />
-          <div className="relative z-10 flex items-center justify-center">
-            {collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5 stroke-[3] text-foreground group-hover:text-primary transition" />
-            ) : (
-              <ChevronLeft className="h-3.5 w-3.5 stroke-[3] text-foreground group-hover:text-primary transition" />
-            )}
-          </div>
-        </div>
-      </button>
-
       {/* Top Section: Logo & Nav List */}
       <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-4 no-scrollbar">
         {/* Official JAAGO Foundation Logo Card */}
