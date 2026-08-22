@@ -1,12 +1,28 @@
 import { NextResponse } from 'next/server';
-import { createApiHandler } from '@jaago/authz';
 import { logger } from '@jaago/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+export interface UserItem {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  department: string;
+  branch: string;
+  jobTitle: string;
+  phone: string;
+  status: string;
+  employeeId: string | null;
+  isEmployeeLinked: boolean;
+  avatarUrl: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
+
 // In-memory tenant user registry with comprehensive defaults for instant responsiveness
-let usersDatabase = [
+let usersDatabase: UserItem[] = [
   {
     id: 'u-101',
     fullName: 'Nasif Kamal',

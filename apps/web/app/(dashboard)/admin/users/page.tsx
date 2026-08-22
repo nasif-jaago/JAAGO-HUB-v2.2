@@ -8,23 +8,18 @@ import {
   Upload,
   Download,
   Search,
-  Filter,
   MoreVertical,
   Key,
   ShieldAlert,
   Trash2,
   UserCheck,
   Building2,
-  Briefcase,
   CheckCircle2,
-  Clock,
   X,
   FileSpreadsheet,
   AlertCircle,
   Sparkles,
   Send,
-  Lock,
-  Phone,
   RefreshCw,
 } from 'lucide-react';
 
@@ -230,7 +225,7 @@ export default function UserManagementPage() {
       reader.onload = (event) => {
         const text = event.target?.result as string;
         const lines = text.split('\n').filter((l) => l.trim());
-        if (lines.length > 1) {
+        if (lines.length > 1 && lines[0]) {
           const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
           const rows = lines.slice(1).map((line) => {
             const values = line.split(',').map((v) => v.trim());

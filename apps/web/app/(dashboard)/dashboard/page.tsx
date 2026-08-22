@@ -4,28 +4,40 @@ import React, { useState, useEffect } from 'react';
 import {
   Clock,
   Flag,
-  ChevronRight,
-  Sparkles,
-  FileText,
-  DollarSign,
-  Briefcase,
   Calendar,
-  Layers,
   Radio,
   Zap,
   ArrowRight,
   LogOut,
   CheckCircle2,
+  Building2,
+  Users,
+  MapPin,
+  FileText,
+  DollarSign,
+  Briefcase,
+  Layers,
+  Award,
+  CreditCard,
+  History,
+  Shield,
+  HeartHandshake,
+  Inbox,
+  User,
+  Timer,
 } from 'lucide-react';
 
 export default function DashboardPage() {
-  const [holidayTab, setHolidayTab] = useState<'upcoming' | 'month' | 'year'>('upcoming');
+  const [activeNavTab, setActiveNavTab] = useState('overview');
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [user, setUser] = useState({
     fullName: 'Nasif Kamal',
     jobTitle: 'Coordinator',
+    department: "Founder's Office",
+    manager: 'S M Nayeem Rahman',
+    organization: 'JAAGO Foundation Trust',
   });
 
   // Fast hydration of attendance status & elapsed timer from localStorage
@@ -39,6 +51,9 @@ export default function DashboardPage() {
             setUser({
               fullName: parsed.fullName,
               jobTitle: parsed.jobTitle || 'Coordinator',
+              department: parsed.department || "Founder's Office",
+              manager: parsed.manager || 'S M Nayeem Rahman',
+              organization: 'JAAGO Foundation Trust',
             });
           }
         }
@@ -47,12 +62,13 @@ export default function DashboardPage() {
         const savedTime = localStorage.getItem('jaago_checkin_timestamp');
         if (savedState === 'true' && savedTime) {
           setIsCheckedIn(true);
-          setCheckInTime(new Date(parseInt(savedTime, 10)).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true,
-          }));
+          setCheckInTime(
+            new Date(parseInt(savedTime, 10)).toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+            })
+          );
           const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
           setElapsedSeconds(diffSeconds);
         }
@@ -95,7 +111,6 @@ export default function DashboardPage() {
       const timeStr = new Date(now).toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: true,
       });
       setIsCheckedIn(true);
@@ -118,8 +133,29 @@ export default function DashboardPage() {
 
   const firstName = user.fullName.split(' ')[0] || 'Nasif';
 
+  const quickNavItems = [
+    { id: 'overview', label: 'OVERVIEW', icon: Layers },
+    { id: 'my-profile', label: 'MY PROFILE', icon: User },
+    { id: 'attendance-logs', label: 'ATTENDANCE LOGS', icon: Clock },
+    { id: 'gps-attendance', label: 'GPS ATTENDANCE', icon: MapPin },
+    { id: 'all-request', label: 'ALL REQUEST', icon: FileText },
+    { id: 'history-track', label: 'HISTORY TRACK', icon: History },
+    { id: 'on-duty', label: 'ON DUTY', icon: Timer },
+    { id: 'my-leave', label: 'MY LEAVE', icon: Calendar },
+    { id: 'approvals', label: 'APPROVALS', icon: Shield },
+    { id: 'expenses', label: 'EXPENSES', icon: CreditCard },
+    { id: 'appraisal', label: 'APPRAISAL', icon: Award },
+    { id: 'payroll', label: 'PAYROLL', icon: DollarSign },
+    { id: 'tax-noc', label: 'TAX & NOC REQUEST', icon: FileText },
+    { id: 'on-leave', label: 'ON LEAVE', icon: User },
+    { id: 'my-department', label: 'MY DEPARTMENT', icon: Building2 },
+    { id: 'my-team', label: 'MY TEAM', icon: Users },
+    { id: 'meeting-rooms', label: 'MEETING ROOMS', icon: Building2 },
+    { id: 'volunteering', label: 'VOLUNTEERING PROGRAM', icon: HeartHandshake },
+  ];
+
   return (
-    <div className="max-w-[1600px] mx-auto text-foreground pb-24 md:pb-28">
+    <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none">
       {/* ========================================================================= */}
       {/* 📱 MOBILE VIEW ONLY (Strictly based on Reference Images 2 & 3)            */}
       {/* ========================================================================= */}
@@ -187,7 +223,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ── CARD 3: MONTHLY ATTENDANCE SUMMARY (Based on Reference Image 3) ── */}
+        {/* ── CARD 3: MONTHLY ATTENDANCE SUMMARY ── */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-5">
           {/* Header */}
           <div className="flex items-center space-x-2 text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">
@@ -215,7 +251,6 @@ export default function DashboardPage() {
 
           {/* Horizontal Progress Bars */}
           <div className="space-y-4">
-            {/* Metric 1: On Time Performance */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold">
                 <span className="text-foreground">On Time Performance</span>
@@ -226,7 +261,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Metric 2: Late Penalty */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold">
                 <span className="text-foreground">Late Penalty</span>
@@ -237,7 +271,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Metric 3: Auto Check-out Rate */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold">
                 <span className="text-foreground">Auto Check–out Rate</span>
@@ -249,7 +282,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Smooth Daily Trend Chart Matching Image 3 */}
+          {/* Smooth Daily Trend Chart */}
           <div className="pt-2">
             <div className="h-24 w-full relative">
               <svg className="w-full h-full overflow-visible" viewBox="0 0 300 70">
@@ -260,13 +293,11 @@ export default function DashboardPage() {
                   </linearGradient>
                 </defs>
 
-                {/* Shaded Area Under Curve */}
                 <path
                   d="M 20 25 Q 60 55, 100 48 T 160 30 T 220 28 T 280 30 L 280 70 L 20 70 Z"
                   fill="url(#mobileTrendGrad)"
                 />
 
-                {/* Curved Line */}
                 <path
                   d="M 20 25 Q 60 55, 100 48 T 160 30 T 220 28 T 280 30"
                   fill="none"
@@ -275,7 +306,6 @@ export default function DashboardPage() {
                   strokeLinecap="round"
                 />
 
-                {/* Point Dots */}
                 <circle cx="20" cy="25" r="3.5" fill="#EF4444" />
                 <circle cx="100" cy="48" r="3.5" fill="#10B981" />
                 <circle cx="160" cy="30" r="3.5" fill="#EF4444" />
@@ -284,7 +314,6 @@ export default function DashboardPage() {
               </svg>
             </div>
 
-            {/* X-Axis Dates & Y-Axis Markers */}
             <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-2">
               <span>11 Aug</span>
               <span>13 Aug</span>
@@ -307,7 +336,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Status Badge Pill */}
           <div className="w-full py-2.5 rounded-full border border-rose-400/80 bg-rose-500/10 text-rose-500 font-black text-xs uppercase tracking-wider text-center flex items-center justify-center">
             NEEDS IMPROVEMENT
           </div>
@@ -315,432 +343,417 @@ export default function DashboardPage() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 💻 DESKTOP & TABLET VIEW ONLY (Strictly Preserved from Reference Image 1)  */}
+      {/* 💻 DESKTOP, LAPTOP & TABLET VIEW ONLY (Pixel-Faithful to Provided Design)  */}
       {/* ========================================================================= */}
       <div className="hidden md:block space-y-5">
-        {/* ── 1. USER HERO PROFILE & ATTENDANCE STATUS CARD ── */}
-        <div className="p-5 sm:p-6 rounded-2xl bg-card border border-border/80 shadow-2xl flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 relative">
-          <div className="flex items-center space-x-4">
-            {/* Avatar with yellow background and IA */}
-            <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-primary text-primary-foreground font-black text-xl sm:text-2xl flex items-center justify-center shadow-lg border border-primary/40 flex-shrink-0">
-              IA
+        {/* ── 1. USER PROFILE HERO CARD ── */}
+        <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 relative">
+          <div className="flex items-center space-x-5">
+            {/* Avatar inside Yellow Border Card with Green Online Dot */}
+            <div className="relative flex-shrink-0">
+              <div className="h-20 w-20 rounded-2xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-md">
+                <div className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 flex items-center justify-center text-primary font-black text-2xl">
+                  NK
+                </div>
+              </div>
+              {/* Online Green Indicator Dot */}
+              <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-card shadow-sm animate-pulse" />
             </div>
 
-            {/* User Info */}
+            {/* User Credentials & Metadata */}
             <div className="space-y-1">
-              <div className="flex items-center space-x-3">
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-                  Intern account
-                </h1>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+                {user.fullName}
+              </h1>
+              <div className="text-sm font-semibold text-muted-foreground">
+                {user.jobTitle}
               </div>
-              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground/90">Admin & Logistics Officer</span>
-                <span className="opacity-40">&bull;</span>
-                <span>JAAGO Foundation Trust</span>
-                <span className="opacity-40">&bull;</span>
-                <span className="text-muted-foreground/80 font-mono">ID: JFT-2026-0417</span>
+              <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-500 pt-0.5">
+                <Building2 className="h-3.5 w-3.5" />
+                <span>{user.organization}</span>
               </div>
-              <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground/80 pt-0.5">
-                <span>Founder&apos;s Office / Fc</span>
-                <span className="opacity-40">&bull;</span>
-                <span>Managers &bull; HR / Masoor Rahman</span>
+              <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground pt-0.5">
+                <div className="flex items-center space-x-1">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground/80" />
+                  <span>{user.department}</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <Briefcase className="h-3.5 w-3.5 text-muted-foreground/80" />
+                  <span>Manager: {user.manager}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Live On-Duty & Check-In Widget */}
-          <div className="flex flex-wrap items-center gap-4 sm:gap-6 w-full xl:w-auto justify-between xl:justify-end">
-            {/* ON DUTY Badge */}
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-surface border border-border text-xs font-bold text-emerald-400">
-              <Radio className="h-4 w-4 text-emerald-400 animate-pulse" />
-              <span className="uppercase tracking-wider">{isCheckedIn ? 'ON DUTY' : 'OFF DUTY'}</span>
+          {/* Right-Side Attendance Radar & Check-In / Check-Out Capsule Boxes */}
+          <div className="flex items-center space-x-3.5 w-full xl:w-auto justify-end">
+            {/* Radar Pulse Capsule */}
+            <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shadow-sm flex-shrink-0">
+              <Radio className="h-5 w-5 animate-pulse" />
             </div>
 
-            {/* CHECK IN Widget */}
-            <div className="flex items-center space-x-2.5">
-              <Clock className="h-4 w-4 text-primary" />
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground">CHECK IN</span>
-                <span className="text-xs font-bold text-foreground font-mono">
-                  {isCheckedIn ? checkInTime || '09:05:12 AM' : '--:--:--'}
-                </span>
+            {/* Check In Box */}
+            <button
+              onClick={handleToggleCheckIn}
+              className={`px-4 py-2.5 rounded-2xl border transition text-left flex items-center space-x-3 cursor-pointer shadow-sm ${
+                isCheckedIn
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500'
+                  : 'bg-surface border-border hover:border-primary/50 text-foreground'
+              }`}
+            >
+              <Clock className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  CHECK IN
+                </div>
+                <div className="text-xs font-black font-mono">
+                  {isCheckedIn ? checkInTime || '09:05 AM' : '--:--'}
+                </div>
               </div>
-              <button
-                onClick={handleToggleCheckIn}
-                className={`ml-1 px-4 py-1.5 rounded-xl font-black text-xs uppercase tracking-wider transition shadow-md active:scale-95 cursor-pointer ${
-                  isCheckedIn
-                    ? 'bg-surface border border-border text-muted-foreground'
-                    : 'bg-primary text-primary-foreground hover:bg-brand-strong'
-                }`}
-              >
-                Check In
-              </button>
-            </div>
+              <span className="text-muted-foreground/60 text-xs font-bold">-</span>
+            </button>
 
-            {/* CHECK OUT Widget */}
-            <div className="flex items-center space-x-2.5">
-              <Flag className="h-4 w-4 text-destructive/80" />
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground">CHECK OUT</span>
-                <span className="text-xs font-bold text-foreground font-mono">--:--:--</span>
+            {/* Check Out Box */}
+            <button
+              onClick={handleToggleCheckIn}
+              disabled={!isCheckedIn}
+              className={`px-4 py-2.5 rounded-2xl border transition text-left flex items-center space-x-3 ${
+                isCheckedIn
+                  ? 'bg-surface border-border hover:border-destructive/50 text-foreground cursor-pointer shadow-sm'
+                  : 'bg-surface/50 border-border/60 text-muted-foreground/50 cursor-not-allowed'
+              }`}
+            >
+              <Flag className="h-4 w-4 text-destructive/80 flex-shrink-0" />
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  CHECK OUT
+                </div>
+                <div className="text-xs font-black font-mono">--:--</div>
               </div>
-              <button
-                onClick={handleToggleCheckIn}
-                disabled={!isCheckedIn}
-                className={`ml-1 text-xs font-bold transition uppercase tracking-wider px-2 py-1.5 rounded-lg ${
-                  isCheckedIn
-                    ? 'text-destructive hover:bg-destructive/10 cursor-pointer'
-                    : 'text-muted-foreground/50 cursor-not-allowed'
-                }`}
-              >
-                Check Out
-              </button>
-            </div>
+              <span className="text-muted-foreground/60 text-xs font-bold">-</span>
+            </button>
           </div>
         </div>
 
-        {/* ── 2. FOUR METRIC CARDS ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Hours Today */}
-          <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              HOURS TODAY
-            </div>
-            <div className="text-3xl font-bold tracking-tight text-foreground font-mono">
-              {formatTime(elapsedSeconds)}
-            </div>
-          </div>
-
-          {/* Card 2: On-Duty Status */}
-          <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              ON-DUTY STATUS
-            </div>
-            <div className="text-3xl font-bold tracking-tight text-foreground flex items-center space-x-2">
-              <span>{isCheckedIn ? 'Present' : 'Absent'}</span>
-              {isCheckedIn && <CheckCircle2 className="h-5 w-5 text-emerald-500" />}
-            </div>
-          </div>
-
-          {/* Card 3: Leave Balance */}
-          <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              LEAVE BALANCE
-            </div>
-            <div className="text-3xl font-bold tracking-tight text-foreground">
-              0 <span className="text-base font-medium text-muted-foreground">Days</span>
-            </div>
-          </div>
-
-          {/* Card 4: Pending Approvals */}
-          <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-              PENDING APPROVALS
-            </div>
-            <div className="text-3xl font-bold tracking-tight text-foreground">
-              1
-            </div>
+        {/* ── 2. HORIZONTAL QUICK NAVIGATION TABS BAR ── */}
+        <div className="p-2 rounded-2xl bg-card border border-border/80 shadow-md">
+          <div className="flex items-center space-x-1.5 overflow-x-auto scrollbar-none py-1 px-1">
+            {quickNavItems.map((item) => {
+              const isActive = activeNavTab === item.id;
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveNavTab(item.id)}
+                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex-shrink-0 ${
+                    isActive
+                      ? 'bg-primary/15 border border-primary/40 text-primary shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-surface'
+                  }`}
+                >
+                  <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className="text-[11px] tracking-wide">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* ── 3. MIDDLE TWO-COLUMN SECTION ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Monthly Attendance */}
-          <div className="lg:col-span-7 p-6 rounded-2xl bg-card border border-border/80 shadow-xl space-y-6 flex flex-col justify-between">
+        {/* ── 3. ROW OF 4 METRIC KPI CARDS ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+          {/* Card 1: Working Hours Today */}
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Layers className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-bold text-foreground">Monthly Attendance</h2>
+              <Clock className="h-5 w-5 text-amber-500" />
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground">
+                Target: 8.0h
+              </span>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground">
+                Working Hours Today
               </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-primary text-primary-foreground uppercase tracking-wider">
-                92% RATE
+              <div className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-foreground pt-1">
+                {formatTime(elapsedSeconds)}
+              </div>
+            </div>
+            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
+              Schedule: General Schedule (10:00 AM – 6:00 PM)
+            </div>
+          </div>
+
+          {/* Card 2: On Duty Status */}
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <Timer className="h-5 w-5 text-amber-500" />
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground">
+                Recent Request
+              </span>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground">
+                On Duty Status
+              </div>
+              <div className="text-3xl sm:text-4xl font-black tracking-tight text-foreground pt-1">
+                4 Pending
+              </div>
+            </div>
+            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
+              Awaiting supervisor verification
+            </div>
+          </div>
+
+          {/* Card 3: Available Time Off */}
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="h-8 w-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500">
+                <Calendar className="h-4 w-4" />
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground">
+                In balance
+              </span>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground">
+                Available Time Off
+              </div>
+              <div className="text-3xl sm:text-4xl font-black tracking-tight text-foreground pt-1 flex items-baseline space-x-1.5">
+                <span>61</span>
+                <span className="text-lg font-bold text-muted-foreground">Days</span>
+              </div>
+            </div>
+            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
+              Annual &bull; Casual &bull; Sick Leave Pool
+            </div>
+          </div>
+
+          {/* Card 4: Active Approvals */}
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div className="h-8 w-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground">
+                Action required
+              </span>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground">
+                Active Approvals
+              </div>
+              <div className="text-3xl sm:text-4xl font-black tracking-tight text-foreground pt-1">
+                2
+              </div>
+            </div>
+            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
+              Purchase requisitions &bull; Leave
+            </div>
+          </div>
+        </div>
+
+        {/* ── 4. LOWER 3-COLUMN SECTION (Strictly from Image) ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
+          {/* ── COLUMN 1: MONTHLY ATTENDANCE SUMMARY ── */}
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-5 flex flex-col justify-between">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-xs font-black uppercase text-foreground tracking-wider">
+                <Clock className="h-4 w-4 text-emerald-500" />
+                <span>Monthly Attendance Summary</span>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase text-rose-500 bg-rose-500/10 border border-rose-400/30">
+                NEEDS IMPROVEMENT
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center">
-              {/* Donut Ring Mock */}
-              <div className="sm:col-span-5 flex items-center justify-center">
-                <div className="relative h-36 w-36 flex items-center justify-center">
-                  <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
-                    <path
-                      className="text-surface"
-                      strokeWidth="3.8"
-                      stroke="currentColor"
-                      fill="none"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                    <path
-                      className="text-primary"
-                      strokeDasharray="92, 100"
-                      strokeWidth="3.8"
-                      strokeLinecap="round"
-                      stroke="currentColor"
-                      fill="none"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                  </svg>
-                  <div className="absolute flex flex-col items-center justify-center text-center">
-                    <span className="text-xl font-black text-foreground">92%</span>
-                    <span className="text-[10px] text-muted-foreground uppercase font-bold">Rate</span>
-                  </div>
+            {/* 3-Column Top Stats */}
+            <div className="grid grid-cols-3 gap-2 text-left">
+              <div>
+                <div className="text-[11px] font-semibold text-muted-foreground">Working Days</div>
+                <div className="text-lg font-black text-foreground pt-1">14 / 15</div>
+                <div className="text-[9px] font-black uppercase tracking-wider text-emerald-500 pt-0.5">
+                  PRESENT / TARGET
                 </div>
               </div>
-
-              {/* Attendance Details Grid */}
-              <div className="sm:col-span-7 grid grid-cols-2 gap-y-4 gap-x-6 text-xs">
-                <div>
-                  <div className="text-muted-foreground text-[11px]">Present</div>
-                  <div className="text-base font-bold text-foreground">15 <span className="text-xs text-muted-foreground font-normal">/ 22</span></div>
+              <div>
+                <div className="text-[11px] font-semibold text-muted-foreground">Late Days</div>
+                <div className="text-lg font-black text-rose-500 pt-1">6</div>
+                <div className="text-[9px] font-black uppercase tracking-wider text-rose-500 pt-0.5">
+                  LATE ENTRIES
                 </div>
-                <div>
-                  <div className="text-muted-foreground text-[11px]">Absent</div>
-                  <div className="text-base font-bold text-foreground">1</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-[11px]">Late Check-Ins</div>
-                  <div className="text-base font-bold text-foreground">3</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-[11px]">On Leave</div>
-                  <div className="text-base font-bold text-foreground">2</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-[11px]">Avg Hours</div>
-                  <div className="text-base font-bold text-foreground">8.3h</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-[11px]">Avg Check-In</div>
-                  <div className="text-base font-bold text-foreground">9:05 AM</div>
+              </div>
+              <div>
+                <div className="text-[11px] font-semibold text-muted-foreground">Auto Check</div>
+                <div className="text-lg font-black text-amber-500 pt-1">8</div>
+                <div className="text-[9px] font-black uppercase tracking-wider text-amber-500 pt-0.5">
+                  AUTO CHECKOUTS
                 </div>
               </div>
             </div>
 
-            {/* Weekly Trend Line Chart */}
-            <div className="pt-2 space-y-2 border-t border-border/50">
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span className="uppercase font-bold tracking-wider">WEEKLY TREND</span>
-                <div className="flex items-center space-x-3">
-                  <div className="flex items-center space-x-1">
-                    <span className="h-2 w-2 rounded-full bg-foreground"></span>
-                    <span>Present</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <span className="h-2 w-2 rounded-full bg-primary"></span>
-                    <span>Late</span>
-                  </div>
+            <div className="h-px bg-border/60" />
+
+            {/* Horizontal Progress Bars */}
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <span className="text-foreground">On-Time Performance</span>
+                  <span className="text-emerald-500 font-black">57.1%</span>
+                </div>
+                <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: '57.1%' }} />
                 </div>
               </div>
 
-              <div className="h-20 w-full flex items-end justify-between px-2 pt-2">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 400 60">
-                  {/* Present Line */}
-                  <path
-                    d="M 10 50 Q 80 48, 140 20 T 260 25 T 390 35"
-                    fill="none"
-                    stroke="currentColor"
-                    className="text-foreground/80"
-                    strokeWidth="2"
-                  />
-                  {/* Late Line */}
-                  <path
-                    d="M 10 55 Q 80 52, 140 50 T 260 48 T 390 52"
-                    fill="none"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth="2.5"
-                  />
-                  {/* Points */}
-                  <circle cx="10" cy="50" r="3.5" className="fill-foreground/80" />
-                  <circle cx="140" cy="20" r="3.5" className="fill-foreground/80" />
-                  <circle cx="260" cy="25" r="3.5" className="fill-foreground/80" />
-                  <circle cx="390" cy="35" r="3.5" className="fill-foreground/80" />
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <span className="text-foreground">Late Penalty</span>
+                  <span className="text-rose-500 font-black">42.9%</span>
+                </div>
+                <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
+                  <div className="h-full bg-rose-500 rounded-full" style={{ width: '42.9%' }} />
+                </div>
+              </div>
 
-                  <circle cx="10" cy="55" r="3.5" fill="hsl(var(--primary))" />
-                  <circle cx="140" cy="50" r="3.5" fill="hsl(var(--primary))" />
-                  <circle cx="260" cy="48" r="3.5" fill="hsl(var(--primary))" />
-                  <circle cx="390" cy="52" r="3.5" fill="hsl(var(--primary))" />
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold">
+                  <span className="text-foreground">Auto Check–out Rate</span>
+                  <span className="text-amber-500 font-black">57.1%</span>
+                </div>
+                <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
+                  <div className="h-full bg-amber-500 rounded-full" style={{ width: '57.1%' }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Smooth Daily Trend Line Chart Matching Reference Images */}
+            <div className="pt-2">
+              <div className="h-28 w-full relative">
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 400 80">
+                  <defs>
+                    <linearGradient id="desktopTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10B981" stopOpacity="0.30" />
+                      <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Shaded Area Under Curve */}
+                  <path
+                    d="M 20 30 Q 60 28, 100 60 T 160 30 T 220 52 T 280 32 T 340 28 T 390 35 L 390 80 L 20 80 Z"
+                    fill="url(#desktopTrendGrad)"
+                  />
+
+                  {/* Curved Smooth Spline */}
+                  <path
+                    d="M 20 30 Q 60 28, 100 60 T 160 30 T 220 52 T 280 32 T 340 28 T 390 35"
+                    fill="none"
+                    stroke="#10B981"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                  />
+
+                  {/* Points on Curve */}
+                  <circle cx="20" cy="30" r="3.5" fill="#10B981" />
+                  <circle cx="60" cy="28" r="3.5" fill="#10B981" />
+                  <circle cx="100" cy="60" r="3.5" fill="#EF4444" />
+                  <circle cx="160" cy="30" r="3.5" fill="#EF4444" />
+                  <circle cx="220" cy="52" r="3.5" fill="#10B981" />
+                  <circle cx="280" cy="32" r="3.5" fill="#10B981" />
+                  <circle cx="340" cy="28" r="3.5" fill="#10B981" />
+                  <circle cx="390" cy="35" r="3.5" fill="#EF4444" />
                 </svg>
               </div>
+
+              {/* X-Axis Dates */}
+              <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-1">
+                <span>06 Aug</span>
+                <span>09 Aug</span>
+                <span>10 Aug</span>
+                <span>11 Aug</span>
+                <span>12 Aug</span>
+                <span>13 Aug</span>
+                <span>17 Aug</span>
+                <span>18 Aug</span>
+                <span>20 Aug</span>
+              </div>
+            </div>
+
+            <div className="h-px bg-border/60" />
+
+            {/* Bottom Row Summary */}
+            <div className="flex items-center justify-between text-xs font-bold">
+              <div className="text-foreground">
+                Avg Hours: <span className="text-blue-500 font-mono font-black">11.0h</span>
+              </div>
+              <div className="text-foreground">
+                Total Worked: <span className="text-amber-500 font-mono font-black">153.6h</span>
+              </div>
             </div>
           </div>
 
-          {/* Upcoming Holidays */}
-          <div className="lg:col-span-5 p-6 rounded-2xl bg-card border border-border/80 shadow-xl space-y-4 flex flex-col justify-between">
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4 text-primary" />
-                <h2 className="text-base font-bold text-foreground">Upcoming Holidays</h2>
-              </div>
+          {/* ── COLUMN 2: UPCOMING HOLIDAYS ── */}
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col justify-between space-y-6">
+            <div className="flex items-center space-x-2 text-xs font-black uppercase text-foreground tracking-wider">
+              <Calendar className="h-4 w-4 text-blue-500" />
+              <span>Upcoming Holidays</span>
+            </div>
 
-              {/* Pill Tabs */}
-              <div className="grid grid-cols-3 p-1 bg-surface rounded-xl border border-border text-xs font-bold">
-                {(['upcoming', 'month', 'year'] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setHolidayTab(t)}
-                    className={`py-1.5 rounded-lg capitalize transition text-center cursor-pointer ${
-                      holidayTab === t
-                        ? 'bg-primary text-primary-foreground font-black shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    {t === 'upcoming' ? 'Upcoming' : t === 'month' ? 'This Month' : 'This Year'}
-                  </button>
-                ))}
-              </div>
+            {/* Empty State / Notice */}
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-16 space-y-2">
+              <p className="text-sm font-semibold text-muted-foreground">
+                No upcoming holidays found
+              </p>
+            </div>
 
-              {/* Holiday Items */}
-              <div className="space-y-2.5">
-                {[
-                  { name: 'Ashura', date: 'Jul 5, 2026', daysLeft: '7D' },
-                  { name: 'July Playing Day', date: 'Jul 22, 2026', daysLeft: '24D' },
-                  { name: 'Eid-e-Milad-un-Nabi', date: 'Sep 26, 2026', daysLeft: '90D' },
-                  { name: 'Shaba Baraat', date: 'Oct 14, 2026', daysLeft: '108D' },
-                ].map((holiday, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-3 rounded-xl bg-surface border border-border/60 hover:border-primary/40 transition"
-                  >
-                    <div>
-                      <div className="text-xs font-bold text-foreground">{holiday.name}</div>
-                      <div className="text-[11px] text-muted-foreground">{holiday.date}</div>
-                    </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[11px] font-black">
-                      {holiday.daysLeft}
-                    </span>
-                  </div>
-                ))}
+            {/* Bottom Legend */}
+            <div className="flex items-center justify-start space-x-4 text-xs font-semibold text-muted-foreground pt-2 border-t border-border/60">
+              <div className="flex items-center space-x-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span>This Week</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                <span>This Month</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className="h-2 w-2 rounded-full bg-blue-500" />
+                <span>Later</span>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ── 4. BOTTOM SECTION: PENDING REQUESTS & APPROVALS ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Pending Requests */}
-          <div className="p-6 rounded-2xl bg-card border border-border/80 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <div className="flex items-center space-x-2">
-                <FileText className="h-4 w-4 text-primary" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Pending Requests
-                </h3>
+          {/* ── COLUMN 3: HR ANNOUNCEMENT BOARD ── */}
+          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col justify-between space-y-6">
+            {/* Header */}
+            <div className="flex items-center space-x-2.5">
+              <div className="h-8 w-8 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                <Zap className="h-4 w-4 fill-purple-400" />
               </div>
-              <a
-                href="#view-all"
-                className="text-xs font-bold text-primary hover:underline flex items-center space-x-1"
-              >
-                <span>VIEW ALL</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </a>
+              <h3 className="text-xs font-black uppercase tracking-wider text-foreground">
+                HR Announcement Board
+              </h3>
             </div>
 
-            <div className="space-y-3">
-              {[
-                {
-                  title: 'Leave Request — Jul 12-14',
-                  sub: 'Submitted Jul 6, 2026',
-                  badge: 'Pending',
-                },
-                {
-                  title: 'Tax & NOC Request',
-                  sub: 'Submitted Jul 3, 2026',
-                  badge: 'In Review',
-                },
-                {
-                  title: 'Purchase Requisition — PR-2026-0417',
-                  sub: 'Submitted Jul 1, 2026',
-                  badge: 'Pending',
-                },
-              ].map((req, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between p-3.5 rounded-xl bg-surface border border-border/60 hover:border-primary/40 transition"
-                >
-                  <div>
-                    <div className="text-xs font-bold text-foreground">{req.title}</div>
-                    <div className="text-[11px] text-muted-foreground">{req.sub}</div>
-                  </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/30">
-                    {req.badge}
-                  </span>
+            {/* Empty State / All Caught Up */}
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-12 space-y-3">
+              <div className="h-14 w-14 rounded-2xl bg-surface border border-border flex items-center justify-center text-muted-foreground">
+                <Inbox className="h-7 w-7 stroke-[1.5]" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-foreground">All Caught Up!</div>
+                <div className="text-xs text-muted-foreground pt-0.5">
+                  No active announcements for your department.
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Pending Approvals */}
-          <div className="p-6 rounded-2xl bg-card border border-border/80 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <div className="flex items-center space-x-2">
-                <Briefcase className="h-4 w-4 text-primary" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Pending Approvals
-                </h3>
               </div>
-              <a
-                href="#view-all"
-                className="text-xs font-bold text-primary hover:underline flex items-center space-x-1"
-              >
-                <span>VIEW ALL</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </a>
             </div>
 
-            <div className="space-y-3">
-              {[
-                {
-                  title: 'Purchase Requisition',
-                  sub: 'By F. Islam - Procurement',
-                  badge: 'Pending',
-                },
-                {
-                  title: 'Leave Request',
-                  sub: 'By T. Ahmed - Programs',
-                  badge: 'Pending',
-                },
-              ].map((app, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between p-3.5 rounded-xl bg-surface border border-border/60 hover:border-primary/40 transition"
-                >
-                  <div>
-                    <div className="text-xs font-bold text-foreground">{app.title}</div>
-                    <div className="text-[11px] text-muted-foreground">{app.sub}</div>
-                  </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/30">
-                    {app.badge}
-                  </span>
-                </div>
-              ))}
+            {/* Bottom Link */}
+            <div className="pt-3 text-center border-t border-border/60">
+              <button className="text-xs font-black uppercase tracking-wider text-purple-500 hover:text-purple-400 hover:underline transition">
+                EXPLORE ALL ARCHIVES
+              </button>
             </div>
           </div>
-        </div>
-
-        {/* ── 5. FLOATING QUICK ACTION BAR ── */}
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-surface/90 backdrop-blur-xl border border-border/80 rounded-2xl shadow-2xl p-1.5 flex items-center space-x-1 sm:space-x-2">
-          {[
-            { label: 'New Purchase Request', icon: DollarSign, active: true },
-            { label: 'Apply Leave', icon: Calendar },
-            { label: 'Submit Expense', icon: FileText },
-            { label: 'All Requests', icon: Briefcase },
-            { label: 'Attendance', icon: Clock },
-            { label: 'Tax & NOC', icon: Sparkles },
-          ].map((action, idx) => (
-            <button
-              key={idx}
-              className={`flex flex-col items-center justify-center py-2 px-3 sm:px-4 rounded-xl transition group cursor-pointer ${
-                action.active
-                  ? 'bg-primary/15 border border-primary/40 text-primary'
-                  : 'hover:bg-card text-muted-foreground hover:text-foreground'
-              }`}
-              title={action.label}
-            >
-              <action.icon className="h-4 w-4 mb-1 group-hover:scale-110 transition" />
-              <span className="text-[9px] font-bold whitespace-nowrap hidden sm:block">
-                {action.label}
-              </span>
-            </button>
-          ))}
         </div>
       </div>
     </div>

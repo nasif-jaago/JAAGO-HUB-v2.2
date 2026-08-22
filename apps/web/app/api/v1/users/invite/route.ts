@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { emails, email, fullName, role = 'Staff', department = 'General', branch = 'Head Office (Banani)', customMessage } = body;
+    const { emails, email, fullName, role = 'Staff', department = 'General', branch = 'Head Office (Banani)' } = body;
 
     const emailList: string[] = emails && Array.isArray(emails)
       ? emails
