@@ -1,0 +1,44 @@
+# Node.js dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js build output
+.next/
+out/
+
+# Turborepo cache
+.turbo/
+
+# Dist / build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Spool and temporary files
+/var/lib/jaago-hub/log-spool/
+*.log
+*.ndjson
+*.ndjson.gz
+*.open.ndjson
+*.ready.ndjson
+*.uploading.ndjson.gz
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+!*.env.example
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/settings.json
+*.swp
+
+# Coverage
+coverage/
+.nyc_output/

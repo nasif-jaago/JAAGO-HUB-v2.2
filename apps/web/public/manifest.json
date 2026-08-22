@@ -1,0 +1,18 @@
+{
+  "name": "JAAGO HUB v2.2 — Modular ERP Platform",
+  "short_name": "JAAGO HUB",
+  "description": "Enterprise Modular NGO ERP Platform for JAAGO Foundation",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0F0F10",
+  "theme_color": "#F5C518",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/jaago-logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@jaago/testing",
+  "version": "2.2.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "tsx --test src/__tests__/**/*.test.ts"
+  },
+  "dependencies": {
+    "@jaago/auth": "workspace:*",
+    "@jaago/authz": "workspace:*",
+    "@jaago/cache": "workspace:*",
+    "@jaago/config": "workspace:*",
+    "@jaago/contracts": "workspace:*",
+    "@jaago/core-domain": "workspace:*",
+    "@jaago/core-infra": "workspace:*",
+    "@jaago/importexport": "workspace:*",
+    "@jaago/logger": "workspace:*",
+    "@jaago/module-system": "workspace:*",
+    "@jaago/notifications": "workspace:*",
+    "@jaago/observability": "workspace:*",
+    "@jaago/queue": "workspace:*",
+    "@jaago/reporting": "workspace:*",
+    "@jaago/search": "workspace:*",
+    "@jaago/storage": "workspace:*",
+    "@jaago/ui": "workspace:*",
+    "@jaago/workflow": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

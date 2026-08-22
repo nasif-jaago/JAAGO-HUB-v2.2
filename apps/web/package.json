@@ -1,0 +1,50 @@
+{
+  "name": "@jaago/web",
+  "version": "2.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jaago/auth": "workspace:*",
+    "@jaago/authz": "workspace:*",
+    "@jaago/config": "workspace:*",
+    "@jaago/contracts": "workspace:*",
+    "@jaago/core-application": "workspace:*",
+    "@jaago/core-domain": "workspace:*",
+    "@jaago/core-infra": "workspace:*",
+    "@jaago/importexport": "workspace:*",
+    "@jaago/logger": "workspace:*",
+    "@jaago/mod-announcements": "workspace:*",
+    "@jaago/mod-directory": "workspace:*",
+    "@jaago/module-system": "workspace:*",
+    "@jaago/notifications": "workspace:*",
+    "@jaago/observability": "workspace:*",
+    "@jaago/reporting": "workspace:*",
+    "@jaago/search": "workspace:*",
+    "@jaago/storage": "workspace:*",
+    "@jaago/ui": "workspace:*",
+    "@jaago/workflow": "workspace:*",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.6.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.2"
+  }
+}

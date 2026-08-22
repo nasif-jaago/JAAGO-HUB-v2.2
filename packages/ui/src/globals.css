@@ -1,0 +1,242 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  JAAGO HUB — Design Tokens (Light + Dark)
+  ------------------------------------------------------------------
+  Palette lifted from the reference screens: JAAGO gold + warm cream
+  (light) and warm near-black (dark). shadcn/Radix-compatible HSL
+  channel triples. Toggle by adding/removing `.dark` on <html>.
+  Use ONLY these tokens in components — never hardcode hex.
+  ------------------------------------------------------------------
+*/
+
+@layer base {
+  :root {
+    /* ── Surfaces — LIGHT (cream) ── */
+    --background: 43 33% 93%;          /* #F4EFE4 page */
+    --surface: 44 45% 97%;             /* #FBF8F1 card base */
+    --card: 44 45% 97%;
+    --card-foreground: 40 24% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 40 24% 9%;
+    --elevated: 0 0% 100%;             /* #FFFFFF raised */
+
+    /* ── Text ── */
+    --foreground: 40 24% 9%;           /* #1E1A12 */
+    --muted: 42 25% 90%;
+    --muted-foreground: 37 16% 38%;    /* #6F6552 */
+
+    /* ── Brand — JAAGO gold ── */
+    --primary: 45 92% 52%;             /* #F5C518 */
+    --primary-foreground: 40 35% 10%;  /* dark text on gold */
+    --brand: 45 92% 52%;
+    --brand-strong: 42 96% 45%;        /* deeper gold hover on light */
+
+    /* ── Accents / states ── */
+    --secondary: 42 30% 88%;
+    --secondary-foreground: 40 24% 12%;
+    --accent: 45 80% 90%;
+    --accent-foreground: 40 30% 12%;
+    --success: 145 55% 38%;
+    --warning: 38 92% 48%;
+    --destructive: 4 74% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --info: 210 80% 46%;
+
+    /* ── Lines / rings ── */
+    --border: 42 33% 85%;              /* #E7DFCD */
+    --input: 42 33% 85%;
+    --ring: 45 92% 52%;
+
+    /* ── Header ── */
+    --header: 44 40% 95%;
+    --header-foreground: 40 22% 16%;
+    --header-border: 42 30% 87%;
+
+    /* ── Sidebar (user + admin) ── */
+    --sidebar: 44 40% 95%;
+    --sidebar-foreground: 40 22% 16%;
+    --sidebar-muted: 37 16% 42%;
+    --sidebar-active: 45 92% 52%;
+    --sidebar-active-foreground: 40 40% 10%;
+    --sidebar-border: 42 30% 87%;
+
+    /* ── Charts (attendance donut + trend) ── */
+    --chart-1: 45 92% 52%;   /* gold */
+    --chart-2: 40 18% 55%;   /* warm grey */
+    --chart-3: 145 45% 42%;
+    --chart-4: 4 70% 55%;
+    --chart-5: 210 70% 50%;
+
+    --radius: 0.9rem;
+  }
+
+  .dark {
+    /* ── Surfaces — DARK (luxury matte black & McGrath/Neewick palette) ── */
+    --header: 240 6% 4.5%;             /* #0B0B0C deep matte header */
+    --header-foreground: 0 0% 90%;
+    --header-border: 240 4% 12%;
+
+    --background: 240 5% 6%;           /* #0F0F10 deep matte black page */
+    --surface: 240 4% 9.5%;            /* #18181A matte card surface */
+    --card: 240 4% 9.5%;               /* #18181A matte card base */
+    --card-foreground: 0 0% 96%;       /* #F5F5F5 crisp white */
+    --popover: 240 4% 11%;             /* #1B1B1D elevated dropdown/popover */
+    --popover-foreground: 0 0% 96%;
+    --elevated: 240 4% 13.5%;          /* #222225 raised matte surfaces */
+
+    --foreground: 0 0% 96%;            /* #F5F5F5 text */
+    --muted: 240 4% 13%;               /* #202024 */
+    --muted-foreground: 240 4% 60%;    /* #97979D clean matte silver-slate */
+
+    --primary: 45 96% 51%;             /* #FAC00A vivid JAAGO / McGrath gold */
+    --primary-foreground: 240 6% 6%;   /* #0F0F10 bold matte black text on gold */
+    --brand: 45 96% 51%;
+    --brand-strong: 45 98% 58%;        /* #F8D038 */
+
+    --secondary: 240 4% 13.5%;         /* #222225 */
+    --secondary-foreground: 0 0% 95%;
+    --accent: 45 90% 12%;              /* gold tinted dark accent */
+    --accent-foreground: 45 96% 62%;
+    --success: 145 55% 42%;
+    --warning: 38 95% 52%;
+    --destructive: 4 75% 54%;
+    --destructive-foreground: 0 0% 100%;
+    --info: 210 80% 55%;
+
+    --border: 240 4% 16%;              /* #27272B crisp subtle matte border */
+    --input: 240 4% 16%;
+    --ring: 45 96% 51%;
+
+    --sidebar: 240 6% 4.5%;            /* #0B0B0C deep matte sidebar */
+    --sidebar-foreground: 0 0% 88%;
+    --sidebar-muted: 240 4% 54%;
+    --sidebar-active: 45 96% 51%;
+    --sidebar-active-foreground: 240 6% 6%;
+    --sidebar-border: 240 4% 12%;      /* #1D1D20 */
+
+    --chart-1: 45 96% 51%;             /* JAAGO Gold */
+    --chart-2: 240 4% 60%;             /* matte slate */
+    --chart-3: 145 50% 45%;            /* green */
+    --chart-4: 4 70% 55%;              /* red */
+    --chart-5: 210 75% 55%;            /* blue */
+  }
+
+  .espresso {
+    /* ── Surfaces — ESPRESSO / CULTURE (Dark Chocolate Header + Warm Sand Canvas & Pure White Cards) ── */
+    --header: 28 45% 10%;              /* #23170E deep espresso dark chocolate header */
+    --header-foreground: 43 45% 95%;   /* #F8F3EA cream text and icons */
+    --header-border: 28 35% 16%;       /* #382517 subtle dark chocolate border */
+
+    --background: 38 32% 93%;          /* #F5EFE6 warm sand page background */
+    --surface: 0 0% 100%;              /* #FFFFFF pure clean alabaster card base */
+    --card: 0 0% 100%;                 /* #FFFFFF */
+    --card-foreground: 28 44% 11%;     /* #26180E deep espresso text */
+    --popover: 0 0% 100%;
+    --popover-foreground: 28 44% 11%;
+    --elevated: 0 0% 100%;             /* #FFFFFF raised card */
+
+    --foreground: 28 44% 11%;          /* #26180E rich dark chocolate typography */
+    --muted: 38 25% 89%;               /* #EDE6D8 */
+    --muted-foreground: 32 16% 42%;    /* #7B6B5B warm taupe */
+
+    --primary: 45 96% 51%;             /* #FAC00A amber JAAGO gold */
+    --primary-foreground: 28 44% 11%;  /* #26180E dark text on gold */
+    --brand: 45 96% 51%;
+    --brand-strong: 42 96% 45%;
+
+    --secondary: 38 28% 88%;           /* #ECE4D6 */
+    --secondary-foreground: 28 44% 12%;
+    --accent: 45 80% 90%;
+    --accent-foreground: 28 44% 12%;
+    --success: 152 65% 36%;            /* emerald from reference */
+    --warning: 38 95% 48%;
+    --destructive: 350 78% 55%;        /* rose from reference */
+    --destructive-foreground: 0 0% 100%;
+    --info: 210 85% 50%;               /* sky blue from reference */
+
+    --border: 38 20% 83%;              /* #E2D9CA crisp warm sand border */
+    --input: 38 20% 83%;
+    --ring: 45 96% 51%;
+
+    --sidebar: 38 28% 90%;             /* #EFE8DC warm wheat/parchment sidebar */
+    --sidebar-foreground: 28 44% 11%;  /* #26180E deep brown text */
+    --sidebar-muted: 32 16% 45%;       /* #857463 */
+    --sidebar-active: 45 96% 51%;      /* Gold active button */
+    --sidebar-active-foreground: 28 44% 11%;
+    --sidebar-border: 38 20% 82%;      /* #DFD5C4 */
+
+    --chart-1: 45 96% 51%;             /* Amber Gold */
+    --chart-2: 32 16% 45%;             /* Warm taupe */
+    --chart-3: 152 65% 36%;            /* Emerald */
+    --chart-4: 350 78% 55%;            /* Rose */
+    --chart-5: 210 85% 50%;            /* Sky Blue */
+  }
+
+  .espresso header,
+  .espresso .bg-header {
+    background-color: hsl(28 45% 10%) !important;
+    color: hsl(43 45% 95%) !important;
+    border-color: hsl(28 35% 16%) !important;
+  }
+  .espresso .text-header-foreground {
+    color: hsl(43 45% 95%) !important;
+  }
+
+  * { border-color: hsl(var(--border)); }
+
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+  body {
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* respect device safe areas (notches) */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+             env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  /* 16px min on inputs prevents mobile zoom-on-focus */
+  input, select, textarea { font-size: 16px; }
+
+  /* honor OS reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* visible keyboard focus everywhere (a11y) */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Sleek custom scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

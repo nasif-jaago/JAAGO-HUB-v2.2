@@ -1,0 +1,20 @@
+[Unit]
+Description=JAAGO HUB Background Worker (BullMQ)
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=jaago
+Group=jaago
+WorkingDirectory=/var/www/jaago-hub
+EnvironmentFile=/etc/jaago-hub/worker.env
+ExecStart=/usr/bin/pnpm --filter @jaago/worker start
+Restart=always
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
