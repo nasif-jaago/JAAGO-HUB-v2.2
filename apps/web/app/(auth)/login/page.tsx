@@ -4,20 +4,15 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
+  User,
   Mail,
-  Lock,
   Eye,
   EyeOff,
-  Target,
-  Rocket,
-  Sun,
-  Moon,
-  Coffee,
-  ArrowRight,
   AlertTriangle,
   CheckCircle2,
   X,
   Send,
+  ImageIcon,
 } from 'lucide-react';
 import {
   isAllowedWorkDomain,
@@ -36,7 +31,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'espresso'>('espresso');
+  const [bgType, setBgType] = useState<'meadow' | 'leaves'>('meadow');
 
   // Forgot Password Modal State
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -45,27 +40,20 @@ export default function LoginPage() {
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [forgotError, setForgotError] = useState('');
 
-  // Sync theme mode and inspect URL query params on mount
+  // Check URL query parameters for OAuth redirects or errors
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('jaago_theme') as 'dark' | 'light' | 'espresso';
-      if (savedTheme) {
-        setThemeMode(savedTheme);
-        document.documentElement.classList.remove('dark', 'light', 'theme-espresso');
-        if (savedTheme === 'dark') document.documentElement.classList.add('dark');
-        else if (savedTheme === 'espresso') document.documentElement.classList.add('theme-espresso');
-        else document.documentElement.classList.add('light');
-      }
+      const savedBg = localStorage.getItem('jaago_login_bg') as 'meadow' | 'leaves';
+      if (savedBg) setBgType(savedBg);
 
-      // Check query params for OAuth errors
       const params = new URLSearchParams(window.location.search);
       const urlError = params.get('error');
       const rejectedEmail = params.get('rejectedEmail');
 
       if (urlError === 'domain_restricted') {
         setErrorMessage(
-          `Access Restricted: Only official organization email domains (@jaago.com.bd, @jaagofoundation.org, @emkcenter.org) are permitted to sign in to JAAGO HUB.${
-            rejectedEmail ? ` ("${rejectedEmail}" is an outsider domain)` : ''
+          `Access Restricted: Only official organization email domains (@jaago.com.bd, @jaagofoundation.org, @emkcenter.org) are permitted to sign in.${
+            rejectedEmail ? ` ("${rejectedEmail}" is unauthorized)` : ''
           }`
         );
       } else if (urlError) {
@@ -74,14 +62,11 @@ export default function LoginPage() {
     }
   }, []);
 
-  const handleThemeChange = (mode: 'dark' | 'light' | 'espresso') => {
-    setThemeMode(mode);
+  const toggleBackground = () => {
+    const nextBg = bgType === 'meadow' ? 'leaves' : 'meadow';
+    setBgType(nextBg);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('jaago_theme', mode);
-      document.documentElement.classList.remove('dark', 'light', 'theme-espresso');
-      if (mode === 'dark') document.documentElement.classList.add('dark');
-      else if (mode === 'espresso') document.documentElement.classList.add('theme-espresso');
-      else document.documentElement.classList.add('light');
+      localStorage.setItem('jaago_login_bg', nextBg);
     }
   };
 
@@ -193,7 +178,7 @@ export default function LoginPage() {
       }
 
       setForgotSuccess(
-        `Password reset instructions have been dispatched to ${cleanForgotEmail} via Supabase. Please check your inbox.`
+        `Password reset link sent to ${cleanForgotEmail} via Supabase. Please check your inbox.`
       );
     } catch (err: any) {
       setForgotError(err.message || 'Failed to send password recovery email.');
@@ -202,286 +187,232 @@ export default function LoginPage() {
     }
   };
 
+  const bgImageSrc = bgType === 'leaves' ? '/login-leaves.png' : '/login-bg.png';
+
   return (
-    <div className="w-full max-w-5xl my-auto py-4 px-2 sm:px-4">
-      {/* ── TOP BAR: BRAND LOGO & THEME SWITCHER ── */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(255,230,0,0.45)] border-2 border-[#FFE600] transition transform hover:scale-[1.02]">
-          <Image
-            src="/jaago-logo.png"
-            alt="JAAGO Foundation"
-            width={200}
-            height={110}
-            priority
-            className="w-36 sm:w-44 md:w-48 h-auto object-cover block"
-          />
-        </div>
-
-        {/* 3-Way Theme Switcher */}
-        <div className="flex items-center space-x-1 p-1 bg-surface border border-border rounded-xl shadow-sm">
-          <button
-            type="button"
-            onClick={() => handleThemeChange('espresso')}
-            title="Espresso Theme"
-            className={`p-1.5 rounded-lg transition cursor-pointer ${
-              themeMode === 'espresso'
-                ? 'bg-amber-500 text-white font-bold shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Coffee className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleThemeChange('dark')}
-            title="Dark Theme"
-            className={`p-1.5 rounded-lg transition cursor-pointer ${
-              themeMode === 'dark'
-                ? 'bg-primary text-primary-foreground font-bold shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Moon className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleThemeChange('light')}
-            title="Light Theme"
-            className={`p-1.5 rounded-lg transition cursor-pointer ${
-              themeMode === 'light'
-                ? 'bg-primary text-primary-foreground font-bold shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Sun className="h-4 w-4" />
-          </button>
-        </div>
+    <div className="relative min-h-screen w-full flex items-center justify-center p-4 sm:p-6 overflow-hidden">
+      {/* ── FULLSCREEN NATURE BACKGROUND IMAGE ── */}
+      <div
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700 transform scale-105"
+        style={{
+          backgroundImage: `url('${bgImageSrc}')`,
+        }}
+      >
+        {/* Ambient Dark/Glass Tint Overlay */}
+        <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"></div>
       </div>
 
-      {/* ── MAIN LOGIN CONTAINER ── */}
-      <div className="rounded-3xl border border-border bg-card shadow-2xl p-6 sm:p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center backdrop-blur-md">
-        {/* Left Column: Sign-In Form */}
-        <div className="lg:col-span-6 space-y-6">
-          <div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1">
-              Sign In.
-            </h1>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              Access the <span className="text-primary font-bold">JAAGO HUB v2.2</span> Ecosystem
-            </p>
+      {/* ── TOP RIGHT SWITCHER (Background Theme) ── */}
+      <div className="fixed top-5 right-5 z-20">
+        <button
+          type="button"
+          onClick={toggleBackground}
+          title={`Switch to ${bgType === 'meadow' ? 'Green Leaves' : 'Meadow Landscape'} Background`}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 border border-white/40 text-white text-xs font-semibold backdrop-blur-md transition shadow-lg cursor-pointer active:scale-95"
+        >
+          <ImageIcon className="h-3.5 w-3.5" />
+          <span className="capitalize">{bgType} Theme</span>
+        </button>
+      </div>
+
+      {/* ── MAIN FROSTED GLASS LOGIN CARD ── */}
+      <div className="relative z-10 w-full max-w-[420px] rounded-[32px] border border-white/40 bg-white/10 dark:bg-black/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] backdrop-blur-2xl p-7 sm:p-9 space-y-6 text-white animate-in fade-in zoom-in-95 duration-300">
+        {/* Brand Header */}
+        <div className="text-center space-y-2">
+          <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(255,230,0,0.4)] border border-[#FFE600]/80 bg-black/40 backdrop-blur-md p-1 mb-1">
+            <Image
+              src="/jaago-logo.png"
+              alt="JAAGO Foundation"
+              width={140}
+              height={70}
+              priority
+              className="w-28 sm:w-32 h-auto object-cover block mx-auto"
+            />
           </div>
 
-          {errorMessage && (
-            <div className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold animate-in fade-in flex items-start space-x-2.5">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <div className="leading-relaxed">{errorMessage}</div>
-            </div>
-          )}
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white drop-shadow-md">
+            Login
+          </h1>
+          <p className="text-xs sm:text-sm text-white/80 font-medium drop-shadow-sm">
+            Welcome back please login to your account
+          </p>
+        </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-foreground">Work Email Address *</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
-                  <Mail className="h-4 w-4" />
-                </div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@jaago.com.bd"
-                  className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-xs sm:text-sm font-medium"
-                />
-              </div>
-            </div>
+        {/* Error Alert Box */}
+        {errorMessage && (
+          <div className="p-3 rounded-2xl bg-red-500/25 border border-red-500/40 text-white text-xs font-semibold backdrop-blur-md animate-in fade-in flex items-start space-x-2 shadow-lg">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-red-200" />
+            <div className="leading-relaxed drop-shadow-sm">{errorMessage}</div>
+          </div>
+        )}
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-foreground">Account Password *</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
-                  <Lock className="h-4 w-4" />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter account password"
-                  className="w-full pl-10 pr-10 py-2.5 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-xs sm:text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-muted-foreground hover:text-foreground transition cursor-pointer"
-                  aria-label="Toggle password visibility"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
+        {/* Sign-In Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* User Email Field */}
+          <div className="relative">
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="User Name / Email"
+              className="w-full pl-4 pr-11 py-3.5 bg-white/10 dark:bg-black/25 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-white/60 focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
+            />
+            <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-white/70">
+              <User className="h-5 w-5" />
             </div>
+          </div>
 
-            <div className="flex items-center justify-between text-xs pt-1">
-              <label className="flex items-center space-x-2 cursor-pointer text-muted-foreground select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer"
-                />
-                <span className="font-semibold text-foreground text-xs">Remember device</span>
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setForgotEmail(email);
-                  setForgotError('');
-                  setForgotSuccess('');
-                  setShowForgotModal(true);
-                }}
-                className="font-bold text-primary hover:underline cursor-pointer text-xs"
-              >
-                Forgot Password?
-              </button>
-            </div>
-
+          {/* Password Field */}
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className="w-full pl-4 pr-11 py-3.5 bg-white/10 dark:bg-black/25 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-white/60 focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
+            />
             <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 px-4 rounded-xl bg-primary text-primary-foreground font-black tracking-wider uppercase text-xs sm:text-sm shadow-xl hover:bg-brand-strong transition duration-150 disabled:opacity-50 active:scale-[0.99] flex items-center justify-center space-x-2 cursor-pointer"
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-white/70 hover:text-white transition cursor-pointer"
+              aria-label="Toggle password visibility"
             >
-              {loading ? (
-                <>
-                  <span className="animate-spin h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full" />
-                  <span>AUTHENTICATING...</span>
-                </>
-              ) : (
-                <>
-                  <span>SIGN IN TO HUB</span>
-                  <ArrowRight className="h-4 w-4" />
-                </>
-              )}
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
-          </form>
-
-          <div className="relative flex items-center justify-center my-3">
-            <div className="border-t border-border w-full"></div>
-            <span className="bg-card px-3 text-[11px] text-muted-foreground uppercase font-bold">
-              or
-            </span>
-            <div className="border-t border-border w-full"></div>
           </div>
 
-          {/* Sign in with Google Workspace OAuth */}
+          {/* Remember Me & Forgot Password */}
+          <div className="flex items-center justify-between text-xs pt-1 text-white/90">
+            <label className="flex items-center space-x-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-white/40 bg-white/20 text-emerald-600 focus:ring-0 accent-[#698a3b] cursor-pointer"
+              />
+              <span className="font-semibold drop-shadow-sm">Remember me</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setForgotEmail(email);
+                setForgotError('');
+                setForgotSuccess('');
+                setShowForgotModal(true);
+              }}
+              className="font-medium hover:underline cursor-pointer text-white/90 hover:text-white drop-shadow-sm"
+            >
+              Forgot Password?
+            </button>
+          </div>
+
+          {/* Submit Action Button (Lush Nature Green Glass Gradient) */}
           <button
-            type="button"
-            disabled={googleLoading}
-            onClick={handleGoogleSignIn}
-            className="w-full py-3 px-4 rounded-xl bg-surface border border-border hover:border-primary/50 text-foreground font-bold text-xs tracking-wider uppercase flex items-center justify-center space-x-3 transition active:scale-[0.99] cursor-pointer shadow-sm disabled:opacity-50"
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#698a3b]/90 to-[#4d6b27]/90 hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/30 text-white font-extrabold tracking-wide text-base shadow-[0_4px_20px_rgba(77,107,39,0.5)] backdrop-blur-md transition duration-200 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer"
           >
-            {googleLoading ? (
-              <span className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+            {loading ? (
+              <>
+                <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+                <span>Logging In...</span>
+              </>
             ) : (
-              <svg className="h-4 w-4" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                />
-              </svg>
+              <span>Login</span>
             )}
-            <span>SIGN IN WITH GOOGLE WORKSPACE</span>
           </button>
+        </form>
+
+        {/* Divider */}
+        <div className="relative flex items-center justify-center my-2">
+          <div className="border-t border-white/20 w-full"></div>
+          <span className="px-3 text-[11px] text-white/70 uppercase font-bold tracking-wider">
+            or
+          </span>
+          <div className="border-t border-white/20 w-full"></div>
         </div>
 
-        {/* Right Column: Mission & Vision Cards */}
-        <div className="lg:col-span-6 space-y-4">
-          {/* Vision Card */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-surface border border-border relative overflow-hidden space-y-2.5 shadow-sm">
-            <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
-            <div className="flex items-center space-x-3">
-              <div className="h-9 w-9 rounded-xl bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
-                <Target className="h-4 w-4" />
-              </div>
-              <h2 className="text-base font-extrabold text-foreground">Our Vision</h2>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed pl-1">
-              The Foundation envisions a society free from all forms of exploitation and
-              discrimination, where every child has the opportunity for education, and every youth
-              has the opportunity to realise their potential.
-            </p>
-          </div>
+        {/* Google Workspace OAuth Button (Frosted Glass) */}
+        <button
+          type="button"
+          disabled={googleLoading}
+          onClick={handleGoogleSignIn}
+          className="w-full py-3 px-4 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center space-x-3 transition active:scale-[0.98] cursor-pointer shadow-md backdrop-blur-md disabled:opacity-50"
+        >
+          {googleLoading ? (
+            <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+          ) : (
+            <svg className="h-4 w-4" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+              />
+            </svg>
+          )}
+          <span>SIGN IN WITH GOOGLE WORKSPACE</span>
+        </button>
 
-          {/* Mission Card */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-surface border border-border relative overflow-hidden space-y-2.5 shadow-sm">
-            <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary"></div>
-            <div className="flex items-center space-x-3">
-              <div className="h-9 w-9 rounded-xl bg-primary/20 flex items-center justify-center text-primary flex-shrink-0">
-                <Rocket className="h-4 w-4" />
-              </div>
-              <h2 className="text-base font-extrabold text-foreground">Our Mission</h2>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed pl-1">
-              To bring about substantial improvement in the lives of underprivileged children and
-              youth living in poverty, illiteracy, and social inequality through quality education and
-              youth empowerment.
-            </p>
-          </div>
-        </div>
+        {/* Footer info */}
+        <p className="text-center text-xs text-white/70 pt-1 font-medium">
+          JAAGO Foundation Enterprise Ecosystem
+        </p>
       </div>
 
-      {/* ── FORGOT PASSWORD MODAL (SUPABASE RECOVERY) ── */}
+      {/* ── FORGOT PASSWORD MODAL (FROSTED GLASS) ── */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-border pb-3">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-black/40 border border-white/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 backdrop-blur-2xl text-white animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-white/20 pb-3">
               <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-500">
+                <div className="h-8 w-8 rounded-xl bg-amber-400/20 flex items-center justify-center text-amber-300">
                   <Mail className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-foreground">Password Recovery</h3>
-                  <p className="text-[11px] text-muted-foreground">Supabase Authentication Service</p>
+                  <h3 className="text-base font-extrabold text-white">Password Recovery</h3>
+                  <p className="text-[11px] text-white/70">Supabase Authentication Service</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowForgotModal(false)}
-                className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                className="p-1 text-white/70 hover:text-white cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              Enter your registered organization work email address. We will dispatch a secure Supabase
+            <p className="text-xs text-white/80 leading-relaxed">
+              Enter your registered organization work email address. We will send a secure Supabase
               password reset link to your inbox.
             </p>
 
             {forgotError && (
-              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold animate-in fade-in">
+              <div className="p-3 rounded-xl bg-red-500/30 border border-red-500/40 text-white text-xs font-semibold animate-in fade-in">
                 {forgotError}
               </div>
             )}
 
             {forgotSuccess ? (
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-2 animate-in fade-in">
-                <CheckCircle2 className="h-7 w-7 text-emerald-500 mx-auto" />
-                <div className="text-xs font-bold text-foreground">{forgotSuccess}</div>
+              <div className="p-4 rounded-2xl bg-emerald-500/25 border border-emerald-500/40 text-center space-y-2 animate-in fade-in">
+                <CheckCircle2 className="h-7 w-7 text-emerald-300 mx-auto" />
+                <div className="text-xs font-bold text-white">{forgotSuccess}</div>
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(false)}
-                  className="mt-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-wider cursor-pointer"
+                  className="mt-2 px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 border border-white/40 text-white font-bold text-xs uppercase tracking-wider cursor-pointer"
                 >
                   Return to Sign In
                 </button>
@@ -489,19 +420,19 @@ export default function LoginPage() {
             ) : (
               <form onSubmit={handleForgotSubmit} className="space-y-3.5">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-foreground">Work Email Address *</label>
+                  <label className="text-xs font-bold text-white">Work Email Address *</label>
                   <input
                     type="email"
                     required
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     placeholder="e.g. name@jaago.com.bd"
-                    className="w-full px-3.5 py-2.5 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-xs"
+                    className="w-full px-3.5 py-2.5 bg-white/10 border border-white/30 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-white/60 text-xs backdrop-blur-md"
                   />
-                  <p className="text-[10px] text-muted-foreground">
-                    Only <strong className="text-foreground">@jaago.com.bd</strong>,{' '}
-                    <strong className="text-foreground">@jaagofoundation.org</strong>, or{' '}
-                    <strong className="text-foreground">@emkcenter.org</strong> emails are eligible.
+                  <p className="text-[10px] text-white/70">
+                    Only <strong className="text-white">@jaago.com.bd</strong>,{' '}
+                    <strong className="text-white">@jaagofoundation.org</strong>, or{' '}
+                    <strong className="text-white">@emkcenter.org</strong> are eligible.
                   </p>
                 </div>
 
@@ -509,14 +440,14 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setShowForgotModal(false)}
-                    className="px-4 py-2 rounded-xl text-muted-foreground hover:bg-surface font-bold text-xs cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-white/70 hover:bg-white/10 font-bold text-xs cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={forgotLoading}
-                    className="px-4 py-2 rounded-xl bg-primary hover:bg-brand-strong text-primary-foreground font-black text-xs uppercase tracking-wider shadow-md transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#698a3b] to-[#4d6b27] hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/30 text-white font-black text-xs uppercase tracking-wider shadow-md transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {forgotLoading ? (
                       <span>SENDING...</span>
