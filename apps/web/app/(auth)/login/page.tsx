@@ -10,13 +10,10 @@ import {
   EyeOff,
   Target,
   Rocket,
-  Shield,
-  Sparkles,
   Sun,
   Moon,
   Coffee,
   ArrowRight,
-  UserCheck,
   AlertTriangle,
   CheckCircle2,
   X,
@@ -32,8 +29,8 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('nasif.kamal@jaago.com.bd');
-  const [password, setPassword] = useState('Password123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -88,20 +85,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickFill = (role: 'admin' | 'manager' | 'officer') => {
-    setErrorMessage('');
-    if (role === 'admin') {
-      setEmail('nasif.kamal@jaago.com.bd');
-      setPassword('Password123!');
-    } else if (role === 'manager') {
-      setEmail('masoor.rahman@jaago.com.bd');
-      setPassword('Password123!');
-    } else {
-      setEmail('habibur.rahman@jaago.com.bd');
-      setPassword('Password123!');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -140,7 +123,7 @@ export default function LoginPage() {
         return;
       }
 
-      // ── 3. API ROUTE FALLBACK (Tenant Registry / Mock Session) ──
+      // ── 3. API ROUTE FALLBACK (Tenant Registry / Seed Fallback) ──
       const res = await fetch('/api/v1/auth/sign-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -278,61 +261,14 @@ export default function LoginPage() {
       {/* ── MAIN LOGIN CONTAINER ── */}
       <div className="rounded-3xl border border-border bg-card shadow-2xl p-6 sm:p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center backdrop-blur-md">
         {/* Left Column: Sign-In Form */}
-        <div className="lg:col-span-6 space-y-5">
+        <div className="lg:col-span-6 space-y-6">
           <div>
-            <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-primary">
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Enterprise Single Sign-On &bull; Supabase Auth</span>
-            </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1">
               Sign In.
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">
               Access the <span className="text-primary font-bold">JAAGO HUB v2.2</span> Ecosystem
             </p>
-          </div>
-
-          {/* Domain Notice Banner */}
-          <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-500 dark:text-amber-400 font-semibold flex items-center space-x-2">
-            <Shield className="h-3.5 w-3.5 flex-shrink-0" />
-            <span>
-              Authorized domains: <strong className="text-foreground">@jaago.com.bd</strong>,{' '}
-              <strong className="text-foreground">@jaagofoundation.org</strong>,{' '}
-              <strong className="text-foreground">@emkcenter.org</strong>
-            </span>
-          </div>
-
-          {/* Quick Demo Autofill Pills for rapid testing on all devices */}
-          <div className="space-y-1.5">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              ⚡ Quick Demo Credentials:
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleQuickFill('admin')}
-                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1 cursor-pointer"
-              >
-                <UserCheck className="h-3 w-3 text-purple-400" />
-                <span>Super Admin</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('manager')}
-                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1 cursor-pointer"
-              >
-                <UserCheck className="h-3 w-3 text-blue-400" />
-                <span>HR Manager</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('officer')}
-                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1 cursor-pointer"
-              >
-                <UserCheck className="h-3 w-3 text-amber-400" />
-                <span>Procurement</span>
-              </button>
-            </div>
           </div>
 
           {errorMessage && (
@@ -342,7 +278,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-foreground">Work Email Address *</label>
               <div className="relative">
@@ -354,7 +290,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. yourname@jaago.com.bd"
+                  placeholder="name@jaago.com.bd"
                   className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-xs sm:text-sm font-medium"
                 />
               </div>
@@ -467,16 +403,9 @@ export default function LoginPage() {
             )}
             <span>SIGN IN WITH GOOGLE WORKSPACE</span>
           </button>
-
-          <p className="text-center text-xs text-muted-foreground pt-1">
-            New employee or volunteer?{' '}
-            <a href="/pnc/employees" className="text-primary font-bold hover:underline">
-              People &amp; Culture Portal
-            </a>
-          </p>
         </div>
 
-        {/* Right Column: Mission, Vision & Security Cards */}
+        {/* Right Column: Mission & Vision Cards */}
         <div className="lg:col-span-6 space-y-4">
           {/* Vision Card */}
           <div className="p-5 sm:p-6 rounded-2xl bg-surface border border-border relative overflow-hidden space-y-2.5 shadow-sm">
@@ -508,17 +437,6 @@ export default function LoginPage() {
               youth living in poverty, illiteracy, and social inequality through quality education and
               youth empowerment.
             </p>
-          </div>
-
-          {/* Security & Multi-Tenant Assurance Badge */}
-          <div className="p-4 rounded-2xl bg-surface/60 border border-border/80 flex items-center space-x-3 text-xs text-muted-foreground">
-            <Shield className="h-5 w-5 text-emerald-500 flex-shrink-0" />
-            <div>
-              <div className="font-bold text-foreground">Supabase Multi-Tenant Protection</div>
-              <div className="text-[11px]">
-                Domain Guard &bull; Row Level Security &bull; TLS 1.3 Strict &bull; Async Audit Spooling
-              </div>
-            </div>
           </div>
         </div>
       </div>
