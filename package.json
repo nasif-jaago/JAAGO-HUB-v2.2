@@ -10,6 +10,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --parallel",
+    "dev:web": "pnpm --filter @jaago/web dev",
+    "dev:worker": "pnpm --filter @jaago/worker dev",
+    "dev:log-runner": "pnpm --filter @jaago/log-runner dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

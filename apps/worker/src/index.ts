@@ -4,6 +4,7 @@ import { EmailJobPayload, ReportJobPayload, NotificationJobPayload } from '@jaag
 export class BackgroundWorkerService {
   private isRunning = false;
   private activeJobsCount = 0;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
 
   public async start(): Promise<void> {
     if (this.isRunning) return;
@@ -16,6 +17,11 @@ export class BackgroundWorkerService {
         concurrency: 5,
       },
     });
+
+    // Periodic heartbeat to keep daemon active
+    this.heartbeatTimer = setInterval(() => {
+      // Background worker active
+    }, 5000);
   }
 
   public async processEmailJob(jobId: string, payload: EmailJobPayload): Promise<void> {
@@ -92,6 +98,10 @@ export class BackgroundWorkerService {
 
   public async stop(): Promise<void> {
     this.isRunning = false;
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     logger.info('SYSTEM', 'worker.engine.stopping', {
       service: 'worker',
       metadata: { inFlightJobs: this.activeJobsCount },
