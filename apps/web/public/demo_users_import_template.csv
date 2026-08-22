@@ -1,0 +1,6 @@
+full_name,email,role,department,branch,job_title,phone,create_employee
+Habibur Rahman,habibur.rahman@jaago.com.bd,Manager,Admin & Procurement,Head Office (Banani),Senior Procurement Officer,+8801711000001,true
+Farhana Islam,farhana.islam@jaago.com.bd,Coordinator,Education & Schools,Rayer Bazar School,School Coordinator,+8801711000002,true
+Tariqul Ahmed,tariqul.ahmed@jaago.com.bd,Officer,Programs & Development,Chittagong Campus,Field Officer,+8801711000003,false
+Nabila Chowdhury,nabila.chowdhury@jaago.com.bd,Staff,Finance & Accounts,Head Office (Banani),Accounts Executive,+8801711000004,true
+Sadia Zaman,sadia.zaman@jaago.com.bd,Intern,Founder's Office,Head Office (Banani),Executive Intern,+8801711000005,false

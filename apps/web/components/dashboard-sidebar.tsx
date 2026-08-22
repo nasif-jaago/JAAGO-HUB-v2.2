@@ -327,10 +327,25 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
             {openSections['settings'] && !collapsed && (
               <div className="pl-4 space-y-0.5 text-sidebar-foreground">
                 <Link
-                  href="/admin/modules"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  href="/admin/users"
+                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    pathname === '/admin/users'
+                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                  } transition`}
                 >
-                  <Boxes className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <Users className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>User Management</span>
+                </Link>
+                <Link
+                  href="/admin/modules"
+                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    pathname === '/admin/modules'
+                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                  } transition`}
+                >
+                  <Boxes className="h-3.5 w-3.5 flex-shrink-0" />
                   <span>Modules Manager</span>
                 </Link>
                 <Link
