@@ -49,9 +49,15 @@ import {
 export interface DashboardSidebarProps {
   collapsed: boolean;
   onToggle?: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-export function DashboardSidebar({ collapsed }: DashboardSidebarProps) {
+export function DashboardSidebar({
+  collapsed,
+  onMouseEnter,
+  onMouseLeave,
+}: DashboardSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -78,8 +84,12 @@ export function DashboardSidebar({ collapsed }: DashboardSidebarProps) {
 
   return (
     <aside
-      className={`fixed lg:relative top-0 bottom-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col justify-between select-none ${
-        collapsed ? '-translate-x-full lg:translate-x-0 lg:w-20' : 'w-72'
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-2xl ${
+        collapsed
+          ? '-translate-x-full w-72 pointer-events-none opacity-0'
+          : 'translate-x-0 w-72 pointer-events-auto opacity-100'
       }`}
     >
       {/* Top Section: Logo & Nav List */}

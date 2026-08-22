@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -25,6 +25,7 @@ import {
   Sun,
   Moon,
   Coffee,
+  Menu,
 } from 'lucide-react';
 
 export type ThemeMode = 'dark' | 'light' | 'espresso';
@@ -36,9 +37,42 @@ export default function PnCLayout({
 }) {
   const pathname = usePathname();
   const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-hide after 3 seconds on initial load
+  useEffect(() => {
+    startAutoHideTimer();
+    return () => {
+      clearAutoHideTimer();
+    };
+  }, []);
+
+  const startAutoHideTimer = () => {
+    clearAutoHideTimer();
+    hideTimerRef.current = setTimeout(() => {
+      setSidebarCollapsed(true);
+    }, 3000);
+  };
+
+  const clearAutoHideTimer = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  };
+
+  const handleMouseEnter = () => {
+    clearAutoHideTimer();
+    setSidebarCollapsed(false);
+  };
+
+  const handleMouseLeave = () => {
+    startAutoHideTimer();
+  };
 
   // Load saved theme or sync from DOM on mount
-  React.useEffect(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('jaago_theme') as ThemeMode | null;
       const root = document.documentElement;
@@ -99,11 +133,26 @@ export default function PnCLayout({
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row antialiased font-sans select-none">
+    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden">
+      {/* ── Left Edge Hit Sensor Panel (Hovering here opens sidebar) ── */}
+      <div
+        onMouseEnter={handleMouseEnter}
+        className="fixed top-0 bottom-0 left-0 w-4 md:w-5 z-50 pointer-events-auto cursor-pointer"
+        title="Hover left edge to open sidebar"
+      />
+
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* ── LEFT SIDEBAR (People & Culture HR Management) ─────────  */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <aside className="w-full md:w-72 bg-sidebar border-r border-sidebar-border flex flex-col justify-between h-screen sticky top-0 flex-shrink-0 z-30 overflow-hidden">
+      <aside
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-2xl overflow-hidden ${
+          sidebarCollapsed
+            ? '-translate-x-full w-72 pointer-events-none opacity-0'
+            : 'translate-x-0 w-72 pointer-events-auto opacity-100'
+        }`}
+      >
         {/* Top Header Card: P&C Brand Badge */}
         <div className="p-4 border-b border-sidebar-border space-y-3 bg-surface/30">
           <div className="flex items-center space-x-3">
@@ -349,13 +398,32 @@ export default function PnCLayout({
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* ── MAIN CONTENT WORKSPACE ────────────────────────────────  */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+      <div
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+          !sidebarCollapsed ? 'md:pl-72' : 'pl-0'
+        }`}
+      >
         {/* Top Header Bar */}
         <header className="h-16 border-b border-header-border bg-header text-header-foreground px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center space-x-2 text-xs sm:text-sm font-bold">
-            <span className="text-primary">People and Culture</span>
-            <span className="text-header-foreground/40">&gt;</span>
-            <span className="text-foreground">{getBreadcrumb()}</span>
+          <div className="flex items-center space-x-3 text-xs sm:text-sm font-bold">
+            <button
+              onClick={() => {
+                if (sidebarCollapsed) {
+                  handleMouseEnter();
+                } else {
+                  setSidebarCollapsed(true);
+                }
+              }}
+              className="p-1.5 rounded-xl hover:bg-surface/50 text-header-foreground transition cursor-pointer"
+              title="Toggle Sidebar"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="flex items-center space-x-2">
+              <span className="text-primary">People and Culture</span>
+              <span className="text-header-foreground/40">&gt;</span>
+              <span className="text-foreground">{getBreadcrumb()}</span>
+            </div>
           </div>
 
           <div className="flex items-center space-x-1.5 sm:space-x-3">
