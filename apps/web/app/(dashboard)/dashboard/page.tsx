@@ -11,24 +11,13 @@ import {
   LogOut,
   CheckCircle2,
   Building2,
-  Users,
   MapPin,
-  FileText,
-  DollarSign,
   Briefcase,
-  Layers,
-  Award,
-  CreditCard,
-  History,
-  Shield,
-  HeartHandshake,
   Inbox,
-  User,
   Timer,
 } from 'lucide-react';
 
 export default function DashboardPage() {
-  const [activeNavTab, setActiveNavTab] = useState('overview');
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -132,27 +121,6 @@ export default function DashboardPage() {
   };
 
   const firstName = user.fullName.split(' ')[0] || 'Nasif';
-
-  const quickNavItems = [
-    { id: 'overview', label: 'OVERVIEW', icon: Layers },
-    { id: 'my-profile', label: 'MY PROFILE', icon: User },
-    { id: 'attendance-logs', label: 'ATTENDANCE LOGS', icon: Clock },
-    { id: 'gps-attendance', label: 'GPS ATTENDANCE', icon: MapPin },
-    { id: 'all-request', label: 'ALL REQUEST', icon: FileText },
-    { id: 'history-track', label: 'HISTORY TRACK', icon: History },
-    { id: 'on-duty', label: 'ON DUTY', icon: Timer },
-    { id: 'my-leave', label: 'MY LEAVE', icon: Calendar },
-    { id: 'approvals', label: 'APPROVALS', icon: Shield },
-    { id: 'expenses', label: 'EXPENSES', icon: CreditCard },
-    { id: 'appraisal', label: 'APPRAISAL', icon: Award },
-    { id: 'payroll', label: 'PAYROLL', icon: DollarSign },
-    { id: 'tax-noc', label: 'TAX & NOC REQUEST', icon: FileText },
-    { id: 'on-leave', label: 'ON LEAVE', icon: User },
-    { id: 'my-department', label: 'MY DEPARTMENT', icon: Building2 },
-    { id: 'my-team', label: 'MY TEAM', icon: Users },
-    { id: 'meeting-rooms', label: 'MEETING ROOMS', icon: Building2 },
-    { id: 'volunteering', label: 'VOLUNTEERING PROGRAM', icon: HeartHandshake },
-  ];
 
   return (
     <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none">
@@ -435,31 +403,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── 2. HORIZONTAL QUICK NAVIGATION TABS BAR ── */}
-        <div className="p-2 rounded-2xl bg-card border border-border/80 shadow-md">
-          <div className="flex items-center space-x-1.5 overflow-x-auto scrollbar-none py-1 px-1">
-            {quickNavItems.map((item) => {
-              const isActive = activeNavTab === item.id;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveNavTab(item.id)}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex-shrink-0 ${
-                    isActive
-                      ? 'bg-primary/15 border border-primary/40 text-primary shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-surface'
-                  }`}
-                >
-                  <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span className="text-[11px] tracking-wide">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── 3. ROW OF 4 METRIC KPI CARDS ── */}
+        {/* ── 2. ROW OF 4 METRIC KPI CARDS ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
           {/* Card 1: Working Hours Today */}
           <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
