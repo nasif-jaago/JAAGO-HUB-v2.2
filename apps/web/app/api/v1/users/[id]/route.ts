@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@jaago/logger';
+import { deleteUsersByIds } from '@/lib/users-db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -7,14 +8,15 @@ export const dynamic = 'force-dynamic';
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
+    deleteUsersByIds([id]);
 
-    logger.info('AUDIT', 'user.deleted', {
+    logger.info('AUDIT', 'user.hard_deleted', {
       metadata: { userId: id },
     });
 
     return NextResponse.json({
       success: true,
-      message: `User ${id} has been permanently deleted from directory.`,
+      message: `User ${id} has been permanently hard deleted from database.`,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Delete operation failed' }, { status: 500 });

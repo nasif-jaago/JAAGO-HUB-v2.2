@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   X,
   FileSpreadsheet,
-  AlertCircle,
   Sparkles,
   Send,
   RefreshCw,
@@ -58,6 +57,7 @@ export default function UserManagementPage() {
   const [showCreateEmployeeModal, setShowCreateEmployeeModal] = useState<UserRecord | null>(null);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState<{ user: UserRecord; tempPass: string } | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState<UserRecord | null>(null);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
 
   // Form states
@@ -364,7 +364,7 @@ export default function UserManagementPage() {
     }
   };
 
-  // ── 9. DELETE USER ──
+  // ── 9. SINGLE HARD DELETE USER ──
   const handleDeleteUser = async () => {
     if (!showDeleteModal) return;
     try {
@@ -372,13 +372,38 @@ export default function UserManagementPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         setUsers((prev) => prev.filter((u) => u.id !== showDeleteModal.id));
-        showToast(`User ${showDeleteModal.fullName} permanently deleted.`);
+        setSelectedUserIds((prev) => prev.filter((id) => id !== showDeleteModal.id));
+        showToast(`User ${showDeleteModal.fullName} permanently hard deleted.`);
         setShowDeleteModal(null);
       } else {
-        alert(data.error || 'Delete failed');
+        alert(data.error || 'Hard delete failed');
       }
     } catch (err: any) {
       alert(err.message || 'Network error');
+    }
+  };
+
+  // ── 10. BULK HARD DELETE USERS ──
+  const handleBulkHardDelete = async () => {
+    if (selectedUserIds.length === 0) return;
+    try {
+      const res = await fetch('/api/v1/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedUserIds }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const count = selectedUserIds.length;
+        setUsers((prev) => prev.filter((u) => !selectedUserIds.includes(u.id)));
+        setSelectedUserIds([]);
+        setShowBulkDeleteModal(false);
+        showToast(`Permanently hard deleted ${count} user account(s) from database.`);
+      } else {
+        alert(data.error || 'Bulk hard delete failed');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Network error during hard delete');
     }
   };
 
@@ -469,6 +494,18 @@ export default function UserManagementPage() {
             <Download className="h-4 w-4 text-blue-500" />
             <span>Export</span>
           </button>
+
+          {/* Delete Button shown when one or more users are selected */}
+          {selectedUserIds.length > 0 && (
+            <button
+              onClick={() => setShowBulkDeleteModal(true)}
+              className="px-4 py-2.5 rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground font-black text-xs uppercase tracking-wider flex items-center space-x-2 shadow-xl transition transform active:scale-95 cursor-pointer animate-in fade-in zoom-in-95 border border-rose-600/40"
+              title="Permanently Hard Delete Selected Users"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete ({selectedUserIds.length})</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1422,38 +1459,141 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* ── MODAL 7: DELETE CONFIRMATION ── */}
+      {/* ── FLOATING BULK SELECTION ACTION BAR ── */}
+      {selectedUserIds.length > 0 && (
+        <div className="fixed bottom-6 inset-x-0 max-w-xl mx-auto z-50 bg-[#1A150E]/95 dark:bg-[#1A150E]/95 text-white backdrop-blur-md px-6 py-3.5 rounded-2xl shadow-2xl border border-primary/40 flex items-center justify-between animate-in fade-in slide-in-from-bottom-5">
+          <div className="flex items-center space-x-3">
+            <span className="h-2.5 w-2.5 rounded-full bg-primary animate-pulse" />
+            <span className="text-xs font-bold font-mono text-white">
+              {selectedUserIds.length} user{selectedUserIds.length > 1 ? 's' : ''} selected
+            </span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setSelectedUserIds([])}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-white/10 text-stone-300 hover:text-white transition cursor-pointer"
+            >
+              Deselect All
+            </button>
+            <button
+              onClick={() => setShowBulkDeleteModal(true)}
+              className="px-4 py-2 rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs font-black uppercase tracking-wider flex items-center space-x-1.5 shadow-lg transition transform active:scale-95 cursor-pointer"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Hard Delete ({selectedUserIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 7: SINGLE USER HARD DELETE CONFIRMATION ── */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-destructive/40 rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center space-x-3 text-destructive">
-              <AlertCircle className="h-6 w-6 flex-shrink-0" />
-              <h3 className="text-base font-bold text-foreground">Delete User Account</h3>
+              <div className="h-10 w-10 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-foreground">Permanently Hard Delete User</h3>
+                <p className="text-[11px] font-bold text-destructive uppercase tracking-wider">Irreversible Database Action</p>
+              </div>
             </div>
 
-            <div className="text-xs text-muted-foreground space-y-2">
-              <p>
-                Are you sure you want to permanently delete user{' '}
-                <span className="font-bold text-foreground">{showDeleteModal.fullName}</span> (
-                {showDeleteModal.email})?
-              </p>
-              <p className="text-rose-500 font-semibold">
-                This action cannot be undone. All active sessions, tokens, and access credentials will be revoked.
-              </p>
+            <div className="text-xs text-muted-foreground space-y-2.5 bg-surface p-4 rounded-2xl border border-border">
+              <div>
+                <span className="text-muted-foreground font-semibold">User:</span>{' '}
+                <span className="font-extrabold text-foreground">{showDeleteModal.fullName}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground font-semibold">Email:</span>{' '}
+                <span className="font-mono text-foreground">{showDeleteModal.email}</span>
+              </div>
+              {showDeleteModal.employeeId && (
+                <div>
+                  <span className="text-muted-foreground font-semibold">Linked Employee ID:</span>{' '}
+                  <span className="font-mono font-bold text-amber-500">{showDeleteModal.employeeId}</span>
+                </div>
+              )}
             </div>
+
+            <p className="text-[11px] font-semibold text-rose-500 bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl">
+              ⚠️ Warning: This is a permanent HARD DELETE. The user account, auth session tokens, database records, and RBAC matrix permissions will be permanently expunged.
+            </p>
 
             <div className="flex items-center justify-end space-x-2 pt-3 border-t border-border">
               <button
                 onClick={() => setShowDeleteModal(null)}
-                className="px-4 py-2 rounded-xl bg-surface border border-border text-foreground font-bold text-xs"
+                className="px-4 py-2 rounded-xl bg-surface border border-border text-foreground font-bold text-xs hover:bg-surface/80 transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteUser}
-                className="px-5 py-2 rounded-xl bg-destructive text-destructive-foreground font-black text-xs uppercase tracking-wider hover:bg-destructive/90 transition shadow-md"
+                className="px-5 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-black text-xs uppercase tracking-wider hover:bg-destructive/90 transition shadow-lg flex items-center space-x-1.5 cursor-pointer"
               >
-                Delete Permanently
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Confirm Hard Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 8: BULK HARD DELETE CONFIRMATION ── */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-destructive/40 rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center space-x-3 text-destructive">
+              <div className="h-10 w-10 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-foreground">
+                  Permanently Hard Delete ({selectedUserIds.length}) Users
+                </h3>
+                <p className="text-[11px] font-bold text-destructive uppercase tracking-wider">Batch Database Operation</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              You are about to permanently hard delete the following <span className="font-bold text-foreground">{selectedUserIds.length}</span> user accounts from the database:
+            </p>
+
+            {/* Selected Users List Preview */}
+            <div className="max-h-48 overflow-y-auto space-y-1.5 p-3 rounded-2xl bg-surface border border-border divide-y divide-border/40 text-xs no-scrollbar">
+              {users
+                .filter((u) => selectedUserIds.includes(u.id))
+                .map((u) => (
+                  <div key={u.id} className="pt-1.5 first:pt-0 flex items-center justify-between">
+                    <div>
+                      <span className="font-extrabold text-foreground">{u.fullName}</span>
+                      <span className="text-[10px] text-muted-foreground ml-2 font-mono">({u.email})</span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-surface border border-border text-muted-foreground">
+                      {u.role}
+                    </span>
+                  </div>
+                ))}
+            </div>
+
+            <p className="text-[11px] font-semibold text-rose-500 bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl">
+              ⚠️ This action cannot be undone. All active sessions, authentication tokens, and user database records will be permanently destroyed.
+            </p>
+
+            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-border">
+              <button
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-4 py-2 rounded-xl bg-surface border border-border text-foreground font-bold text-xs hover:bg-surface/80 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkHardDelete}
+                className="px-5 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-black text-xs uppercase tracking-wider hover:bg-destructive/90 transition shadow-lg flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Hard Delete ({selectedUserIds.length}) Records</span>
               </button>
             </div>
           </div>
