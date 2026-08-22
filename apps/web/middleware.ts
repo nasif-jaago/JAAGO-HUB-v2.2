@@ -10,10 +10,10 @@ export function middleware(_request: NextRequest) {
     script-src 'self' 'unsafe-eval' 'unsafe-inline';
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
-    img-src 'self' data: blob: https://storage.jaago.com.bd;
-    connect-src 'self' https://storage.jaago.com.bd;
+    img-src 'self' data: blob: https://storage.jaago.com.bd https://*.supabase.co https://*.googleusercontent.com;
+    connect-src 'self' https://storage.jaago.com.bd https://*.supabase.co https://*.googleapis.com;
     frame-ancestors 'none';
-    form-action 'self';
+    form-action 'self' https://*.supabase.co https://accounts.google.com;
   `.replace(/\s{2,}/g, ' ').trim();
 
   response.headers.set('Content-Security-Policy', cspHeader);
