@@ -31,7 +31,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [bgType, setBgType] = useState<'meadow' | 'leaves'>('meadow');
+  const [bgType, setBgType] = useState<'meadow' | 'brand'>('meadow');
 
   // Forgot Password Modal State
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -43,7 +43,7 @@ export default function LoginPage() {
   // Check URL query parameters for OAuth redirects or errors
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedBg = localStorage.getItem('jaago_login_bg') as 'meadow' | 'leaves';
+      const savedBg = localStorage.getItem('jaago_login_bg') as 'meadow' | 'brand';
       if (savedBg) setBgType(savedBg);
 
       const params = new URLSearchParams(window.location.search);
@@ -63,7 +63,7 @@ export default function LoginPage() {
   }, []);
 
   const toggleBackground = () => {
-    const nextBg = bgType === 'meadow' ? 'leaves' : 'meadow';
+    const nextBg = bgType === 'meadow' ? 'brand' : 'meadow';
     setBgType(nextBg);
     if (typeof window !== 'undefined') {
       localStorage.setItem('jaago_login_bg', nextBg);
@@ -187,19 +187,27 @@ export default function LoginPage() {
     }
   };
 
-  const bgImageSrc = bgType === 'leaves' ? '/login-leaves.png' : '/login-bg.png';
+  const bgImageSrc = bgType === 'brand' ? '/jaago-brand-banner.png' : '/login-bg.png';
 
   return (
-    <div className="relative min-h-screen w-full flex items-center justify-center p-4 sm:p-6 overflow-hidden">
-      {/* ── FULLSCREEN NATURE BACKGROUND IMAGE ── */}
-      <div
-        className="fixed inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700 transform scale-105"
-        style={{
-          backgroundImage: `url('${bgImageSrc}')`,
-        }}
-      >
-        {/* Ambient Dark/Glass Tint Overlay */}
-        <div className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"></div>
+    <div className="relative min-h-screen w-full flex items-center justify-center p-4 sm:p-6 overflow-hidden select-none">
+      {/* ── FULLSCREEN AUTO-ADJUSTING BACKGROUND IMAGE ── */}
+      <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden">
+        <Image
+          src={bgImageSrc}
+          alt="JAAGO Hub Background"
+          fill
+          priority
+          sizes="100vw"
+          quality={100}
+          className="object-cover object-center w-full h-full transform scale-105 transition-all duration-700"
+        />
+        {/* Soft Ambient Frosted Glass Darkening Overlay for High Legibility */}
+        <div
+          className={`absolute inset-0 transition-colors duration-500 ${
+            bgType === 'brand' ? 'bg-black/55 backdrop-blur-[4px]' : 'bg-black/25 backdrop-blur-[2px]'
+          }`}
+        />
       </div>
 
       {/* ── TOP RIGHT SWITCHER (Background Theme) ── */}
@@ -207,11 +215,11 @@ export default function LoginPage() {
         <button
           type="button"
           onClick={toggleBackground}
-          title={`Switch to ${bgType === 'meadow' ? 'Green Leaves' : 'Meadow Landscape'} Background`}
+          title={`Switch to ${bgType === 'meadow' ? 'JAAGO Brand' : 'Nature Meadow'} Background`}
           className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 border border-white/40 text-white text-xs font-semibold backdrop-blur-md transition shadow-lg cursor-pointer active:scale-95"
         >
           <ImageIcon className="h-3.5 w-3.5" />
-          <span className="capitalize">{bgType} Theme</span>
+          <span className="capitalize">{bgType === 'meadow' ? 'Meadow' : 'Brand'} Theme</span>
         </button>
       </div>
 
@@ -219,14 +227,14 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-[420px] rounded-[32px] border border-white/40 bg-white/10 dark:bg-black/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] backdrop-blur-2xl p-7 sm:p-9 space-y-6 text-white animate-in fade-in zoom-in-95 duration-300">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(255,230,0,0.4)] border border-[#FFE600]/80 bg-black/40 backdrop-blur-md p-1 mb-1">
+          <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(255,230,0,0.4)] border border-[#FFE600]/80 bg-black/40 backdrop-blur-md p-1.5 mb-1">
             <Image
               src="/jaago-logo.png"
               alt="JAAGO Foundation"
-              width={140}
-              height={70}
+              width={160}
+              height={80}
               priority
-              className="w-28 sm:w-32 h-auto object-cover block mx-auto"
+              className="w-32 sm:w-36 h-auto object-contain block mx-auto"
             />
           </div>
 
