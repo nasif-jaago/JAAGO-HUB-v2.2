@@ -9,6 +9,7 @@ import {
   Bell,
   Search,
   Tv,
+  Smartphone,
   LogOut,
   ChevronDown,
 } from 'lucide-react';
@@ -24,34 +25,40 @@ export interface DashboardHeaderProps {
 }
 
 export type ThemeMode = 'dark' | 'light' | 'espresso';
+export type ViewMode = 'desktop' | 'mobile';
 
 export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps) {
   const router = useRouter();
   const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [viewMode, setViewMode] = useState<ViewMode>('desktop');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [lang, setLang] = useState<'en' | 'bn'>('en');
 
-  // Load saved theme or sync from DOM on mount
+  // Load saved theme and view mode from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('jaago_theme') as ThemeMode | null;
+      const savedTheme = localStorage.getItem('jaago_theme') as ThemeMode | null;
       const root = document.documentElement;
-      if (saved === 'dark' || saved === 'light' || saved === 'espresso') {
+      if (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'espresso') {
         root.classList.remove('dark', 'light', 'espresso');
-        if (saved !== 'light') {
-          root.classList.add(saved);
+        if (savedTheme !== 'light') {
+          root.classList.add(savedTheme);
         }
-        setTheme(saved);
+        setTheme(savedTheme);
       } else if (root.classList.contains('espresso')) {
         setTheme('espresso');
       } else if (root.classList.contains('dark')) {
         setTheme('dark');
       } else {
         setTheme('light');
+      }
+
+      const savedViewMode = localStorage.getItem('jaago_view_mode') as ViewMode | null;
+      if (savedViewMode === 'mobile' || savedViewMode === 'desktop') {
+        setViewMode(savedViewMode);
       }
     }
   }, []);
@@ -95,6 +102,15 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
     }
   };
 
+  const toggleViewMode = () => {
+    const nextMode: ViewMode = viewMode === 'desktop' ? 'mobile' : 'desktop';
+    setViewMode(nextMode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('jaago_view_mode', nextMode);
+      window.dispatchEvent(new CustomEvent('jaago_view_mode_change', { detail: nextMode }));
+    }
+  };
+
   const handleSignOut = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('jaago_access_token');
@@ -109,7 +125,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
       <div className="flex items-center space-x-3">
         <button
           onClick={onToggleSidebar}
-          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition"
+          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition cursor-pointer"
           aria-label="Toggle navigation menu"
         >
           <Menu className="h-5 w-5" />
@@ -134,7 +150,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         {/* Desktop Search */}
         <button
           onClick={() => setShowSearchModal(true)}
-          className="hidden sm:inline-flex p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition"
+          className="hidden sm:inline-flex p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition cursor-pointer"
           title="Search (Cmd+K)"
         >
           <Search className="h-4 w-4 hover:text-primary" />
@@ -196,19 +212,10 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
           </div>
         )}
 
-        {/* Language Switcher */}
-        <button
-          onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}
-          className="px-2.5 py-1 rounded-xl text-xs font-mono font-bold bg-surface/50 border border-header-border text-header-foreground hover:border-primary/50 transition shadow-sm"
-          title="Switch Language (English / বাংলা)"
-        >
-          {lang === 'en' ? 'EN' : 'বাংলা'}
-        </button>
-
         {/* Theme Switcher (3-Way: Dark / Light / Espresso) */}
         <button
           onClick={cycleTheme}
-          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition flex items-center justify-center"
+          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition flex items-center justify-center cursor-pointer"
           title={`Theme: ${
             theme === 'dark'
               ? 'Matte Black (Click for Light Mode)'
@@ -223,36 +230,41 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
           {theme === 'espresso' && <Coffee className="h-4 w-4 text-amber-400" />}
         </button>
 
-        {/* Mobile Quick Sign Out Button (Matching Reference Image 2) */}
+        {/* Mobile Quick Sign Out Button */}
         <button
           onClick={handleSignOut}
-          className="sm:hidden p-2 rounded-xl text-destructive hover:bg-destructive/10 transition border border-destructive/20"
+          className="sm:hidden p-2 rounded-xl text-destructive hover:bg-destructive/10 transition border border-destructive/20 cursor-pointer"
           title="Sign Out"
           aria-label="Sign Out"
         >
           <LogOut className="h-4 w-4" />
         </button>
 
-        {/* Screen mode */}
+        {/* Shift Mobile View & Desktop View Button */}
         <button
-          onClick={() => {
-            if (!document.fullscreenElement) {
-              document.documentElement.requestFullscreen().catch(() => {});
-            } else {
-              document.exitFullscreen().catch(() => {});
-            }
-          }}
-          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition hidden sm:inline-flex"
-          title="Screen Mode"
+          onClick={toggleViewMode}
+          className={`p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition flex items-center justify-center cursor-pointer ${
+            viewMode === 'mobile' ? 'bg-primary/20 text-primary border border-primary/40' : ''
+          }`}
+          title={
+            viewMode === 'mobile'
+              ? 'Currently in Mobile View — Click to shift to Desktop View'
+              : 'Currently in Desktop View — Click to shift to Mobile View'
+          }
+          aria-label="Shift Mobile View and Desktop View"
         >
-          <Tv className="h-4 w-4 hover:text-primary" />
+          {viewMode === 'mobile' ? (
+            <Smartphone className="h-4 w-4 text-primary" />
+          ) : (
+            <Tv className="h-4 w-4 hover:text-primary" />
+          )}
         </button>
 
         {/* Notifications */}
         <div className="relative">
           <button
             onClick={() => setShowNotifMenu(!showNotifMenu)}
-            className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition relative"
+            className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition relative cursor-pointer"
             title="Notifications"
           >
             <Bell className="h-4 w-4 hover:text-primary" />
@@ -322,7 +334,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         <div className="relative pl-1">
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="flex items-center space-x-2 p-0.5 rounded-full hover:ring-2 hover:ring-primary/50 transition"
+            className="flex items-center space-x-2 p-0.5 rounded-full hover:ring-2 hover:ring-primary/50 transition cursor-pointer"
           >
             <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-black flex items-center justify-center text-xs shadow-md">
               IA
@@ -339,7 +351,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
               <div className="pt-2">
                 <button
                   onClick={handleSignOut}
-                  className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl transition"
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl transition cursor-pointer"
                 >
                   <LogOut className="h-4 w-4" />
                   <span>Sign Out</span>

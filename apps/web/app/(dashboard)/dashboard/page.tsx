@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
+  const [viewMode, setViewMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -29,42 +30,58 @@ export default function DashboardPage() {
     organization: 'JAAGO Foundation Trust',
   });
 
-  // Fast hydration of attendance status & elapsed timer from localStorage
+  // Hydrate view mode, attendance status & elapsed timer from localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const storedUser = localStorage.getItem('jaago_user');
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          if (parsed.fullName) {
-            setUser({
-              fullName: parsed.fullName,
-              jobTitle: parsed.jobTitle || 'Coordinator',
-              department: parsed.department || "Founder's Office",
-              manager: parsed.manager || 'S M Nayeem Rahman',
-              organization: 'JAAGO Foundation Trust',
-            });
-          }
-        }
+    if (typeof window === 'undefined') return;
 
-        const savedState = localStorage.getItem('jaago_is_checked_in');
-        const savedTime = localStorage.getItem('jaago_checkin_timestamp');
-        if (savedState === 'true' && savedTime) {
-          setIsCheckedIn(true);
-          setCheckInTime(
-            new Date(parseInt(savedTime, 10)).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            })
-          );
-          const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
-          setElapsedSeconds(diffSeconds);
-        }
-      } catch {
-        // Fallback gracefully
+    const handleViewModeChange = (e: any) => {
+      if (e.detail) {
+        setViewMode(e.detail);
       }
+    };
+    window.addEventListener('jaago_view_mode_change', handleViewModeChange);
+
+    try {
+      const savedViewMode = localStorage.getItem('jaago_view_mode') as 'desktop' | 'mobile' | null;
+      if (savedViewMode) {
+        setViewMode(savedViewMode);
+      }
+
+      const storedUser = localStorage.getItem('jaago_user');
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        if (parsed.fullName) {
+          setUser({
+            fullName: parsed.fullName,
+            jobTitle: parsed.jobTitle || 'Coordinator',
+            department: parsed.department || "Founder's Office",
+            manager: parsed.manager || 'S M Nayeem Rahman',
+            organization: 'JAAGO Foundation Trust',
+          });
+        }
+      }
+
+      const savedState = localStorage.getItem('jaago_is_checked_in');
+      const savedTime = localStorage.getItem('jaago_checkin_timestamp');
+      if (savedState === 'true' && savedTime) {
+        setIsCheckedIn(true);
+        setCheckInTime(
+          new Date(parseInt(savedTime, 10)).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+        );
+        const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
+        setElapsedSeconds(diffSeconds);
+      }
+    } catch {
+      // Fallback gracefully
     }
+
+    return () => {
+      window.removeEventListener('jaago_view_mode_change', handleViewModeChange);
+    };
   }, []);
 
   // Live timer tick when checked in
@@ -127,7 +144,11 @@ export default function DashboardPage() {
       {/* ========================================================================= */}
       {/* 📱 MOBILE VIEW ONLY (Strictly based on Reference Images 2 & 3)            */}
       {/* ========================================================================= */}
-      <div className="block md:hidden space-y-4 pt-1">
+      <div
+        className={`${
+          viewMode === 'mobile' ? 'block max-w-md mx-auto' : viewMode === 'desktop' ? 'hidden' : 'block md:hidden'
+        } space-y-4 pt-1`}
+      >
         {/* User Greeting Header */}
         <div className="space-y-0.5 px-1">
           <h1 className="text-2xl font-black tracking-tight text-foreground">
@@ -313,7 +334,11 @@ export default function DashboardPage() {
       {/* ========================================================================= */}
       {/* 💻 DESKTOP, LAPTOP & TABLET VIEW ONLY (Pixel-Faithful to Provided Design)  */}
       {/* ========================================================================= */}
-      <div className="hidden md:block space-y-5">
+      <div
+        className={`${
+          viewMode === 'desktop' ? 'block' : viewMode === 'mobile' ? 'hidden' : 'hidden md:block'
+        } space-y-5`}
+      >
         {/* ── 1. USER PROFILE HERO CARD ── */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 relative">
           <div className="flex items-center space-x-5">
