@@ -29,6 +29,22 @@ export const POST = createApiHandler({
 
     const { email, password } = parsed.data;
 
+    // Strict domain check: Only @jaago.com.bd, @jaagofoundation.org, @emkcenter.org
+    const { isAllowedWorkDomain, getDomainRestrictionError } = await import('@jaago/auth');
+    if (!isAllowedWorkDomain(email)) {
+      logger.warn('SECURITY', 'auth.domain_rejected', { metadata: { email } });
+      return Response.json(
+        {
+          success: false,
+          error: {
+            message: getDomainRestrictionError(email),
+            code: 'AUTH_DOMAIN_RESTRICTED',
+          },
+        },
+        { status: 403 }
+      );
+    }
+
     // 1. Try Supabase Auth if configured with live credentials
     const isMock = !process.env['NEXT_PUBLIC_SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'].includes('mock') || !process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
 

@@ -17,7 +17,18 @@ import {
   Coffee,
   ArrowRight,
   UserCheck,
+  AlertTriangle,
+  CheckCircle2,
+  X,
+  Send,
 } from 'lucide-react';
+import {
+  isAllowedWorkDomain,
+  getDomainRestrictionError,
+  signInWithGoogle,
+  requestPasswordReset,
+  getSupabase,
+} from '@/lib/supabase-auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,11 +37,18 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [themeMode, setThemeMode] = useState<'dark' | 'light' | 'espresso'>('espresso');
-  const [showForgotModal, setShowForgotModal] = useState(false);
 
-  // Sync theme mode on mount
+  // Forgot Password Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState('');
+  const [forgotError, setForgotError] = useState('');
+
+  // Sync theme mode and inspect URL query params on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('jaago_theme') as 'dark' | 'light' | 'espresso';
@@ -40,6 +58,21 @@ export default function LoginPage() {
         if (savedTheme === 'dark') document.documentElement.classList.add('dark');
         else if (savedTheme === 'espresso') document.documentElement.classList.add('theme-espresso');
         else document.documentElement.classList.add('light');
+      }
+
+      // Check query params for OAuth errors
+      const params = new URLSearchParams(window.location.search);
+      const urlError = params.get('error');
+      const rejectedEmail = params.get('rejectedEmail');
+
+      if (urlError === 'domain_restricted') {
+        setErrorMessage(
+          `Access Restricted: Only official organization email domains (@jaago.com.bd, @jaagofoundation.org, @emkcenter.org) are permitted to sign in to JAAGO HUB.${
+            rejectedEmail ? ` ("${rejectedEmail}" is an outsider domain)` : ''
+          }`
+        );
+      } else if (urlError) {
+        setErrorMessage(decodeURIComponent(urlError));
       }
     }
   }, []);
@@ -56,6 +89,7 @@ export default function LoginPage() {
   };
 
   const handleQuickFill = (role: 'admin' | 'manager' | 'officer') => {
+    setErrorMessage('');
     if (role === 'admin') {
       setEmail('nasif.kamal@jaago.com.bd');
       setPassword('Password123!');
@@ -73,17 +107,50 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMessage('');
 
+    const cleanEmail = email.trim().toLowerCase();
+
+    // ── 1. STRICT WORK DOMAIN VALIDATION ──
+    if (!isAllowedWorkDomain(cleanEmail)) {
+      setErrorMessage(getDomainRestrictionError(cleanEmail));
+      setLoading(false);
+      return;
+    }
+
     try {
+      // ── 2. SUPABASE DIRECT AUTHENTICATION ATTEMPT ──
+      const supabase = getSupabase();
+      const { data: supaData, error: supaError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
+
+      if (!supaError && supaData.session && supaData.user) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('jaago_access_token', supaData.session.access_token);
+          localStorage.setItem(
+            'jaago_user',
+            JSON.stringify({
+              id: supaData.user.id,
+              email: supaData.user.email,
+              fullName: supaData.user.user_metadata['full_name'] || cleanEmail,
+            })
+          );
+        }
+        router.push('/dashboard');
+        return;
+      }
+
+      // ── 3. API ROUTE FALLBACK (Tenant Registry / Mock Session) ──
       const res = await fetch('/api/v1/auth/sign-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: cleanEmail, password }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error?.message || 'Sign in failed');
+        throw new Error(data.error?.message || 'Invalid credentials');
       }
 
       // Save session info to localStorage
@@ -97,6 +164,58 @@ export default function LoginPage() {
       setErrorMessage(err.message || 'An error occurred while signing in');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── 4. SIGN IN WITH GOOGLE WORKSPACE (SUPABASE OAUTH) ──
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setErrorMessage('');
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) throw error;
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to initiate Google sign-in');
+      setGoogleLoading(false);
+    }
+  };
+
+  // ── 5. FORGOT PASSWORD HANDLER (SUPABASE AUTH) ──
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotSuccess('');
+
+    const cleanForgotEmail = forgotEmail.trim().toLowerCase();
+
+    // Domain validation
+    if (!isAllowedWorkDomain(cleanForgotEmail)) {
+      setForgotError(getDomainRestrictionError(cleanForgotEmail));
+      return;
+    }
+
+    setForgotLoading(true);
+
+    try {
+      const { error } = await requestPasswordReset(cleanForgotEmail);
+      if (error) {
+        // Fallback to API route
+        const res = await fetch('/api/v1/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanForgotEmail }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error?.message || 'Failed to send reset link');
+      }
+
+      setForgotSuccess(
+        `Password reset instructions have been dispatched to ${cleanForgotEmail} via Supabase. Please check your inbox.`
+      );
+    } catch (err: any) {
+      setForgotError(err.message || 'Failed to send password recovery email.');
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -121,7 +240,7 @@ export default function LoginPage() {
             type="button"
             onClick={() => handleThemeChange('espresso')}
             title="Espresso Theme"
-            className={`p-1.5 rounded-lg transition ${
+            className={`p-1.5 rounded-lg transition cursor-pointer ${
               themeMode === 'espresso'
                 ? 'bg-amber-500 text-white font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
@@ -133,7 +252,7 @@ export default function LoginPage() {
             type="button"
             onClick={() => handleThemeChange('dark')}
             title="Dark Theme"
-            className={`p-1.5 rounded-lg transition ${
+            className={`p-1.5 rounded-lg transition cursor-pointer ${
               themeMode === 'dark'
                 ? 'bg-primary text-primary-foreground font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
@@ -145,7 +264,7 @@ export default function LoginPage() {
             type="button"
             onClick={() => handleThemeChange('light')}
             title="Light Theme"
-            className={`p-1.5 rounded-lg transition ${
+            className={`p-1.5 rounded-lg transition cursor-pointer ${
               themeMode === 'light'
                 ? 'bg-primary text-primary-foreground font-bold shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
@@ -159,11 +278,11 @@ export default function LoginPage() {
       {/* ── MAIN LOGIN CONTAINER ── */}
       <div className="rounded-3xl border border-border bg-card shadow-2xl p-6 sm:p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center backdrop-blur-md">
         {/* Left Column: Sign-In Form */}
-        <div className="lg:col-span-6 space-y-6">
+        <div className="lg:col-span-6 space-y-5">
           <div>
             <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-primary">
               <Sparkles className="h-3.5 w-3.5" />
-              <span>Enterprise Single Sign-On</span>
+              <span>Enterprise Single Sign-On &bull; Supabase Auth</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1">
               Sign In.
@@ -173,16 +292,26 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {/* Domain Notice Banner */}
+          <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-500 dark:text-amber-400 font-semibold flex items-center space-x-2">
+            <Shield className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>
+              Authorized domains: <strong className="text-foreground">@jaago.com.bd</strong>,{' '}
+              <strong className="text-foreground">@jaagofoundation.org</strong>,{' '}
+              <strong className="text-foreground">@emkcenter.org</strong>
+            </span>
+          </div>
+
           {/* Quick Demo Autofill Pills for rapid testing on all devices */}
           <div className="space-y-1.5">
             <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              ⚡ Quick Demo Login:
+              ⚡ Quick Demo Credentials:
             </div>
             <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
                 onClick={() => handleQuickFill('admin')}
-                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1"
+                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1 cursor-pointer"
               >
                 <UserCheck className="h-3 w-3 text-purple-400" />
                 <span>Super Admin</span>
@@ -190,7 +319,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleQuickFill('manager')}
-                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1"
+                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1 cursor-pointer"
               >
                 <UserCheck className="h-3 w-3 text-blue-400" />
                 <span>HR Manager</span>
@@ -198,7 +327,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => handleQuickFill('officer')}
-                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1"
+                className="px-2.5 py-1 rounded-lg bg-surface border border-border hover:border-primary text-[11px] font-bold text-foreground transition active:scale-95 flex items-center space-x-1 cursor-pointer"
               >
                 <UserCheck className="h-3 w-3 text-amber-400" />
                 <span>Procurement</span>
@@ -207,14 +336,15 @@ export default function LoginPage() {
           </div>
 
           {errorMessage && (
-            <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold animate-in fade-in">
-              {errorMessage}
+            <div className="p-3.5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive text-xs font-semibold animate-in fade-in flex items-start space-x-2.5">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <div className="leading-relaxed">{errorMessage}</div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-foreground">Work Email Address</label>
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-foreground">Work Email Address *</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
                   <Mail className="h-4 w-4" />
@@ -224,14 +354,14 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@jaago.com.bd"
-                  className="w-full pl-10 pr-4 py-3 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition text-sm"
+                  placeholder="e.g. yourname@jaago.com.bd"
+                  className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-xs sm:text-sm font-medium"
                 />
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-foreground">Account Password</label>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-foreground">Account Password *</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
                   <Lock className="h-4 w-4" />
@@ -241,8 +371,8 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full pl-10 pr-10 py-3 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition text-sm"
+                  placeholder="Enter account password"
+                  className="w-full pl-10 pr-10 py-2.5 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-xs sm:text-sm"
                 />
                 <button
                   type="button"
@@ -255,20 +385,25 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center justify-between text-xs pt-1">
               <label className="flex items-center space-x-2 cursor-pointer text-muted-foreground select-none">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary accent-primary"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer"
                 />
-                <span className="font-semibold text-foreground">Remember device</span>
+                <span className="font-semibold text-foreground text-xs">Remember device</span>
               </label>
               <button
                 type="button"
-                onClick={() => setShowForgotModal(true)}
-                className="font-bold text-primary hover:underline cursor-pointer"
+                onClick={() => {
+                  setForgotEmail(email);
+                  setForgotError('');
+                  setForgotSuccess('');
+                  setShowForgotModal(true);
+                }}
+                className="font-bold text-primary hover:underline cursor-pointer text-xs"
               >
                 Forgot Password?
               </button>
@@ -293,7 +428,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="relative flex items-center justify-center my-4">
+          <div className="relative flex items-center justify-center my-3">
             <div className="border-t border-border w-full"></div>
             <span className="bg-card px-3 text-[11px] text-muted-foreground uppercase font-bold">
               or
@@ -301,41 +436,41 @@ export default function LoginPage() {
             <div className="border-t border-border w-full"></div>
           </div>
 
-          {/* Sign in with Google */}
+          {/* Sign in with Google Workspace OAuth */}
           <button
             type="button"
-            onClick={() => {
-              setLoading(true);
-              setTimeout(() => {
-                router.push('/dashboard');
-              }, 500);
-            }}
-            className="w-full py-3 px-4 rounded-xl bg-surface border border-border hover:border-primary/50 text-foreground font-bold text-xs tracking-wider uppercase flex items-center justify-center space-x-3 transition active:scale-[0.99] cursor-pointer shadow-sm"
+            disabled={googleLoading}
+            onClick={handleGoogleSignIn}
+            className="w-full py-3 px-4 rounded-xl bg-surface border border-border hover:border-primary/50 text-foreground font-bold text-xs tracking-wider uppercase flex items-center justify-center space-x-3 transition active:scale-[0.99] cursor-pointer shadow-sm disabled:opacity-50"
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-              />
-            </svg>
+            {googleLoading ? (
+              <span className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
+            ) : (
+              <svg className="h-4 w-4" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                />
+              </svg>
+            )}
             <span>SIGN IN WITH GOOGLE WORKSPACE</span>
           </button>
 
           <p className="text-center text-xs text-muted-foreground pt-1">
             New employee or volunteer?{' '}
-            <a href="/pnc" target="_blank" className="text-primary font-bold hover:underline">
+            <a href="/pnc/employees" className="text-primary font-bold hover:underline">
               People &amp; Culture Portal
             </a>
           </p>
@@ -379,32 +514,104 @@ export default function LoginPage() {
           <div className="p-4 rounded-2xl bg-surface/60 border border-border/80 flex items-center space-x-3 text-xs text-muted-foreground">
             <Shield className="h-5 w-5 text-emerald-500 flex-shrink-0" />
             <div>
-              <div className="font-bold text-foreground">Enterprise Security Protected</div>
+              <div className="font-bold text-foreground">Supabase Multi-Tenant Protection</div>
               <div className="text-[11px]">
-                Multi-Tenant RLS &bull; TLS 1.3 Strict &bull; Async Audit Spooling
+                Domain Guard &bull; Row Level Security &bull; TLS 1.3 Strict &bull; Async Audit Spooling
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Forgot Password Modal */}
+      {/* ── FORGOT PASSWORD MODAL (SUPABASE RECOVERY) ── */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <h3 className="text-base font-extrabold text-foreground">Password Recovery</h3>
-            <p className="text-xs text-muted-foreground">
-              Please contact your System Administrator or Human Resources coordinator to reset your
-              credentials or generate a temporary password via the User Management portal.
-            </p>
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-500">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-foreground">Password Recovery</h3>
+                  <p className="text-[11px] text-muted-foreground">Supabase Authentication Service</p>
+                </div>
+              </div>
               <button
                 onClick={() => setShowForgotModal(false)}
-                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-wider hover:bg-brand-strong transition cursor-pointer"
+                className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
               >
-                Close
+                <X className="h-4 w-4" />
               </button>
             </div>
+
+            <p className="text-xs text-muted-foreground">
+              Enter your registered organization work email address. We will dispatch a secure Supabase
+              password reset link to your inbox.
+            </p>
+
+            {forgotError && (
+              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-xs font-semibold animate-in fade-in">
+                {forgotError}
+              </div>
+            )}
+
+            {forgotSuccess ? (
+              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center space-y-2 animate-in fade-in">
+                <CheckCircle2 className="h-7 w-7 text-emerald-500 mx-auto" />
+                <div className="text-xs font-bold text-foreground">{forgotSuccess}</div>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(false)}
+                  className="mt-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-wider cursor-pointer"
+                >
+                  Return to Sign In
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotSubmit} className="space-y-3.5">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-foreground">Work Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="e.g. name@jaago.com.bd"
+                    className="w-full px-3.5 py-2.5 bg-surface border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Only <strong className="text-foreground">@jaago.com.bd</strong>,{' '}
+                    <strong className="text-foreground">@jaagofoundation.org</strong>, or{' '}
+                    <strong className="text-foreground">@emkcenter.org</strong> emails are eligible.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    className="px-4 py-2 rounded-xl text-muted-foreground hover:bg-surface font-bold text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="px-4 py-2 rounded-xl bg-primary hover:bg-brand-strong text-primary-foreground font-black text-xs uppercase tracking-wider shadow-md transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {forgotLoading ? (
+                      <span>SENDING...</span>
+                    ) : (
+                      <>
+                        <Send className="h-3.5 w-3.5" />
+                        <span>DISPATCH RESET LINK</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
