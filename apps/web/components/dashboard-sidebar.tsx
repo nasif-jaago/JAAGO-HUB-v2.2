@@ -45,6 +45,7 @@ import {
   ChevronRight,
   ChevronLeft,
   ExternalLink,
+  BookOpen,
 } from 'lucide-react';
 
 export interface DashboardSidebarProps {
@@ -451,6 +452,17 @@ export function DashboardSidebar({
                 >
                   <Shield className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                   <span>RBAC Matrix</span>
+                </Link>
+                <Link
+                  href="/admin/about"
+                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    pathname === '/admin/about'
+                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                  } transition`}
+                >
+                  <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>About JAAGO HUB</span>
                 </Link>
               </div>
             )}
