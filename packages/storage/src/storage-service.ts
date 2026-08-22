@@ -82,7 +82,7 @@ export class StorageService {
 
       let objectKey = '';
       if (parsed.pathname.includes('/storage/v1/object/sign/')) {
-        const afterSign = parsed.pathname.split('/storage/v1/object/sign/')[1];
+        const afterSign = parsed.pathname.split('/storage/v1/object/sign/')[1] || '';
         const subParts = afterSign.split('/');
         objectKey = subParts.slice(1).join('/');
       } else {
@@ -161,9 +161,11 @@ export class StorageService {
           })
           .catch((err) => {
             logger.warn('SYSTEM', 'storage.supabase_upload_background_failed', {
-              error: err.message,
-              bucket: targetBucket,
-              objectKey,
+              metadata: {
+                error: err.message,
+                bucket: targetBucket,
+                objectKey,
+              },
             });
           });
       }
