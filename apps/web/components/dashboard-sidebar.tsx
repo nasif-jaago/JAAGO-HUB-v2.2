@@ -43,6 +43,7 @@ import {
   LogOut,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   ExternalLink,
 } from 'lucide-react';
 
@@ -55,6 +56,7 @@ export interface DashboardSidebarProps {
 
 export function DashboardSidebar({
   collapsed,
+  onToggle,
   onMouseEnter,
   onMouseLeave,
 }: DashboardSidebarProps) {
@@ -93,7 +95,19 @@ export function DashboardSidebar({
       }`}
     >
       {/* Top Section: Logo & Nav List */}
-      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-4 no-scrollbar">
+      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-4 no-scrollbar relative">
+        {/* Small Hide/Collapse Button in Top-Right Corner */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle?.();
+          }}
+          className="absolute top-2.5 right-2.5 p-1 rounded-lg bg-surface/80 hover:bg-surface border border-border/80 text-muted-foreground hover:text-foreground transition shadow-sm z-10 cursor-pointer"
+          title="Hide Sidebar"
+          aria-label="Hide Sidebar"
+        >
+          <ChevronLeft className="h-3.5 w-3.5 text-foreground" />
+        </button>
         {/* Official JAAGO Foundation Logo Card */}
         <div className="flex items-center justify-center py-1">
           <div

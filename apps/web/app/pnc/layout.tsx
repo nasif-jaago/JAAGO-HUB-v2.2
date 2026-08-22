@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Bell,
   HelpCircle,
   Search,
@@ -154,19 +155,34 @@ export default function PnCLayout({
         }`}
       >
         {/* Top Header Card: P&C Brand Badge */}
-        <div className="p-4 border-b border-sidebar-border space-y-3 bg-surface/30">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-xl bg-[#26180E] border border-primary/40 text-primary flex items-center justify-center font-black text-sm shadow-md">
-              P&amp;C
+        <div className="p-4 border-b border-sidebar-border space-y-3 bg-surface/30 relative">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="h-10 w-10 rounded-xl bg-[#26180E] border border-primary/40 text-primary flex items-center justify-center font-black text-sm shadow-md flex-shrink-0">
+                P&amp;C
+              </div>
+              <div>
+                <h1 className="text-sm font-extrabold text-foreground leading-tight">
+                  People and Culture
+                </h1>
+                <p className="text-[11px] font-semibold text-muted-foreground">
+                  v1.0 HR Management
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-sm font-extrabold text-foreground leading-tight">
-                People and Culture
-              </h1>
-              <p className="text-[11px] font-semibold text-muted-foreground">
-                v1.0 HR Management
-              </p>
-            </div>
+
+            {/* Small Hide Button in Top-Right Corner */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSidebarCollapsed(true);
+              }}
+              className="p-1 rounded-lg bg-surface/80 hover:bg-surface border border-border/80 text-muted-foreground hover:text-foreground transition shadow-sm cursor-pointer"
+              title="Hide Sidebar"
+              aria-label="Hide Sidebar"
+            >
+              <ChevronLeft className="h-3.5 w-3.5 text-foreground" />
+            </button>
           </div>
 
           {/* Back to JAAGO HUB button */}
