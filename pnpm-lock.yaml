@@ -581,6 +581,9 @@ importers:
       '@jaago/logger':
         specifier: workspace:*
         version: link:../logger
+      '@supabase/supabase-js':
+        specifier: ^2.47.10
+        version: 2.112.3
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

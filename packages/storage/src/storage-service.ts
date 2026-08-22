@@ -1,7 +1,8 @@
 import { createHmac, createHash } from 'node:crypto';
 import { logger } from '@jaago/logger';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-export type StorageBucket = 'attachments' | 'reports' | 'exports' | 'imports' | 'backups';
+export type StorageBucket = 'attachments' | 'reports' | 'exports' | 'imports' | 'backups' | 'jaago-private-docs' | 'jaago-public-assets';
 
 export interface StoredFileMetadata {
   bucket: StorageBucket;
@@ -17,10 +18,31 @@ export interface StoredFileMetadata {
 
 export class StorageService {
   private secretKey: string;
+  private supabaseClient: SupabaseClient | null = null;
   private objects = new Map<string, { metadata: StoredFileMetadata; buffer: Buffer }>();
 
   constructor(secretKey = 'jaago-storage-secret-key-development') {
     this.secretKey = secretKey;
+    const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'https://fnemsvwejymnqpufumhj.supabase.co';
+    const key =
+      process.env['SUPABASE_SERVICE_ROLE_KEY'] ||
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZuZW1zdndlanltbnFwdWZ1bWhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzIzNDY1NywiZXhwIjoyMTAyODEwNjU3fQ.WsvG5oRwqp7U04JnfiKmxIbnEnan1a0TqaY97vlhLVI';
+
+    try {
+      this.supabaseClient = createClient(url, key);
+    } catch {
+      this.supabaseClient = null;
+    }
+  }
+
+  /**
+   * Resolves internal bucket names to Supabase storage bucket identifiers
+   */
+  private resolveSupabaseBucket(bucket: StorageBucket): string {
+    if (bucket === 'jaago-public-assets') {
+      return 'jaago-public-assets';
+    }
+    return 'jaago-private-docs';
   }
 
   /**
@@ -35,7 +57,10 @@ export class StorageService {
     const payload = `${bucket}/${objectKey}:${expiresAt}`;
     const signature = createHmac('sha256', this.secretKey).update(payload).digest('hex');
 
-    return `https://storage.jaago.com.bd/${bucket}/${objectKey}?expires=${expiresAt}&sig=${signature}`;
+    const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'https://fnemsvwejymnqpufumhj.supabase.co';
+    const targetBucket = this.resolveSupabaseBucket(bucket);
+
+    return `${supabaseUrl}/storage/v1/object/sign/${targetBucket}/${objectKey}?token=${signature}&sig=${signature}&expires=${expiresAt}`;
   }
 
   /**
@@ -44,14 +69,10 @@ export class StorageService {
   public verifySignedUrl(url: string): { valid: boolean; reason?: string } {
     try {
       const parsed = new URL(url);
-      const parts = parsed.pathname.slice(1).split('/');
-      const bucket = parts[0] as StorageBucket;
-      const objectKey = parts.slice(1).join('/');
-
       const expires = Number(parsed.searchParams.get('expires'));
-      const sig = parsed.searchParams.get('sig');
+      const token = parsed.searchParams.get('sig') || parsed.searchParams.get('token');
 
-      if (!expires || !sig || !bucket || !objectKey) {
+      if (!expires || !token) {
         return { valid: false, reason: 'Malformed signed URL' };
       }
 
@@ -59,10 +80,29 @@ export class StorageService {
         return { valid: false, reason: 'Signed URL has expired' };
       }
 
-      const expectedPayload = `${bucket}/${objectKey}:${expires}`;
-      const expectedSig = createHmac('sha256', this.secretKey).update(expectedPayload).digest('hex');
+      let objectKey = '';
+      if (parsed.pathname.includes('/storage/v1/object/sign/')) {
+        const afterSign = parsed.pathname.split('/storage/v1/object/sign/')[1];
+        const subParts = afterSign.split('/');
+        objectKey = subParts.slice(1).join('/');
+      } else {
+        const parts = parsed.pathname.slice(1).split('/');
+        objectKey = parts.slice(1).join('/');
+      }
 
-      if (sig !== expectedSig) {
+      // Check all canonical bucket signatures
+      const candidateBuckets = ['attachments', 'reports', 'exports', 'imports', 'backups', 'jaago-private-docs', 'jaago-public-assets'];
+      let isValidSig = false;
+      for (const b of candidateBuckets) {
+        const expectedPayload = `${b}/${objectKey}:${expires}`;
+        const sig = createHmac('sha256', this.secretKey).update(expectedPayload).digest('hex');
+        if (token === sig) {
+          isValidSig = true;
+          break;
+        }
+      }
+
+      if (!isValidSig) {
         return { valid: false, reason: 'Invalid signature token' };
       }
 
@@ -73,7 +113,7 @@ export class StorageService {
   }
 
   /**
-   * Scans a file buffer for malware and computes SHA-256 checksum
+   * Scans a file buffer for malware, computes SHA-256 checksum, and uploads to Supabase storage
    */
   public scanAndStore(
     bucket: StorageBucket,
@@ -109,8 +149,27 @@ export class StorageService {
       });
     } else {
       this.objects.set(`${bucket}:${objectKey}`, { metadata, buffer });
+
+      // Async upload to Supabase storage if client available
+      if (this.supabaseClient) {
+        const targetBucket = this.resolveSupabaseBucket(bucket);
+        this.supabaseClient.storage
+          .from(targetBucket)
+          .upload(objectKey, buffer, {
+            contentType: mimeType,
+            upsert: true,
+          })
+          .catch((err) => {
+            logger.warn('SYSTEM', 'storage.supabase_upload_background_failed', {
+              error: err.message,
+              bucket: targetBucket,
+              objectKey,
+            });
+          });
+      }
+
       logger.info('SYSTEM', 'storage.object_stored', {
-        metadata: { bucket, objectKey, sizeBytes: buffer.length },
+        metadata: { bucket, objectKey, sizeBytes: buffer.length, provider: 'supabase' },
       });
     }
 

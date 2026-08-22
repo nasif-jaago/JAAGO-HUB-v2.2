@@ -8,8 +8,10 @@ export function getSupabaseAnonClient(): SupabaseClient {
     return anonClient;
   }
 
-  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'https://mock.supabase.co';
-  const anonKey = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] || 'mock-anon-key-00000000000000000000';
+  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'https://fnemsvwejymnqpufumhj.supabase.co';
+  const anonKey =
+    process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZuZW1zdndlanltbnFwdWZ1bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcyMzQ2NTcsImV4cCI6MjEwMjgxMDY1N30.YnZZloLZnLA77mbqnZmkw35dKPLx3XG-lQY89t9NpeQ';
 
   anonClient = createClient(url, anonKey, {
     auth: {
@@ -30,8 +32,10 @@ export function getSupabaseAdminClient(): SupabaseClient {
     return adminClient;
   }
 
-  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'https://mock.supabase.co';
-  const serviceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'] || 'mock-service-role-key-0000000000000';
+  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'https://fnemsvwejymnqpufumhj.supabase.co';
+  const serviceKey =
+    process.env['SUPABASE_SERVICE_ROLE_KEY'] ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZuZW1zdndlanltbnFwdWZ1bWhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzIzNDY1NywiZXhwIjoyMTAyODEwNjU3fQ.WsvG5oRwqp7U04JnfiKmxIbnEnan1a0TqaY97vlhLVI';
 
   adminClient = createClient(url, serviceKey, {
     auth: {
