@@ -117,6 +117,9 @@ importers:
       '@jaago/workflow':
         specifier: workspace:*
         version: link:../../packages/workflow
+      '@supabase/supabase-js':
+        specifier: ^2.47.10
+        version: 2.112.3
       clsx:
         specifier: ^2.1.1
         version: 2.1.1

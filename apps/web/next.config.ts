@@ -25,6 +25,18 @@ const nextConfig: NextConfig = {
     '@jaago/ui',
     '@jaago/workflow',
   ],
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        crypto: false,
+        'node:crypto': false,
+        stream: false,
+        buffer: false,
+      };
+    }
+    return config;
+  },
 };
 
 export default nextConfig;
