@@ -13,6 +13,8 @@ out/
 dist/
 build/
 *.tsbuildinfo
+deploy_ready/
+*.zip
 
 # Spool and temporary files
 /var/lib/jaago-hub/log-spool/
