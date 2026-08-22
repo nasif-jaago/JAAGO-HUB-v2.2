@@ -624,20 +624,21 @@ export default function UserManagementPage() {
                 <th className="p-4">Employee Record</th>
                 <th className="p-4">Status</th>
                 <th className="p-4">Last Login</th>
+                <th className="p-4 text-center">Create Employee</th>
                 <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="p-8 text-center text-muted-foreground">
                     <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
                     <span>Loading users directory...</span>
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="p-8 text-center text-muted-foreground">
                     No users found matching current filters.
                   </td>
                 </tr>
@@ -717,22 +718,9 @@ export default function UserManagementPage() {
                             </span>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setShowCreateEmployeeModal(user);
-                              setEmployeeForm({
-                                designation: user.jobTitle || 'Officer',
-                                department: user.department || 'Admin & Procurement',
-                                branch: user.branch || 'Head Office (Banani)',
-                                salaryBdt: 45000,
-                                dateOfJoining: '2026-08-01',
-                              });
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground font-bold text-[10px] uppercase tracking-wider transition flex items-center space-x-1 cursor-pointer"
-                          >
-                            <UserCheck className="h-3 w-3" />
-                            <span>Create Employee</span>
-                          </button>
+                          <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-bold">
+                            Unlinked
+                          </span>
                         )}
                       </td>
 
@@ -763,6 +751,32 @@ export default function UserManagementPage() {
                       {/* Last Login */}
                       <td className="p-4 text-muted-foreground font-mono text-[11px]">
                         {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
+                      </td>
+
+                      {/* Create Employee Column (Before Actions) */}
+                      <td className="p-4 text-center">
+                        {!user.isEmployeeLinked && !user.employeeId ? (
+                          <button
+                            onClick={() => {
+                              const params = new URLSearchParams({
+                                action: 'new',
+                                name: user.fullName,
+                                email: user.email,
+                                department: user.department,
+                                designation: user.jobTitle || user.role,
+                                userId: user.id,
+                              });
+                              window.open(`/pnc/employees?${params.toString()}`, '_blank');
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-[11px] uppercase tracking-wider transition flex items-center space-x-1.5 mx-auto cursor-pointer shadow-md active:scale-95"
+                            title="Create Employee in People & Culture"
+                          >
+                            <UserPlus className="h-3.5 w-3.5 stroke-[2.5]" />
+                            <span>Create Employee</span>
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground/20 text-xs">—</span>
+                        )}
                       </td>
 
                       {/* Actions Column */}

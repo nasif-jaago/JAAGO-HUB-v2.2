@@ -150,3 +150,50 @@ export function deleteUsersByIds(ids: string[]) {
   usersDatabase = usersDatabase.filter((u) => !ids.includes(u.id));
   return usersDatabase;
 }
+
+export function linkUserToEmployee(userIdOrEmail: string, employeeId: string) {
+  usersDatabase = usersDatabase.map((u) =>
+    u.id === userIdOrEmail || u.email.toLowerCase() === userIdOrEmail.toLowerCase()
+      ? { ...u, employeeId, isEmployeeLinked: true }
+      : u
+  );
+  return usersDatabase;
+}
+
+export function addUserFromEmployee(emp: {
+  fullName: string;
+  email: string;
+  department: string;
+  jobTitle?: string;
+  employeeId?: string;
+}) {
+  const existing = usersDatabase.find((u) => u.email.toLowerCase() === emp.email.toLowerCase());
+  if (existing) {
+    if (emp.employeeId) {
+      existing.employeeId = emp.employeeId;
+      existing.isEmployeeLinked = true;
+    }
+    return existing;
+  }
+
+  const newId = `u-${Date.now().toString().slice(-4)}`;
+  const newUser: UserItem = {
+    id: newId,
+    fullName: emp.fullName,
+    email: emp.email,
+    role: 'Staff',
+    department: emp.department || 'General',
+    branch: 'Head Office (Banani)',
+    jobTitle: emp.jobTitle || 'Staff Member',
+    phone: '',
+    status: 'active',
+    employeeId: emp.employeeId || null,
+    isEmployeeLinked: Boolean(emp.employeeId),
+    avatarUrl: '',
+    createdAt: new Date().toISOString(),
+    lastLoginAt: null,
+  };
+
+  usersDatabase.unshift(newUser);
+  return newUser;
+}
