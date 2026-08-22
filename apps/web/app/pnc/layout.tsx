@@ -22,7 +22,12 @@ import {
   Bell,
   HelpCircle,
   Search,
+  Sun,
+  Moon,
+  Coffee,
 } from 'lucide-react';
+
+export type ThemeMode = 'dark' | 'light' | 'espresso';
 
 export default function PnCLayout({
   children,
@@ -30,6 +35,47 @@ export default function PnCLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const [theme, setTheme] = useState<ThemeMode>('dark');
+
+  // Load saved theme or sync from DOM on mount
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('jaago_theme') as ThemeMode | null;
+      const root = document.documentElement;
+      if (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'espresso') {
+        root.classList.remove('dark', 'light', 'espresso');
+        if (savedTheme !== 'light') {
+          root.classList.add(savedTheme);
+        }
+        setTheme(savedTheme);
+      } else if (root.classList.contains('espresso')) {
+        setTheme('espresso');
+      } else if (root.classList.contains('dark')) {
+        setTheme('dark');
+      } else {
+        setTheme('light');
+      }
+    }
+  }, []);
+
+  const cycleTheme = () => {
+    const root = document.documentElement;
+    root.classList.remove('dark', 'light', 'espresso');
+    let nextTheme: ThemeMode;
+    if (theme === 'dark') {
+      nextTheme = 'light';
+    } else if (theme === 'light') {
+      nextTheme = 'espresso';
+      root.classList.add('espresso');
+    } else {
+      nextTheme = 'dark';
+      root.classList.add('dark');
+    }
+    setTheme(nextTheme);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('jaago_theme', nextTheme);
+    }
+  };
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     organization: false,
@@ -312,14 +358,32 @@ export default function PnCLayout({
             <span className="text-foreground">{getBreadcrumb()}</span>
           </div>
 
-          <div className="flex items-center space-x-3">
-            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition" title="Search">
+          <div className="flex items-center space-x-1.5 sm:space-x-3">
+            {/* Theme Mode Switcher (3-Way: Dark / Light / Espresso) */}
+            <button
+              onClick={cycleTheme}
+              className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition flex items-center justify-center cursor-pointer"
+              title={`Theme: ${
+                theme === 'dark'
+                  ? 'Matte Black (Click for Light Mode)'
+                  : theme === 'light'
+                  ? 'Warm Cream (Click for Espresso Mode)'
+                  : 'Warm Espresso (Click for Dark Mode)'
+              }`}
+              aria-label="Toggle Theme Mode"
+            >
+              {theme === 'dark' && <Moon className="h-4 w-4 text-primary" />}
+              {theme === 'light' && <Sun className="h-4 w-4 text-amber-500" />}
+              {theme === 'espresso' && <Coffee className="h-4 w-4 text-amber-400" />}
+            </button>
+
+            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition cursor-pointer" title="Search">
               <Search className="h-4 w-4" />
             </button>
-            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition" title="Notifications">
+            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition cursor-pointer" title="Notifications">
               <Bell className="h-4 w-4" />
             </button>
-            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition" title="Help">
+            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition cursor-pointer" title="Help">
               <HelpCircle className="h-4 w-4" />
             </button>
           </div>
