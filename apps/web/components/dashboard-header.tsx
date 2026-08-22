@@ -105,8 +105,8 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
 
   return (
     <header className="h-16 border-b border-header-border bg-header text-header-foreground px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 select-none transition-colors duration-200">
-      {/* Left: Breadcrumbs & Toggle */}
-      <div className="flex items-center space-x-3 sm:space-x-4">
+      {/* Left: Hamburger Menu (Mobile & Desktop) */}
+      <div className="flex items-center space-x-3">
         <button
           onClick={onToggleSidebar}
           className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition"
@@ -115,7 +115,8 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
           <Menu className="h-5 w-5" />
         </button>
 
-        <div className="flex items-center space-x-2 text-xs sm:text-sm font-semibold tracking-wide">
+        {/* Desktop Breadcrumbs */}
+        <div className="hidden sm:flex items-center space-x-2 text-xs sm:text-sm font-semibold tracking-wide">
           <span className="text-primary font-black tracking-wider">JAAGO HUB</span>
           <span className="text-header-foreground/50 hidden sm:inline">Dashboards</span>
           <span className="text-header-foreground/50 hidden sm:inline">&gt;</span>
@@ -123,12 +124,17 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         </div>
       </div>
 
-      {/* Right: Actions matching Reference Image */}
-      <div className="flex items-center space-x-2 sm:space-x-3">
-        {/* Search */}
+      {/* Center on Mobile: JAAGO HUB Brand */}
+      <div className="sm:hidden text-base font-black tracking-wider text-foreground">
+        <span className="text-primary">JAAGO</span> HUB
+      </div>
+
+      {/* Right: Actions */}
+      <div className="flex items-center space-x-1.5 sm:space-x-3">
+        {/* Desktop Search */}
         <button
           onClick={() => setShowSearchModal(true)}
-          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition"
+          className="hidden sm:inline-flex p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition"
           title="Search (Cmd+K)"
         >
           <Search className="h-4 w-4 hover:text-primary" />
@@ -215,6 +221,16 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
           {theme === 'dark' && <Moon className="h-4 w-4 text-primary" />}
           {theme === 'light' && <Sun className="h-4 w-4 text-amber-500" />}
           {theme === 'espresso' && <Coffee className="h-4 w-4 text-amber-400" />}
+        </button>
+
+        {/* Mobile Quick Sign Out Button (Matching Reference Image 2) */}
+        <button
+          onClick={handleSignOut}
+          className="sm:hidden p-2 rounded-xl text-destructive hover:bg-destructive/10 transition border border-destructive/20"
+          title="Sign Out"
+          aria-label="Sign Out"
+        >
+          <LogOut className="h-4 w-4" />
         </button>
 
         {/* Screen mode */}
