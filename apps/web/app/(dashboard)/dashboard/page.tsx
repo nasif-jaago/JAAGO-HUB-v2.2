@@ -330,7 +330,7 @@ export default function DashboardPage() {
 
             {/* User Credentials & Metadata */}
             <div className="space-y-1">
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
                 {user.fullName}
               </h1>
               <div className="text-sm font-semibold text-muted-foreground">
@@ -417,7 +417,7 @@ export default function DashboardPage() {
               <div className="text-xs font-semibold text-muted-foreground">
                 Working Hours Today
               </div>
-              <div className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-foreground pt-1">
+              <div className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground pt-1">
                 {formatTime(elapsedSeconds)}
               </div>
             </div>
@@ -438,7 +438,7 @@ export default function DashboardPage() {
               <div className="text-xs font-semibold text-muted-foreground">
                 On Duty Status
               </div>
-              <div className="text-3xl sm:text-4xl font-black tracking-tight text-foreground pt-1">
+              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1">
                 4 Pending
               </div>
             </div>
@@ -461,7 +461,7 @@ export default function DashboardPage() {
               <div className="text-xs font-semibold text-muted-foreground">
                 Available Time Off
               </div>
-              <div className="text-3xl sm:text-4xl font-black tracking-tight text-foreground pt-1 flex items-baseline space-x-1.5">
+              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1 flex items-baseline space-x-1.5">
                 <span>61</span>
                 <span className="text-lg font-bold text-muted-foreground">Days</span>
               </div>
@@ -485,7 +485,7 @@ export default function DashboardPage() {
               <div className="text-xs font-semibold text-muted-foreground">
                 Active Approvals
               </div>
-              <div className="text-3xl sm:text-4xl font-black tracking-tight text-foreground pt-1">
+              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1">
                 2
               </div>
             </div>
@@ -495,17 +495,22 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── 4. LOWER 3-COLUMN SECTION (Strictly from Image) ── */}
+        {/* ── 3. LOWER 3-COLUMN SECTION (Strictly from Image) ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
           {/* ── COLUMN 1: MONTHLY ATTENDANCE SUMMARY ── */}
           <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-5 flex flex-col justify-between">
             {/* Header */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-xs font-black uppercase text-foreground tracking-wider">
-                <Clock className="h-4 w-4 text-emerald-500" />
-                <span>Monthly Attendance Summary</span>
+              <div className="flex items-center space-x-2.5 text-foreground">
+                <div className="h-5 w-5 rounded-full border border-emerald-500/40 text-emerald-500 flex items-center justify-center flex-shrink-0">
+                  <Clock className="h-3 w-3" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-base font-bold text-foreground leading-tight">Monthly Attendance</span>
+                  <span className="text-base font-bold text-foreground leading-tight">Summary</span>
+                </div>
               </div>
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase text-rose-500 bg-rose-500/10 border border-rose-400/30">
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase text-rose-500 bg-rose-500/10 border border-rose-400/30">
                 NEEDS IMPROVEMENT
               </span>
             </div>
@@ -514,21 +519,21 @@ export default function DashboardPage() {
             <div className="grid grid-cols-3 gap-2 text-left">
               <div>
                 <div className="text-[11px] font-semibold text-muted-foreground">Working Days</div>
-                <div className="text-lg font-black text-foreground pt-1">14 / 15</div>
+                <div className="text-lg font-extrabold text-foreground pt-1">14 / 15</div>
                 <div className="text-[9px] font-black uppercase tracking-wider text-emerald-500 pt-0.5">
                   PRESENT / TARGET
                 </div>
               </div>
               <div>
                 <div className="text-[11px] font-semibold text-muted-foreground">Late Days</div>
-                <div className="text-lg font-black text-rose-500 pt-1">6</div>
+                <div className="text-lg font-extrabold text-rose-500 pt-1">6</div>
                 <div className="text-[9px] font-black uppercase tracking-wider text-rose-500 pt-0.5">
                   LATE ENTRIES
                 </div>
               </div>
               <div>
                 <div className="text-[11px] font-semibold text-muted-foreground">Auto Check</div>
-                <div className="text-lg font-black text-amber-500 pt-1">8</div>
+                <div className="text-lg font-extrabold text-amber-500 pt-1">8</div>
                 <div className="text-[9px] font-black uppercase tracking-wider text-amber-500 pt-0.5">
                   AUTO CHECKOUTS
                 </div>

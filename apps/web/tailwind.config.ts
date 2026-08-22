@@ -70,6 +70,9 @@ const config: Config = {
         md: 'calc(var(--radius) - 4px)',
         sm: 'calc(var(--radius) - 8px)',
       },
+      fontFamily: {
+        sans: ['var(--font-plus-jakarta)', 'var(--font-inter)', 'system-ui', 'sans-serif'],
+      },
     },
   },
   plugins: [],

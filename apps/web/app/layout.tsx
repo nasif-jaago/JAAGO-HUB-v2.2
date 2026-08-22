@@ -1,5 +1,19 @@
 import type { Metadata, Viewport } from 'next';
+import { Plus_Jakarta_Sans, Inter } from 'next/font/google';
 import './globals.css';
+
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-plus-jakarta',
+  display: 'swap',
+});
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'JAAGO HUB v2.2 — Enterprise NGO Platform',
@@ -29,8 +43,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className="dark">
-      <body className="min-h-screen bg-background text-foreground antialiased selection:bg-brand selection:text-primary-foreground">
+    <html lang="en" suppressHydrationWarning className={`dark ${plusJakarta.variable} ${inter.variable}`}>
+      <body className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-brand selection:text-primary-foreground">
         {children}
       </body>
     </html>
