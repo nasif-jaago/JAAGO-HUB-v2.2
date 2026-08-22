@@ -176,19 +176,19 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-4 sm:p-6 overflow-hidden select-none">
-      {/* ── FULLSCREEN AUTO-ADJUSTING USER GIVEN BACKGROUND IMAGE ── */}
-      <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden">
+      {/* ── FULLSCREEN AUTO-ADJUSTING NEON BACKGROUND IMAGE ── */}
+      <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden bg-black">
         <Image
-          src="/login-bg.png"
-          alt="JAAGO Foundation Background"
+          src="/login-bg.jpg"
+          alt="JAAGO HUB Background"
           fill
           priority
           sizes="100vw"
           quality={100}
           className="object-cover object-center w-full h-full"
         />
-        {/* Ambient Dark Frosted Glass Overlay to ensure crystal clear contrast & legibility */}
-        <div className="absolute inset-0 bg-black/45 backdrop-blur-[3px]" />
+        {/* Ambient Dark Frosted Overlay to ensure high contrast & glassmorphism effect */}
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       </div>
 
       {/* ── MAIN FROSTED GLASS LOGIN CARD ── */}
