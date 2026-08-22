@@ -83,3 +83,30 @@ export async function updatePassword(newPassword: string) {
     password: newPassword,
   });
 }
+
+/**
+ * Completely sign out user from Supabase, clear local storage & cookies, and redirect to /login
+ */
+export async function signOutUser() {
+  try {
+    const supabase = getSupabase();
+    await supabase.auth.signOut();
+  } catch (err) {
+    console.error('Supabase sign out error:', err);
+  }
+
+  try {
+    await fetch('/api/v1/auth/sign-out', { method: 'POST' });
+  } catch {}
+
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('jaago_access_token');
+    localStorage.removeItem('jaago_user');
+    localStorage.removeItem('jaago_is_checked_in');
+    localStorage.removeItem('jaago_checkin_timestamp');
+    document.cookie = 'jaago_access_token=; path=/; max-age=0; SameSite=Lax';
+    document.cookie = 'jaago_user=; path=/; max-age=0; SameSite=Lax';
+    window.location.href = '/login';
+  }
+}
+

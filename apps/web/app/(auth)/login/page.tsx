@@ -64,16 +64,21 @@ export default function LoginPage() {
           setErrorMessage(getDomainRestrictionError(userEmail));
           return;
         }
+        const userPayload = {
+          id: session.user.id,
+          email: session.user.email,
+          fullName: session.user.user_metadata['full_name'] || session.user.user_metadata['name'] || userEmail,
+          avatarUrl: session.user.user_metadata['avatar_url'] || session.user.user_metadata['picture'] || '',
+          jobTitle: 'Coordinator',
+          organizationName: 'JAAGO Foundation Trust',
+          roles: ['super_admin', 'coordinator'],
+          permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
+        };
         localStorage.setItem('jaago_access_token', session.access_token);
-        localStorage.setItem(
-          'jaago_user',
-          JSON.stringify({
-            id: session.user.id,
-            email: session.user.email,
-            fullName: session.user.user_metadata['full_name'] || userEmail,
-          })
-        );
-        router.push('/dashboard');
+        localStorage.setItem('jaago_user', JSON.stringify(userPayload));
+        document.cookie = `jaago_access_token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
+        document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=604800; SameSite=Lax`;
+        window.location.href = '/dashboard';
       }
     });
 
@@ -87,16 +92,21 @@ export default function LoginPage() {
           setErrorMessage(getDomainRestrictionError(userEmail));
           return;
         }
+        const userPayload = {
+          id: session.user.id,
+          email: session.user.email,
+          fullName: session.user.user_metadata['full_name'] || session.user.user_metadata['name'] || userEmail,
+          avatarUrl: session.user.user_metadata['avatar_url'] || session.user.user_metadata['picture'] || '',
+          jobTitle: 'Coordinator',
+          organizationName: 'JAAGO Foundation Trust',
+          roles: ['super_admin', 'coordinator'],
+          permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
+        };
         localStorage.setItem('jaago_access_token', session.access_token);
-        localStorage.setItem(
-          'jaago_user',
-          JSON.stringify({
-            id: session.user.id,
-            email: session.user.email,
-            fullName: session.user.user_metadata['full_name'] || userEmail,
-          })
-        );
-        router.push('/dashboard');
+        localStorage.setItem('jaago_user', JSON.stringify(userPayload));
+        document.cookie = `jaago_access_token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
+        document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=604800; SameSite=Lax`;
+        window.location.href = '/dashboard';
       }
     });
 
@@ -127,19 +137,25 @@ export default function LoginPage() {
         password,
       });
 
-      if (!supaError && supaData.session && supaData.user) {
+      if (!supaError && supaData?.session && supaData?.user) {
+        const userPayload = {
+          id: supaData.user.id,
+          email: supaData.user.email,
+          fullName: supaData.user.user_metadata['full_name'] || cleanEmail,
+          jobTitle: 'Coordinator',
+          organizationName: 'JAAGO Foundation Trust',
+          roles: ['super_admin', 'coordinator'],
+          permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
+        };
+
         if (typeof window !== 'undefined') {
           localStorage.setItem('jaago_access_token', supaData.session.access_token);
-          localStorage.setItem(
-            'jaago_user',
-            JSON.stringify({
-              id: supaData.user.id,
-              email: supaData.user.email,
-              fullName: supaData.user.user_metadata['full_name'] || cleanEmail,
-            })
-          );
+          localStorage.setItem('jaago_user', JSON.stringify(userPayload));
+          document.cookie = `jaago_access_token=${supaData.session.access_token}; path=/; max-age=604800; SameSite=Lax`;
+          document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=604800; SameSite=Lax`;
         }
-        router.push('/dashboard');
+
+        window.location.href = '/dashboard';
         return;
       }
 
@@ -153,16 +169,18 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error?.message || 'Invalid credentials');
+        throw new Error(data.error?.message || 'Invalid email or password.');
       }
 
-      // Save session info to localStorage
+      // Save session info to localStorage and cookies
       if (typeof window !== 'undefined' && data.session?.accessToken) {
         localStorage.setItem('jaago_access_token', data.session.accessToken);
         localStorage.setItem('jaago_user', JSON.stringify(data.user));
+        document.cookie = `jaago_access_token=${data.session.accessToken}; path=/; max-age=604800; SameSite=Lax`;
+        document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(data.user))}; path=/; max-age=604800; SameSite=Lax`;
       }
 
-      router.push('/dashboard');
+      window.location.href = '/dashboard';
     } catch (err: any) {
       setErrorMessage(err.message || 'An error occurred while signing in');
     } finally {
@@ -187,6 +205,7 @@ export default function LoginPage() {
       setGoogleLoading(false);
     }
   };
+
 
   // ── 5. FORGOT PASSWORD HANDLER (SUPABASE AUTH) ──
   const handleForgotSubmit = async (e: React.FormEvent) => {

@@ -12,13 +12,37 @@ export default function DashboardLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auto-hide after 3 seconds on initial load
+  const [currentUser, setCurrentUser] = useState({
+    fullName: 'Nasif Kamal',
+    jobTitle: 'Coordinator',
+    avatarUrl: '',
+  });
+
+  // Auto-hide after 3 seconds on initial load & hydrate user
   useEffect(() => {
     startAutoHideTimer();
+
+    if (typeof window !== 'undefined') {
+      try {
+        const storedUser = localStorage.getItem('jaago_user');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          if (parsed.fullName) {
+            setCurrentUser({
+              fullName: parsed.fullName,
+              jobTitle: parsed.jobTitle || 'Coordinator',
+              avatarUrl: parsed.avatarUrl || '',
+            });
+          }
+        }
+      } catch {}
+    }
+
     return () => {
       clearAutoHideTimer();
     };
   }, []);
+
 
   const startAutoHideTimer = () => {
     clearAutoHideTimer();
@@ -43,12 +67,8 @@ export default function DashboardLayout({
     startAutoHideTimer();
   };
 
-  const currentUser = {
-    fullName: 'Nasif Kamal',
-    jobTitle: 'Coordinator',
-  };
-
   return (
+
     <div className="min-h-screen bg-background text-foreground flex relative overflow-x-hidden">
       {/* ── Left Side Hit Sensor Panel (Hovering here immediately opens the sidebar) ── */}
       <div

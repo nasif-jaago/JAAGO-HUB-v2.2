@@ -84,6 +84,7 @@ export const POST = createApiHandler({
       const mockUserId = matchingUser ? matchingUser.id : 'u-101';
       const fullName = matchingUser ? matchingUser.fullName : 'Nasif Kamal';
       const role = matchingUser ? matchingUser.role : 'Super Admin';
+      const accessToken = `jwt-jaago-access-${Date.now()}`;
 
       logger.info('AUTH', 'user.signin.success', {
         userId: mockUserId,
@@ -91,22 +92,35 @@ export const POST = createApiHandler({
         metadata: { email, role },
       });
 
-      return Response.json({
-        user: {
-          id: mockUserId,
-          email,
-          fullName,
-          jobTitle: matchingUser?.jobTitle || 'Coordinator',
-          organizationId: 'org-jaago-dhaka',
-          organizationName: 'JAAGO Foundation Trust',
-          roles: [role.toLowerCase(), 'super_admin', 'coordinator'],
-          permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
-        },
+      const userObj = {
+        id: mockUserId,
+        email,
+        fullName,
+        jobTitle: matchingUser?.jobTitle || 'Coordinator',
+        organizationId: 'org-jaago-dhaka',
+        organizationName: 'JAAGO Foundation Trust',
+        roles: [role.toLowerCase(), 'super_admin', 'coordinator'],
+        permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
+      };
+
+      const response = Response.json({
+        user: userObj,
         session: {
-          accessToken: `jwt-jaago-access-${Date.now()}`,
+          accessToken,
           expiresIn: 604800,
         },
       });
+
+      response.headers.append(
+        'Set-Cookie',
+        `jaago_access_token=${accessToken}; Path=/; Max-Age=604800; SameSite=Lax`
+      );
+      response.headers.append(
+        'Set-Cookie',
+        `jaago_user=${encodeURIComponent(JSON.stringify(userObj))}; Path=/; Max-Age=604800; SameSite=Lax`
+      );
+
+      return response;
     }
 
     logger.warn('SECURITY', 'user.signin.failed', {
@@ -120,3 +134,4 @@ export const POST = createApiHandler({
     });
   },
 });
+

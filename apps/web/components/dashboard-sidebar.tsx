@@ -3,7 +3,10 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { signOutUser } from '@/lib/supabase-auth';
+
+
 import {
   User,
   LayoutGrid,
@@ -62,9 +65,9 @@ export function DashboardSidebar({
   onMouseLeave,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
 
   // Accordion state for sidebar categories
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     dashboard: true,
     requests: false,
@@ -77,13 +80,10 @@ export function DashboardSidebar({
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handleSignOut = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('jaago_access_token');
-      localStorage.removeItem('jaago_user');
-    }
-    router.push('/sign-in');
+  const handleSignOut = async () => {
+    await signOutUser();
   };
+
 
   return (
     <aside

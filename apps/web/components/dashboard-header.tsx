@@ -14,6 +14,8 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { signOutUser } from '@/lib/supabase-auth';
+
 
 export interface DashboardHeaderProps {
   onToggleSidebar: () => void;
@@ -111,13 +113,10 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
     }
   };
 
-  const handleSignOut = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('jaago_access_token');
-      localStorage.removeItem('jaago_user');
-    }
-    router.push('/sign-in');
+  const handleSignOut = async () => {
+    await signOutUser();
   };
+
 
   return (
     <header className="h-16 border-b border-header-border bg-header text-header-foreground px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30 select-none transition-colors duration-200">
