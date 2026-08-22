@@ -38,24 +38,72 @@ export default function LoginPage() {
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [forgotError, setForgotError] = useState('');
 
-  // Inspect URL query params for OAuth redirects or errors
+  // Auto-detect OAuth redirect session or query error parameters
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const urlError = params.get('error');
-      const rejectedEmail = params.get('rejectedEmail');
+    const params = new URLSearchParams(window.location.search);
+    const urlError = params.get('error');
+    const rejectedEmail = params.get('rejectedEmail');
 
-      if (urlError === 'domain_restricted') {
-        setErrorMessage(
-          `Access Restricted: Only official organization email domains (@jaago.com.bd, @jaagofoundation.org, @emkcenter.org) are permitted to sign in.${
-            rejectedEmail ? ` ("${rejectedEmail}" is unauthorized)` : ''
-          }`
-        );
-      } else if (urlError) {
-        setErrorMessage(decodeURIComponent(urlError));
-      }
+    if (urlError === 'domain_restricted') {
+      setErrorMessage(
+        `Access Restricted: Only official organization email domains (@jaago.com.bd, @jaagofoundation.org, @emkcenter.org) are permitted to sign in.${
+          rejectedEmail ? ` ("${rejectedEmail}" is unauthorized)` : ''
+        }`
+      );
+    } else if (urlError) {
+      setErrorMessage(decodeURIComponent(urlError));
     }
-  }, []);
+
+    // Check if Supabase session is already active or returned via OAuth hash
+    const supabase = getSupabase();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && session.user) {
+        const userEmail = session.user.email || '';
+        if (!isAllowedWorkDomain(userEmail)) {
+          supabase.auth.signOut();
+          setErrorMessage(getDomainRestrictionError(userEmail));
+          return;
+        }
+        localStorage.setItem('jaago_access_token', session.access_token);
+        localStorage.setItem(
+          'jaago_user',
+          JSON.stringify({
+            id: session.user.id,
+            email: session.user.email,
+            fullName: session.user.user_metadata['full_name'] || userEmail,
+          })
+        );
+        router.push('/dashboard');
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session && session.user) {
+        const userEmail = session.user.email || '';
+        if (!isAllowedWorkDomain(userEmail)) {
+          supabase.auth.signOut();
+          setErrorMessage(getDomainRestrictionError(userEmail));
+          return;
+        }
+        localStorage.setItem('jaago_access_token', session.access_token);
+        localStorage.setItem(
+          'jaago_user',
+          JSON.stringify({
+            id: session.user.id,
+            email: session.user.email,
+            fullName: session.user.user_metadata['full_name'] || userEmail,
+          })
+        );
+        router.push('/dashboard');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,8 +175,13 @@ export default function LoginPage() {
     setGoogleLoading(true);
     setErrorMessage('');
     try {
-      const { error } = await signInWithGoogle();
+      const { data, error } = await signInWithGoogle();
       if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('Could not retrieve Google OAuth authorization URL');
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to initiate Google sign-in');
       setGoogleLoading(false);
@@ -176,7 +229,7 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-4 sm:p-6 overflow-hidden select-none">
-      {/* ── FULLSCREEN AUTO-ADJUSTING NEON BACKGROUND IMAGE ── */}
+      {/* ── FULLSCREEN AUTO-ADJUSTING PINE FOREST BACKGROUND IMAGE ── */}
       <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden bg-black">
         <Image
           src="/login-bg.jpg"
@@ -188,7 +241,7 @@ export default function LoginPage() {
           className="object-cover object-center w-full h-full"
         />
         {/* Ambient Dark Frosted Overlay to ensure high contrast & glassmorphism effect */}
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" />
       </div>
 
       {/* ── MAIN FROSTED GLASS LOGIN CARD ── */}
@@ -318,28 +371,33 @@ export default function LoginPage() {
           className="w-full py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/30 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center space-x-3 transition active:scale-[0.98] cursor-pointer shadow-md backdrop-blur-md disabled:opacity-50"
         >
           {googleLoading ? (
-            <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+            <>
+              <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+              <span>CONNECTING TO GOOGLE...</span>
+            </>
           ) : (
-            <svg className="h-4 w-4" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-              />
-            </svg>
+            <>
+              <svg className="h-4 w-4" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                />
+              </svg>
+              <span>SIGN IN WITH GOOGLE WORKSPACE</span>
+            </>
           )}
-          <span>SIGN IN WITH GOOGLE WORKSPACE</span>
         </button>
 
         {/* Footer info */}
