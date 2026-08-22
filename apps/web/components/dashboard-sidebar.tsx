@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  User,
   LayoutGrid,
   FileText,
   Tag,
@@ -57,7 +58,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
   // Accordion state for sidebar categories
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     dashboard: true,
-    requests: true,
+    requests: false,
     attendance: false,
     organization: false,
     settings: false,
@@ -124,168 +125,199 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
         </div>
 
         {/* Navigation Menus */}
-        <nav className="space-y-3 pt-1">
-          {/* ── 1. OVERVIEW MENU ITEM ── */}
-          <div>
-            <Link
-              href="/dashboard"
-              title="Overview"
-              className={`w-full flex items-center ${
-                collapsed ? 'justify-center px-2' : 'space-x-2.5 px-3.5'
-              } py-2.5 rounded-2xl text-xs font-bold transition shadow-sm ${
-                pathname === '/dashboard'
-                  ? 'bg-primary/20 text-foreground font-black border border-primary/40 shadow-sm'
-                  : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
-              }`}
-            >
-              <LayoutGrid className="h-4 w-4 text-foreground flex-shrink-0" />
-              {!collapsed && <span>Overview</span>}
-            </Link>
-          </div>
+        <nav className="space-y-4 pt-1">
+          {/* ═══════════════════════════════════════════════════════════ */}
+          {/* ── 1. DASHBOARD SECTION (EVERYTHING UNDER MY DASHBOARD) ──  */}
+          {/* ═══════════════════════════════════════════════════════════ */}
+          <div className="space-y-1.5">
+            {!collapsed && (
+              <div className="px-1 text-[10px] uppercase font-bold tracking-wider text-sidebar-muted">
+                DASHBOARD
+              </div>
+            )}
 
-          {/* ── 2. REQUESTS ACCORDION ── */}
-          <div className="space-y-1">
+            {/* MY DASHBOARD CONTAINER BUTTON */}
             <button
-              onClick={() => toggleSection('requests')}
-              title="Requests"
+              onClick={() => toggleSection('dashboard')}
+              title="My Dashboard"
               className={`w-full flex items-center ${
                 collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
-              } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition`}
+              } py-2.5 rounded-2xl text-xs font-black bg-primary text-primary-foreground shadow-md transition transform active:scale-95 cursor-pointer`}
             >
               <div className="flex items-center space-x-2.5">
-                <FileText className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
-                {!collapsed && <span>Requests</span>}
+                <User className="h-4 w-4 stroke-[2.5] flex-shrink-0 text-primary-foreground" />
+                {!collapsed && <span>My Dashboard</span>}
               </div>
               {!collapsed && (
-                openSections['requests'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
+                openSections['dashboard'] ? <ChevronDown className="h-4 w-4 stroke-[2.5]" /> : <ChevronRight className="h-4 w-4 stroke-[2.5]" />
               )}
             </button>
 
-            {openSections['requests'] && !collapsed && (
-              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/40 ml-3 text-sidebar-foreground">
+            {/* NESTED CONTENT INSIDE MY DASHBOARD */}
+            {openSections['dashboard'] && !collapsed && (
+              <div className="pl-2 space-y-1.5 pt-1 animate-in fade-in slide-in-from-top-2 duration-150">
+                {/* 1.1 Overview (Active Highlighted Pill) */}
                 <Link
-                  href="/workflows"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  href="/dashboard"
+                  title="Overview"
+                  className={`w-full flex items-center space-x-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                    pathname === '/dashboard'
+                      ? 'bg-primary/20 text-foreground font-black border border-primary/40'
+                      : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
+                  }`}
                 >
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>All Requests</span>
+                  <LayoutGrid className="h-4 w-4 text-foreground flex-shrink-0" />
+                  <span>Overview</span>
                 </Link>
-                {[
-                  { label: 'Leave Request', icon: Tag, href: '/leaves' },
-                  { label: 'General Requisition...', icon: Briefcase, href: '/workflows' },
-                  { label: 'Purchase Requisition...', icon: ShoppingCart, href: '/workflows' },
-                  { label: 'Expenses', icon: DollarSign, href: '/workflows' },
-                  { label: 'Recruitment Requisition...', icon: UserPlus, href: '/workflows' },
-                  { label: 'Sign Request', icon: PenTool, href: '/workflows' },
-                  { label: 'Tax & NOC Request...', icon: DollarSign, href: '/workflows' },
-                  { label: 'Payment Voucher...', icon: Receipt, href: '/workflows' },
-                  { label: 'Meeting Rooms', icon: Calendar, href: '/workflows' },
-                  { label: 'Volunteering Program...', icon: Award, href: '/workflows' },
-                ].map((item, idx) => (
-                  <Link
-                    key={idx}
-                    href={item.href}
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+
+                {/* 1.2 Requests Accordion */}
+                <div className="space-y-0.5">
+                  <button
+                    onClick={() => toggleSection('requests')}
+                    title="Requests"
+                    className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-surface/50 cursor-pointer"
                   >
-                    <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
+                    <div className="flex items-center space-x-2.5">
+                      <FileText className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
+                      <span>Requests</span>
+                    </div>
+                    {openSections['requests'] ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                  </button>
 
-          {/* ── 3. ATTENDANCE & LEAVE ACCORDION ── */}
-          <div className="space-y-1">
-            <button
-              onClick={() => toggleSection('attendance')}
-              title="Attendance & Leave"
-              className={`w-full flex items-center ${
-                collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
-              } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Clock className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
-                {!collapsed && <span>Attendance &amp; Leave</span>}
-              </div>
-              {!collapsed && (
-                openSections['attendance'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </button>
+                  {openSections['requests'] && (
+                    <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
+                      <Link
+                        href="/workflows"
+                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <span>All Requests</span>
+                      </Link>
+                      {[
+                        { label: 'Leave Request', icon: Tag, href: '/leaves' },
+                        { label: 'General Requisition...', icon: Briefcase, href: '/workflows' },
+                        { label: 'Purchase Requisition...', icon: ShoppingCart, href: '/workflows' },
+                        { label: 'Expenses', icon: DollarSign, href: '/workflows' },
+                        { label: 'Recruitment Requisition...', icon: UserPlus, href: '/workflows' },
+                        { label: 'Sign Request', icon: PenTool, href: '/workflows' },
+                        { label: 'Tax & NOC Request...', icon: DollarSign, href: '/workflows' },
+                        { label: 'Payment Voucher...', icon: Receipt, href: '/workflows' },
+                        { label: 'Meeting Rooms', icon: Calendar, href: '/workflows' },
+                        { label: 'Volunteering Program...', icon: Award, href: '/workflows' },
+                      ].map((item, idx) => (
+                        <Link
+                          key={idx}
+                          href={item.href}
+                          className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                        >
+                          <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-            {openSections['attendance'] && !collapsed && (
-              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/40 ml-3 text-sidebar-foreground">
-                <Link
-                  href="/attendance"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
-                >
-                  <History className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>Attendance</span>
-                </Link>
-                <Link
-                  href="/leaves"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
-                >
-                  <Calendar className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>My Leave</span>
-                </Link>
-                <Link
-                  href="/on-duty"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
-                >
-                  <Radio className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>On Duty</span>
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* ── 4. ORGANIZATION ACCORDION ── */}
-          <div className="space-y-1">
-            <button
-              onClick={() => toggleSection('organization')}
-              title="Organization"
-              className={`w-full flex items-center ${
-                collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
-              } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Building2 className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
-                {!collapsed && <span>Organization</span>}
-              </div>
-              {!collapsed && (
-                openSections['organization'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </button>
-
-            {openSections['organization'] && !collapsed && (
-              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/40 ml-3 text-sidebar-foreground">
-                {[
-                  { label: 'My Team', icon: Users, href: '/organization/team' },
-                  { label: 'My Department', icon: Users, href: '/organization/department' },
-                  { label: 'Cross Department...', icon: GitFork, href: '/organization/cross-department' },
-                  { label: 'Contacts', icon: BookUser, href: '/organization/contacts' },
-                  { label: 'On Leave', icon: UserCheck, href: '/organization/on-leave' },
-                  { label: 'Performance & Appraisal...', icon: Star, href: '/organization/performance' },
-                ].map((item, idx) => (
-                  <Link
-                    key={idx}
-                    href={item.href}
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                {/* 1.3 Attendance & Leave Accordion */}
+                <div className="space-y-0.5">
+                  <button
+                    onClick={() => toggleSection('attendance')}
+                    title="Attendance & Leave"
+                    className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-surface/50 cursor-pointer"
                   >
-                    <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate">{item.label}</span>
-                  </Link>
-                ))}
+                    <div className="flex items-center space-x-2.5">
+                      <Clock className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
+                      <span>Attendance &amp; Leave</span>
+                    </div>
+                    {openSections['attendance'] ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+
+                  {openSections['attendance'] && (
+                    <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
+                      <Link
+                        href="/attendance"
+                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                      >
+                        <History className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <span>Attendance</span>
+                      </Link>
+                      <Link
+                        href="/leaves"
+                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                      >
+                        <Calendar className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <span>My Leave</span>
+                      </Link>
+                      <Link
+                        href="/on-duty"
+                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                      >
+                        <Radio className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <span>On Duty</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+
+                {/* 1.4 Organization Accordion */}
+                <div className="space-y-0.5">
+                  <button
+                    onClick={() => toggleSection('organization')}
+                    title="Organization"
+                    className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-surface/50 cursor-pointer"
+                  >
+                    <div className="flex items-center space-x-2.5">
+                      <Building2 className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
+                      <span>Organization</span>
+                    </div>
+                    {openSections['organization'] ? (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+
+                  {openSections['organization'] && (
+                    <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
+                      {[
+                        { label: 'My Team', icon: Users, href: '/organization/team' },
+                        { label: 'My Department', icon: Users, href: '/organization/department' },
+                        { label: 'Cross Department...', icon: GitFork, href: '/organization/cross-department' },
+                        { label: 'Contacts', icon: BookUser, href: '/organization/contacts' },
+                        { label: 'On Leave', icon: UserCheck, href: '/organization/on-leave' },
+                        { label: 'Performance & Appraisal...', icon: Star, href: '/organization/performance' },
+                      ].map((item, idx) => (
+                        <Link
+                          key={idx}
+                          href={item.href}
+                          className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                        >
+                          <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
-          {/* ── 5. DEPARTMENTS SECTION (Directly from Reference Images) ── */}
+          {/* ═══════════════════════════════════════════════════════════ */}
+          {/* ── 2. DEPARTMENTS SECTION (Directly from Reference Images) ─ */}
+          {/* ═══════════════════════════════════════════════════════════ */}
           {!collapsed && (
             <div className="space-y-1 pt-3 border-t border-sidebar-border/70">
-              <div className="px-3.5 py-1 text-[10px] uppercase font-bold tracking-wider text-sidebar-muted">
-                Departments
+              <div className="px-1 text-[10px] uppercase font-bold tracking-wider text-sidebar-muted">
+                DEPARTMENTS
               </div>
               {[
                 { label: 'Admin & Procurement', icon: Building2 },
@@ -302,7 +334,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
               ].map((dept, idx) => (
                 <button
                   key={idx}
-                  className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left"
+                  className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer"
                 >
                   <dept.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                   <span className="truncate">{dept.label}</span>
@@ -311,14 +343,16 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
             </div>
           )}
 
-          {/* ── 6. SETTINGS ACCORDION ── */}
+          {/* ═══════════════════════════════════════════════════════════ */}
+          {/* ── 3. SETTINGS ACCORDION ─────────────────────────────────  */}
+          {/* ═══════════════════════════════════════════════════════════ */}
           <div className="space-y-1 pt-2 border-t border-sidebar-border">
             <button
               onClick={() => toggleSection('settings')}
               title="Settings"
               className={`w-full flex items-center ${
                 collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
-              } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition`}
+              } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition cursor-pointer`}
             >
               <div className="flex items-center space-x-2.5">
                 <Settings className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
@@ -330,7 +364,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
             </button>
 
             {openSections['settings'] && !collapsed && (
-              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/40 ml-3 text-sidebar-foreground">
+              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
                 <Link
                   href="/admin/users"
                   className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
