@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   X,
   Send,
-  ImageIcon,
 } from 'lucide-react';
 import {
   isAllowedWorkDomain,
@@ -31,7 +30,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [bgType, setBgType] = useState<'meadow' | 'brand'>('meadow');
 
   // Forgot Password Modal State
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -40,12 +38,9 @@ export default function LoginPage() {
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [forgotError, setForgotError] = useState('');
 
-  // Check URL query parameters for OAuth redirects or errors
+  // Inspect URL query params for OAuth redirects or errors
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedBg = localStorage.getItem('jaago_login_bg') as 'meadow' | 'brand';
-      if (savedBg) setBgType(savedBg);
-
       const params = new URLSearchParams(window.location.search);
       const urlError = params.get('error');
       const rejectedEmail = params.get('rejectedEmail');
@@ -61,14 +56,6 @@ export default function LoginPage() {
       }
     }
   }, []);
-
-  const toggleBackground = () => {
-    const nextBg = bgType === 'meadow' ? 'brand' : 'meadow';
-    setBgType(nextBg);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('jaago_login_bg', nextBg);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,52 +174,33 @@ export default function LoginPage() {
     }
   };
 
-  const bgImageSrc = bgType === 'brand' ? '/jaago-brand-banner.png' : '/login-bg.png';
-
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-4 sm:p-6 overflow-hidden select-none">
-      {/* ── FULLSCREEN AUTO-ADJUSTING BACKGROUND IMAGE ── */}
+      {/* ── FULLSCREEN AUTO-ADJUSTING USER GIVEN BACKGROUND IMAGE ── */}
       <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden">
         <Image
-          src={bgImageSrc}
-          alt="JAAGO Hub Background"
+          src="/login-bg.png"
+          alt="JAAGO Foundation Background"
           fill
           priority
           sizes="100vw"
           quality={100}
-          className="object-cover object-center w-full h-full transform scale-105 transition-all duration-700"
+          className="object-cover object-center w-full h-full"
         />
-        {/* Soft Ambient Frosted Glass Darkening Overlay for High Legibility */}
-        <div
-          className={`absolute inset-0 transition-colors duration-500 ${
-            bgType === 'brand' ? 'bg-black/55 backdrop-blur-[4px]' : 'bg-black/25 backdrop-blur-[2px]'
-          }`}
-        />
-      </div>
-
-      {/* ── TOP RIGHT SWITCHER (Background Theme) ── */}
-      <div className="fixed top-5 right-5 z-20">
-        <button
-          type="button"
-          onClick={toggleBackground}
-          title={`Switch to ${bgType === 'meadow' ? 'JAAGO Brand' : 'Nature Meadow'} Background`}
-          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 border border-white/40 text-white text-xs font-semibold backdrop-blur-md transition shadow-lg cursor-pointer active:scale-95"
-        >
-          <ImageIcon className="h-3.5 w-3.5" />
-          <span className="capitalize">{bgType === 'meadow' ? 'Meadow' : 'Brand'} Theme</span>
-        </button>
+        {/* Ambient Dark Frosted Glass Overlay to ensure crystal clear contrast & legibility */}
+        <div className="absolute inset-0 bg-black/45 backdrop-blur-[3px]" />
       </div>
 
       {/* ── MAIN FROSTED GLASS LOGIN CARD ── */}
-      <div className="relative z-10 w-full max-w-[420px] rounded-[32px] border border-white/40 bg-white/10 dark:bg-black/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] backdrop-blur-2xl p-7 sm:p-9 space-y-6 text-white animate-in fade-in zoom-in-95 duration-300">
+      <div className="relative z-10 w-full max-w-[420px] rounded-[32px] border border-white/40 bg-black/40 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] backdrop-blur-2xl p-7 sm:p-9 space-y-6 text-white animate-in fade-in zoom-in-95 duration-300">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(255,230,0,0.4)] border border-[#FFE600]/80 bg-black/40 backdrop-blur-md p-1.5 mb-1">
+          <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_25px_rgba(255,230,0,0.5)] border border-[#FFE600] bg-black/50 backdrop-blur-md p-2 mb-1">
             <Image
               src="/jaago-logo.png"
               alt="JAAGO Foundation"
               width={160}
-              height={80}
+              height={90}
               priority
               className="w-32 sm:w-36 h-auto object-contain block mx-auto"
             />
@@ -241,14 +209,14 @@ export default function LoginPage() {
           <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white drop-shadow-md">
             Login
           </h1>
-          <p className="text-xs sm:text-sm text-white/80 font-medium drop-shadow-sm">
+          <p className="text-xs sm:text-sm text-white/85 font-medium drop-shadow-sm">
             Welcome back please login to your account
           </p>
         </div>
 
         {/* Error Alert Box */}
         {errorMessage && (
-          <div className="p-3 rounded-2xl bg-red-500/25 border border-red-500/40 text-white text-xs font-semibold backdrop-blur-md animate-in fade-in flex items-start space-x-2 shadow-lg">
+          <div className="p-3 rounded-2xl bg-red-500/30 border border-red-500/50 text-white text-xs font-semibold backdrop-blur-md animate-in fade-in flex items-start space-x-2 shadow-lg">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-red-200" />
             <div className="leading-relaxed drop-shadow-sm">{errorMessage}</div>
           </div>
@@ -263,8 +231,8 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="User Name / Email"
-              className="w-full pl-4 pr-11 py-3.5 bg-white/10 dark:bg-black/25 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-white/60 focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
+              placeholder="User Name / Work Email"
+              className="w-full pl-4 pr-11 py-3.5 bg-white/10 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
             />
             <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-white/70">
               <User className="h-5 w-5" />
@@ -279,7 +247,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
-              className="w-full pl-4 pr-11 py-3.5 bg-white/10 dark:bg-black/25 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-white/60 focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
+              className="w-full pl-4 pr-11 py-3.5 bg-white/10 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
             />
             <button
               type="button"
@@ -298,7 +266,7 @@ export default function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-white/40 bg-white/20 text-emerald-600 focus:ring-0 accent-[#698a3b] cursor-pointer"
+                className="h-4 w-4 rounded border-white/40 bg-white/20 text-[#FFE600] focus:ring-0 accent-[#FFE600] cursor-pointer"
               />
               <span className="font-semibold drop-shadow-sm">Remember me</span>
             </label>
@@ -316,11 +284,11 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* Submit Action Button (Lush Nature Green Glass Gradient) */}
+          {/* Submit Action Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#698a3b]/90 to-[#4d6b27]/90 hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/30 text-white font-extrabold tracking-wide text-base shadow-[0_4px_20px_rgba(77,107,39,0.5)] backdrop-blur-md transition duration-200 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer"
+            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#698a3b]/90 to-[#4d6b27]/90 hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/40 text-white font-extrabold tracking-wide text-base shadow-[0_4px_20px_rgba(77,107,39,0.5)] backdrop-blur-md transition duration-200 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer"
           >
             {loading ? (
               <>
@@ -347,7 +315,7 @@ export default function LoginPage() {
           type="button"
           disabled={googleLoading}
           onClick={handleGoogleSignIn}
-          className="w-full py-3 px-4 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center space-x-3 transition active:scale-[0.98] cursor-pointer shadow-md backdrop-blur-md disabled:opacity-50"
+          className="w-full py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/30 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center space-x-3 transition active:scale-[0.98] cursor-pointer shadow-md backdrop-blur-md disabled:opacity-50"
         >
           {googleLoading ? (
             <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
@@ -383,7 +351,7 @@ export default function LoginPage() {
       {/* ── FORGOT PASSWORD MODAL (FROSTED GLASS) ── */}
       {showForgotModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-black/40 border border-white/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 backdrop-blur-2xl text-white animate-in fade-in zoom-in-95">
+          <div className="bg-black/50 border border-white/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 backdrop-blur-2xl text-white animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-white/20 pb-3">
               <div className="flex items-center space-x-2">
                 <div className="h-8 w-8 rounded-xl bg-amber-400/20 flex items-center justify-center text-amber-300">
@@ -435,7 +403,7 @@ export default function LoginPage() {
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     placeholder="e.g. name@jaago.com.bd"
-                    className="w-full px-3.5 py-2.5 bg-white/10 border border-white/30 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-white/60 text-xs backdrop-blur-md"
+                    className="w-full px-3.5 py-2.5 bg-white/10 border border-white/30 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] text-xs backdrop-blur-md"
                   />
                   <p className="text-[10px] text-white/70">
                     Only <strong className="text-white">@jaago.com.bd</strong>,{' '}
