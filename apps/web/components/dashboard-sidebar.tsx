@@ -5,35 +5,44 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
+  LayoutGrid,
   FileText,
+  Tag,
+  Briefcase,
+  ShoppingCart,
+  DollarSign,
+  UserPlus,
+  PenTool,
+  Receipt,
   Calendar,
+  Award,
+  Clock,
+  History,
+  Radio,
   Building2,
+  Users,
+  GitFork,
+  BookUser,
+  UserCheck,
+  Star,
+  TrendingUp,
+  ClipboardList,
+  HeartHandshake,
+  BarChart2,
   Settings,
+  Boxes,
+  Wand2,
+  Cpu,
+  Activity,
+  Server,
+  Bot,
+  Shield,
+  MessageSquare,
+  Mail,
   LogOut,
   ChevronDown,
   ChevronRight,
   ChevronLeft,
-  Briefcase,
-  Layers,
-  Clock,
-  Shield,
-  Bot,
-  Mail,
-  Server,
-  DollarSign,
-  Users,
-  MessageSquare,
-  FileCheck,
-  Award,
-  Video,
-  HeartHandshake,
-  Boxes,
-  Activity,
-  BarChart3,
-  Cpu,
-  Wand2,
-  Scale,
 } from 'lucide-react';
 
 export interface DashboardSidebarProps {
@@ -44,10 +53,12 @@ export interface DashboardSidebarProps {
 export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Accordion state for sidebar categories
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     dashboard: true,
     requests: true,
-    attendance: true,
+    attendance: false,
     organization: false,
     settings: false,
   });
@@ -70,7 +81,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
         collapsed ? '-translate-x-full lg:translate-x-0 lg:w-20' : 'w-72'
       }`}
     >
-      {/* ── HIDE / UNHIDE SIDEBAR TOGGLE BUTTON (Based on reference design) ── */}
+      {/* ── HIDE / UNHIDE SIDEBAR TOGGLE BUTTON ── */}
       <button
         onClick={onToggle}
         type="button"
@@ -79,10 +90,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
         className="absolute -right-3.5 top-20 z-50 flex items-center justify-center group focus:outline-none transition-transform active:scale-90"
       >
         <div className="relative flex items-center justify-center w-7 h-16 rounded-full bg-surface border border-border/90 shadow-[0_4px_16px_rgba(0,0,0,0.5)] group-hover:border-primary/80 group-hover:shadow-[0_0_16px_rgba(250,192,10,0.45)] transition-all duration-200 cursor-pointer overflow-hidden">
-          {/* Vertical gradient pill track matching reference mockup */}
           <div className="absolute inset-y-2 w-2 rounded-full bg-gradient-to-b from-amber-500 via-primary to-orange-500 opacity-80 group-hover:opacity-100 group-hover:w-2.5 transition-all duration-200" />
-
-          {/* Directional Chevron Icon */}
           <div className="relative z-10 flex items-center justify-center">
             {collapsed ? (
               <ChevronRight className="h-3.5 w-3.5 stroke-[3] text-foreground group-hover:text-primary transition" />
@@ -93,8 +101,8 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
         </div>
       </button>
 
-      {/* Top Section: Official Logo & Nav List */}
-      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-5 no-scrollbar">
+      {/* Top Section: Logo & Nav List */}
+      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-4 no-scrollbar">
         {/* Official JAAGO Foundation Logo Card */}
         <div className="flex items-center justify-center py-1">
           <div
@@ -116,43 +124,26 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
         </div>
 
         {/* Navigation Menus */}
-        <nav className="space-y-4 pt-1">
-          {/* Dashboards Section */}
-          <div className="space-y-1">
-            <button
-              onClick={() => toggleSection('dashboard')}
-              title="My Dashboard"
+        <nav className="space-y-3 pt-1">
+          {/* ── 1. OVERVIEW MENU ITEM ── */}
+          <div>
+            <Link
+              href="/dashboard"
+              title="Overview"
               className={`w-full flex items-center ${
-                collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
+                collapsed ? 'justify-center px-2' : 'space-x-2.5 px-3.5'
               } py-2.5 rounded-2xl text-xs font-bold transition shadow-sm ${
                 pathname === '/dashboard'
-                  ? 'bg-primary text-primary-foreground font-black'
-                  : 'text-sidebar-foreground hover:bg-surface'
+                  ? 'bg-primary/20 text-foreground font-black border border-primary/40 shadow-sm'
+                  : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
               }`}
             >
-              <div className="flex items-center space-x-2.5">
-                <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
-                {!collapsed && <span>My Dashboard</span>}
-              </div>
-              {!collapsed && (
-                openSections['dashboard'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </button>
-
-            {openSections['dashboard'] && !collapsed && (
-              <div className="pl-3 pt-1 space-y-1">
-                <Link
-                  href="/dashboard"
-                  className="flex items-center space-x-2.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-surface border border-border text-foreground hover:border-primary/40 transition"
-                >
-                  <Layers className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                  <span>Overview</span>
-                </Link>
-              </div>
-            )}
+              <LayoutGrid className="h-4 w-4 text-foreground flex-shrink-0" />
+              {!collapsed && <span>Overview</span>}
+            </Link>
           </div>
 
-          {/* Requests Section */}
+          {/* ── 2. REQUESTS ACCORDION ── */}
           <div className="space-y-1">
             <button
               onClick={() => toggleSection('requests')}
@@ -162,7 +153,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
               } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition`}
             >
               <div className="flex items-center space-x-2.5">
-                <FileText className="h-4 w-4 text-primary/80 flex-shrink-0" />
+                <FileText className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 {!collapsed && <span>Requests</span>}
               </div>
               {!collapsed && (
@@ -171,38 +162,40 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
             </button>
 
             {openSections['requests'] && !collapsed && (
-              <div className="pl-4 space-y-0.5 text-sidebar-foreground">
+              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/40 ml-3 text-sidebar-foreground">
                 <Link
                   href="/workflows"
                   className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
                 >
-                  <FileCheck className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                  <span>Workflows &amp; Approvals</span>
+                  <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span>All Requests</span>
                 </Link>
                 {[
-                  { label: 'Leave Request', icon: Calendar },
-                  { label: 'Purchase Requisition', icon: DollarSign },
-                  { label: 'Expenses', icon: DollarSign },
-                  { label: 'Recruitment Requisition', icon: Users },
-                  { label: 'Sign Request', icon: FileCheck },
-                  { label: 'Tax & NOC Request', icon: Award },
-                  { label: 'Payment Voucher', icon: DollarSign },
-                  { label: 'Meeting Rooms', icon: Video },
-                  { label: 'Volunteering Program', icon: HeartHandshake },
+                  { label: 'Leave Request', icon: Tag, href: '/leaves' },
+                  { label: 'General Requisition...', icon: Briefcase, href: '/workflows' },
+                  { label: 'Purchase Requisition...', icon: ShoppingCart, href: '/workflows' },
+                  { label: 'Expenses', icon: DollarSign, href: '/workflows' },
+                  { label: 'Recruitment Requisition...', icon: UserPlus, href: '/workflows' },
+                  { label: 'Sign Request', icon: PenTool, href: '/workflows' },
+                  { label: 'Tax & NOC Request...', icon: DollarSign, href: '/workflows' },
+                  { label: 'Payment Voucher...', icon: Receipt, href: '/workflows' },
+                  { label: 'Meeting Rooms', icon: Calendar, href: '/workflows' },
+                  { label: 'Volunteering Program...', icon: Award, href: '/workflows' },
                 ].map((item, idx) => (
-                  <button
+                  <Link
                     key={idx}
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition"
+                    href={item.href}
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
                   >
                     <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span className="truncate">{item.label}</span>
-                  </button>
+                  </Link>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Attendance & Leave */}
+          {/* ── 3. ATTENDANCE & LEAVE ACCORDION ── */}
           <div className="space-y-1">
             <button
               onClick={() => toggleSection('attendance')}
@@ -212,8 +205,8 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
               } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition`}
             >
               <div className="flex items-center space-x-2.5">
-                <Clock className="h-4 w-4 text-primary/80 flex-shrink-0" />
-                {!collapsed && <span>Attendance & Leave</span>}
+                <Clock className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
+                {!collapsed && <span>Attendance &amp; Leave</span>}
               </div>
               {!collapsed && (
                 openSections['attendance'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
@@ -221,60 +214,33 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
             </button>
 
             {openSections['attendance'] && !collapsed && (
-              <div className="pl-4 space-y-0.5 text-sidebar-foreground">
+              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/40 ml-3 text-sidebar-foreground">
                 <Link
-                  href="/hr/employees"
+                  href="/attendance"
                   className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
                 >
-                  <Users className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                  <span>Staff Directory</span>
+                  <History className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span>Attendance</span>
                 </Link>
-                {[
-                  { label: 'Attendance', icon: Clock },
-                  { label: 'My Leave', icon: Calendar },
-                  { label: 'On Duty', icon: Briefcase },
-                ].map((item, idx) => (
-                  <button
-                    key={idx}
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition"
-                  >
-                    <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span>{item.label}</span>
-                  </button>
-                ))}
+                <Link
+                  href="/leaves"
+                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                >
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span>My Leave</span>
+                </Link>
+                <Link
+                  href="/on-duty"
+                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                >
+                  <Radio className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span>On Duty</span>
+                </Link>
               </div>
             )}
           </div>
 
-          {/* Finance & Accounts */}
-          <div className="space-y-1">
-            <Link
-              href="/finance/accounting"
-              title="Finance & Accounts"
-              className={`w-full flex items-center ${
-                collapsed ? 'justify-center px-2' : 'space-x-2.5 px-3.5'
-              } py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface hover:text-primary transition`}
-            >
-              <Scale className="h-4 w-4 text-primary/80 flex-shrink-0" />
-              {!collapsed && <span>Finance &amp; Accounts</span>}
-            </Link>
-          </div>
-
-          {/* Reports & Analytics */}
-          <div className="space-y-1">
-            <Link
-              href="/reports"
-              title="Reports & Analytics"
-              className={`w-full flex items-center ${
-                collapsed ? 'justify-center px-2' : 'space-x-2.5 px-3.5'
-              } py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface hover:text-primary transition`}
-            >
-              <BarChart3 className="h-4 w-4 text-primary/80 flex-shrink-0" />
-              {!collapsed && <span>Reports &amp; Analytics</span>}
-            </Link>
-          </div>
-
-          {/* Organization */}
+          {/* ── 4. ORGANIZATION ACCORDION ── */}
           <div className="space-y-1">
             <button
               onClick={() => toggleSection('organization')}
@@ -284,29 +250,68 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
               } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition`}
             >
               <div className="flex items-center space-x-2.5">
-                <Building2 className="h-4 w-4 text-primary/80 flex-shrink-0" />
+                <Building2 className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 {!collapsed && <span>Organization</span>}
               </div>
               {!collapsed && (
                 openSections['organization'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
               )}
             </button>
+
+            {openSections['organization'] && !collapsed && (
+              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/40 ml-3 text-sidebar-foreground">
+                {[
+                  { label: 'My Team', icon: Users, href: '/organization/team' },
+                  { label: 'My Department', icon: Users, href: '/organization/department' },
+                  { label: 'Cross Department...', icon: GitFork, href: '/organization/cross-department' },
+                  { label: 'Contacts', icon: BookUser, href: '/organization/contacts' },
+                  { label: 'On Leave', icon: UserCheck, href: '/organization/on-leave' },
+                  { label: 'Performance & Appraisal...', icon: Star, href: '/organization/performance' },
+                ].map((item, idx) => (
+                  <Link
+                    key={idx}
+                    href={item.href}
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  >
+                    <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Departments */}
+          {/* ── 5. DEPARTMENTS SECTION (Directly from Reference Images) ── */}
           {!collapsed && (
-            <div className="space-y-1">
+            <div className="space-y-1 pt-3 border-t border-sidebar-border/70">
               <div className="px-3.5 py-1 text-[10px] uppercase font-bold tracking-wider text-sidebar-muted">
                 Departments
               </div>
-              <button className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition">
-                <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                <span>Admin & Procurement</span>
-              </button>
+              {[
+                { label: 'Admin & Procurement', icon: Building2 },
+                { label: 'Child Welfare', icon: Star },
+                { label: 'Digital & Creative (DKL)', icon: TrendingUp },
+                { label: "Founder's Office (FC)", icon: FileText },
+                { label: 'Fundraising & Grants', icon: DollarSign },
+                { label: 'Impact Investment', icon: Radio },
+                { label: 'Project Implementation', icon: ClipboardList },
+                { label: 'Programmes', icon: Users },
+                { label: 'Private Sector (PSE)', icon: Building2 },
+                { label: 'Youth Development (YDF)', icon: HeartHandshake },
+                { label: 'MEAL (Monitoring & Eval)', icon: BarChart2 },
+              ].map((dept, idx) => (
+                <button
+                  key={idx}
+                  className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left"
+                >
+                  <dept.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="truncate">{dept.label}</span>
+                </button>
+              ))}
             </div>
           )}
 
-          {/* Settings */}
+          {/* ── 6. SETTINGS ACCORDION ── */}
           <div className="space-y-1 pt-2 border-t border-sidebar-border">
             <button
               onClick={() => toggleSection('settings')}
@@ -316,7 +321,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
               } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition`}
             >
               <div className="flex items-center space-x-2.5">
-                <Settings className="h-4 w-4 text-primary/80 flex-shrink-0" />
+                <Settings className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 {!collapsed && <span>Settings</span>}
               </div>
               {!collapsed && (
@@ -325,7 +330,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
             </button>
 
             {openSections['settings'] && !collapsed && (
-              <div className="pl-4 space-y-0.5 text-sidebar-foreground">
+              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/40 ml-3 text-sidebar-foreground">
                 <Link
                   href="/admin/users"
                   className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
@@ -352,48 +357,44 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
                   href="/admin/studio"
                   className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
                 >
-                  <Wand2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <Wand2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                   <span>Studio-lite Builder</span>
                 </Link>
                 <Link
                   href="/admin/control-center"
                   className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
                 >
-                  <Cpu className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <Cpu className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                   <span>Control Center</span>
                 </Link>
                 <Link
                   href="/admin/logs"
                   className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
                 >
-                  <Activity className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <Activity className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                   <span>System Logs</span>
                 </Link>
                 <Link
                   href="/admin/api-keys"
                   className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
                 >
-                  <Server className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                   <span>API Settings</span>
                 </Link>
                 <Link
                   href="/admin/integrations"
                   className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
                 >
-                  <Bot className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                  <Bot className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                   <span>AI Agent &amp; Integrations</span>
                 </Link>
-                {[
-                  { label: 'RBAC Matrix', icon: Shield },
-                ].map((item, idx) => (
-                  <button
-                    key={idx}
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition"
-                  >
-                    <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span>{item.label}</span>
-                  </button>
-                ))}
+                <Link
+                  href="/admin/rbac"
+                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                >
+                  <Shield className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span>RBAC Matrix</span>
+                </Link>
               </div>
             )}
           </div>
@@ -404,13 +405,13 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
       <div className="p-3.5 border-t border-sidebar-border space-y-3">
         {!collapsed && (
           <div className="flex items-center justify-center space-x-3">
-            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition" title="Chat">
+            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition cursor-pointer" title="Chat">
               <MessageSquare className="h-4 w-4" />
             </button>
-            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition" title="Mail">
+            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition cursor-pointer" title="Mail">
               <Mail className="h-4 w-4" />
             </button>
-            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition" title="Calendar">
+            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition cursor-pointer" title="Calendar">
               <Calendar className="h-4 w-4" />
             </button>
           </div>
@@ -421,7 +422,7 @@ export function DashboardSidebar({ collapsed, onToggle }: DashboardSidebarProps)
           title="Sign Out"
           className={`w-full py-2.5 ${
             collapsed ? 'px-2 justify-center' : 'px-4 justify-center space-x-2'
-          } rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 font-bold text-xs uppercase tracking-wider flex items-center transition`}
+          } rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 font-bold text-xs uppercase tracking-wider flex items-center transition cursor-pointer`}
         >
           <LogOut className="h-4 w-4 flex-shrink-0" />
           {!collapsed && <span>SIGN OUT</span>}
