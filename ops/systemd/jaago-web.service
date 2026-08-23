@@ -9,7 +9,7 @@ User=jaago
 Group=jaago
 WorkingDirectory=/var/www/jaago-hub
 EnvironmentFile=/etc/jaago-hub/web.env
-ExecStart=/usr/bin/pnpm --filter @jaago/web start
+ExecStart=/usr/bin/npm run start --workspace=@jaago/web
 Restart=always
 RestartSec=5s
 StandardOutput=journal

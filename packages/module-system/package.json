@@ -13,10 +13,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/contracts": "workspace:*",
-    "@jaago/core-domain": "workspace:*",
-    "@jaago/core-infra": "workspace:*",
-    "@jaago/logger": "workspace:*",
+    "@jaago/contracts": "*",
+    "@jaago/core-domain": "*",
+    "@jaago/core-infra": "*",
+    "@jaago/logger": "*",
     "zod": "^3.24.1"
   },
   "devDependencies": {

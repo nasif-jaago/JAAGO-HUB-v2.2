@@ -12,14 +12,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@jaago/config": "workspace:*",
-    "@jaago/contracts": "workspace:*",
-    "@jaago/core-domain": "workspace:*",
-    "@jaago/core-application": "workspace:*",
-    "@jaago/core-infra": "workspace:*",
-    "@jaago/logger": "workspace:*",
-    "@jaago/observability": "workspace:*",
-    "@jaago/queue": "workspace:*"
+    "@jaago/config": "*",
+    "@jaago/contracts": "*",
+    "@jaago/core-domain": "*",
+    "@jaago/core-application": "*",
+    "@jaago/core-infra": "*",
+    "@jaago/logger": "*",
+    "@jaago/observability": "*",
+    "@jaago/queue": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

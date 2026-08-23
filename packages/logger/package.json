@@ -14,8 +14,8 @@
     "test": "tsx --test src/__tests__/**/*.test.ts"
   },
   "dependencies": {
-    "@jaago/contracts": "workspace:*",
-    "@jaago/observability": "workspace:*",
+    "@jaago/contracts": "*",
+    "@jaago/observability": "*",
     "pino": "^9.6.0"
   },
   "devDependencies": {

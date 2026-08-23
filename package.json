@@ -2,18 +2,26 @@
   "name": "jaago-hub",
   "version": "2.2.0",
   "private": true,
-  "packageManager": "pnpm@11.22.0",
+  "main": "index.js",
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "modules/*",
+    "packages/modules/*"
+  ],
   "engines": {
-    "node": ">=22.0.0",
-    "pnpm": ">=9.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
+    "start": "node index.js",
+    "start:server": "node index.js",
     "build": "turbo run build && node tooling/scripts/prepare-deploy.mjs",
     "deploy:prepare": "node tooling/scripts/prepare-deploy.mjs",
     "dev": "turbo run dev --parallel",
-    "dev:web": "pnpm --filter @jaago/web dev",
-    "dev:worker": "pnpm --filter @jaago/worker dev",
-    "dev:log-runner": "pnpm --filter @jaago/log-runner dev",
+    "dev:web": "npm run dev --workspace=@jaago/web",
+    "dev:worker": "npm run dev --workspace=@jaago/worker",
+    "dev:log-runner": "npm run dev --workspace=@jaago/log-runner",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",

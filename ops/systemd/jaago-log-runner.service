@@ -8,7 +8,7 @@ User=jaago
 Group=jaago
 WorkingDirectory=/var/www/jaago-hub
 EnvironmentFile=/etc/jaago-hub/log-runner.env
-ExecStart=/usr/bin/pnpm --filter @jaago/log-runner start
+ExecStart=/usr/bin/npm run start --workspace=@jaago/log-runner
 Restart=always
 RestartSec=5s
 StandardOutput=journal

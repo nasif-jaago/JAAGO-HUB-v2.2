@@ -13,10 +13,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/cache": "workspace:*",
-    "@jaago/config": "workspace:*",
-    "@jaago/contracts": "workspace:*",
-    "@jaago/logger": "workspace:*",
+    "@jaago/cache": "*",
+    "@jaago/config": "*",
+    "@jaago/contracts": "*",
+    "@jaago/logger": "*",
     "bullmq": "^5.34.8"
   },
   "devDependencies": {

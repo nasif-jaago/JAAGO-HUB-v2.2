@@ -13,9 +13,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/config": "workspace:*",
-    "@jaago/contracts": "workspace:*",
-    "@jaago/logger": "workspace:*",
+    "@jaago/config": "*",
+    "@jaago/contracts": "*",
+    "@jaago/logger": "*",
     "ioredis": "^5.4.2"
   },
   "devDependencies": {

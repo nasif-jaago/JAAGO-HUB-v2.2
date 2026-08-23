@@ -112,7 +112,6 @@ const productionPackageJson = {
   },
   engines: {
     node: '>=20.0.0',
-    pnpm: '>=9.0.0',
     npm: '>=9.0.0',
   },
 };
@@ -222,10 +221,10 @@ RewriteEngine On
     Deny from all
 </FilesMatch>
 
-# Reverse Proxy all traffic to Node.js application port (default 3000)
+# Reverse Proxy all traffic to Node.js application port (default 50001)
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
+RewriteRule ^(.*)$ http://127.0.0.1:50001/$1 [P,L]
 `;
 
 fs.writeFileSync(path.join(deployDir, '.htaccess'), htaccessContent, 'utf-8');
@@ -241,7 +240,7 @@ const ecosystemContent = `module.exports = {
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 3000,
+        PORT: process.env.PORT || 3000,
       },
     },
   ],

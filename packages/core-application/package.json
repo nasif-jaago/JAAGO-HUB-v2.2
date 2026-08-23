@@ -13,8 +13,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/core-domain": "workspace:*",
-    "@jaago/contracts": "workspace:*"
+    "@jaago/core-domain": "*",
+    "@jaago/contracts": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -13,11 +13,11 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/auth": "workspace:*",
-    "@jaago/cache": "workspace:*",
-    "@jaago/contracts": "workspace:*",
-    "@jaago/logger": "workspace:*",
-    "@jaago/observability": "workspace:*"
+    "@jaago/auth": "*",
+    "@jaago/cache": "*",
+    "@jaago/contracts": "*",
+    "@jaago/logger": "*",
+    "@jaago/observability": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

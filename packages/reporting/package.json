@@ -13,9 +13,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/contracts": "workspace:*",
-    "@jaago/importexport": "workspace:*",
-    "@jaago/logger": "workspace:*"
+    "@jaago/contracts": "*",
+    "@jaago/importexport": "*",
+    "@jaago/logger": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

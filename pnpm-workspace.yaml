@@ -1,9 +1,0 @@
-packages:
-  - 'apps/*'
-  - 'packages/*'
-  - 'modules/*'
-  - 'packages/modules/*'
-allowBuilds:
-  esbuild: true
-  msgpackr-extract: true
-  sharp: true

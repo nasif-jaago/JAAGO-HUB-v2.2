@@ -13,8 +13,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/contracts": "workspace:*",
-    "@jaago/config": "workspace:*",
+    "@jaago/contracts": "*",
+    "@jaago/config": "*",
     "@supabase/supabase-js": "^2.47.10"
   },
   "devDependencies": {

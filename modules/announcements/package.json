@@ -13,10 +13,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/contracts": "workspace:*",
-    "@jaago/core-infra": "workspace:*",
-    "@jaago/module-system": "workspace:*",
-    "@jaago/mod-directory": "workspace:*"
+    "@jaago/contracts": "*",
+    "@jaago/core-infra": "*",
+    "@jaago/module-system": "*",
+    "@jaago/mod-directory": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

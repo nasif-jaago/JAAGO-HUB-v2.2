@@ -13,10 +13,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/core-domain": "workspace:*",
-    "@jaago/core-application": "workspace:*",
-    "@jaago/contracts": "workspace:*",
-    "@jaago/config": "workspace:*",
+    "@jaago/core-domain": "*",
+    "@jaago/core-application": "*",
+    "@jaago/contracts": "*",
+    "@jaago/config": "*",
     "drizzle-orm": "^0.38.3",
     "postgres": "^3.4.5"
   },

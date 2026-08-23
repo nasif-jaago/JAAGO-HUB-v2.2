@@ -13,9 +13,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/contracts": "workspace:*",
-    "@jaago/core-domain": "workspace:*",
-    "@jaago/module-system": "workspace:*"
+    "@jaago/contracts": "*",
+    "@jaago/core-domain": "*",
+    "@jaago/module-system": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
