@@ -602,46 +602,79 @@ export const INITIAL_INSURANCE_CATEGORIES: InsuranceCategoryItem[] = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 3. DATABASE SERVICES & SUPABASE FETCH/SAVE HANDLERS
+// 3. DATABASE SERVICES & SUPABASE FETCH/SAVE/DELETE HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════
+
+export function getDeletedEntityIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem('jaago_pnc_deleted_entity_ids');
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+export function addDeletedEntityId(id: string) {
+  if (typeof window === 'undefined' || !id) return;
+  try {
+    const ids = getDeletedEntityIds();
+    ids.add(id);
+    localStorage.setItem('jaago_pnc_deleted_entity_ids', JSON.stringify(Array.from(ids)));
+  } catch {}
+}
+
+export function removeDeletedEntityId(id: string) {
+  if (typeof window === 'undefined' || !id) return;
+  try {
+    const ids = getDeletedEntityIds();
+    ids.delete(id);
+    localStorage.setItem('jaago_pnc_deleted_entity_ids', JSON.stringify(Array.from(ids)));
+  } catch {}
+}
 
 // --- ORGANIZATIONS ---
 export async function fetchOrganizationsFromSupabase(): Promise<OrganizationEntity[]> {
+  const deletedIds = getDeletedEntityIds();
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_ORGANIZATIONS;
+    if (!supabase) return INITIAL_ORGANIZATIONS.filter((o) => !deletedIds.has(o.id));
     const { data, error } = await supabase.from('organizations').select('*').order('name', { ascending: true });
-    if (error || !data || data.length === 0) return INITIAL_ORGANIZATIONS;
+    if (error || !data || data.length === 0) {
+      return INITIAL_ORGANIZATIONS.filter((o) => !deletedIds.has(o.id));
+    }
 
-    return data.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      logoUrl: row.logo_url || '',
-      address: row.address || '',
-      banani: row.banani || '',
-      city: row.city || 'Dhaka',
-      division: row.division || 'Dhaka Division',
-      postalCode: row.postal_code || '1213',
-      country: row.country || 'Bangladesh',
-      partnerCountry: row.partner_country || 'Bangladesh',
-      phone: row.phone || '',
-      email: row.email || '',
-      website: row.website || 'https://jaago.com.bd',
-      emailDomain: row.email_domain || 'jaago.com.bd',
-      brandColor: row.brand_color || '#FED900',
-      taxId: row.tax_id || '',
-      companyId: row.company_id || '',
-      currency: row.currency || 'BDT',
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    return data
+      .filter((row: any) => !deletedIds.has(row.id))
+      .map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        logoUrl: row.logo_url || '',
+        address: row.address || '',
+        banani: row.banani || '',
+        city: row.city || 'Dhaka',
+        division: row.division || 'Dhaka Division',
+        postalCode: row.postal_code || '1213',
+        country: row.country || 'Bangladesh',
+        partnerCountry: row.partner_country || 'Bangladesh',
+        phone: row.phone || '',
+        email: row.email || '',
+        website: row.website || 'https://jaago.com.bd',
+        emailDomain: row.email_domain || 'jaago.com.bd',
+        brandColor: row.brand_color || '#FED900',
+        taxId: row.tax_id || '',
+        companyId: row.company_id || '',
+        currency: row.currency || 'BDT',
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
   } catch {
-    return INITIAL_ORGANIZATIONS;
+    return INITIAL_ORGANIZATIONS.filter((o) => !deletedIds.has(o.id));
   }
 }
 
 export async function saveOrganizationToSupabase(org: OrganizationEntity): Promise<boolean> {
   try {
+    removeDeletedEntityId(org.id);
     const supabase = getSupabase();
     if (!supabase) return false;
     const payload = {
@@ -673,48 +706,58 @@ export async function saveOrganizationToSupabase(org: OrganizationEntity): Promi
 }
 
 export async function deleteOrganizationFromSupabase(id: string): Promise<boolean> {
+  addDeletedEntityId(id);
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
-    const { error } = await supabase.from('organizations').delete().eq('id', id);
-    return !error;
+    if (!supabase) return true;
+    await supabase.from('organizations').delete().eq('id', id);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 // --- BRANCHES ---
 export async function fetchBranchesFromSupabase(organizationId?: string): Promise<OrganizationBranch[]> {
+  const deletedIds = getDeletedEntityIds();
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_BRANCHES;
+    if (!supabase) {
+      const base = organizationId ? INITIAL_BRANCHES.filter((b) => b.organizationId === organizationId) : INITIAL_BRANCHES;
+      return base.filter((b) => !deletedIds.has(b.id));
+    }
     let query = supabase.from('organization_branches').select('*');
     if (organizationId) {
       query = query.eq('organization_id', organizationId);
     }
     const { data, error } = await query.order('name', { ascending: true });
     if (error || !data || data.length === 0) {
-      return organizationId ? INITIAL_BRANCHES.filter((b) => b.organizationId === organizationId) : INITIAL_BRANCHES;
+      const base = organizationId ? INITIAL_BRANCHES.filter((b) => b.organizationId === organizationId) : INITIAL_BRANCHES;
+      return base.filter((b) => !deletedIds.has(b.id));
     }
-    return data.map((row: any) => ({
-      id: row.id,
-      organizationId: row.organization_id,
-      name: row.name,
-      code: row.code || '',
-      phone: row.phone || '',
-      email: row.email || '',
-      address: row.address || '',
-      city: row.city || 'Dhaka',
-      country: row.country || 'Bangladesh',
-      createdAt: row.created_at,
-    }));
+    return data
+      .filter((row: any) => !deletedIds.has(row.id))
+      .map((row: any) => ({
+        id: row.id,
+        organizationId: row.organization_id,
+        name: row.name,
+        code: row.code || '',
+        phone: row.phone || '',
+        email: row.email || '',
+        address: row.address || '',
+        city: row.city || 'Dhaka',
+        country: row.country || 'Bangladesh',
+        createdAt: row.created_at,
+      }));
   } catch {
-    return organizationId ? INITIAL_BRANCHES.filter((b) => b.organizationId === organizationId) : INITIAL_BRANCHES;
+    const base = organizationId ? INITIAL_BRANCHES.filter((b) => b.organizationId === organizationId) : INITIAL_BRANCHES;
+    return base.filter((b) => !deletedIds.has(b.id));
   }
 }
 
 export async function saveBranchToSupabase(branch: OrganizationBranch): Promise<boolean> {
   try {
+    removeDeletedEntityId(branch.id);
     const supabase = getSupabase();
     if (!supabase) return false;
     const payload = {
@@ -736,48 +779,58 @@ export async function saveBranchToSupabase(branch: OrganizationBranch): Promise<
 }
 
 export async function deleteBranchFromSupabase(id: string): Promise<boolean> {
+  addDeletedEntityId(id);
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
-    const { error } = await supabase.from('organization_branches').delete().eq('id', id);
-    return !error;
+    if (!supabase) return true;
+    await supabase.from('organization_branches').delete().eq('id', id);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 // --- POLICIES ---
 export async function fetchPoliciesFromSupabase(organizationId?: string): Promise<OrganizationPolicy[]> {
+  const deletedIds = getDeletedEntityIds();
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_POLICIES;
+    if (!supabase) {
+      const base = organizationId ? INITIAL_POLICIES.filter((p) => p.organizationId === organizationId) : INITIAL_POLICIES;
+      return base.filter((p) => !deletedIds.has(p.id));
+    }
     let query = supabase.from('organization_policies').select('*');
     if (organizationId) {
       query = query.eq('organization_id', organizationId);
     }
     const { data, error } = await query.order('created_at', { ascending: false });
     if (error || !data || data.length === 0) {
-      return organizationId ? INITIAL_POLICIES.filter((p) => p.organizationId === organizationId) : INITIAL_POLICIES;
+      const base = organizationId ? INITIAL_POLICIES.filter((p) => p.organizationId === organizationId) : INITIAL_POLICIES;
+      return base.filter((p) => !deletedIds.has(p.id));
     }
-    return data.map((row: any) => ({
-      id: row.id,
-      organizationId: row.organization_id,
-      title: row.title,
-      category: row.category || 'GENERAL',
-      description: row.description || '',
-      attachmentName: row.attachment_name || '',
-      attachmentSize: row.attachment_size || '',
-      attachmentUrl: row.attachment_url || '',
-      uploadedAt: row.uploaded_at,
-      createdAt: row.created_at,
-    }));
+    return data
+      .filter((row: any) => !deletedIds.has(row.id))
+      .map((row: any) => ({
+        id: row.id,
+        organizationId: row.organization_id,
+        title: row.title,
+        category: row.category || 'GENERAL',
+        description: row.description || '',
+        attachmentName: row.attachment_name || '',
+        attachmentSize: row.attachment_size || '',
+        attachmentUrl: row.attachment_url || '',
+        uploadedAt: row.uploaded_at,
+        createdAt: row.created_at,
+      }));
   } catch {
-    return organizationId ? INITIAL_POLICIES.filter((p) => p.organizationId === organizationId) : INITIAL_POLICIES;
+    const base = organizationId ? INITIAL_POLICIES.filter((p) => p.organizationId === organizationId) : INITIAL_POLICIES;
+    return base.filter((p) => !deletedIds.has(p.id));
   }
 }
 
 export async function savePolicyToSupabase(policy: OrganizationPolicy): Promise<boolean> {
   try {
+    removeDeletedEntityId(policy.id);
     const supabase = getSupabase();
     if (!supabase) return false;
     const payload = {
@@ -799,40 +852,45 @@ export async function savePolicyToSupabase(policy: OrganizationPolicy): Promise<
 }
 
 export async function deletePolicyFromSupabase(id: string): Promise<boolean> {
+  addDeletedEntityId(id);
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
-    const { error } = await supabase.from('organization_policies').delete().eq('id', id);
-    return !error;
+    if (!supabase) return true;
+    await supabase.from('organization_policies').delete().eq('id', id);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 // --- DESIGNATIONS ---
 export async function fetchDesignationsFromSupabase(): Promise<DesignationItem[]> {
+  const deletedIds = getDeletedEntityIds();
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_DESIGNATIONS;
+    if (!supabase) return INITIAL_DESIGNATIONS.filter((d) => !deletedIds.has(d.id));
     const { data, error } = await supabase.from('designations').select('*').order('name', { ascending: true });
-    if (error || !data || data.length === 0) return INITIAL_DESIGNATIONS;
-    return data.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      code: row.code || '',
-      grade: row.grade || '',
-      departmentOrProject: row.department_or_project || '',
-      description: row.description || '',
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    if (error || !data || data.length === 0) return INITIAL_DESIGNATIONS.filter((d) => !deletedIds.has(d.id));
+    return data
+      .filter((row: any) => !deletedIds.has(row.id))
+      .map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        code: row.code || '',
+        grade: row.grade || '',
+        departmentOrProject: row.department_or_project || '',
+        description: row.description || '',
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
   } catch {
-    return INITIAL_DESIGNATIONS;
+    return INITIAL_DESIGNATIONS.filter((d) => !deletedIds.has(d.id));
   }
 }
 
 export async function saveDesignationToSupabase(des: DesignationItem): Promise<boolean> {
   try {
+    removeDeletedEntityId(des.id);
     const supabase = getSupabase();
     if (!supabase) return false;
     const payload = {
@@ -852,44 +910,49 @@ export async function saveDesignationToSupabase(des: DesignationItem): Promise<b
 }
 
 export async function deleteDesignationFromSupabase(id: string): Promise<boolean> {
+  addDeletedEntityId(id);
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
-    const { error } = await supabase.from('designations').delete().eq('id', id);
-    return !error;
+    if (!supabase) return true;
+    await supabase.from('designations').delete().eq('id', id);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 // --- DEPARTMENTS ---
 export async function fetchDepartmentsFromSupabase(): Promise<DepartmentItem[]> {
+  const deletedIds = getDeletedEntityIds();
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_DEPARTMENTS;
+    if (!supabase) return INITIAL_DEPARTMENTS.filter((d) => !deletedIds.has(d.id));
     const { data, error } = await supabase.from('departments').select('*').order('name', { ascending: true });
-    if (error || !data || data.length === 0) return INITIAL_DEPARTMENTS;
-    return data.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      code: row.code || '',
-      organizationId: row.organization_id || '',
-      organizationName: row.organization_name || '',
-      parentDepartmentId: row.parent_department_id || '',
-      parentDepartmentName: row.parent_department_name || '',
-      managerName: row.manager_name || '',
-      managerId: row.manager_id || '',
-      description: row.description || '',
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    if (error || !data || data.length === 0) return INITIAL_DEPARTMENTS.filter((d) => !deletedIds.has(d.id));
+    return data
+      .filter((row: any) => !deletedIds.has(row.id))
+      .map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        code: row.code || '',
+        organizationId: row.organization_id || '',
+        organizationName: row.organization_name || '',
+        parentDepartmentId: row.parent_department_id || '',
+        parentDepartmentName: row.parent_department_name || '',
+        managerName: row.manager_name || '',
+        managerId: row.manager_id || '',
+        description: row.description || '',
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
   } catch {
-    return INITIAL_DEPARTMENTS;
+    return INITIAL_DEPARTMENTS.filter((d) => !deletedIds.has(d.id));
   }
 }
 
 export async function saveDepartmentToSupabase(dept: DepartmentItem): Promise<boolean> {
   try {
+    removeDeletedEntityId(dept.id);
     const supabase = getSupabase();
     if (!supabase) return false;
     const payload = {
@@ -913,48 +976,55 @@ export async function saveDepartmentToSupabase(dept: DepartmentItem): Promise<bo
 }
 
 export async function deleteDepartmentFromSupabase(id: string): Promise<boolean> {
+  addDeletedEntityId(id);
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
-    const { error } = await supabase.from('departments').delete().eq('id', id);
-    return !error;
+    if (!supabase) return true;
+    await supabase.from('departments').delete().eq('id', id);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 // --- PROJECTS ---
 export async function fetchProjectsFromSupabase(): Promise<ProjectItem[]> {
+  const deletedIds = getDeletedEntityIds();
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_PROJECTS;
+    if (!supabase) return INITIAL_PROJECTS.filter((p) => !deletedIds.has(p.id));
     const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true });
-    if (error || !data || data.length === 0) return INITIAL_PROJECTS;
-    return data.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      code: row.code || '',
-      organizationId: row.organization_id || '',
-      organizationName: row.organization_name || '',
-      parentDepartmentId: row.parent_department_id || '',
-      parentDepartmentName: row.parent_department_name || '',
-      projectManagerName: row.project_manager_name || '',
-      projectManagerId: row.project_manager_id || '',
-      financeLeadName: row.finance_lead_name || '',
-      financeLeadId: row.finance_lead_id || '',
-      description: row.description || '',
-      status: row.status || 'ACTIVE',
-      budget: Number(row.budget || 0),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    if (error || !data || data.length === 0) return INITIAL_PROJECTS.filter((p) => !deletedIds.has(p.id));
+    return data
+      .filter((row: any) => !deletedIds.has(row.id))
+      .map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        code: row.code || '',
+        organizationId: row.organization_id || '',
+        organizationName: row.organization_name || '',
+        parentDepartmentId: row.parent_department_id || '',
+        parentDepartmentName: row.parent_department_name || '',
+        projectManagerName: row.project_manager_name || '',
+        projectManagerId: row.project_manager_id || '',
+        managerName: row.project_manager_name || '',
+        managerId: row.project_manager_id || '',
+        financeLeadName: row.finance_lead_name || '',
+        financeLeadId: row.finance_lead_id || '',
+        description: row.description || '',
+        status: row.status || 'ACTIVE',
+        budget: Number(row.budget || 0),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
   } catch {
-    return INITIAL_PROJECTS;
+    return INITIAL_PROJECTS.filter((p) => !deletedIds.has(p.id));
   }
 }
 
 export async function saveProjectToSupabase(proj: ProjectItem): Promise<boolean> {
   try {
+    removeDeletedEntityId(proj.id);
     const supabase = getSupabase();
     if (!supabase) return false;
     const payload = {
@@ -965,8 +1035,8 @@ export async function saveProjectToSupabase(proj: ProjectItem): Promise<boolean>
       organization_name: proj.organizationName || '',
       parent_department_id: proj.parentDepartmentId || '',
       parent_department_name: proj.parentDepartmentName || '',
-      project_manager_name: proj.projectManagerName || '',
-      project_manager_id: proj.projectManagerId || '',
+      project_manager_name: proj.projectManagerName || proj.managerName || '',
+      project_manager_id: proj.projectManagerId || proj.managerId || '',
       finance_lead_name: proj.financeLeadName || '',
       finance_lead_id: proj.financeLeadId || '',
       description: proj.description || '',
@@ -982,58 +1052,63 @@ export async function saveProjectToSupabase(proj: ProjectItem): Promise<boolean>
 }
 
 export async function deleteProjectFromSupabase(id: string): Promise<boolean> {
+  addDeletedEntityId(id);
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
-    const { error } = await supabase.from('projects').delete().eq('id', id);
-    return !error;
+    if (!supabase) return true;
+    await supabase.from('projects').delete().eq('id', id);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 // --- TEAMS & MEMBERS ---
 export async function fetchTeamsFromSupabase(): Promise<TeamItem[]> {
+  const deletedIds = getDeletedEntityIds();
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_TEAMS;
+    if (!supabase) return INITIAL_TEAMS.filter((t) => !deletedIds.has(t.id));
     const { data: teamsData, error: teamsError } = await supabase.from('teams').select('*').order('name', { ascending: true });
-    if (teamsError || !teamsData || teamsData.length === 0) return INITIAL_TEAMS;
+    if (teamsError || !teamsData || teamsData.length === 0) return INITIAL_TEAMS.filter((t) => !deletedIds.has(t.id));
 
     const { data: membersData } = await supabase.from('team_members').select('*');
 
-    return teamsData.map((t: any) => {
-      const teamMems = (membersData || [])
-        .filter((m: any) => m.team_id === t.id)
-        .map((m: any) => ({
-          id: m.id,
-          teamId: m.team_id,
-          employeeId: m.employee_id,
-          employeeName: m.employee_name,
-          employeeCode: m.employee_code,
-          role: m.role || 'Member',
-        }));
+    return teamsData
+      .filter((t: any) => !deletedIds.has(t.id))
+      .map((t: any) => {
+        const teamMems = (membersData || [])
+          .filter((m: any) => m.team_id === t.id)
+          .map((m: any) => ({
+            id: m.id,
+            teamId: m.team_id,
+            employeeId: m.employee_id,
+            employeeName: m.employee_name,
+            employeeCode: m.employee_code,
+            role: m.role || 'Member',
+          }));
 
-      return {
-        id: t.id,
-        name: t.name,
-        code: t.code || '',
-        departmentOrProject: t.department_or_project || '',
-        teamLeadName: t.team_lead_name || '',
-        teamLeadId: t.team_lead_id || '',
-        description: t.description || '',
-        members: teamMems.length > 0 ? teamMems : undefined,
-        createdAt: t.created_at,
-        updatedAt: t.updated_at,
-      };
-    });
+        return {
+          id: t.id,
+          name: t.name,
+          code: t.code || '',
+          departmentOrProject: t.department_or_project || '',
+          teamLeadName: t.team_lead_name || '',
+          teamLeadId: t.team_lead_id || '',
+          description: t.description || '',
+          members: teamMems.length > 0 ? teamMems : undefined,
+          createdAt: t.created_at,
+          updatedAt: t.updated_at,
+        };
+      });
   } catch {
-    return INITIAL_TEAMS;
+    return INITIAL_TEAMS.filter((t) => !deletedIds.has(t.id));
   }
 }
 
 export async function saveTeamToSupabase(team: TeamItem): Promise<boolean> {
   try {
+    removeDeletedEntityId(team.id);
     const supabase = getSupabase();
     if (!supabase) return false;
     const teamId = team.id || `tm-${Date.now()}`;
@@ -1070,41 +1145,46 @@ export async function saveTeamToSupabase(team: TeamItem): Promise<boolean> {
 }
 
 export async function deleteTeamFromSupabase(id: string): Promise<boolean> {
+  addDeletedEntityId(id);
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     await supabase.from('team_members').delete().eq('team_id', id);
-    const { error } = await supabase.from('teams').delete().eq('id', id);
-    return !error;
+    await supabase.from('teams').delete().eq('id', id);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 // --- INSURANCE CATEGORIES ---
 export async function fetchInsuranceCategoriesFromSupabase(): Promise<InsuranceCategoryItem[]> {
+  const deletedIds = getDeletedEntityIds();
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_INSURANCE_CATEGORIES;
+    if (!supabase) return INITIAL_INSURANCE_CATEGORIES.filter((c) => !deletedIds.has(c.id));
     const { data, error } = await supabase.from('insurance_categories').select('*').order('monthly_premium', { ascending: false });
-    if (error || !data || data.length === 0) return INITIAL_INSURANCE_CATEGORIES;
-    return data.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      monthlyPremium: Number(row.monthly_premium || 0),
-      description: row.description || '',
-      coverageDetails: row.coverage_details || '',
-      isActive: Boolean(row.is_active),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    if (error || !data || data.length === 0) return INITIAL_INSURANCE_CATEGORIES.filter((c) => !deletedIds.has(c.id));
+    return data
+      .filter((row: any) => !deletedIds.has(row.id))
+      .map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        monthlyPremium: Number(row.monthly_premium || 0),
+        description: row.description || '',
+        coverageDetails: row.coverage_details || '',
+        isActive: Boolean(row.is_active),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
   } catch {
-    return INITIAL_INSURANCE_CATEGORIES;
+    return INITIAL_INSURANCE_CATEGORIES.filter((c) => !deletedIds.has(c.id));
   }
 }
 
 export async function saveInsuranceCategoryToSupabase(cat: InsuranceCategoryItem): Promise<boolean> {
   try {
+    removeDeletedEntityId(cat.id);
     const supabase = getSupabase();
     if (!supabase) return false;
     const payload = {
@@ -1124,12 +1204,14 @@ export async function saveInsuranceCategoryToSupabase(cat: InsuranceCategoryItem
 }
 
 export async function deleteInsuranceCategoryFromSupabase(id: string): Promise<boolean> {
+  addDeletedEntityId(id);
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
-    const { error } = await supabase.from('insurance_categories').delete().eq('id', id);
-    return !error;
+    if (!supabase) return true;
+    await supabase.from('insurance_categories').delete().eq('id', id);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
+

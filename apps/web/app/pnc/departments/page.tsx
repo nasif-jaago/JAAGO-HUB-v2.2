@@ -157,11 +157,13 @@ export default function DepartmentsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this department?')) return;
-    await deleteDepartmentFromSupabase(id);
     setDepartments((prev) => prev.filter((d) => d.id !== id));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
-    showToast('Department deleted');
+    if (editingItem?.id === id) {
+      setShowModal(false);
+    }
+    await deleteDepartmentFromSupabase(id);
+    showToast('Department deleted successfully');
   };
 
   // Bulk actions
@@ -195,13 +197,13 @@ export default function DepartmentsPage() {
 
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected department(s)?`)) return;
+    const count = selectedIds.length;
+    setDepartments((prev) => prev.filter((d) => !selectedIds.includes(d.id)));
     for (const id of selectedIds) {
       await deleteDepartmentFromSupabase(id);
     }
-    setDepartments((prev) => prev.filter((d) => !selectedIds.includes(d.id)));
-    showToast(`${selectedIds.length} department(s) deleted`);
     setSelectedIds([]);
+    showToast(`${count} department(s) deleted`);
   };
 
   // Filtered list
@@ -673,21 +675,35 @@ export default function DepartmentsPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-border/70">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-bold transition cursor-pointer"
-              >
-                CANCEL
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
-              >
-                {editingItem ? 'UPDATE DEPARTMENT' : 'CREATE DEPARTMENT'}
-              </button>
+            <div className="flex items-center justify-between pt-3 border-t border-border/70">
+              {editingItem ? (
+                <button
+                  type="button"
+                  onClick={() => handleDelete(editingItem.id)}
+                  className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>DELETE</span>
+                </button>
+              ) : (
+                <div />
+              )}
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-bold transition cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
+                >
+                  {editingItem ? 'UPDATE DEPARTMENT' : 'CREATE DEPARTMENT'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

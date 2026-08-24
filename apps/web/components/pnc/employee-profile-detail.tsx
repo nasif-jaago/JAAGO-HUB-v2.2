@@ -144,6 +144,7 @@ interface EmployeeProfileDetailProps {
   currentUser?: { fullName: string; jobTitle: string } | undefined;
   onSave: (updatedProfile: FullEmployeeProfile) => void;
   onBack: () => void;
+  onDelete?: ((code: string) => void) | undefined;
   onCreateUser?: ((employee: FullEmployeeProfile) => void) | undefined;
 }
 
@@ -162,6 +163,7 @@ export function EmployeeProfileDetail({
   currentUser = { fullName: 'Nasif Kamal', jobTitle: 'Coordinator' },
   onSave,
   onBack,
+  onDelete,
   onCreateUser,
 }: EmployeeProfileDetailProps) {
   const isNew = !initialData?.id;
@@ -568,6 +570,19 @@ export function EmployeeProfileDetail({
             >
               <UserCheck className="h-3.5 w-3.5" />
               <span>Create User</span>
+            </button>
+          )}
+
+          {/* Delete Profile Button */}
+          {!isNew && onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(formData.code)}
+              className="px-4 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
+              title="Delete this employee profile"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Delete</span>
             </button>
           )}
 

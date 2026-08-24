@@ -30,6 +30,7 @@ import {
   archiveEmployeesInSupabase,
   unarchiveEmployeesInSupabase,
   deleteEmployeesFromSupabase,
+  getDeletedEmployeeCodes,
 } from '@/lib/supabase-employees';
 
 const INITIAL_EMPLOYEES: FullEmployeeProfile[] = [
@@ -422,10 +423,11 @@ export default function PnCEmployeesPage() {
 
       // Fetch latest employees directly from Supabase PostgreSQL & merge seed employees
       fetchEmployeesFromSupabase().then((remoteData) => {
+        const deletedCodes = getDeletedEmployeeCodes();
         if (remoteData && remoteData.length > 0) {
           const remoteCodes = new Set(remoteData.map((e) => e.code));
-          const missingSeeds = INITIAL_EMPLOYEES.filter((s) => !remoteCodes.has(s.code));
-          const merged = [...remoteData, ...missingSeeds];
+          const missingSeeds = INITIAL_EMPLOYEES.filter((s) => !remoteCodes.has(s.code) && !deletedCodes.has(s.code));
+          const merged = [...remoteData.filter((e) => !deletedCodes.has(e.code)), ...missingSeeds];
 
           // Auto-save missing seeds to Supabase in background
           if (missingSeeds.length > 0) {
@@ -436,6 +438,10 @@ export default function PnCEmployeesPage() {
           try {
             localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(merged));
           } catch {}
+        } else {
+          // If no remote data, fallback to seeds excluding deleted
+          const filteredSeeds = INITIAL_EMPLOYEES.filter((s) => !deletedCodes.has(s.code));
+          setEmployees(filteredSeeds);
         }
       });
     }
@@ -459,22 +465,22 @@ export default function PnCEmployeesPage() {
     if (activeTab === 'ARCHIVED') {
       if (!isArchived) return false;
     } else {
-      // In all standard tabs (including search), DO NOT show archived employees!
+      // In all standard tabs, NEVER show archived employees
       if (isArchived) return false;
-
-      if (activeTab === 'ACTIVE' && emp.status !== 'Active') return false;
-      if (activeTab === 'TERMINATED' && emp.status !== 'Terminated') return false;
-      if (activeTab === 'RESIGNED' && emp.status !== 'Resigned') return false;
-      if (activeTab === 'INCOMPLETE' && emp.status !== 'Incomplete') return false;
     }
+
+    if (activeTab === 'ACTIVE' && emp.status !== 'Active') return false;
+    if (activeTab === 'TERMINATED' && emp.status !== 'Terminated') return false;
+    if (activeTab === 'RESIGNED' && emp.status !== 'Resigned') return false;
+    if (activeTab === 'INCOMPLETE' && emp.status !== 'Incomplete') return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = emp.name.toLowerCase().includes(q);
       const matchCode = emp.code.toLowerCase().includes(q);
-      const matchEmail = emp.workEmail?.toLowerCase().includes(q);
-      const matchDept = emp.department?.toLowerCase().includes(q);
-      if (!matchName && !matchCode && !matchEmail && !matchDept) return false;
+      const matchEmail = (emp.workEmail || '').toLowerCase().includes(q);
+      const matchDesig = (emp.designation || '').toLowerCase().includes(q);
+      if (!matchName && !matchCode && !matchEmail && !matchDesig) return false;
     }
 
     if (selectedDept && emp.department !== selectedDept) return false;
@@ -485,7 +491,7 @@ export default function PnCEmployeesPage() {
     return true;
   });
 
-  // Handle Save from EmployeeProfileDetail
+  // Handle saving employee profile from detail view
   const handleSaveProfile = async (updatedProfile: FullEmployeeProfile) => {
     const existingIndex = employees.findIndex((e) => e.id === updatedProfile.id || e.code === updatedProfile.code);
     let newList: FullEmployeeProfile[];
@@ -645,9 +651,17 @@ export default function PnCEmployeesPage() {
     setSelectedCodes([]);
   };
 
+  const handleDeleteEmployee = async (code: string) => {
+    const updated = employees.filter((e) => e.code !== code);
+    persistEmployees(updated);
+    if (selectedProfile?.code === code) {
+      setSelectedProfile(null);
+    }
+    await deleteEmployeesFromSupabase([code]);
+  };
+
   const handleDeleteSelected = async () => {
     if (selectedCodes.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedCodes.length} selected employee(s)?`)) return;
     const updated = employees.filter((e) => !selectedCodes.includes(e.code));
     persistEmployees(updated);
     await deleteEmployeesFromSupabase(selectedCodes);
@@ -671,6 +685,7 @@ export default function PnCEmployeesPage() {
           currentUser={currentUser}
           onSave={handleSaveProfile}
           onBack={() => setSelectedProfile(null)}
+          onDelete={handleDeleteEmployee}
           onCreateUser={handleCreateUserForEmployee}
         />
       </div>
@@ -1022,6 +1037,15 @@ export default function PnCEmployeesPage() {
                           title="Open Full Tab-Wise Profile"
                         >
                           <Edit3 className="h-3.5 w-3.5" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEmployee(emp.code)}
+                          className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+                          title="Delete Employee Profile"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </td>

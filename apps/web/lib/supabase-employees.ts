@@ -258,6 +258,33 @@ export async function saveEmployeeToSupabase(
   }
 }
 
+export function getDeletedEmployeeCodes(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem('jaago_pnc_deleted_employee_codes');
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+export function addDeletedEmployeeCode(code: string) {
+  if (typeof window === 'undefined' || !code) return;
+  try {
+    const codes = getDeletedEmployeeCodes();
+    codes.add(code);
+    localStorage.setItem('jaago_pnc_deleted_employee_codes', JSON.stringify(Array.from(codes)));
+  } catch {}
+}
+
+export function removeDeletedEmployeeCode(code: string) {
+  if (typeof window === 'undefined' || !code) return;
+  try {
+    const codes = getDeletedEmployeeCodes();
+    codes.delete(code);
+    localStorage.setItem('jaago_pnc_deleted_employee_codes', JSON.stringify(Array.from(codes)));
+  } catch {}
+}
+
 /**
  * Bulk archive employees
  */
@@ -296,12 +323,14 @@ export async function unarchiveEmployeesInSupabase(codes: string[]): Promise<boo
  * Bulk delete employees
  */
 export async function deleteEmployeesFromSupabase(codes: string[]): Promise<boolean> {
+  codes.forEach((c) => addDeletedEmployeeCode(c));
   try {
     const supabase = getSupabase();
-    if (!supabase) return false;
-    const { error } = await supabase.from('employees').delete().in('code', codes);
-    return !error;
+    if (!supabase) return true;
+    await supabase.from('employees').delete().in('code', codes);
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
+

@@ -182,11 +182,12 @@ export default function OrganizationPage() {
   };
 
   const handleDeleteOrganization = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this organization entity?')) return;
-    await deleteOrganizationFromSupabase(id);
     setOrganizations((prev) => prev.filter((o) => o.id !== id));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
-    setSelectedOrg(null);
+    if (selectedOrg?.id === id) {
+      setSelectedOrg(null);
+    }
+    await deleteOrganizationFromSupabase(id);
     showToast('Organization entity deleted');
   };
 
@@ -221,13 +222,13 @@ export default function OrganizationPage() {
 
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected organization(s)?`)) return;
+    const count = selectedIds.length;
+    setOrganizations((prev) => prev.filter((o) => !selectedIds.includes(o.id)));
     for (const id of selectedIds) {
       await deleteOrganizationFromSupabase(id);
     }
-    setOrganizations((prev) => prev.filter((o) => !selectedIds.includes(o.id)));
-    showToast(`${selectedIds.length} organization(s) deleted`);
     setSelectedIds([]);
+    showToast(`${count} organization(s) deleted`);
   };
 
   // Branch Handlers
@@ -255,10 +256,9 @@ export default function OrganizationPage() {
   };
 
   const handleDeleteBranch = async (id: string) => {
-    if (!confirm('Remove this branch location?')) return;
-    await deleteBranchFromSupabase(id);
     setBranches((prev) => prev.filter((b) => b.id !== id));
-    showToast('Branch removed');
+    await deleteBranchFromSupabase(id);
+    showToast('Branch location removed successfully');
   };
 
   // Policy Handlers
@@ -286,10 +286,9 @@ export default function OrganizationPage() {
   };
 
   const handleDeletePolicy = async (id: string) => {
-    if (!confirm('Delete this policy document?')) return;
-    await deletePolicyFromSupabase(id);
     setPolicies((prev) => prev.filter((p) => p.id !== id));
-    showToast('Policy deleted');
+    await deletePolicyFromSupabase(id);
+    showToast('Policy document deleted successfully');
   };
 
   // Filtered organizations
@@ -601,6 +600,18 @@ export default function OrganizationPage() {
             </div>
 
             <div className="flex items-center space-x-2.5">
+              {!isCreatingNew && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOrganization(formData.id)}
+                  className="px-4 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
+                  title="Delete this company"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>DELETE</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 className="px-4 py-2 rounded-2xl bg-card border border-border hover:bg-surface text-xs font-bold text-muted-foreground hover:text-foreground transition cursor-pointer flex items-center space-x-1.5"

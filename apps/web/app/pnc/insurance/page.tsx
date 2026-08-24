@@ -107,11 +107,13 @@ export default function InsurancePage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this insurance category?')) return;
-    await deleteInsuranceCategoryFromSupabase(id);
     setCategories((prev) => prev.filter((c) => c.id !== id));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
-    showToast('Insurance category deleted');
+    if (editingItem?.id === id) {
+      setShowModal(false);
+    }
+    await deleteInsuranceCategoryFromSupabase(id);
+    showToast('Insurance category deleted successfully');
   };
 
   // Bulk actions
@@ -145,13 +147,13 @@ export default function InsurancePage() {
 
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedIds.length} selected category/categories?`)) return;
+    const count = selectedIds.length;
+    setCategories((prev) => prev.filter((c) => !selectedIds.includes(c.id)));
     for (const id of selectedIds) {
       await deleteInsuranceCategoryFromSupabase(id);
     }
-    setCategories((prev) => prev.filter((c) => !selectedIds.includes(c.id)));
-    showToast(`${selectedIds.length} category/categories deleted`);
     setSelectedIds([]);
+    showToast(`${count} category/categories deleted`);
   };
 
   // Filtered List
@@ -503,21 +505,35 @@ export default function InsurancePage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-border/70">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-bold transition cursor-pointer"
-              >
-                CANCEL
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
-              >
-                {editingItem ? 'UPDATE CATEGORY' : 'CREATE CATEGORY'}
-              </button>
+            <div className="flex items-center justify-between pt-3 border-t border-border/70">
+              {editingItem ? (
+                <button
+                  type="button"
+                  onClick={() => handleDelete(editingItem.id)}
+                  className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>DELETE</span>
+                </button>
+              ) : (
+                <div />
+              )}
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-bold transition cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
+                >
+                  {editingItem ? 'UPDATE CATEGORY' : 'CREATE CATEGORY'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
