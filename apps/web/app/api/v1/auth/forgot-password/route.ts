@@ -58,7 +58,7 @@ export const POST = createApiHandler({
 
       return Response.json({
         success: true,
-        message: `Password reset instructions have been dispatched to ${email} via Supabase.`,
+        message: `Password reset instructions have been dispatched to ${email}.`,
       });
     } catch (err: any) {
       logger.error('AUTH', 'user.reset_password.failed', { metadata: { email, err: err.message } });

@@ -30,6 +30,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Forgot Password Modal State
   const [showForgotModal, setShowForgotModal] = useState(false);
@@ -38,11 +39,17 @@ export default function LoginPage() {
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [forgotError, setForgotError] = useState('');
 
-  // Auto-detect OAuth redirect session or query error parameters
+  // Auto-detect OAuth redirect session, password recovery, or query error parameters
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash;
     const urlError = params.get('error');
     const rejectedEmail = params.get('rejectedEmail');
+    const resetStatus = params.get('reset');
+
+    if (resetStatus === 'success') {
+      setSuccessMessage('Your password has been reset successfully! Please sign in with your new password.');
+    }
 
     if (urlError === 'domain_restricted') {
       setErrorMessage(
@@ -54,10 +61,30 @@ export default function LoginPage() {
       setErrorMessage(decodeURIComponent(urlError));
     }
 
+    // Check if this is a password recovery link landing on /login
+    const isRecovery =
+      params.get('type') === 'recovery' ||
+      params.get('next') === '/reset-password' ||
+      hash.includes('type=recovery');
+
+    if (isRecovery) {
+      window.location.href = `/reset-password${window.location.search}${window.location.hash}`;
+      return;
+    }
+
     // Check if Supabase session is already active or returned via OAuth hash
     const supabase = getSupabase();
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session && session.user) {
+        // If recovery hash or recovery type, redirect to /reset-password
+        if (
+          window.location.hash.includes('type=recovery') ||
+          window.location.search.includes('type=recovery')
+        ) {
+          window.location.href = `/reset-password${window.location.search}${window.location.hash}`;
+          return;
+        }
+
         const userEmail = session.user.email || '';
         if (!isAllowedWorkDomain(userEmail)) {
           supabase.auth.signOut();
@@ -85,7 +112,20 @@ export default function LoginPage() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        window.location.href = `/reset-password${window.location.search}${window.location.hash}`;
+        return;
+      }
+
       if (event === 'SIGNED_IN' && session && session.user) {
+        if (
+          window.location.hash.includes('type=recovery') ||
+          window.location.search.includes('type=recovery')
+        ) {
+          window.location.href = `/reset-password${window.location.search}${window.location.hash}`;
+          return;
+        }
+
         const userEmail = session.user.email || '';
         if (!isAllowedWorkDomain(userEmail)) {
           supabase.auth.signOut();
@@ -130,18 +170,23 @@ export default function LoginPage() {
     }
 
     try {
-      // ── 2. SUPABASE DIRECT AUTHENTICATION ATTEMPT ──
+      // ── 2. SUPABASE DIRECT AUTHENTICATION ──
       const supabase = getSupabase();
       const { data: supaData, error: supaError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
       });
 
-      if (!supaError && supaData?.session && supaData?.user) {
+      if (supaError) {
+        throw new Error(supaError.message || 'Invalid email or password.');
+      }
+
+      if (supaData?.session && supaData?.user) {
         const userPayload = {
           id: supaData.user.id,
           email: supaData.user.email,
-          fullName: supaData.user.user_metadata['full_name'] || cleanEmail,
+          fullName: supaData.user.user_metadata['full_name'] || supaData.user.user_metadata['name'] || cleanEmail,
+          avatarUrl: supaData.user.user_metadata['avatar_url'] || supaData.user.user_metadata['picture'] || '',
           jobTitle: 'Coordinator',
           organizationName: 'JAAGO Foundation Trust',
           roles: ['super_admin', 'coordinator'],
@@ -159,30 +204,9 @@ export default function LoginPage() {
         return;
       }
 
-      // ── 3. API ROUTE FALLBACK (Tenant Registry / Seed Fallback) ──
-      const res = await fetch('/api/v1/auth/sign-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, password }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error?.message || 'Invalid email or password.');
-      }
-
-      // Save session info to localStorage and cookies
-      if (typeof window !== 'undefined' && data.session?.accessToken) {
-        localStorage.setItem('jaago_access_token', data.session.accessToken);
-        localStorage.setItem('jaago_user', JSON.stringify(data.user));
-        document.cookie = `jaago_access_token=${data.session.accessToken}; path=/; max-age=604800; SameSite=Lax`;
-        document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(data.user))}; path=/; max-age=604800; SameSite=Lax`;
-      }
-
-      window.location.href = '/dashboard';
+      throw new Error('Authentication failed. Please verify your credentials.');
     } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred while signing in');
+      setErrorMessage(err.message || 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -237,7 +261,7 @@ export default function LoginPage() {
       }
 
       setForgotSuccess(
-        `Password reset link sent to ${cleanForgotEmail} via Supabase. Please check your inbox.`
+        `Password reset link sent to ${cleanForgotEmail}. Please check your inbox.`
       );
     } catch (err: any) {
       setForgotError(err.message || 'Failed to send password recovery email.');
@@ -286,6 +310,14 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {/* Success Alert Box */}
+        {successMessage && (
+          <div className="p-3.5 rounded-2xl bg-emerald-500/30 border border-emerald-500/50 text-white text-xs font-semibold backdrop-blur-md animate-in fade-in flex items-start space-x-2 shadow-lg">
+            <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5 text-emerald-300" />
+            <div className="leading-relaxed drop-shadow-sm">{successMessage}</div>
+          </div>
+        )}
+
         {/* Error Alert Box */}
         {errorMessage && (
           <div className="p-3 rounded-2xl bg-red-500/30 border border-red-500/50 text-white text-xs font-semibold backdrop-blur-md animate-in fade-in flex items-start space-x-2 shadow-lg">
@@ -306,8 +338,8 @@ export default function LoginPage() {
               placeholder="User Name / Work Email"
               className="w-full pl-4 pr-11 py-3.5 bg-white/10 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
             />
-            <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-white/70">
-              <User className="h-5 w-5" />
+            <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-black">
+              <User className="h-5 w-5 text-black" />
             </div>
           </div>
 
@@ -324,10 +356,10 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-4 flex items-center text-white/70 hover:text-white transition cursor-pointer"
+              className="absolute inset-y-0 right-0 pr-4 flex items-center text-black hover:text-black/70 transition cursor-pointer"
               aria-label="Toggle password visibility"
             >
-              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              {showPassword ? <EyeOff className="h-5 w-5 text-black" /> : <Eye className="h-5 w-5 text-black" />}
             </button>
           </div>
 
@@ -437,7 +469,7 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-white">Password Recovery</h3>
-                  <p className="text-[11px] text-white/70">Supabase Authentication Service</p>
+                  <p className="text-[11px] text-white/70">Enterprise Identity &amp; Access Control</p>
                 </div>
               </div>
               <button
@@ -449,8 +481,7 @@ export default function LoginPage() {
             </div>
 
             <p className="text-xs text-white/80 leading-relaxed">
-              Enter your registered organization work email address. We will send a secure Supabase
-              password reset link to your inbox.
+              Enter your registered organization work email address. We will send a secure password reset link to your inbox.
             </p>
 
             {forgotError && (

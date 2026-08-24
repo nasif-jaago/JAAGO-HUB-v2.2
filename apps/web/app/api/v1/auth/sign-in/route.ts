@@ -45,93 +45,64 @@ export const POST = createApiHandler({
       );
     }
 
-    // 1. Try Supabase Auth if configured with live credentials
-    const isMock = !process.env['NEXT_PUBLIC_SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'].includes('mock') || !process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
+    // Supabase Authentication
+    try {
+      const supabase = getSupabaseAnonClient();
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (!isMock) {
-      try {
-        const supabase = getSupabaseAnonClient();
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (!error && data.user && data.session) {
-          logger.info('AUTH', 'user.signin.success', {
-            userId: data.user.id,
-            metadata: { email },
-          });
+      if (error || !data.user || !data.session) {
+        logger.warn('SECURITY', 'user.signin.failed', {
+          errorCode: ErrorCode.AUTH_INVALID_CREDENTIALS,
+          metadata: { email, error: error?.message },
+        });
 
-          return Response.json({
-            user: {
-              id: data.user.id,
-              email: data.user.email,
-              fullName: data.user.user_metadata['full_name'] || email,
-              organizationId: data.user.user_metadata['organization_id'] || 'org-root',
-            },
-            session: {
-              accessToken: data.session.access_token,
-              expiresIn: data.session.expires_in,
-            },
-          });
-        }
-      } catch {
-        // Fall back to users-db registry
+        throw new AppError(error?.message || 'Invalid email or password', {
+          code: ErrorCode.AUTH_INVALID_CREDENTIALS,
+          statusCode: 401,
+        });
       }
-    }
-
-    // 2. In-memory / tenant registry authentication fallback
-    const { usersDatabase } = await import('@/lib/users-db');
-    const matchingUser = usersDatabase.find((u) => u.email.toLowerCase() === email.toLowerCase());
-
-    if (matchingUser || email.includes('@jaago.com.bd') || email.includes('@emkcenter.org') || email === 'admin@jaago.org') {
-      const mockUserId = matchingUser ? matchingUser.id : 'u-101';
-      const fullName = matchingUser ? matchingUser.fullName : 'Nasif Kamal';
-      const role = matchingUser ? matchingUser.role : 'Super Admin';
-      const accessToken = `jwt-jaago-access-${Date.now()}`;
 
       logger.info('AUTH', 'user.signin.success', {
-        userId: mockUserId,
-        organizationId: 'org-jaago-dhaka',
-        metadata: { email, role },
+        userId: data.user.id,
+        metadata: { email },
       });
 
       const userObj = {
-        id: mockUserId,
-        email,
-        fullName,
-        jobTitle: matchingUser?.jobTitle || 'Coordinator',
-        organizationId: 'org-jaago-dhaka',
+        id: data.user.id,
+        email: data.user.email,
+        fullName: data.user.user_metadata['full_name'] || data.user.user_metadata['name'] || email,
+        organizationId: data.user.user_metadata['organization_id'] || 'org-jaago-dhaka',
         organizationName: 'JAAGO Foundation Trust',
-        roles: [role.toLowerCase(), 'super_admin', 'coordinator'],
+        roles: ['super_admin', 'coordinator'],
         permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
       };
 
       const response = Response.json({
         user: userObj,
         session: {
-          accessToken,
-          expiresIn: 604800,
+          accessToken: data.session.access_token,
+          expiresIn: data.session.expires_in,
         },
       });
 
       response.headers.append(
         'Set-Cookie',
-        `jaago_access_token=${accessToken}; Path=/; Max-Age=604800; SameSite=Lax`
+        `jaago_access_token=${data.session.access_token}; Path=/; Max-Age=${data.session.expires_in || 604800}; SameSite=Lax`
       );
       response.headers.append(
         'Set-Cookie',
-        `jaago_user=${encodeURIComponent(JSON.stringify(userObj))}; Path=/; Max-Age=604800; SameSite=Lax`
+        `jaago_user=${encodeURIComponent(JSON.stringify(userObj))}; Path=/; Max-Age=${data.session.expires_in || 604800}; SameSite=Lax`
       );
 
       return response;
+    } catch (err: any) {
+      if (err instanceof AppError) throw err;
+
+      throw new AppError(err.message || 'Invalid email or password', {
+        code: ErrorCode.AUTH_INVALID_CREDENTIALS,
+        statusCode: 401,
+      });
     }
-
-    logger.warn('SECURITY', 'user.signin.failed', {
-      errorCode: ErrorCode.AUTH_INVALID_CREDENTIALS,
-      metadata: { email },
-    });
-
-    throw new AppError('Invalid email or password', {
-      code: ErrorCode.AUTH_INVALID_CREDENTIALS,
-      statusCode: 401,
-    });
   },
 });
 

@@ -33,6 +33,11 @@ export default function AuthCallbackPage() {
 
         const supabase = getSupabase();
 
+        const isRecovery =
+          url.searchParams.get('type') === 'recovery' ||
+          url.searchParams.get('next') === '/reset-password' ||
+          url.hash.includes('type=recovery');
+
         // 1. If PKCE authorization code is present, exchange it for a session in the browser
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -47,6 +52,11 @@ export default function AuthCallbackPage() {
               return;
             }
           }
+
+          if (isRecovery) {
+            window.location.href = '/reset-password';
+            return;
+          }
         }
 
         // 2. Retrieve the active session
@@ -54,17 +64,26 @@ export default function AuthCallbackPage() {
         const session = sessionResult?.session;
         const user = session?.user;
 
+        if (isRecovery) {
+          window.location.href = '/reset-password';
+          return;
+        }
+
         if (!session || !user) {
           // Wait briefly for onAuthStateChange to capture implicit hash token
           const { data: authListener } = supabase.auth.onAuthStateChange(
-            async (_event, newSession) => {
+            async (event, newSession) => {
+              if (event === 'PASSWORD_RECOVERY' || isRecovery) {
+                authListener.subscription.unsubscribe();
+                window.location.href = '/reset-password';
+                return;
+              }
               if (newSession?.user) {
                 authListener.subscription.unsubscribe();
                 await handleSuccessfulSession(newSession);
               }
             }
           );
-
 
           setTimeout(() => {
             if (isMounted && status === 'loading') {
