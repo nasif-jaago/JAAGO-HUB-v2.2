@@ -31,6 +31,7 @@ async function setupBuckets() {
   const bucketsToCreate = [
     { id: 'jaago-private-docs', public: false },
     { id: 'jaago-public-assets', public: true },
+    { id: 'employees', public: true },
   ];
 
   for (const b of bucketsToCreate) {

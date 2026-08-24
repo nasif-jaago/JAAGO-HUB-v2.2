@@ -48,14 +48,14 @@ export default function ResetPasswordPage() {
   return (
     <div className="w-full max-w-md my-auto py-8 px-4">
       <div className="mb-6 flex items-center justify-center">
-        <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_20px_rgba(255,230,0,0.45)] border-2 border-[#FFE600]">
+        <div className="inline-block rounded-2xl overflow-hidden shadow-md">
           <Image
             src="/jaago-logo.png"
             alt="JAAGO Foundation"
             width={180}
             height={100}
             priority
-            className="w-40 h-auto object-cover block"
+            className="w-40 h-auto object-cover block rounded-2xl"
           />
         </div>
       </div>

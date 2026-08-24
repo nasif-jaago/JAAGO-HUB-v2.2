@@ -129,6 +129,12 @@ export default function PnCLayout({
 
   const getBreadcrumb = () => {
     if (pathname.includes('/employees')) return 'Employees';
+    if (pathname.includes('/organization')) return 'Organization & Branches';
+    if (pathname.includes('/designations')) return 'Designations';
+    if (pathname.includes('/teams')) return 'Teams';
+    if (pathname.includes('/departments')) return 'Departments';
+    if (pathname.includes('/projects')) return 'Projects';
+    if (pathname.includes('/insurance')) return 'Insurance Info';
     if (pathname.includes('/time-off') || pathname.includes('/leave')) return 'Leave Calendar';
     return 'Dashboard';
   };
@@ -227,32 +233,108 @@ export default function PnCLayout({
           <div className="space-y-0.5">
             <button
               onClick={() => toggleSection('organization')}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer"
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                pathname.startsWith('/pnc/organization') ||
+                pathname.startsWith('/pnc/designations') ||
+                pathname.startsWith('/pnc/teams') ||
+                pathname.startsWith('/pnc/departments') ||
+                pathname.startsWith('/pnc/projects') ||
+                pathname.startsWith('/pnc/insurance')
+                  ? 'text-primary font-black bg-primary/10'
+                  : 'text-sidebar-foreground hover:bg-surface'
+              }`}
             >
               <div className="flex items-center space-x-2.5">
-                <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Building2 className={`h-4 w-4 flex-shrink-0 ${
+                  pathname.startsWith('/pnc/organization') ||
+                  pathname.startsWith('/pnc/designations') ||
+                  pathname.startsWith('/pnc/teams') ||
+                  pathname.startsWith('/pnc/departments') ||
+                  pathname.startsWith('/pnc/projects') ||
+                  pathname.startsWith('/pnc/insurance')
+                    ? 'text-primary'
+                    : 'text-muted-foreground'
+                }`} />
                 <span className="uppercase tracking-wider text-[11px]">ORGANIZATION</span>
               </div>
-              {openSections['organization'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              {openSections['organization'] ||
+              pathname.startsWith('/pnc/organization') ||
+              pathname.startsWith('/pnc/designations') ||
+              pathname.startsWith('/pnc/teams') ||
+              pathname.startsWith('/pnc/departments') ||
+              pathname.startsWith('/pnc/projects') ||
+              pathname.startsWith('/pnc/insurance') ? (
+                <ChevronDown className="h-3.5 w-3.5 text-primary" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
             </button>
-            {openSections['organization'] && (
+            {(openSections['organization'] ||
+              pathname.startsWith('/pnc/organization') ||
+              pathname.startsWith('/pnc/designations') ||
+              pathname.startsWith('/pnc/teams') ||
+              pathname.startsWith('/pnc/departments') ||
+              pathname.startsWith('/pnc/projects') ||
+              pathname.startsWith('/pnc/insurance')) && (
               <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <Link href="/pnc/employees" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/organization"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/organization'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Organization &amp; Branches
                 </Link>
-                <Link href="/pnc/employees" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/designations"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/designations'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Designations
                 </Link>
-                <Link href="/pnc/employees" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/teams"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/teams'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Teams
                 </Link>
-                <Link href="/pnc/employees" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/departments"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/departments'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Departments
                 </Link>
-                <Link href="/pnc/employees" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/projects"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/projects'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Projects
                 </Link>
-                <Link href="/pnc/employees" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/insurance"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/insurance'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Insurance Info
                 </Link>
               </div>

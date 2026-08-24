@@ -4,6 +4,30 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'fnemsvwejymnqpufumhj.supabase.co',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'hub.jaago.com.bd',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+        pathname: '/**',
+      },
+    ],
+  },
   transpilePackages: [
     '@jaago/auth',
     '@jaago/authz',
@@ -40,3 +64,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+

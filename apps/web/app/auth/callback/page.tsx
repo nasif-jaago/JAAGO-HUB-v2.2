@@ -158,14 +158,14 @@ export default function AuthCallbackPage() {
       {/* Frosted Glass Status Card */}
       <div className="relative z-10 w-full max-w-[420px] rounded-[32px] border border-white/40 bg-black/50 shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] backdrop-blur-2xl p-8 sm:p-10 space-y-6 text-white text-center animate-in fade-in zoom-in-95 duration-300">
         {/* Brand Header */}
-        <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_25px_rgba(255,230,0,0.5)] border border-[#FFE600] bg-black/50 backdrop-blur-md p-2 mb-2">
+        <div className="inline-block rounded-2xl overflow-hidden mb-2">
           <Image
             src="/jaago-logo.png"
             alt="JAAGO Foundation"
             width={140}
             height={70}
             priority
-            className="w-28 sm:w-32 h-auto object-contain block mx-auto"
+            className="w-28 sm:w-32 h-auto object-contain block mx-auto rounded-2xl shadow-md"
           />
         </div>
 
@@ -225,8 +225,12 @@ export default function AuthCallbackPage() {
           </div>
         )}
 
-        <p className="text-[11px] text-white/60 pt-2 font-medium">
-          JAAGO Foundation Enterprise Ecosystem &bull; Single Sign-On
+        <p className="text-[11px] text-white/60 pt-2 font-medium tracking-wide flex items-center justify-center">
+          <span>JAAGO Foundation ERP</span>
+          <sup className="ml-1 inline-flex items-center justify-center text-[8px] font-bold lowercase border border-white/50 rounded-full px-1.5 py-0.5 leading-none -translate-y-0.5 mr-1.5">
+            t4d
+          </sup>
+          <span>&bull; Single Sign-On</span>
         </p>
       </div>
     </div>

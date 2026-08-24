@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import {
   Upload,
   Download,
   Plus,
   Search,
   RotateCw,
-  Eye,
   X,
   UserPlus,
   Mail,
@@ -15,158 +15,361 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Edit3,
+  Archive,
+  Trash2,
 } from 'lucide-react';
+import {
+  EmployeeProfileDetail,
+  FullEmployeeProfile,
+  EmployeeStatus,
+} from '@/components/pnc/employee-profile-detail';
+import {
+  fetchEmployeesFromSupabase,
+  saveEmployeeToSupabase,
+  archiveEmployeesInSupabase,
+  unarchiveEmployeesInSupabase,
+  deleteEmployeesFromSupabase,
+} from '@/lib/supabase-employees';
 
-interface EmployeeItem {
-  id: string;
-  name: string;
-  code: string;
-  email?: string | undefined;
-  workingSchedule: string;
-  department: string;
-  designation: string;
-  organization: string;
-  joiningDate: string;
-  confirmationDate: string;
-  status: 'Active' | 'Inactive' | 'Terminated' | 'Resigned';
-  isUser?: boolean | undefined;
-  userId?: string | undefined;
-}
-
-const INITIAL_EMPLOYEES: EmployeeItem[] = [
+const INITIAL_EMPLOYEES: FullEmployeeProfile[] = [
   {
     id: 'emp-1',
     name: 'Abdul Aziz',
     code: 'GLSP08241107940',
-    email: 'abdul.aziz@jaago.com.bd',
+    avatarUrl: '',
+    workEmail: 'abdul.aziz@jaago.com.bd',
+    workMobile: '+880 1711 000001',
     workingSchedule: 'General 9 AM to 5 PM',
     department: 'Program Implementation',
     designation: 'Security Guard',
     organization: 'JAAGO Foundation Trust',
-    joiningDate: '2024-05-12',
-    confirmationDate: '2024-05-12',
+    branch: 'Head Office (Banani)',
+    project: 'Campus Security',
+    supervisor: 'Nasif Kamal',
+    secondarySupervisor: 'Habibur Rahman',
+    workLocation: 'Banani, Dhaka',
+    remark: 'Night shift rotation assigned',
     status: 'Active',
+
+    personalEmail: 'aziz.private@gmail.com',
+    personalPhone: '+880 1811 000001',
+    bankName: 'Eastern Bank Ltd',
+    bankAccountNumber: '1041234567801',
+    nickName: 'Aziz',
+    nid: '1988269123450001',
+    bloodGroup: 'B+',
+    birthday: '1988-04-12',
+    gender: 'MALE',
+    religion: 'Islam',
+    maritalStatus: 'Married',
+    emergencyContactName: 'Fatema Begum (Spouse)',
+    emergencyPhone: '+880 1811 999001',
+    nationality: 'Bangladeshi',
+    passportNo: 'A01928371',
+    homeAddress: 'Mohakhali TB Gate, Dhaka-1212',
+    dependentChildren: 2,
+
+    joiningDate: '2024-05-12',
+    contractEndDate: '2027-05-11',
+    wageType: 'Fixed',
+    wage: 25000,
+    salaryJulDec: 25000,
+    salaryJanJun: 25000,
+    monthlyTotalAllowance: 'Yes',
+    sixMonthsCompletionStatus: 'Yes',
+    probationaryStatus: 'Confirmed',
+    contractType: 'Full Time',
+    noTaxDeduction: false,
+    bonusEligibility: 'Yes',
+    pfApplies: 'Yes',
+    pfRate: 10.0,
+    regularSalary: 25000,
+    extraHours: 8,
+    extraPayment: 2000,
+    calculationValue: '1.25x',
+    temporarySalary: 0,
+    totalCurrentSalary: 27000,
+    currency: 'BDT',
+    adjustmentStartDate: '2024-05-12',
+    adjustmentEndDate: '2027-05-11',
+    assignedTeacherStaff: 'Security Wing',
+    payrollRemark: 'Standard security wage structure',
+
+    officeDays: 'Sunday to Thursday',
+    officeHours: '09:00 AM - 05:00 PM',
+    rfid: 'RFID-100291',
+    leaveGroup: 'Standard Full-time',
+    employeeType: 'Permanent',
+
+    logHistory: [
+      {
+        id: 'log-1',
+        timestamp: '2024-05-12T09:00:00.000Z',
+        formattedDate: 'May 12, 2024, 9:00 AM',
+        userName: 'Nasif Kamal',
+        userRole: 'Coordinator',
+        field: 'Profile Creation',
+        oldValue: 'None',
+        newValue: 'Profile created & confirmed',
+        actionType: 'create',
+      },
+    ],
     isUser: false,
   },
   {
     id: 'emp-2',
     name: 'Abdul Mazid',
     code: 'ADM011420100045',
-    email: 'abdul.mazid@jaago.com.bd',
+    avatarUrl: '',
+    workEmail: 'abdul.mazid@jaago.com.bd',
+    workMobile: '+880 1711 000002',
     workingSchedule: 'General 9 AM to 5 PM',
     department: 'Digital School Program',
     designation: 'Manager',
     organization: 'JAAGO Foundation',
-    joiningDate: '—',
-    confirmationDate: '—',
+    branch: 'Head Office (Banani)',
+    project: 'Telco Digital School',
+    supervisor: 'Nasif Kamal',
+    secondarySupervisor: 'Farhana Ahmed',
+    workLocation: 'Banani, Dhaka',
+    remark: 'Leads DSP Operations across 12 branch schools',
     status: 'Active',
+
+    personalEmail: 'mazid.p@gmail.com',
+    personalPhone: '+880 1811 000002',
+    bankName: 'BRAC Bank Ltd',
+    bankAccountNumber: '1501234567802',
+    nickName: 'Mazid',
+    nid: '1985269123450002',
+    bloodGroup: 'O+',
+    birthday: '1985-08-20',
+    gender: 'MALE',
+    religion: 'Islam',
+    maritalStatus: 'Married',
+    emergencyContactName: 'Nasrin Akhter (Spouse)',
+    emergencyPhone: '+880 1811 999002',
+    nationality: 'Bangladeshi',
+    passportNo: 'B02938472',
+    homeAddress: 'Gulshan 2, Dhaka',
+    dependentChildren: 1,
+
+    joiningDate: '2021-03-01',
+    contractEndDate: '2026-03-01',
+    wageType: 'Fixed',
+    wage: 95000,
+    salaryJulDec: 95000,
+    salaryJanJun: 95000,
+    monthlyTotalAllowance: 'Yes',
+    sixMonthsCompletionStatus: 'Yes',
+    probationaryStatus: 'Confirmed',
+    contractType: 'Full Time',
+    noTaxDeduction: false,
+    bonusEligibility: 'Yes',
+    pfApplies: 'Yes',
+    pfRate: 10.0,
+    regularSalary: 95000,
+    extraHours: 0,
+    extraPayment: 0,
+    calculationValue: '1.0x',
+    temporarySalary: 0,
+    totalCurrentSalary: 95000,
+    currency: 'BDT',
+    adjustmentStartDate: '2021-03-01',
+    adjustmentEndDate: '2026-03-01',
+    assignedTeacherStaff: 'Management Core',
+    payrollRemark: 'Manager grade payroll scale',
+
+    officeDays: 'Sunday to Thursday',
+    officeHours: '09:00 AM - 05:00 PM',
+    rfid: 'RFID-100292',
+    leaveGroup: 'Standard Full-time',
+    employeeType: 'Permanent',
+
+    logHistory: [
+      {
+        id: 'log-2',
+        timestamp: '2021-03-01T09:00:00.000Z',
+        formattedDate: 'Mar 1, 2021, 9:00 AM',
+        userName: 'Nasif Kamal',
+        userRole: 'Coordinator',
+        field: 'Profile Creation',
+        oldValue: 'None',
+        newValue: 'DSP Manager appointed',
+        actionType: 'create',
+      },
+    ],
     isUser: false,
   },
   {
     id: 'emp-3',
     name: 'Abdullah Al Imran',
     code: 'DC082224020391',
-    email: 'abdullah.imran@jaago.com.bd',
+    avatarUrl: '',
+    workEmail: 'abdullah.imran@jaago.com.bd',
+    workMobile: '+880 1711 000003',
     workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
     department: 'Communications',
     designation: 'Assistant Manager',
     organization: 'JAAGO Foundation',
-    joiningDate: '2022-08-16',
-    confirmationDate: '2022-08-16',
+    branch: 'Head Office (Banani)',
+    project: 'Digital Media & Storytelling',
+    supervisor: 'Farhana Ahmed',
+    secondarySupervisor: 'Nasif Kamal',
+    workLocation: 'Banani, Dhaka',
+    remark: 'Key contact for external campaigns',
     status: 'Active',
+
+    personalEmail: 'imran.comm@gmail.com',
+    personalPhone: '+880 1811 000003',
+    bankName: 'City Bank Ltd',
+    bankAccountNumber: '2201234567803',
+    nickName: 'Imran',
+    nid: '1992269123450003',
+    bloodGroup: 'A+',
+    birthday: '1992-11-14',
+    gender: 'MALE',
+    religion: 'Islam',
+    maritalStatus: 'Single',
+    emergencyContactName: 'Rashidul Hasan (Brother)',
+    emergencyPhone: '+880 1811 999003',
+    nationality: 'Bangladeshi',
+    passportNo: 'C03948573',
+    homeAddress: 'Mirpur DOHS, Dhaka',
+    dependentChildren: 0,
+
+    joiningDate: '2022-08-16',
+    contractEndDate: '2027-08-15',
+    wageType: 'Fixed',
+    wage: 75000,
+    salaryJulDec: 75000,
+    salaryJanJun: 75000,
+    monthlyTotalAllowance: 'Yes',
+    sixMonthsCompletionStatus: 'Yes',
+    probationaryStatus: 'Confirmed',
+    contractType: 'Full Time',
+    noTaxDeduction: false,
+    bonusEligibility: 'Yes',
+    pfApplies: 'Yes',
+    pfRate: 10.0,
+    regularSalary: 75000,
+    extraHours: 0,
+    extraPayment: 0,
+    calculationValue: '1.0x',
+    temporarySalary: 0,
+    totalCurrentSalary: 75000,
+    currency: 'BDT',
+    adjustmentStartDate: '2022-08-16',
+    adjustmentEndDate: '2027-08-15',
+    assignedTeacherStaff: 'Communications Lead',
+    payrollRemark: 'Confirmed regular payroll',
+
+    officeDays: 'Sunday to Thursday',
+    officeHours: '10:00 AM - 06:00 PM',
+    rfid: 'RFID-100293',
+    leaveGroup: 'Standard Full-time',
+    employeeType: 'Permanent',
+
+    logHistory: [],
     isUser: false,
   },
   {
     id: 'emp-4',
     name: 'Abdullah Al Yousuf',
     code: 'EMK2025154',
-    email: 'abdullah.yousuf@emkcenter.org',
+    avatarUrl: '',
+    workEmail: 'abdullah.yousuf@emkcenter.org',
+    workMobile: '+880 1711 000004',
     workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
     department: 'EMK Center',
     designation: 'Program Officer',
     organization: 'JAAGO Foundation',
+    branch: 'Head Office (Banani)',
+    project: 'EMK Youth Innovation Labs',
+    supervisor: 'Farhana Ahmed',
+    secondarySupervisor: 'Nasif Kamal',
+    workLocation: 'Dhanmondi, Dhaka',
+    remark: 'Coordinator for US Embassy partnership programs',
+    status: 'Active',
+
+    personalEmail: 'yousuf.emk@gmail.com',
+    personalPhone: '+880 1811 000004',
+    bankName: 'Eastern Bank Ltd',
+    bankAccountNumber: '1041234567804',
+    nickName: 'Yousuf',
+    nid: '1995269123450004',
+    bloodGroup: 'AB+',
+    birthday: '1995-02-18',
+    gender: 'MALE',
+    religion: 'Islam',
+    maritalStatus: 'Single',
+    emergencyContactName: 'Jahanara Yousuf (Mother)',
+    emergencyPhone: '+880 1811 999004',
+    nationality: 'Bangladeshi',
+    passportNo: 'D04958674',
+    homeAddress: 'Dhanmondi 27, Dhaka',
+    dependentChildren: 0,
+
     joiningDate: '2025-02-24',
-    confirmationDate: '2025-02-16',
-    status: 'Active',
-    isUser: false,
-  },
-  {
-    id: 'emp-5',
-    name: 'Abdullah Bin Alam Opi',
-    code: 'BBN012501011128',
-    email: 'abdullah.opi@jaago.com.bd',
-    workingSchedule: '—',
-    department: 'Digital School Program',
-    designation: 'Program Executive',
-    organization: 'JAAGO Foundation',
-    joiningDate: '—',
-    confirmationDate: '—',
-    status: 'Active',
-    isUser: false,
-  },
-  {
-    id: 'emp-6',
-    name: 'Abdur Rahim',
-    code: 'FMDC072501011307',
-    email: 'po13.cmdc@jaago.com.bd',
-    workingSchedule: 'General 9 AM to 5 PM',
-    department: 'Program Implementation',
-    designation: 'Field Officer',
-    organization: 'JAAGO Foundation Trust',
-    joiningDate: '2024-05-12',
-    confirmationDate: '2024-05-12',
-    status: 'Active',
-    isUser: false,
-  },
-  {
-    id: 'emp-7',
-    name: 'Abdur Rahman',
-    code: 'TEK012501011133',
-    email: 'abdur.rahman2@jaago.com.bd',
-    workingSchedule: '—',
-    department: 'Digital School Program',
-    designation: 'Digital Instructor',
-    organization: 'JAAGO Foundation',
-    joiningDate: '—',
-    confirmationDate: '—',
-    status: 'Active',
-    isUser: false,
-  },
-  {
-    id: 'emp-8',
-    name: 'Abdur Rahman Helal',
-    code: 'DC011912120014',
-    email: 'abdur.rahman@jaago.com.bd',
-    workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
-    department: 'Communications',
-    designation: 'Assistant Manager',
-    organization: 'JAAGO Foundation',
-    joiningDate: '2019-01-02',
-    confirmationDate: '2025-01-01',
-    status: 'Active',
+    contractEndDate: '2026-02-23',
+    wageType: 'Fixed',
+    wage: 55000,
+    salaryJulDec: 55000,
+    salaryJanJun: 55000,
+    monthlyTotalAllowance: 'Yes',
+    sixMonthsCompletionStatus: 'No',
+    probationaryStatus: 'On Probation',
+    contractType: 'Full Time',
+    noTaxDeduction: false,
+    bonusEligibility: 'No',
+    pfApplies: 'No',
+    pfRate: 0.0,
+    regularSalary: 55000,
+    extraHours: 0,
+    extraPayment: 0,
+    calculationValue: '1.0x',
+    temporarySalary: 0,
+    totalCurrentSalary: 55000,
+    currency: 'BDT',
+    adjustmentStartDate: '2025-02-24',
+    adjustmentEndDate: '2026-02-23',
+    assignedTeacherStaff: 'EMK Staff',
+    payrollRemark: 'Probationary scale',
+
+    officeDays: 'Sunday to Thursday',
+    officeHours: '10:00 AM - 06:00 PM',
+    rfid: 'RFID-100294',
+    leaveGroup: 'Project Staff',
+    employeeType: 'Contractual',
+
+    logHistory: [],
     isUser: false,
   },
 ];
 
 export default function PnCEmployeesPage() {
-  const [employees, setEmployees] = useState<EmployeeItem[]>(INITIAL_EMPLOYEES);
-  const [activeTab, setActiveTab] = useState<'ALL' | 'ACTIVE' | 'INACTIVE' | 'TERMINATED' | 'RESIGNED'>('ALL');
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(INITIAL_EMPLOYEES);
+
+  // Current selected employee for the rich tab-wise profile view (null = Table view)
+  const [selectedProfile, setSelectedProfile] = useState<FullEmployeeProfile | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedOrg, setSelectedOrg] = useState('');
+  const [selectedBranch, setSelectedBranch] = useState('');
+  const [selectedDesignation, setSelectedDesignation] = useState('');
+
   const [showImportModal, setShowImportModal] = useState(false);
 
-  // Form State
-  const [newName, setNewName] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newDept, setNewDept] = useState('Program Implementation');
-  const [newDesignation, setNewDesignation] = useState('Program Officer');
-  const [newOrg, setNewOrg] = useState('JAAGO Foundation');
-  const [linkedUserId, setLinkedUserId] = useState<string | null>(null);
+  // Current logged in user info
+  const [currentUser, setCurrentUser] = useState({
+    fullName: 'Nasif Kamal',
+    jobTitle: 'Coordinator',
+  });
 
   // Invite Success Modal State
   const [showInviteSuccessModal, setShowInviteSuccessModal] = useState<{
-    employee: EmployeeItem;
+    employee: FullEmployeeProfile;
     emailPayload: {
       to: string;
       userId: string;
@@ -176,93 +379,135 @@ export default function PnCEmployeesPage() {
     };
   } | null>(null);
   const [copiedPass, setCopiedPass] = useState(false);
+  const [activeTab, setActiveTab] = useState<
+    'ALL' | 'ACTIVE' | 'TERMINATED' | 'RESIGNED' | 'INCOMPLETE' | 'ARCHIVED'
+  >('ALL');
 
-  // Handle URL query params (e.g. redirected from User Management with pre-filled data)
+  const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
+
+  // Hydrate state on client mount to prevent SSR mismatch
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('jaago_pnc_employees_v2');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setEmployees(parsed);
+          }
+        }
+      } catch {}
+
+      try {
+        const userStr = localStorage.getItem('jaago_user');
+        if (userStr) {
+          const parsed = JSON.parse(userStr);
+          if (parsed.fullName) {
+            setCurrentUser({
+              fullName: parsed.fullName,
+              jobTitle: parsed.jobTitle || 'Coordinator',
+            });
+          }
+        }
+      } catch {}
+
       const params = new URLSearchParams(window.location.search);
-      if (params.get('action') === 'new' || params.get('name')) {
-        const nameParam = params.get('name') || '';
-        const emailParam = params.get('email') || '';
-        const deptParam = params.get('department') || params.get('dept') || 'Program Implementation';
-        const desigParam = params.get('designation') || params.get('desig') || 'Program Officer';
-        const uId = params.get('userId') || null;
-
-        if (nameParam) setNewName(nameParam);
-        if (emailParam) setNewEmail(emailParam);
-        if (deptParam) setNewDept(deptParam);
-        if (desigParam) setNewDesignation(desigParam);
-        if (uId) setLinkedUserId(uId);
-
-        setShowAddModal(true);
+      if (params.get('action') === 'new') {
+        // Open blank new profile
+        setSelectedProfile({} as FullEmployeeProfile);
+      } else if (params.get('id')) {
+        const target = employees.find((e) => e.id === params.get('id') || e.code === params.get('id'));
+        if (target) setSelectedProfile(target);
       }
+
+      // Fetch latest employees directly from Supabase PostgreSQL & merge seed employees
+      fetchEmployeesFromSupabase().then((remoteData) => {
+        if (remoteData && remoteData.length > 0) {
+          const remoteCodes = new Set(remoteData.map((e) => e.code));
+          const missingSeeds = INITIAL_EMPLOYEES.filter((s) => !remoteCodes.has(s.code));
+          const merged = [...remoteData, ...missingSeeds];
+
+          // Auto-save missing seeds to Supabase in background
+          if (missingSeeds.length > 0) {
+            missingSeeds.forEach((s) => saveEmployeeToSupabase(s));
+          }
+
+          setEmployees(merged);
+          try {
+            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(merged));
+          } catch {}
+        }
+      });
     }
   }, []);
 
+  // Persist employees state to localStorage
+  const persistEmployees = (updatedList: FullEmployeeProfile[]) => {
+    setEmployees(updatedList);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(updatedList));
+      } catch {}
+    }
+  };
+
+  // Filter employees for table list
   const filtered = employees.filter((emp) => {
-    if (activeTab === 'ACTIVE' && emp.status !== 'Active') return false;
-    if (activeTab === 'INACTIVE' && emp.status !== 'Inactive') return false;
-    if (activeTab === 'TERMINATED' && emp.status !== 'Terminated') return false;
-    if (activeTab === 'RESIGNED' && emp.status !== 'Resigned') return false;
+    const isArchived = emp.status === 'Archived' || Boolean(emp.isArchived);
+
+    // If ARCHIVED tab is selected, show ONLY archived employees
+    if (activeTab === 'ARCHIVED') {
+      if (!isArchived) return false;
+    } else {
+      // In all standard tabs (including search), DO NOT show archived employees!
+      if (isArchived) return false;
+
+      if (activeTab === 'ACTIVE' && emp.status !== 'Active') return false;
+      if (activeTab === 'TERMINATED' && emp.status !== 'Terminated') return false;
+      if (activeTab === 'RESIGNED' && emp.status !== 'Resigned') return false;
+      if (activeTab === 'INCOMPLETE' && emp.status !== 'Incomplete') return false;
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = emp.name.toLowerCase().includes(q);
       const matchCode = emp.code.toLowerCase().includes(q);
-      const matchEmail = emp.email?.toLowerCase().includes(q);
-      if (!matchName && !matchCode && !matchEmail) return false;
+      const matchEmail = emp.workEmail?.toLowerCase().includes(q);
+      const matchDept = emp.department?.toLowerCase().includes(q);
+      if (!matchName && !matchCode && !matchEmail && !matchDept) return false;
     }
 
     if (selectedDept && emp.department !== selectedDept) return false;
+    if (selectedOrg && emp.organization !== selectedOrg) return false;
+    if (selectedBranch && emp.branch !== selectedBranch) return false;
+    if (selectedDesignation && emp.designation !== selectedDesignation) return false;
+
     return true;
   });
 
-  const handleCreateEmployee = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim()) return;
+  // Handle Save from EmployeeProfileDetail
+  const handleSaveProfile = async (updatedProfile: FullEmployeeProfile) => {
+    const existingIndex = employees.findIndex((e) => e.id === updatedProfile.id || e.code === updatedProfile.code);
+    let newList: FullEmployeeProfile[];
 
-    const newItemCode = `JFT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const newItem: EmployeeItem = {
-      id: `emp-${Date.now()}`,
-      name: newName,
-      code: newItemCode,
-      email: newEmail || undefined,
-      workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
-      department: newDept,
-      designation: newDesignation,
-      organization: newOrg,
-      joiningDate: new Date().toISOString().slice(0, 10),
-      confirmationDate: '—',
-      status: 'Active',
-      isUser: Boolean(linkedUserId),
-      userId: linkedUserId || undefined,
-    };
-
-    // If linked to an existing user, update the user in the database
-    if (linkedUserId) {
-      try {
-        await fetch('/api/v1/users/link-employee', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: linkedUserId, employeeCode: newItemCode }),
-        });
-      } catch (err) {
-        console.error('Failed to link user:', err);
-      }
+    if (existingIndex >= 0) {
+      newList = [...employees];
+      newList[existingIndex] = updatedProfile;
+    } else {
+      newList = [updatedProfile, ...employees];
     }
 
-    setEmployees([newItem, ...employees]);
-    setShowAddModal(false);
-    setNewName('');
-    setNewEmail('');
-    setLinkedUserId(null);
+    persistEmployees(newList);
+    setSelectedProfile(updatedProfile);
+
+    // Save to Supabase PostgreSQL in background
+    await saveEmployeeToSupabase(updatedProfile, updatedProfile.logHistory);
   };
 
   // Create User Account from Employee and send Invite Email
-  const handleCreateUserForEmployee = async (emp: EmployeeItem) => {
+  const handleCreateUserForEmployee = async (emp: FullEmployeeProfile) => {
     try {
-      const emailToUse = emp.email || `${emp.name.toLowerCase().replace(/\s+/g, '.')}@jaago.com.bd`;
+      const emailToUse = emp.workEmail || `${emp.name.toLowerCase().replace(/\s+/g, '.')}@jaago.com.bd`;
       const res = await fetch('/api/v1/users/create-from-employee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -276,12 +521,15 @@ export default function PnCEmployeesPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        // Automatically hide the Create User button by marking isUser = true
-        setEmployees((prev) =>
-          prev.map((e) =>
-            e.id === emp.id ? { ...e, isUser: true, email: emailToUse, userId: data.data.user.id } : e
-          )
+        const updatedList = employees.map((e) =>
+          e.id === emp.id ? { ...e, isUser: true, workEmail: emailToUse, userId: data.data.user.id } : e
         );
+        persistEmployees(updatedList);
+
+        if (selectedProfile && selectedProfile.id === emp.id) {
+          setSelectedProfile({ ...selectedProfile, isUser: true, workEmail: emailToUse, userId: data.data.user.id });
+        }
+
         setShowInviteSuccessModal({
           employee: emp,
           emailPayload: data.data.emailPayload,
@@ -294,17 +542,33 @@ export default function PnCEmployeesPage() {
     }
   };
 
+  // Export CSV Handler
   const handleExportCSV = () => {
-    const headers = ['Employee Name', 'Code', 'Email', 'Department', 'Designation', 'Organization', 'Joining Date', 'Status'];
+    const headers = [
+      'Employee Name',
+      'Employee Code',
+      'Designation',
+      'Department',
+      'Organization',
+      'Work Email',
+      'Mobile',
+      'Joining Date',
+      'Wage',
+      'Status',
+      'Working Schedule',
+    ];
     const rows = employees.map((e) => [
       `"${e.name}"`,
       `"${e.code}"`,
-      `"${e.email || ''}"`,
-      `"${e.department}"`,
       `"${e.designation}"`,
+      `"${e.department}"`,
       `"${e.organization}"`,
+      `"${e.workEmail || ''}"`,
+      `"${e.workMobile || ''}"`,
       `"${e.joiningDate}"`,
+      `"${e.wage}"`,
       `"${e.status}"`,
+      `"${e.workingSchedule}"`,
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -318,16 +582,114 @@ export default function PnCEmployeesPage() {
     document.body.removeChild(link);
   };
 
+  // Helper for Status Badge in Table
+  const getStatusBadge = (status: EmployeeStatus) => {
+    switch (status) {
+      case 'Active':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
+            Active
+          </span>
+        );
+      case 'Terminated':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20">
+            Terminated
+          </span>
+        );
+      case 'Resigned':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20">
+            Resigned
+          </span>
+        );
+      case 'Incomplete':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20">
+            Incomplete
+          </span>
+        );
+      case 'Archived':
+        return (
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold text-slate-400 bg-slate-500/10 border border-slate-500/20">
+            Archived
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold text-muted-foreground bg-muted border border-border">
+            {status}
+          </span>
+        );
+    }
+  };
+
+  // Bulk Actions Handlers
+  const handleArchiveSelected = async () => {
+    if (selectedCodes.length === 0) return;
+    const updated = employees.map((e) =>
+      selectedCodes.includes(e.code) ? { ...e, status: 'Archived' as EmployeeStatus, isArchived: true } : e
+    );
+    persistEmployees(updated);
+    await archiveEmployeesInSupabase(selectedCodes);
+    setSelectedCodes([]);
+  };
+
+  const handleUnarchiveSelected = async () => {
+    if (selectedCodes.length === 0) return;
+    const updated = employees.map((e) =>
+      selectedCodes.includes(e.code) ? { ...e, status: 'Active' as EmployeeStatus, isArchived: false } : e
+    );
+    persistEmployees(updated);
+    await unarchiveEmployeesInSupabase(selectedCodes);
+    setSelectedCodes([]);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedCodes.length === 0) return;
+    if (!confirm(`Are you sure you want to delete ${selectedCodes.length} selected employee(s)?`)) return;
+    const updated = employees.filter((e) => !selectedCodes.includes(e.code));
+    persistEmployees(updated);
+    await deleteEmployeesFromSupabase(selectedCodes);
+    setSelectedCodes([]);
+  };
+
+  // If a profile is selected, render the rich tab-wise Employee Profile Detail View
+  if (selectedProfile !== null) {
+    return (
+      <div className="p-2 sm:p-4 select-none">
+        <EmployeeProfileDetail
+          initialData={selectedProfile.id ? selectedProfile : null}
+          allEmployees={employees.map((e) => ({
+            id: e.id,
+            name: e.name,
+            code: e.code,
+            designation: e.designation,
+            department: e.department,
+            avatarUrl: e.avatarUrl,
+          }))}
+          currentUser={currentUser}
+          onSave={handleSaveProfile}
+          onBack={() => setSelectedProfile(null)}
+          onCreateUser={handleCreateUserForEmployee}
+        />
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // MAIN EMPLOYEE LIST VIEW
+  // ═══════════════════════════════════════════════════════════════════════
   return (
-    <div className="space-y-6 select-none">
+    <div className="space-y-6 select-none animate-in fade-in duration-200">
       {/* ── 1. HEADER SECTION ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl sm:text-4xl font-serif font-black tracking-tight text-foreground">
             Employee List
           </h1>
-          <p className="text-xs font-semibold text-muted-foreground pt-1">
-            742 employees total
+          <p className="text-xs font-semibold text-muted-foreground pt-1" suppressHydrationWarning>
+            {employees.filter((e) => e.status !== 'Archived' && !e.isArchived).length} active employee records managed across all entities
           </p>
         </div>
 
@@ -341,15 +703,8 @@ export default function PnCEmployeesPage() {
           </button>
 
           <button
-            onClick={() => {
-              setNewName('');
-              setNewEmail('');
-              setNewDept('Program Implementation');
-              setNewDesignation('Program Officer');
-              setLinkedUserId(null);
-              setShowAddModal(true);
-            }}
-            className="px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold transition flex items-center space-x-2 shadow-md cursor-pointer"
+            onClick={() => setSelectedProfile({} as FullEmployeeProfile)}
+            className="px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-black transition flex items-center space-x-2 shadow-md shadow-amber-500/20 cursor-pointer active:scale-95"
           >
             <Plus className="h-4 w-4 stroke-[3]" />
             <span>NEW EMPLOYEE</span>
@@ -365,13 +720,16 @@ export default function PnCEmployeesPage() {
         </div>
       </div>
 
-      {/* ── 2. STATUS TABS ── */}
-      <div className="flex items-center space-x-6 border-b border-border/60 text-xs font-extrabold tracking-wider text-muted-foreground">
-        {(['ALL', 'ACTIVE', 'INACTIVE', 'TERMINATED', 'RESIGNED'] as const).map((tab) => (
+      {/* ── 2. STATUS FILTER TABS (With ARCHIVED) ── */}
+      <div className="flex items-center space-x-6 border-b border-border/60 text-xs font-extrabold tracking-wider text-muted-foreground overflow-x-auto pb-0.5">
+        {(['ALL', 'ACTIVE', 'TERMINATED', 'RESIGNED', 'INCOMPLETE', 'ARCHIVED'] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`pb-3 transition relative cursor-pointer ${
+            onClick={() => {
+              setActiveTab(tab);
+              setSelectedCodes([]);
+            }}
+            className={`pb-3 transition relative cursor-pointer whitespace-nowrap ${
               activeTab === tab
                 ? 'text-amber-500 dark:text-amber-400 font-black'
                 : 'hover:text-foreground'
@@ -393,7 +751,7 @@ export default function PnCEmployeesPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, email, or ID..."
+            placeholder="Search by name, ID, email, or department..."
             className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
           />
         </div>
@@ -408,39 +766,62 @@ export default function PnCEmployeesPage() {
             <option value="Program Implementation">Program Implementation</option>
             <option value="Digital School Program">Digital School Program</option>
             <option value="Communications">Communications</option>
+            <option value="Executive Office">Executive Office</option>
+            <option value="Finance & Accounts">Finance &amp; Accounts</option>
+            <option value="People and Culture">People and Culture</option>
             <option value="EMK Center">EMK Center</option>
           </select>
         </div>
 
         <div>
-          <select className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer">
+          <select
+            value={selectedOrg}
+            onChange={(e) => setSelectedOrg(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
+          >
             <option value="">Organization (All)</option>
             <option value="JAAGO Foundation">JAAGO Foundation</option>
             <option value="JAAGO Foundation Trust">JAAGO Foundation Trust</option>
+            <option value="EMK Center">EMK Center</option>
           </select>
         </div>
 
         <div>
-          <select className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer">
+          <select
+            value={selectedBranch}
+            onChange={(e) => setSelectedBranch(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
+          >
             <option value="">Branch (All)</option>
-            <option value="Head Office">Head Office (Banani)</option>
-            <option value="Rayer Bazar">Rayer Bazar</option>
-            <option value="Chittagong">Chittagong</option>
+            <option value="Head Office (Banani)">Head Office (Banani)</option>
+            <option value="Rayer Bazar Free School">Rayer Bazar Free School</option>
+            <option value="Chittagong Campus">Chittagong Campus</option>
+            <option value="Cox's Bazar Branch">Cox&apos;s Bazar Branch</option>
+            <option value="Rajshahi Campus">Rajshahi Campus</option>
           </select>
         </div>
 
         <div className="flex items-center space-x-2">
-          <select className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer">
+          <select
+            value={selectedDesignation}
+            onChange={(e) => setSelectedDesignation(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
+          >
             <option value="">Designation (All)</option>
             <option value="Manager">Manager</option>
             <option value="Assistant Manager">Assistant Manager</option>
             <option value="Program Officer">Program Officer</option>
             <option value="Security Guard">Security Guard</option>
+            <option value="Digital Instructor">Digital Instructor</option>
+            <option value="Coordinator">Coordinator</option>
           </select>
           <button
             onClick={() => {
               setSearchQuery('');
               setSelectedDept('');
+              setSelectedOrg('');
+              setSelectedBranch('');
+              setSelectedDesignation('');
             }}
             className="p-2.5 rounded-2xl bg-card border border-border text-muted-foreground hover:text-foreground transition cursor-pointer flex-shrink-0"
             title="Reset Filters"
@@ -450,6 +831,55 @@ export default function PnCEmployeesPage() {
         </div>
       </div>
 
+      {/* ── BULK ACTIONS FLOATING/TOP BAR (Appears when 1+ selected) ── */}
+      {selectedCodes.length > 0 && (
+        <div className="p-3.5 px-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center space-x-2 text-xs font-black text-amber-500">
+            <Check className="h-4 w-4 stroke-[3]" />
+            <span>{selectedCodes.length} employee(s) selected</span>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {activeTab === 'ARCHIVED' ? (
+              <button
+                type="button"
+                onClick={handleUnarchiveSelected}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+                <span>Restore / Unarchive</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleArchiveSelected}
+                className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              >
+                <Archive className="h-3.5 w-3.5" />
+                <span>Archive Selected</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleDeleteSelected}
+              className="px-3.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Delete Selected</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedCodes([])}
+              className="px-3 py-1.5 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-semibold transition cursor-pointer"
+            >
+              Deselect All
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── 4. EMPLOYEE DATA TABLE ── */}
       <div className="rounded-3xl bg-card border border-border shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -457,7 +887,19 @@ export default function PnCEmployeesPage() {
             <thead>
               <tr className="border-b border-border/80 text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground bg-surface/40">
                 <th className="py-3.5 px-4 w-8">
-                  <input type="checkbox" className="rounded accent-amber-500 cursor-pointer" />
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((e) => selectedCodes.includes(e.code))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedCodes(Array.from(new Set([...selectedCodes, ...filtered.map((f) => f.code)])));
+                      } else {
+                        const filteredCodes = new Set(filtered.map((f) => f.code));
+                        setSelectedCodes(selectedCodes.filter((c) => !filteredCodes.has(c)));
+                      }
+                    }}
+                    className="rounded accent-amber-500 cursor-pointer w-4 h-4"
+                  />
                 </th>
                 <th className="py-3.5 px-4">EMPLOYEE</th>
                 <th className="py-3.5 px-4">WORKING SCHEDULE</th>
@@ -465,37 +907,72 @@ export default function PnCEmployeesPage() {
                 <th className="py-3.5 px-4">DESIGNATION</th>
                 <th className="py-3.5 px-4">ORGANIZATION</th>
                 <th className="py-3.5 px-4">JOINING DATE</th>
-                <th className="py-3.5 px-4">CONFIRMATION DATE</th>
                 <th className="py-3.5 px-4 text-center">STATUS</th>
                 <th className="py-3.5 px-4 text-right">ACTIONS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40 font-medium">
               {filtered.map((emp) => {
+                const isSelected = selectedCodes.includes(emp.code);
                 const initials = emp.name
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase();
+                  ? emp.name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase()
+                  : 'EM';
 
                 return (
-                  <tr key={emp.id} className="hover:bg-surface/50 transition">
-                    <td className="py-3.5 px-4">
-                      <input type="checkbox" className="rounded accent-amber-500 cursor-pointer" />
+                  <tr
+                    key={emp.id}
+                    onClick={() => setSelectedProfile(emp)}
+                    className={`transition cursor-pointer group ${
+                      isSelected ? 'bg-amber-500/10 hover:bg-amber-500/15' : 'hover:bg-surface/60'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          if (isSelected) {
+                            setSelectedCodes(selectedCodes.filter((c) => c !== emp.code));
+                          } else {
+                            setSelectedCodes([...selectedCodes, emp.code]);
+                          }
+                        }}
+                        className="rounded accent-amber-500 cursor-pointer w-4 h-4"
+                      />
                     </td>
                     <td className="py-3.5 px-4">
                       <div className="flex items-center space-x-3">
-                        <div className="h-8 w-8 rounded-full bg-[#26180E] text-primary flex items-center justify-center font-black text-xs shadow-sm flex-shrink-0">
-                          {initials}
-                        </div>
+                        {emp.avatarUrl ? (
+                          <div className="h-9 w-9 rounded-full overflow-hidden relative shadow-sm border border-border flex-shrink-0">
+                            <Image
+                              src={emp.avatarUrl}
+                              alt={emp.name}
+                              fill
+                              sizes="36px"
+                              unoptimized
+                              className="object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="h-9 w-9 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center font-black text-xs shadow-sm flex-shrink-0 border border-amber-500/20">
+                            {initials}
+                          </div>
+                        )}
                         <div>
-                          <div className="font-extrabold text-foreground">{emp.name}</div>
+                          <div className="font-extrabold text-foreground group-hover:text-amber-500 transition">
+                            {emp.name}
+                          </div>
                           <div className="text-[10px] font-mono text-muted-foreground">
                             ID: {emp.code}
                           </div>
-                          {emp.email && (
-                            <div className="text-[10px] text-muted-foreground/80">{emp.email}</div>
+                          {emp.workEmail && (
+                            <div className="text-[10px] text-muted-foreground/80">{emp.workEmail}</div>
                           )}
                         </div>
                       </div>
@@ -515,22 +992,18 @@ export default function PnCEmployeesPage() {
                     <td className="py-3.5 px-4 text-muted-foreground font-mono text-[11px]">
                       {emp.joiningDate}
                     </td>
-                    <td className="py-3.5 px-4 text-muted-foreground font-mono text-[11px]">
-                      {emp.confirmationDate}
-                    </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
-                        {emp.status}
-                      </span>
+                      {getStatusBadge(emp.status)}
                     </td>
-                    <td className="py-3.5 px-4 text-right">
+                    <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end space-x-2">
                         {/* If NOT a user, show Create User button */}
                         {!emp.isUser ? (
                           <button
+                            type="button"
                             onClick={() => handleCreateUserForEmployee(emp)}
-                            className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-[11px] flex items-center space-x-1.5 transition shadow-sm cursor-pointer whitespace-nowrap active:scale-95"
-                            title="Create JAAGO HUB User Account & Send Invite Email"
+                            className="px-2.5 py-1 rounded-xl bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-bold text-[11px] flex items-center space-x-1.5 transition shadow-sm cursor-pointer whitespace-nowrap active:scale-95"
+                            title="Create JAAGO HUB User Account & Send Credentials"
                           >
                             <UserPlus className="h-3 w-3 stroke-[2.5]" />
                             <span>Create User</span>
@@ -543,10 +1016,12 @@ export default function PnCEmployeesPage() {
                         )}
 
                         <button
-                          className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
-                          title="View details"
+                          type="button"
+                          onClick={() => setSelectedProfile(emp)}
+                          className="p-1.5 rounded-xl bg-surface border border-border text-foreground hover:border-amber-500/50 hover:text-amber-500 transition cursor-pointer"
+                          title="Open Full Tab-Wise Profile"
                         >
-                          <Eye className="h-4 w-4" />
+                          <Edit3 className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </td>
@@ -558,117 +1033,16 @@ export default function PnCEmployeesPage() {
         </div>
       </div>
 
-      {/* ── 5. NEW EMPLOYEE MODAL ── */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <h2 className="text-base font-extrabold text-foreground">Add New Employee</h2>
-                {linkedUserId && (
-                  <p className="text-[11px] font-bold text-amber-500">
-                    🔗 Linked to User Account: {linkedUserId}
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  setShowAddModal(false);
-                  setLinkedUserId(null);
-                }}
-                className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateEmployee} className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Masoor Rahman"
-                  className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-foreground focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Work Email</label>
-                <input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="masoor.rahman@jaago.com.bd"
-                  className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-foreground focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-foreground">Department</label>
-                  <input
-                    type="text"
-                    value={newDept}
-                    onChange={(e) => setNewDept(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-foreground"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-bold text-foreground">Designation</label>
-                  <input
-                    type="text"
-                    value={newDesignation}
-                    onChange={(e) => setNewDesignation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-foreground"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Organization</label>
-                <select
-                  value={newOrg}
-                  onChange={(e) => setNewOrg(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-foreground font-semibold"
-                >
-                  <option value="JAAGO Foundation">JAAGO Foundation</option>
-                  <option value="JAAGO Foundation Trust">JAAGO Foundation Trust</option>
-                </select>
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setLinkedUserId(null);
-                  }}
-                  className="px-4 py-2 rounded-xl text-muted-foreground hover:bg-surface font-bold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-md cursor-pointer"
-                >
-                  Create Profile
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── 6. IMPORT CSV MODAL ── */}
+      {/* ── 5. IMPORT CSV MODAL ── */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h2 className="text-base font-extrabold text-foreground">Import Employee CSV</h2>
-              <button onClick={() => setShowImportModal(false)} className="p-1 text-muted-foreground hover:text-foreground cursor-pointer">
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -676,7 +1050,7 @@ export default function PnCEmployeesPage() {
             <div className="p-6 rounded-2xl border-2 border-dashed border-border hover:border-primary text-center space-y-2 cursor-pointer bg-surface/50">
               <Upload className="h-8 w-8 text-primary mx-auto" />
               <div className="text-xs font-bold text-foreground">Click to upload CSV or drag &amp; drop</div>
-              <div className="text-[10px] text-muted-foreground font-mono">Maximum 5,000 records per batch</div>
+              <div className="text-[10px] text-muted-foreground font-mono">Supports all 5 tabs data columns</div>
             </div>
 
             <div className="flex items-center justify-between text-xs pt-2">
@@ -690,7 +1064,7 @@ export default function PnCEmployeesPage() {
               <button
                 onClick={() => {
                   setShowImportModal(false);
-                  alert('Batch import completed: 8 new employee records synchronized!');
+                  alert('Batch import completed: Employee records synchronized successfully!');
                 }}
                 className="px-4 py-2 rounded-xl bg-amber-500 text-white font-bold cursor-pointer"
               >
@@ -701,7 +1075,7 @@ export default function PnCEmployeesPage() {
         </div>
       )}
 
-      {/* ── 7. INVITE EMAIL DISPATCHED MODAL ── */}
+      {/* ── 6. INVITE EMAIL DISPATCHED MODAL ── */}
       {showInviteSuccessModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-card border border-amber-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
@@ -747,10 +1121,6 @@ export default function PnCEmployeesPage() {
                 </a>
               </div>
             </div>
-
-            <p className="text-[10px] text-muted-foreground bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl text-center font-medium">
-              ✨ The user account is now active and the <span className="font-bold text-foreground">&quot;Create User&quot;</span> button for this employee is automatically hidden.
-            </p>
 
             <div className="pt-2 flex items-center space-x-2">
               <button

@@ -267,14 +267,14 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-[420px] rounded-[32px] border border-white/40 bg-black/40 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] backdrop-blur-2xl p-7 sm:p-9 space-y-6 text-white animate-in fade-in zoom-in-95 duration-300">
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="inline-block rounded-2xl overflow-hidden shadow-[0_0_25px_rgba(255,230,0,0.5)] border border-[#FFE600] bg-black/50 backdrop-blur-md p-2 mb-1">
+          <div className="inline-block rounded-2xl overflow-hidden mb-1">
             <Image
               src="/jaago-logo.png"
               alt="JAAGO Foundation"
               width={160}
               height={90}
               priority
-              className="w-32 sm:w-36 h-auto object-contain block mx-auto"
+              className="w-32 sm:w-36 h-auto object-contain block mx-auto rounded-2xl shadow-md"
             />
           </div>
 
@@ -382,21 +382,20 @@ export default function LoginPage() {
           <div className="border-t border-white/20 w-full"></div>
         </div>
 
-        {/* Google Workspace OAuth Button (Frosted Glass) */}
-        <button
-          type="button"
-          disabled={googleLoading}
-          onClick={handleGoogleSignIn}
-          className="w-full py-3 px-4 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/30 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center space-x-3 transition active:scale-[0.98] cursor-pointer shadow-md backdrop-blur-md disabled:opacity-50"
-        >
-          {googleLoading ? (
-            <>
-              <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-              <span>CONNECTING TO GOOGLE...</span>
-            </>
-          ) : (
-            <>
-              <svg className="h-4 w-4" viewBox="0 0 24 24">
+        {/* Google OAuth Button (Icon Only) */}
+        <div className="flex justify-center pt-1">
+          <button
+            type="button"
+            disabled={googleLoading}
+            onClick={handleGoogleSignIn}
+            aria-label="Sign in with Google"
+            title="Sign in with Google"
+            className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 border border-white/30 flex items-center justify-center transition duration-200 active:scale-95 cursor-pointer shadow-lg backdrop-blur-md disabled:opacity-50 group hover:border-white/50"
+          >
+            {googleLoading ? (
+              <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              <svg className="h-6 w-6 transition-transform duration-200 group-hover:scale-110" viewBox="0 0 24 24">
                 <path
                   fill="#4285F4"
                   d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
@@ -414,14 +413,16 @@ export default function LoginPage() {
                   d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                 />
               </svg>
-              <span>SIGN IN WITH GOOGLE WORKSPACE</span>
-            </>
-          )}
-        </button>
+            )}
+          </button>
+        </div>
 
         {/* Footer info */}
-        <p className="text-center text-xs text-white/70 pt-1 font-medium">
-          JAAGO Foundation Enterprise Ecosystem
+        <p className="text-center text-xs text-white/70 pt-1 font-medium tracking-wide flex items-center justify-center">
+          <span>JAAGO Foundation ERP</span>
+          <sup className="ml-1 inline-flex items-center justify-center text-[8.5px] font-bold lowercase border border-white/60 rounded-full px-1.5 py-0.5 leading-none -translate-y-0.5">
+            t4d
+          </sup>
         </p>
       </div>
 
