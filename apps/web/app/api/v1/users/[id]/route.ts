@@ -13,11 +13,18 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 
     try {
       const supabaseAdmin = getSupabaseAdminClient();
-      if (id.includes('-') && id.length > 20) {
+      if (id.includes('@')) {
+        // If passed as email
+        const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+        const match = userList?.users?.find((u) => u.email?.toLowerCase() === id.toLowerCase());
+        if (match) {
+          await supabaseAdmin.auth.admin.deleteUser(match.id);
+        }
+      } else {
         await supabaseAdmin.auth.admin.deleteUser(id);
       }
     } catch (err: any) {
-      logger.warn('AUTH', 'user.delete_supabase_notice', { metadata: { userId: id, error: err?.message } });
+      logger.warn('SYSTEM', 'user.delete_supabase_notice', { metadata: { userId: id, error: err?.message } });
     }
 
     logger.info('AUDIT', 'user.hard_deleted', {
@@ -26,7 +33,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 
     return NextResponse.json({
       success: true,
-      message: `User ${id} has been permanently deleted.`,
+      message: `User ${id} has been permanently deleted from Supabase Auth.`,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Delete operation failed' }, { status: 500 });
@@ -40,13 +47,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     try {
       const supabaseAdmin = getSupabaseAdminClient();
-      if (id.includes('-') && id.length > 20) {
-        await supabaseAdmin.auth.admin.updateUserById(id, {
-          user_metadata: updates,
-        });
-      }
+      await supabaseAdmin.auth.admin.updateUserById(id, {
+        user_metadata: updates,
+      });
     } catch (err: any) {
-      logger.warn('AUTH', 'user.update_supabase_notice', { metadata: { userId: id, error: err?.message } });
+      logger.warn('SYSTEM', 'user.update_supabase_notice', { metadata: { userId: id, error: err?.message } });
     }
 
     logger.info('AUDIT', 'user.updated', {

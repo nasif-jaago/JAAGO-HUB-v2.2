@@ -180,25 +180,17 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
  */
 export async function fetchEmployeesFromSupabase(): Promise<FullEmployeeProfile[] | null> {
   try {
-    const supabase = getSupabase();
-    if (!supabase) return null;
-    const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .order('name', { ascending: true });
-
-    if (error) {
-      console.warn('Supabase fetch employees error:', error.message);
-      return null;
+    const res = await fetch('/api/v1/hr/employees', {
+      cache: 'no-store',
+    });
+    const json = await res.json();
+    if (res.ok && json.success && Array.isArray(json.data)) {
+      if (json.data.length === 0) return [];
+      return json.data.map(mapRowToEmployeeProfile);
     }
-
-    if (!data || data.length === 0) {
-      return null;
-    }
-
-    return data.map(mapRowToEmployeeProfile);
+    return null;
   } catch (err) {
-    console.warn('Supabase connection error:', err);
+    console.warn('Supabase fetch employees error:', err);
     return null;
   }
 }
@@ -211,47 +203,26 @@ export async function saveEmployeeToSupabase(
   newLogs: LogHistoryEntry[] = []
 ): Promise<{ success: boolean; data?: FullEmployeeProfile; error?: string }> {
   try {
-    const supabase = getSupabase();
-    if (!supabase) return { success: false, error: 'No Supabase client' };
     const payload = mapEmployeeProfileToPayload(profile);
+    const body = {
+      ...(profile.id && !profile.id.startsWith('emp-') ? { id: profile.id } : {}),
+      ...payload,
+      logs: newLogs,
+    };
 
-    // Upsert employee
-    const { data: upsertData, error: upsertError } = await supabase
-      .from('employees')
-      .upsert(
-        {
-          ...(profile.id && !profile.id.startsWith('emp-') ? { id: profile.id } : {}),
-          ...payload,
-        },
-        { onConflict: 'code' }
-      )
-      .select()
-      .single();
+    const res = await fetch('/api/v1/hr/employees', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
 
-    if (upsertError) {
-      console.warn('Supabase upsert error:', upsertError.message);
-      return { success: false, error: upsertError.message };
+    const json = await res.json();
+    if (res.ok && json.success && json.data) {
+      const savedProfile = mapRowToEmployeeProfile(json.data);
+      return { success: true, data: savedProfile };
     }
 
-    const savedProfile = mapRowToEmployeeProfile(upsertData);
-
-    // Insert any new audit logs
-    if (newLogs.length > 0 && upsertData?.id) {
-      const logRows = newLogs.map((log) => ({
-        employee_id: upsertData.id,
-        employee_code: profile.code,
-        user_name: log.userName,
-        user_role: log.userRole,
-        field_name: log.field,
-        old_value: log.oldValue,
-        new_value: log.newValue,
-        action_type: log.actionType || 'update',
-      }));
-
-      await supabase.from('employee_activity_logs').insert(logRows);
-    }
-
-    return { success: true, data: savedProfile };
+    return { success: false, error: json.error || 'Failed to save employee to Supabase' };
   } catch (err: any) {
     console.warn('Save employee error:', err);
     return { success: false, error: err?.message || 'Failed to save employee profile' };
@@ -320,17 +291,20 @@ export async function unarchiveEmployeesInSupabase(codes: string[]): Promise<boo
 }
 
 /**
- * Bulk delete employees
+ * Bulk delete employees permanently from Supabase
  */
 export async function deleteEmployeesFromSupabase(codes: string[]): Promise<boolean> {
   codes.forEach((c) => addDeletedEmployeeCode(c));
   try {
-    const supabase = getSupabase();
-    if (!supabase) return true;
-    await supabase.from('employees').delete().in('code', codes);
-    return true;
-  } catch {
-    return true;
+    const res = await fetch('/api/v1/hr/employees', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codes }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn('Delete employee error:', err);
+    return false;
   }
 }
 

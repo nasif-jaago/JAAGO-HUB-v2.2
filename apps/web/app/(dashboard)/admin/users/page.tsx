@@ -605,8 +605,8 @@ export default function UserManagementPage() {
       </div>
 
       {/* ── USER DIRECTORY TABLE PANEL ── */}
-      <div className="rounded-2xl bg-card border border-border shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="rounded-2xl bg-card border border-border shadow-xl">
+        <div className="overflow-x-auto min-h-[380px] pb-28">
           <table className="w-full text-left text-xs">
             <thead className="bg-surface/80 text-muted-foreground border-b border-border font-bold uppercase tracking-wider text-[10px]">
               <tr>
@@ -666,8 +666,19 @@ export default function UserManagementPage() {
                       {/* User (Avatar + Name + Email) */}
                       <td className="p-4">
                         <div className="flex items-center space-x-3">
-                          <div className="h-9 w-9 rounded-xl bg-primary/20 border border-primary/30 text-primary font-black text-xs flex items-center justify-center flex-shrink-0">
-                            {initials}
+                          <div className="h-9 w-9 rounded-xl bg-primary/20 border border-primary/30 text-primary font-black text-xs flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+                            {user.avatarUrl ? (
+                              <img
+                                src={user.avatarUrl}
+                                alt={user.fullName}
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              initials
+                            )}
                           </div>
                           <div>
                             <div className="font-bold text-foreground flex items-center space-x-1.5">
@@ -822,62 +833,76 @@ export default function UserManagementPage() {
 
                         {/* Action Popover Menu */}
                         {activeActionMenuId === user.id && (
-                          <div className="absolute right-4 mt-2 w-56 rounded-2xl bg-card border border-border shadow-2xl p-2 z-30 animate-in fade-in zoom-in-95 text-left space-y-1">
-                            {!user.isEmployeeLinked && (
+                          <>
+                            {/* Backdrop overlay to close on outside click */}
+                            <div
+                              className="fixed inset-0 z-30"
+                              onClick={() => setActiveActionMenuId(null)}
+                            />
+
+                            <div className="absolute right-4 top-full mt-1.5 w-56 rounded-2xl bg-card border border-border shadow-[0_12px_40px_rgba(0,0,0,0.25)] p-2 z-40 animate-in fade-in zoom-in-95 text-left space-y-1">
+                              {!user.isEmployeeLinked && (
+                                <button
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    setShowCreateEmployeeModal(user);
+                                  }}
+                                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition cursor-pointer"
+                                >
+                                  <UserCheck className="h-3.5 w-3.5 text-primary" />
+                                  <span>Create Employee</span>
+                                </button>
+                              )}
+
+                              {user.status === 'invited' && (
+                                <button
+                                  onClick={() => {
+                                    setActiveActionMenuId(null);
+                                    showToast(`Invitation re-sent to ${user.email}`);
+                                  }}
+                                  className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition cursor-pointer"
+                                >
+                                  <Mail className="h-3.5 w-3.5 text-amber-500" />
+                                  <span>Resend Invite</span>
+                                </button>
+                              )}
+
                               <button
                                 onClick={() => {
                                   setActiveActionMenuId(null);
-                                  setShowCreateEmployeeModal(user);
+                                  handleResetPassword(user);
                                 }}
-                                className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition"
+                                className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition cursor-pointer"
                               >
-                                <UserCheck className="h-3.5 w-3.5 text-primary" />
-                                <span>Create Employee</span>
+                                <Key className="h-3.5 w-3.5 text-amber-500" />
+                                <span>Reset Password</span>
                               </button>
-                            )}
 
-                            {user.status === 'invited' && (
                               <button
                                 onClick={() => {
                                   setActiveActionMenuId(null);
-                                  showToast(`Invitation re-sent to ${user.email}`);
+                                  handleRevokeAccess(user);
                                 }}
-                                className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition"
+                                className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition cursor-pointer"
                               >
-                                <Mail className="h-3.5 w-3.5 text-amber-500" />
-                                <span>Resend Invite</span>
+                                <ShieldAlert className="h-3.5 w-3.5" />
+                                <span>Revoke / Suspend</span>
                               </button>
-                            )}
 
-                            <button
-                              onClick={() => handleResetPassword(user)}
-                              className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition"
-                            >
-                              <Key className="h-3.5 w-3.5 text-amber-500" />
-                              <span>Reset Password</span>
-                            </button>
+                              <div className="h-px bg-border my-1" />
 
-                            <button
-                              onClick={() => handleRevokeAccess(user)}
-                              className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 rounded-xl transition"
-                            >
-                              <ShieldAlert className="h-3.5 w-3.5" />
-                              <span>Revoke / Suspend</span>
-                            </button>
-
-                            <div className="h-px bg-border my-1" />
-
-                            <button
-                              onClick={() => {
-                                setActiveActionMenuId(null);
-                                setShowDeleteModal(user);
-                              }}
-                              className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl transition"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              <span>Delete User</span>
-                            </button>
-                          </div>
+                              <button
+                                onClick={() => {
+                                  setActiveActionMenuId(null);
+                                  setShowDeleteModal(user);
+                                }}
+                                className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl transition cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>Delete User</span>
+                              </button>
+                            </div>
+                          </>
                         )}
                       </td>
                     </tr>

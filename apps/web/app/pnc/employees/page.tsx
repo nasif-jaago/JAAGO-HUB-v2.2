@@ -12,12 +12,13 @@ import {
   UserPlus,
   Mail,
   CheckCircle2,
-  Copy,
   Check,
   ExternalLink,
   Edit3,
   Archive,
   Trash2,
+  Send,
+  Loader2,
 } from 'lucide-react';
 import {
   EmployeeProfileDetail,
@@ -30,53 +31,52 @@ import {
   archiveEmployeesInSupabase,
   unarchiveEmployeesInSupabase,
   deleteEmployeesFromSupabase,
-  getDeletedEmployeeCodes,
 } from '@/lib/supabase-employees';
 
 const INITIAL_EMPLOYEES: FullEmployeeProfile[] = [
   {
-    id: 'emp-1',
-    name: 'Abdul Aziz',
-    code: 'GLSP08241107940',
+    id: 'emp-nasif',
+    name: 'Nasif Kamal',
+    code: 'FO032507061190',
     avatarUrl: '',
-    workEmail: 'abdul.aziz@jaago.com.bd',
+    workEmail: 'nasif.kamal@jaago.com.bd',
     workMobile: '+880 1711 000001',
-    workingSchedule: 'General 9 AM to 5 PM',
-    department: 'Program Implementation',
-    designation: 'Security Guard',
+    workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
+    department: "Founder's Office / FC",
+    designation: 'Coordinator, Tech 4 Development',
     organization: 'JAAGO Foundation Trust',
     branch: 'Head Office (Banani)',
-    project: 'Campus Security',
-    supervisor: 'Nasif Kamal',
+    project: 'Tech 4 Development',
+    supervisor: 'Founder & Executive Director',
     secondarySupervisor: 'Habibur Rahman',
     workLocation: 'Banani, Dhaka',
-    remark: 'Night shift rotation assigned',
+    remark: 'Lead Developer & System Administrator',
     status: 'Active',
 
-    personalEmail: 'aziz.private@gmail.com',
+    personalEmail: 'nasif.personal@gmail.com',
     personalPhone: '+880 1811 000001',
     bankName: 'Eastern Bank Ltd',
-    bankAccountNumber: '1041234567801',
-    nickName: 'Aziz',
-    nid: '1988269123450001',
+    bankAccountNumber: '1041234567800',
+    nickName: 'Nasif',
+    nid: '1996269123456789',
     bloodGroup: 'B+',
-    birthday: '1988-04-12',
+    birthday: '1996-05-15',
     gender: 'MALE',
     religion: 'Islam',
-    maritalStatus: 'Married',
-    emergencyContactName: 'Fatema Begum (Spouse)',
-    emergencyPhone: '+880 1811 999001',
+    maritalStatus: 'Single',
+    emergencyContactName: 'Kamal Hossain (Father)',
+    emergencyPhone: '+880 1811 999000',
     nationality: 'Bangladeshi',
-    passportNo: 'A01928371',
-    homeAddress: 'Mohakhali TB Gate, Dhaka-1212',
-    dependentChildren: 2,
+    passportNo: 'A09876543',
+    homeAddress: 'Road 11, Banani, Dhaka-1213',
+    dependentChildren: 0,
 
-    joiningDate: '2024-05-12',
-    contractEndDate: '2027-05-11',
+    joiningDate: '2026-08-24',
+    contractEndDate: '2028-12-31',
     wageType: 'Fixed',
-    wage: 25000,
-    salaryJulDec: 25000,
-    salaryJanJun: 25000,
+    wage: 150000,
+    salaryJulDec: 150000,
+    salaryJanJun: 150000,
     monthlyTotalAllowance: 'Yes',
     sixMonthsCompletionStatus: 'Yes',
     probationaryStatus: 'Confirmed',
@@ -85,266 +85,38 @@ const INITIAL_EMPLOYEES: FullEmployeeProfile[] = [
     bonusEligibility: 'Yes',
     pfApplies: 'Yes',
     pfRate: 10.0,
-    regularSalary: 25000,
-    extraHours: 8,
-    extraPayment: 2000,
-    calculationValue: '1.25x',
+    regularSalary: 150000,
+    extraHours: 0,
+    extraPayment: 0,
+    calculationValue: '1.0x',
     temporarySalary: 0,
-    totalCurrentSalary: 27000,
+    totalCurrentSalary: 150000,
     currency: 'BDT',
-    adjustmentStartDate: '2024-05-12',
-    adjustmentEndDate: '2027-05-11',
-    assignedTeacherStaff: 'Security Wing',
-    payrollRemark: 'Standard security wage structure',
+    adjustmentStartDate: '2026-08-24',
+    adjustmentEndDate: '2028-12-31',
+    assignedTeacherStaff: 'Core Management',
+    payrollRemark: 'Coordinator payroll grade',
 
     officeDays: 'Sunday to Thursday',
-    officeHours: '09:00 AM - 05:00 PM',
-    rfid: 'RFID-100291',
+    officeHours: '10:00 AM - 06:00 PM',
+    rfid: 'RFID-100290',
     leaveGroup: 'Standard Full-time',
     employeeType: 'Permanent',
 
     logHistory: [
       {
-        id: 'log-1',
-        timestamp: '2024-05-12T09:00:00.000Z',
-        formattedDate: 'May 12, 2024, 9:00 AM',
-        userName: 'Nasif Kamal',
-        userRole: 'Coordinator',
+        id: 'log-0',
+        timestamp: '2026-08-24T10:00:00.000Z',
+        formattedDate: 'Aug 24, 2026, 10:00 AM',
+        userName: 'System Admin',
+        userRole: 'Super Admin',
         field: 'Profile Creation',
         oldValue: 'None',
-        newValue: 'Profile created & confirmed',
+        newValue: 'Profile created & active',
         actionType: 'create',
       },
     ],
-    isUser: false,
-  },
-  {
-    id: 'emp-2',
-    name: 'Abdul Mazid',
-    code: 'ADM011420100045',
-    avatarUrl: '',
-    workEmail: 'abdul.mazid@jaago.com.bd',
-    workMobile: '+880 1711 000002',
-    workingSchedule: 'General 9 AM to 5 PM',
-    department: 'Digital School Program',
-    designation: 'Manager',
-    organization: 'JAAGO Foundation',
-    branch: 'Head Office (Banani)',
-    project: 'Telco Digital School',
-    supervisor: 'Nasif Kamal',
-    secondarySupervisor: 'Farhana Ahmed',
-    workLocation: 'Banani, Dhaka',
-    remark: 'Leads DSP Operations across 12 branch schools',
-    status: 'Active',
-
-    personalEmail: 'mazid.p@gmail.com',
-    personalPhone: '+880 1811 000002',
-    bankName: 'BRAC Bank Ltd',
-    bankAccountNumber: '1501234567802',
-    nickName: 'Mazid',
-    nid: '1985269123450002',
-    bloodGroup: 'O+',
-    birthday: '1985-08-20',
-    gender: 'MALE',
-    religion: 'Islam',
-    maritalStatus: 'Married',
-    emergencyContactName: 'Nasrin Akhter (Spouse)',
-    emergencyPhone: '+880 1811 999002',
-    nationality: 'Bangladeshi',
-    passportNo: 'B02938472',
-    homeAddress: 'Gulshan 2, Dhaka',
-    dependentChildren: 1,
-
-    joiningDate: '2021-03-01',
-    contractEndDate: '2026-03-01',
-    wageType: 'Fixed',
-    wage: 95000,
-    salaryJulDec: 95000,
-    salaryJanJun: 95000,
-    monthlyTotalAllowance: 'Yes',
-    sixMonthsCompletionStatus: 'Yes',
-    probationaryStatus: 'Confirmed',
-    contractType: 'Full Time',
-    noTaxDeduction: false,
-    bonusEligibility: 'Yes',
-    pfApplies: 'Yes',
-    pfRate: 10.0,
-    regularSalary: 95000,
-    extraHours: 0,
-    extraPayment: 0,
-    calculationValue: '1.0x',
-    temporarySalary: 0,
-    totalCurrentSalary: 95000,
-    currency: 'BDT',
-    adjustmentStartDate: '2021-03-01',
-    adjustmentEndDate: '2026-03-01',
-    assignedTeacherStaff: 'Management Core',
-    payrollRemark: 'Manager grade payroll scale',
-
-    officeDays: 'Sunday to Thursday',
-    officeHours: '09:00 AM - 05:00 PM',
-    rfid: 'RFID-100292',
-    leaveGroup: 'Standard Full-time',
-    employeeType: 'Permanent',
-
-    logHistory: [
-      {
-        id: 'log-2',
-        timestamp: '2021-03-01T09:00:00.000Z',
-        formattedDate: 'Mar 1, 2021, 9:00 AM',
-        userName: 'Nasif Kamal',
-        userRole: 'Coordinator',
-        field: 'Profile Creation',
-        oldValue: 'None',
-        newValue: 'DSP Manager appointed',
-        actionType: 'create',
-      },
-    ],
-    isUser: false,
-  },
-  {
-    id: 'emp-3',
-    name: 'Abdullah Al Imran',
-    code: 'DC082224020391',
-    avatarUrl: '',
-    workEmail: 'abdullah.imran@jaago.com.bd',
-    workMobile: '+880 1711 000003',
-    workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
-    department: 'Communications',
-    designation: 'Assistant Manager',
-    organization: 'JAAGO Foundation',
-    branch: 'Head Office (Banani)',
-    project: 'Digital Media & Storytelling',
-    supervisor: 'Farhana Ahmed',
-    secondarySupervisor: 'Nasif Kamal',
-    workLocation: 'Banani, Dhaka',
-    remark: 'Key contact for external campaigns',
-    status: 'Active',
-
-    personalEmail: 'imran.comm@gmail.com',
-    personalPhone: '+880 1811 000003',
-    bankName: 'City Bank Ltd',
-    bankAccountNumber: '2201234567803',
-    nickName: 'Imran',
-    nid: '1992269123450003',
-    bloodGroup: 'A+',
-    birthday: '1992-11-14',
-    gender: 'MALE',
-    religion: 'Islam',
-    maritalStatus: 'Single',
-    emergencyContactName: 'Rashidul Hasan (Brother)',
-    emergencyPhone: '+880 1811 999003',
-    nationality: 'Bangladeshi',
-    passportNo: 'C03948573',
-    homeAddress: 'Mirpur DOHS, Dhaka',
-    dependentChildren: 0,
-
-    joiningDate: '2022-08-16',
-    contractEndDate: '2027-08-15',
-    wageType: 'Fixed',
-    wage: 75000,
-    salaryJulDec: 75000,
-    salaryJanJun: 75000,
-    monthlyTotalAllowance: 'Yes',
-    sixMonthsCompletionStatus: 'Yes',
-    probationaryStatus: 'Confirmed',
-    contractType: 'Full Time',
-    noTaxDeduction: false,
-    bonusEligibility: 'Yes',
-    pfApplies: 'Yes',
-    pfRate: 10.0,
-    regularSalary: 75000,
-    extraHours: 0,
-    extraPayment: 0,
-    calculationValue: '1.0x',
-    temporarySalary: 0,
-    totalCurrentSalary: 75000,
-    currency: 'BDT',
-    adjustmentStartDate: '2022-08-16',
-    adjustmentEndDate: '2027-08-15',
-    assignedTeacherStaff: 'Communications Lead',
-    payrollRemark: 'Confirmed regular payroll',
-
-    officeDays: 'Sunday to Thursday',
-    officeHours: '10:00 AM - 06:00 PM',
-    rfid: 'RFID-100293',
-    leaveGroup: 'Standard Full-time',
-    employeeType: 'Permanent',
-
-    logHistory: [],
-    isUser: false,
-  },
-  {
-    id: 'emp-4',
-    name: 'Abdullah Al Yousuf',
-    code: 'EMK2025154',
-    avatarUrl: '',
-    workEmail: 'abdullah.yousuf@emkcenter.org',
-    workMobile: '+880 1711 000004',
-    workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
-    department: 'EMK Center',
-    designation: 'Program Officer',
-    organization: 'JAAGO Foundation',
-    branch: 'Head Office (Banani)',
-    project: 'EMK Youth Innovation Labs',
-    supervisor: 'Farhana Ahmed',
-    secondarySupervisor: 'Nasif Kamal',
-    workLocation: 'Dhanmondi, Dhaka',
-    remark: 'Coordinator for US Embassy partnership programs',
-    status: 'Active',
-
-    personalEmail: 'yousuf.emk@gmail.com',
-    personalPhone: '+880 1811 000004',
-    bankName: 'Eastern Bank Ltd',
-    bankAccountNumber: '1041234567804',
-    nickName: 'Yousuf',
-    nid: '1995269123450004',
-    bloodGroup: 'AB+',
-    birthday: '1995-02-18',
-    gender: 'MALE',
-    religion: 'Islam',
-    maritalStatus: 'Single',
-    emergencyContactName: 'Jahanara Yousuf (Mother)',
-    emergencyPhone: '+880 1811 999004',
-    nationality: 'Bangladeshi',
-    passportNo: 'D04958674',
-    homeAddress: 'Dhanmondi 27, Dhaka',
-    dependentChildren: 0,
-
-    joiningDate: '2025-02-24',
-    contractEndDate: '2026-02-23',
-    wageType: 'Fixed',
-    wage: 55000,
-    salaryJulDec: 55000,
-    salaryJanJun: 55000,
-    monthlyTotalAllowance: 'Yes',
-    sixMonthsCompletionStatus: 'No',
-    probationaryStatus: 'On Probation',
-    contractType: 'Full Time',
-    noTaxDeduction: false,
-    bonusEligibility: 'No',
-    pfApplies: 'No',
-    pfRate: 0.0,
-    regularSalary: 55000,
-    extraHours: 0,
-    extraPayment: 0,
-    calculationValue: '1.0x',
-    temporarySalary: 0,
-    totalCurrentSalary: 55000,
-    currency: 'BDT',
-    adjustmentStartDate: '2025-02-24',
-    adjustmentEndDate: '2026-02-23',
-    assignedTeacherStaff: 'EMK Staff',
-    payrollRemark: 'Probationary scale',
-
-    officeDays: 'Sunday to Thursday',
-    officeHours: '10:00 AM - 06:00 PM',
-    rfid: 'RFID-100294',
-    leaveGroup: 'Project Staff',
-    employeeType: 'Contractual',
-
-    logHistory: [],
-    isUser: false,
+    isUser: true,
   },
 ];
 
@@ -373,13 +145,19 @@ export default function PnCEmployeesPage() {
     employee: FullEmployeeProfile;
     emailPayload: {
       to: string;
+      recipientName?: string;
+      subject?: string;
       userId: string;
       tempPassword: string;
       loginUrl: string;
+      securityNote?: string;
+      fullEmailText?: string;
       sentAt: string;
     };
   } | null>(null);
-  const [copiedPass, setCopiedPass] = useState(false);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailSentSuccess, setEmailSentSuccess] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
     'ALL' | 'ACTIVE' | 'TERMINATED' | 'RESIGNED' | 'INCOMPLETE' | 'ARCHIVED'
   >('ALL');
@@ -413,35 +191,37 @@ export default function PnCEmployeesPage() {
       } catch {}
 
       const params = new URLSearchParams(window.location.search);
-      if (params.get('action') === 'new') {
-        // Open blank new profile
+      const urlId = params.get('id');
+      const isNewAction = params.get('action') === 'new';
+
+      if (isNewAction) {
         setSelectedProfile({} as FullEmployeeProfile);
-      } else if (params.get('id')) {
-        const target = employees.find((e) => e.id === params.get('id') || e.code === params.get('id'));
-        if (target) setSelectedProfile(target);
       }
 
-      // Fetch latest employees directly from Supabase PostgreSQL & merge seed employees
+      // Fetch latest employees directly from Supabase PostgreSQL (Source of Truth)
       fetchEmployeesFromSupabase().then((remoteData) => {
-        const deletedCodes = getDeletedEmployeeCodes();
         if (remoteData && remoteData.length > 0) {
-          const remoteCodes = new Set(remoteData.map((e) => e.code));
-          const missingSeeds = INITIAL_EMPLOYEES.filter((s) => !remoteCodes.has(s.code) && !deletedCodes.has(s.code));
-          const merged = [...remoteData.filter((e) => !deletedCodes.has(e.code)), ...missingSeeds];
-
-          // Auto-save missing seeds to Supabase in background
-          if (missingSeeds.length > 0) {
-            missingSeeds.forEach((s) => saveEmployeeToSupabase(s));
-          }
-
-          setEmployees(merged);
+          setEmployees(remoteData);
           try {
-            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(merged));
+            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(remoteData));
           } catch {}
+
+          if (urlId) {
+            const target = remoteData.find((e) => e.id === urlId || e.code === urlId);
+            if (target) setSelectedProfile(target);
+          }
         } else {
-          // If no remote data, fallback to seeds excluding deleted
-          const filteredSeeds = INITIAL_EMPLOYEES.filter((s) => !deletedCodes.has(s.code));
-          setEmployees(filteredSeeds);
+          // If Supabase table is fresh/empty, seed default staff
+          setEmployees(INITIAL_EMPLOYEES);
+          try {
+            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(INITIAL_EMPLOYEES));
+          } catch {}
+          INITIAL_EMPLOYEES.forEach((s) => saveEmployeeToSupabase(s));
+
+          if (urlId) {
+            const target = INITIAL_EMPLOYEES.find((e) => e.id === urlId || e.code === urlId);
+            if (target) setSelectedProfile(target);
+          }
         }
       });
     }
@@ -504,7 +284,9 @@ export default function PnCEmployeesPage() {
     }
 
     persistEmployees(newList);
-    setSelectedProfile(updatedProfile);
+    setSelectedProfile(null); // Auto close window and show Employee List view
+    setToastMessage(`Employee profile for "${updatedProfile.name}" saved successfully.`);
+    setTimeout(() => setToastMessage(null), 3500);
 
     // Save to Supabase PostgreSQL in background
     await saveEmployeeToSupabase(updatedProfile, updatedProfile.logHistory);
@@ -527,17 +309,24 @@ export default function PnCEmployeesPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        const updatedEmp: FullEmployeeProfile = {
+          ...emp,
+          isUser: true,
+          workEmail: emailToUse,
+          userId: data.data?.user?.id || '',
+        };
         const updatedList = employees.map((e) =>
-          e.id === emp.id ? { ...e, isUser: true, workEmail: emailToUse, userId: data.data.user.id } : e
+          e.id === emp.id || e.code === emp.code ? updatedEmp : e
         );
         persistEmployees(updatedList);
+        await saveEmployeeToSupabase(updatedEmp);
 
-        if (selectedProfile && selectedProfile.id === emp.id) {
-          setSelectedProfile({ ...selectedProfile, isUser: true, workEmail: emailToUse, userId: data.data.user.id });
+        if (selectedProfile && (selectedProfile.id === emp.id || selectedProfile.code === emp.code)) {
+          setSelectedProfile(updatedEmp);
         }
 
         setShowInviteSuccessModal({
-          employee: emp,
+          employee: updatedEmp,
           emailPayload: data.data.emailPayload,
         });
       } else {
@@ -697,6 +486,20 @@ export default function PnCEmployeesPage() {
   // ═══════════════════════════════════════════════════════════════════════
   return (
     <div className="space-y-6 select-none animate-in fade-in duration-200">
+      {/* ── TOAST NOTIFICATION ── */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 p-4 rounded-2xl bg-emerald-600 text-white shadow-2xl border border-emerald-400 flex items-center space-x-3 animate-in fade-in slide-in-from-top-4 duration-300">
+          <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-200" />
+          <span className="text-xs font-bold">{toastMessage}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            className="p-1 hover:bg-emerald-700/50 rounded-lg transition cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* ── 1. HEADER SECTION ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -1102,67 +905,126 @@ export default function PnCEmployeesPage() {
       {/* ── 6. INVITE EMAIL DISPATCHED MODAL ── */}
       {showInviteSuccessModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-amber-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 flex-shrink-0">
-                <Mail className="h-5 w-5" />
+          <div className="bg-card border border-amber-500/40 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 flex-shrink-0">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-foreground">Welcome &amp; Invite Email Dispatched</h2>
+                  <p className="text-[11px] font-bold text-emerald-500 flex items-center space-x-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Supabase Auth &amp; JAAGO HUB User Created</span>
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-black text-foreground">Invitation Email Sent!</h2>
-                <p className="text-[11px] font-bold text-emerald-500 flex items-center space-x-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>JAAGO HUB User Account Provisioned</span>
-                </p>
-              </div>
+              <button
+                onClick={() => setShowInviteSuccessModal(null)}
+                className="p-1 text-muted-foreground hover:text-foreground rounded-lg transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-            <div className="text-xs text-muted-foreground">
-              An invitation email with access credentials has been dispatched to{' '}
-              <span className="font-extrabold text-foreground">{showInviteSuccessModal.emailPayload.to}</span>.
+            {/* Email Subject Line Header */}
+            <div className="p-3 rounded-xl bg-surface border border-border/80 text-xs space-y-1">
+              <div className="text-[10px] uppercase font-black text-muted-foreground tracking-wider">Email Subject:</div>
+              <div className="font-bold text-foreground">
+                {showInviteSuccessModal.emailPayload.subject || 'Welcome to JAAGO HUB — Your Login Access & Credentials'}
+              </div>
+              <div className="text-[11px] text-muted-foreground pt-1 flex items-center space-x-1">
+                <span>Recipient:</span>
+                <span className="font-extrabold text-foreground">{showInviteSuccessModal.emailPayload.to}</span>
+              </div>
             </div>
 
             {/* Credential Details Card */}
-            <div className="p-4 rounded-2xl bg-surface border border-border space-y-2.5 text-xs font-mono">
+            <div className="p-4 rounded-2xl bg-surface/90 border border-border space-y-2.5 text-xs font-mono">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground font-sans font-bold">User ID (Login):</span>
-                <span className="font-bold text-foreground">{showInviteSuccessModal.emailPayload.userId}</span>
+                <span className="text-muted-foreground font-sans font-bold">User ID (Work Email):</span>
+                <span className="font-bold text-foreground select-all">{showInviteSuccessModal.emailPayload.userId}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground font-sans font-bold">Auto Password:</span>
-                <span className="font-black text-amber-500 tracking-wider">
+                <span className="font-black text-amber-500 tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20 select-all">
                   {showInviteSuccessModal.emailPayload.tempPassword}
                 </span>
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
-                <span className="text-muted-foreground font-sans font-bold">Login Portal:</span>
+                <span className="text-muted-foreground font-sans font-bold">Portal Access Link:</span>
                 <a
                   href="/login"
                   target="_blank"
                   className="text-primary hover:underline flex items-center space-x-1 font-sans text-[11px] font-bold"
                 >
-                  <span>/login</span>
+                  <span>{showInviteSuccessModal.emailPayload.loginUrl || '/login'}</span>
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
             </div>
 
+            {/* Security Note Alert */}
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold flex items-start space-x-2">
+              <span className="text-sm leading-none">⚠️</span>
+              <div>
+                <strong>Security Note:</strong>{' '}
+                {showInviteSuccessModal.emailPayload.securityNote ||
+                  'Please update your password as soon as possible after your initial login.'}
+              </div>
+            </div>
+
+            {/* Actions */}
             <div className="pt-2 flex items-center space-x-2">
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `JAAGO HUB Credentials\nLogin: ${showInviteSuccessModal.emailPayload.userId}\nPassword: ${showInviteSuccessModal.emailPayload.tempPassword}\nPortal: ${showInviteSuccessModal.emailPayload.loginUrl}`
-                  );
-                  setCopiedPass(true);
-                  setTimeout(() => setCopiedPass(false), 2000);
+                type="button"
+                disabled={isSendingEmail}
+                onClick={async () => {
+                  if (!showInviteSuccessModal) return;
+                  setIsSendingEmail(true);
+                  try {
+                    const payload = showInviteSuccessModal.emailPayload;
+                    const res = await fetch('/api/v1/notifications/send-email', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        to: payload.to,
+                        subject: payload.subject || 'Welcome to JAAGO HUB — Your Login Access & Credentials',
+                        bodyText: payload.fullEmailText,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      setEmailSentSuccess(true);
+                      setToastMessage(`✓ Welcome email successfully sent to ${payload.to}`);
+                      setTimeout(() => setToastMessage(null), 4000);
+                      setTimeout(() => setEmailSentSuccess(false), 3000);
+                    } else {
+                      alert(data.error || 'Failed to dispatch email');
+                    }
+                  } catch (err: any) {
+                    alert(err.message || 'Email dispatch network error');
+                  } finally {
+                    setIsSendingEmail(false);
+                  }
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-surface border border-border text-foreground hover:border-primary/50 font-bold text-xs flex items-center justify-center space-x-1.5 transition cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
               >
-                {copiedPass ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                <span>{copiedPass ? 'Copied to Clipboard!' : 'Copy Credentials'}</span>
+                {isSendingEmail ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : emailSentSuccess ? (
+                  <CheckCircle2 className="h-4 w-4 text-white" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                <span>
+                  {isSendingEmail ? 'Sending Email...' : emailSentSuccess ? 'Email Dispatched!' : 'Send Email'}
+                </span>
               </button>
               <button
+                type="button"
                 onClick={() => setShowInviteSuccessModal(null)}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs uppercase tracking-wider shadow-md transition cursor-pointer"
+                className="px-6 py-2.5 rounded-xl bg-surface border border-border text-foreground hover:border-primary/50 font-bold text-xs uppercase tracking-wider transition cursor-pointer"
               >
                 Done
               </button>

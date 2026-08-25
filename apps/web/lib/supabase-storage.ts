@@ -1,12 +1,10 @@
-import { getSupabase } from './supabase-auth';
-
 /**
  * Resizes and crops an image file to a square frame using HTML5 Canvas
  */
 export async function resizeAndCropImage(
   file: File,
   targetSize = 500,
-  quality = 0.9
+  quality = 0.92
 ): Promise<{ blob: Blob; dataUrl: string }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -68,71 +66,37 @@ export async function resizeAndCropImage(
 }
 
 /**
- * Uploads employee photo to Supabase Storage bucket
+ * Uploads employee photo to Supabase Storage bucket via server-side admin endpoint
  */
 export async function uploadEmployeePhoto(
   file: File,
   employeeCode: string
 ): Promise<{ url: string; isFallback?: boolean }> {
-  // Max size 3MB check
-  if (file.size > 3 * 1024 * 1024) {
-    throw new Error('Image size exceeds maximum allowed size of 3 MB');
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error('Image size exceeds maximum allowed size of 5 MB');
   }
 
-  // Allowed file formats check
-  const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  if (!validTypes.includes(file.type)) {
-    throw new Error('Allowed file types are *.jpeg, *.jpg, *.png, *.gif');
-  }
-
-  // 1. Process & Auto-Crop to Profile Frame
   const { blob, dataUrl } = await resizeAndCropImage(file, 500, 0.92);
 
   try {
-    const supabase = getSupabase();
-    const cleanCode = employeeCode.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
-    const fileName = `emp_${cleanCode}_${Date.now()}.jpg`;
-    const filePath = `avatars/${fileName}`;
+    const formData = new FormData();
+    const croppedFile = new File([blob], `avatar_${employeeCode || 'emp'}.jpg`, {
+      type: 'image/jpeg',
+    });
+    formData.append('file', croppedFile);
+    formData.append('employeeCode', employeeCode || 'emp');
 
-    // Try uploading to 'employees' bucket or 'jaago-public-assets'
-    const targetBucket = 'employees';
+    const res = await fetch('/api/v1/hr/employees/upload-photo', {
+      method: 'POST',
+      body: formData,
+    });
 
-    // Check/upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from(targetBucket)
-      .upload(filePath, blob, {
-        contentType: 'image/jpeg',
-        upsert: true,
-      });
-
-    if (uploadError) {
-      // Try fallback to 'jaago-public-assets'
-      const { data: fallbackData, error: fallbackError } = await supabase.storage
-        .from('jaago-public-assets')
-        .upload(`employees/${fileName}`, blob, {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-
-      if (!fallbackError && fallbackData) {
-        const { data: publicUrlData } = supabase.storage
-          .from('jaago-public-assets')
-          .getPublicUrl(`employees/${fileName}`);
-        return { url: publicUrlData.publicUrl };
-      }
-
-      console.warn('Supabase storage upload fallback to local DataURI:', uploadError.message);
-      return { url: dataUrl, isFallback: true };
+    const data = await res.json();
+    if (res.ok && data.success && data.url) {
+      return { url: data.url };
     }
 
-    if (uploadData) {
-      const { data: publicUrlData } = supabase.storage
-        .from(targetBucket)
-        .getPublicUrl(filePath);
-
-      return { url: publicUrlData.publicUrl };
-    }
-
+    console.warn('Server upload failed, falling back to dataUrl:', data?.error);
     return { url: dataUrl, isFallback: true };
   } catch (err) {
     console.error('Photo upload unexpected error:', err);

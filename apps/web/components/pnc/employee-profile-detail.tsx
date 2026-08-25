@@ -278,6 +278,16 @@ export function EmployeeProfileDetail({
   // Track original for diff logging
   const originalStateRef = useRef<FullEmployeeProfile>(formData);
 
+  // Sync state whenever initialData updates asynchronously from Supabase
+  useEffect(() => {
+    if (initialData && initialData.code) {
+      setFormData({ ...initialData });
+      originalStateRef.current = { ...initialData };
+      setSupervisorQuery(initialData.supervisor || '');
+      setSecSupervisorQuery(initialData.secondarySupervisor || '');
+    }
+  }, [initialData]);
+
   // Picture upload & Drag-to-Adjust Cropper state
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);

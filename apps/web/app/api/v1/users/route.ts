@@ -13,39 +13,58 @@ export async function GET(request: Request) {
   const status = searchParams.get('status') || 'all';
   const department = searchParams.get('department') || 'all';
 
-  let allUsers: UserItem[] = [...usersDatabase];
+  let allUsers: UserItem[] = [];
 
   try {
     const supabaseAdmin = getSupabaseAdminClient();
+
+    // 1. Fetch live Supabase Auth users
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.listUsers({
       perPage: 1000,
     });
 
+    // 2. Fetch live employees from Supabase database to cross-reference linked profiles
+    const { data: empData } = await supabaseAdmin
+      .from('employees')
+      .select('id, code, name, work_email, personal_email, designation, department, branch, avatar_url, status');
+
+    const employees = empData || [];
+
     if (!authError && authData?.users) {
-      // Map Supabase Auth users
       const supabaseUserItems: UserItem[] = authData.users.map((su) => {
-        const existingLocal = usersDatabase.find((u) => u.email.toLowerCase() === (su.email || '').toLowerCase());
         const meta = su.user_metadata || {};
+        const emailLower = (su.email || '').toLowerCase().trim();
+
+        // Cross-reference with live public.employees table
+        const matchingEmp = employees.find(
+          (e) =>
+            (e.work_email && e.work_email.toLowerCase().trim() === emailLower) ||
+            (e.personal_email && e.personal_email.toLowerCase().trim() === emailLower) ||
+            (meta['employee_code'] && e.code === meta['employee_code']) ||
+            (meta['employee_id'] && e.code === meta['employee_id'])
+        );
+
+        const linkedCode = matchingEmp?.code || meta['employee_code'] || meta['employee_id'] || null;
+        const isLinked = Boolean(linkedCode || matchingEmp);
 
         return {
           id: su.id,
-          fullName: meta['full_name'] || meta['name'] || existingLocal?.fullName || su.email?.split('@')[0] || 'User',
+          fullName: matchingEmp?.name || meta['full_name'] || meta['name'] || su.email?.split('@')[0] || 'User',
           email: su.email || '',
-          role: meta['role'] || existingLocal?.role || 'Staff',
-          department: meta['department'] || existingLocal?.department || 'General',
-          branch: meta['branch'] || existingLocal?.branch || 'Head Office (Banani)',
-          jobTitle: meta['job_title'] || existingLocal?.jobTitle || 'Team Member',
-          phone: meta['phone'] || su.phone || existingLocal?.phone || '',
-          status: su.banned_until ? 'suspended' : su.email_confirmed_at ? 'active' : 'invited',
-          employeeId: meta['employee_id'] || existingLocal?.employeeId || null,
-          isEmployeeLinked: Boolean(meta['employee_id'] || existingLocal?.isEmployeeLinked),
-          avatarUrl: meta['avatar_url'] || meta['picture'] || existingLocal?.avatarUrl || '',
-          createdAt: su.created_at || existingLocal?.createdAt || new Date().toISOString(),
-          lastLoginAt: su.last_sign_in_at || existingLocal?.lastLoginAt || null,
+          role: meta['role'] || 'Staff',
+          department: matchingEmp?.department || meta['department'] || 'General',
+          branch: matchingEmp?.branch || meta['branch'] || 'Head Office (Banani)',
+          jobTitle: matchingEmp?.designation || meta['job_title'] || 'Team Member',
+          phone: meta['phone'] || su.phone || '',
+          status: su.banned_until ? 'suspended' : 'active',
+          employeeId: linkedCode,
+          isEmployeeLinked: isLinked,
+          avatarUrl: matchingEmp?.avatar_url || meta['avatar_url'] || meta['picture'] || '',
+          createdAt: su.created_at || new Date().toISOString(),
+          lastLoginAt: su.last_sign_in_at || null,
         };
       });
 
-      // Merge Supabase users with local
       const seenEmails = new Set<string>();
       const merged: UserItem[] = [];
 
@@ -56,6 +75,7 @@ export async function GET(request: Request) {
         }
       }
 
+      // Add any non-duplicate active memory users
       for (const u of usersDatabase) {
         if (!seenEmails.has(u.email.toLowerCase())) {
           seenEmails.add(u.email.toLowerCase());
@@ -64,9 +84,12 @@ export async function GET(request: Request) {
       }
 
       allUsers = merged;
+    } else {
+      allUsers = [...usersDatabase];
     }
   } catch (err: any) {
-    logger.warn('AUTH', 'users.fetch_supabase_fallback', { metadata: { error: err?.message } });
+    logger.warn('SYSTEM', 'users.fetch_supabase_error', { metadata: { error: err?.message } });
+    allUsers = [...usersDatabase];
   }
 
   let filtered = [...allUsers];
@@ -144,12 +167,12 @@ export async function POST(request: Request) {
           job_title: jobTitle,
           phone,
           employee_id: employeeId,
+          employee_code: employeeId,
           organization_id: 'org-jaago-dhaka',
         },
       });
 
       if (supaErr) {
-        // If user already exists in Supabase, update metadata
         if (supaErr.message.includes('already registered') || supaErr.message.includes('already exists')) {
           const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
           const match = userList?.users?.find((u) => u.email?.toLowerCase() === cleanEmail);
@@ -164,17 +187,18 @@ export async function POST(request: Request) {
                 job_title: jobTitle,
                 phone,
                 employee_id: employeeId,
+                employee_code: employeeId,
               },
             });
           }
         } else {
-          logger.warn('AUTH', 'user.create_supabase_failed', { metadata: { error: supaErr.message } });
+          logger.warn('SYSTEM', 'user.create_supabase_failed', { metadata: { error: supaErr.message } });
         }
       } else if (supaUser?.user) {
         createdId = supaUser.user.id;
       }
     } catch (err: any) {
-      logger.warn('AUTH', 'user.create_supabase_error', { metadata: { error: err?.message } });
+      logger.warn('SYSTEM', 'user.create_supabase_error', { metadata: { error: err?.message } });
     }
 
     const newUser: UserItem = {
@@ -219,13 +243,10 @@ export async function DELETE(request: Request) {
     try {
       const supabaseAdmin = getSupabaseAdminClient();
       for (const id of ids) {
-        if (id.includes('-') && id.length > 20) {
-          // UUID format -> delete from Supabase Auth
-          await supabaseAdmin.auth.admin.deleteUser(id);
-        }
+        await supabaseAdmin.auth.admin.deleteUser(id);
       }
     } catch (err: any) {
-      logger.warn('AUTH', 'users.delete_supabase_error', { metadata: { error: err?.message } });
+      logger.warn('SYSTEM', 'users.delete_supabase_error', { metadata: { error: err?.message } });
     }
 
     logger.info('AUDIT', 'users.deleted', {
