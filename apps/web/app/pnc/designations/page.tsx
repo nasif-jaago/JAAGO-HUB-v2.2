@@ -19,9 +19,6 @@ import {
   DesignationItem,
   DepartmentItem,
   ProjectItem,
-  INITIAL_DESIGNATIONS,
-  INITIAL_DEPARTMENTS,
-  INITIAL_PROJECTS,
   fetchDesignationsFromSupabase,
   saveDesignationToSupabase,
   deleteDesignationFromSupabase,
@@ -46,9 +43,9 @@ const COMMON_GRADES = [
 ];
 
 export default function DesignationsPage() {
-  const [designations, setDesignations] = useState<DesignationItem[]>(INITIAL_DESIGNATIONS);
-  const [departments, setDepartments] = useState<DepartmentItem[]>(INITIAL_DEPARTMENTS);
-  const [projects, setProjects] = useState<ProjectItem[]>(INITIAL_PROJECTS);
+  const [designations, setDesignations] = useState<DesignationItem[]>([]);
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('');
@@ -70,13 +67,13 @@ export default function DesignationsPage() {
 
   useEffect(() => {
     fetchDesignationsFromSupabase().then((data) => {
-      if (data && data.length > 0) setDesignations(data);
+      if (data) setDesignations(data);
     });
     fetchDepartmentsFromSupabase().then((depts) => {
-      if (depts && depts.length > 0) setDepartments(depts);
+      if (depts) setDepartments(depts);
     });
     fetchProjectsFromSupabase().then((prjs) => {
-      if (prjs && prjs.length > 0) setProjects(prjs);
+      if (prjs) setProjects(prjs);
     });
   }, []);
 
@@ -177,11 +174,10 @@ export default function DesignationsPage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    setDesignations((prev) => prev.filter((d) => !selectedIds.includes(d.id)));
-    for (const id of selectedIds) {
-      await deleteDesignationFromSupabase(id);
-    }
+    const idsToDelete = [...selectedIds];
+    setDesignations((prev) => prev.filter((d) => !idsToDelete.includes(d.id)));
     setSelectedIds([]);
+    await Promise.all(idsToDelete.map((id) => deleteDesignationFromSupabase(id)));
     showToast(`${count} designation(s) deleted`);
   };
 
@@ -544,29 +540,49 @@ export default function DesignationsPage() {
                 </select>
               </div>
 
-              {/* Department (Called from Department/Project both) */}
+              {/* Department / Project (Called from Department/Project both) */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Department / Project (Call data from Department/Project both)
                 </label>
                 <select
-                  value={formData.departmentOrProject}
+                  value={formData.departmentOrProject || ''}
                   onChange={(e) => setFormData({ ...formData, departmentOrProject: e.target.value })}
                   className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
                 >
-                  <optgroup label="Departments">
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        Department: {d.name}
-                      </option>
-                    ))}
+                  <option value="">Select Department or Project</option>
+                  <optgroup label="── Departments ──">
+                    {departments.length > 0 ? (
+                      departments.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Executive Office">Executive Office</option>
+                        <option value="Program Implementation">Program Implementation</option>
+                        <option value="Digital School Program">Digital School Program</option>
+                        <option value="Finance & Accounts">Finance & Accounts</option>
+                        <option value="People and Culture">People and Culture</option>
+                        <option value="Communications & Fundraising">Communications & Fundraising</option>
+                      </>
+                    )}
                   </optgroup>
-                  <optgroup label="Projects">
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        Project: {p.name}
-                      </option>
-                    ))}
+                  <optgroup label="── Projects ──">
+                    {projects.length > 0 ? (
+                      projects.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Telco Digital School">Telco Digital School</option>
+                        <option value="Free School Education for Underprivileged">Free School Education for Underprivileged</option>
+                        <option value="Universal Youth Development & Volunteer Voice">Universal Youth Development & Volunteer Voice</option>
+                      </>
+                    )}
                   </optgroup>
                 </select>
               </div>

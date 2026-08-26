@@ -23,6 +23,7 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     branch: row.branch || 'Head Office (Banani)',
     department: row.department || 'Program Implementation',
     project: row.project || 'General Operations',
+    team: row.team || 'Core Development Team',
     supervisor: row.supervisor || '',
     secondarySupervisor: row.secondary_supervisor || '',
     workLocation: row.work_location || 'Banani, Dhaka',
@@ -74,7 +75,21 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     assignedTeacherStaff: row.assigned_teacher_staff || '',
     payrollRemark: row.payroll_remark || '',
 
-    // Tab 4: DSP
+    // Tab 4: Insurance
+    insuranceStatus: row.insurance_status || 'Active',
+    insuranceCoverageCategory: row.insurance_coverage_category || 'Standard Full-Time (Plan B)',
+    insuranceMonthlyPremium: Number(row.insurance_monthly_premium ?? 1500),
+    employeeHealthInsuranceId: row.employee_health_insurance_id || '',
+    spouseHealthInsuranceId: row.spouse_health_insurance_id || '',
+    spouseName: row.spouse_name || '',
+    child1HealthInsuranceId: row.child1_health_insurance_id || '',
+    child1Name: row.child1_name || '',
+    child2HealthInsuranceId: row.child2_health_insurance_id || '',
+    child2Name: row.child2_name || '',
+    child3HealthInsuranceId: row.child3_health_insurance_id || '',
+    child3Name: row.child3_name || '',
+
+    // Tab 5: DSP
     officeDays: row.office_days || 'Sunday to Thursday',
     customOfficeDaysFrom: row.custom_office_days_from || undefined,
     customOfficeDaysTo: row.custom_office_days_to || undefined,
@@ -83,7 +98,7 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     leaveGroup: row.leave_group || 'Standard Full-time',
     employeeType: row.employee_type || 'Permanent',
 
-    // Tab 5: Logs
+    // Tab 6: Logs
     logHistory: [],
     isUser: Boolean(row.is_user),
     userId: row.user_id || undefined,
@@ -110,6 +125,7 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     branch: profile.branch,
     department: profile.department,
     project: profile.project,
+    team: profile.team || null,
     supervisor: profile.supervisor || null,
     secondary_supervisor: profile.secondarySupervisor || null,
     work_location: profile.workLocation || null,
@@ -161,7 +177,21 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     assigned_teacher_staff: profile.assignedTeacherStaff || null,
     payroll_remark: profile.payrollRemark || null,
 
-    // Tab 4: DSP
+    // Tab 4: Insurance
+    insurance_status: profile.insuranceStatus || 'Active',
+    insurance_coverage_category: profile.insuranceCoverageCategory || null,
+    insurance_monthly_premium: profile.insuranceMonthlyPremium ?? 1500,
+    employee_health_insurance_id: profile.employeeHealthInsuranceId || null,
+    spouse_health_insurance_id: profile.spouseHealthInsuranceId || null,
+    spouse_name: profile.spouseName || null,
+    child1_health_insurance_id: profile.child1HealthInsuranceId || null,
+    child1_name: profile.child1Name || null,
+    child2_health_insurance_id: profile.child2HealthInsuranceId || null,
+    child2_name: profile.child2Name || null,
+    child3_health_insurance_id: profile.child3HealthInsuranceId || null,
+    child3_name: profile.child3Name || null,
+
+    // Tab 5: DSP
     office_days: profile.officeDays,
     custom_office_days_from: profile.customOfficeDaysFrom || null,
     custom_office_days_to: profile.customOfficeDaysTo || null,

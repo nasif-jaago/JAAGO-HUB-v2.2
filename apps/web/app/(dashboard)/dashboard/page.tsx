@@ -16,7 +16,6 @@ import {
   Inbox,
   Timer,
 } from 'lucide-react';
-import { DashboardSubNav } from '@/components/dashboard-sub-nav';
 import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
 
 export default function DashboardPage() {
@@ -171,13 +170,11 @@ export default function DashboardPage() {
     }
   };
 
+  const [imgError, setImgError] = useState(false);
   const firstName = user.fullName.split(' ')[0] || 'Nasif';
 
   return (
     <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none">
-      {/* ── Dashboard Sub-Navigation Strip (Overview | My Profile | ...) ── */}
-      <DashboardSubNav activeTab="overview" />
-
       {/* ========================================================================= */}
       {/* 📱 MOBILE VIEW ONLY (Strictly based on Reference Images 2 & 3)            */}
       {/* ========================================================================= */}
@@ -187,16 +184,17 @@ export default function DashboardPage() {
         } space-y-4 pt-1`}
       >
         {/* User Greeting Header */}
-        <div className="flex items-center space-x-3 px-1">
-          <div className="h-12 w-12 rounded-xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-sm flex-shrink-0">
-            {user.avatarUrl ? (
+        <div className="flex items-center space-x-4 px-1">
+          <div className="h-16 w-16 rounded-2xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-md flex-shrink-0 relative">
+            {user.avatarUrl && !imgError ? (
               <img
                 src={user.avatarUrl}
                 alt={user.fullName}
+                onError={() => setImgError(true)}
                 className="h-full w-full object-cover"
               />
             ) : (
-              <span className="text-primary font-black text-base">
+              <span className="text-primary font-black text-lg">
                 {user.fullName
                   ? user.fullName
                       .split(' ')
@@ -400,19 +398,20 @@ export default function DashboardPage() {
         } space-y-5`}
       >
         {/* ── 1. USER PROFILE HERO CARD ── */}
-        <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 relative">
-          <div className="flex items-center space-x-5">
-            {/* Avatar inside Yellow Border Card with Green Online Dot */}
+        <div className="p-6 sm:p-7 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 relative">
+          <div className="flex items-center space-x-6">
+            {/* Avatar inside Yellow Border Card with Green Online Dot (ENLARGED) */}
             <div className="relative flex-shrink-0">
-              <div className="h-20 w-20 rounded-2xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-md">
-                {user.avatarUrl ? (
+              <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-3xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-lg relative p-0.5">
+                {user.avatarUrl && !imgError ? (
                   <img
                     src={user.avatarUrl}
                     alt={user.fullName}
-                    className="h-full w-full object-cover"
+                    onError={() => setImgError(true)}
+                    className="h-full w-full object-cover rounded-[22px]"
                   />
                 ) : (
-                  <div className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 flex items-center justify-center text-primary font-black text-2xl">
+                  <div className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 rounded-[22px] flex items-center justify-center text-primary font-black text-3xl sm:text-4xl">
                     {user.fullName
                       ? user.fullName
                           .split(' ')
@@ -426,7 +425,7 @@ export default function DashboardPage() {
                 )}
               </div>
               {/* Online Green Indicator Dot */}
-              <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-card shadow-sm animate-pulse" />
+              <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 border-2 border-card shadow-md animate-pulse" />
             </div>
 
             {/* User Credentials & Metadata */}

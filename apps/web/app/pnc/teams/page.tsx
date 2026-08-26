@@ -20,9 +20,6 @@ import {
   TeamMemberItem,
   DepartmentItem,
   ProjectItem,
-  INITIAL_TEAMS,
-  INITIAL_DEPARTMENTS,
-  INITIAL_PROJECTS,
   fetchTeamsFromSupabase,
   saveTeamToSupabase,
   deleteTeamFromSupabase,
@@ -33,9 +30,9 @@ import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
 
 export default function TeamsPage() {
-  const [teams, setTeams] = useState<TeamItem[]>(INITIAL_TEAMS);
-  const [departments, setDepartments] = useState<DepartmentItem[]>(INITIAL_DEPARTMENTS);
-  const [projects, setProjects] = useState<ProjectItem[]>(INITIAL_PROJECTS);
+  const [teams, setTeams] = useState<TeamItem[]>([]);
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,16 +65,16 @@ export default function TeamsPage() {
 
   useEffect(() => {
     fetchTeamsFromSupabase().then((data) => {
-      if (data && data.length > 0) setTeams(data);
+      if (data) setTeams(data);
     });
     fetchDepartmentsFromSupabase().then((depts) => {
-      if (depts && depts.length > 0) setDepartments(depts);
+      if (depts) setDepartments(depts);
     });
     fetchProjectsFromSupabase().then((prjs) => {
-      if (prjs && prjs.length > 0) setProjects(prjs);
+      if (prjs) setProjects(prjs);
     });
     fetchEmployeesFromSupabase().then((emps) => {
-      if (emps && emps.length > 0) setEmployees(emps);
+      if (emps) setEmployees(emps);
     });
   }, []);
 
@@ -240,11 +237,10 @@ export default function TeamsPage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    setTeams((prev) => prev.filter((t) => !selectedIds.includes(t.id)));
-    for (const id of selectedIds) {
-      await deleteTeamFromSupabase(id);
-    }
+    const idsToDelete = [...selectedIds];
+    setTeams((prev) => prev.filter((t) => !idsToDelete.includes(t.id)));
     setSelectedIds([]);
+    await Promise.all(idsToDelete.map((id) => deleteTeamFromSupabase(id)));
     showToast(`${count} team(s) deleted`);
   };
 
@@ -588,29 +584,49 @@ export default function TeamsPage() {
                 />
               </div>
 
-              {/* Department (Call data from Department/Project both) */}
+              {/* Department / Project */}
               <div className="space-y-1">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Department / Project
                 </label>
                 <select
-                  value={formData.departmentOrProject}
+                  value={formData.departmentOrProject || ''}
                   onChange={(e) => setFormData({ ...formData, departmentOrProject: e.target.value })}
                   className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
                 >
-                  <optgroup label="Departments">
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        Department: {d.name}
-                      </option>
-                    ))}
+                  <option value="">Select Department or Project</option>
+                  <optgroup label="── Departments ──">
+                    {departments.length > 0 ? (
+                      departments.map((d) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Executive Office">Executive Office</option>
+                        <option value="Program Implementation">Program Implementation</option>
+                        <option value="Digital School Program">Digital School Program</option>
+                        <option value="Finance & Accounts">Finance & Accounts</option>
+                        <option value="People and Culture">People and Culture</option>
+                        <option value="Communications & Fundraising">Communications & Fundraising</option>
+                      </>
+                    )}
                   </optgroup>
-                  <optgroup label="Projects">
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        Project: {p.name}
-                      </option>
-                    ))}
+                  <optgroup label="── Projects ──">
+                    {projects.length > 0 ? (
+                      projects.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Telco Digital School">Telco Digital School</option>
+                        <option value="Free School Education for Underprivileged">Free School Education for Underprivileged</option>
+                        <option value="Universal Youth Development & Volunteer Voice">Universal Youth Development & Volunteer Voice</option>
+                      </>
+                    )}
                   </optgroup>
                 </select>
               </div>

@@ -31,8 +31,6 @@ import {
   OrganizationBranch,
   OrganizationPolicy,
   INITIAL_ORGANIZATIONS,
-  INITIAL_BRANCHES,
-  INITIAL_POLICIES,
   fetchOrganizationsFromSupabase,
   saveOrganizationToSupabase,
   deleteOrganizationFromSupabase,
@@ -47,7 +45,7 @@ import {
 type PolicyCategory = 'ALL' | 'GENERAL' | 'LEAVE' | 'ATTENDANCE' | 'CODE OF CONDUCT' | 'TRAVEL' | 'EXPENSES' | 'OTHER';
 
 export default function OrganizationPage() {
-  const [organizations, setOrganizations] = useState<OrganizationEntity[]>(INITIAL_ORGANIZATIONS);
+  const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<OrganizationEntity | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [viewMode, setViewMode] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
@@ -58,8 +56,8 @@ export default function OrganizationPage() {
   const [activeTab, setActiveTab] = useState<'GENERAL' | 'BRANCHES' | 'POLICIES' | 'HISTORY'>('GENERAL');
 
   // Branches & Policies for the selected organization
-  const [branches, setBranches] = useState<OrganizationBranch[]>(INITIAL_BRANCHES);
-  const [policies, setPolicies] = useState<OrganizationPolicy[]>(INITIAL_POLICIES);
+  const [branches, setBranches] = useState<OrganizationBranch[]>([]);
+  const [policies, setPolicies] = useState<OrganizationPolicy[]>([]);
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,7 +92,7 @@ export default function OrganizationPage() {
   // Load from Supabase on mount
   useEffect(() => {
     fetchOrganizationsFromSupabase().then((orgs) => {
-      if (orgs && orgs.length > 0) setOrganizations(orgs);
+      if (orgs) setOrganizations(orgs);
     });
   }, []);
 
@@ -223,11 +221,10 @@ export default function OrganizationPage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    setOrganizations((prev) => prev.filter((o) => !selectedIds.includes(o.id)));
-    for (const id of selectedIds) {
-      await deleteOrganizationFromSupabase(id);
-    }
+    const idsToDelete = [...selectedIds];
+    setOrganizations((prev) => prev.filter((o) => !idsToDelete.includes(o.id)));
     setSelectedIds([]);
+    await Promise.all(idsToDelete.map((id) => deleteOrganizationFromSupabase(id)));
     showToast(`${count} organization(s) deleted`);
   };
 

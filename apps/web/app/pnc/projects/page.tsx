@@ -20,9 +20,6 @@ import {
   ProjectItem,
   DepartmentItem,
   OrganizationEntity,
-  INITIAL_PROJECTS,
-  INITIAL_DEPARTMENTS,
-  INITIAL_ORGANIZATIONS,
   fetchProjectsFromSupabase,
   saveProjectToSupabase,
   deleteProjectFromSupabase,
@@ -33,9 +30,9 @@ import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<ProjectItem[]>(INITIAL_PROJECTS);
-  const [departments, setDepartments] = useState<DepartmentItem[]>(INITIAL_DEPARTMENTS);
-  const [organizations, setOrganizations] = useState<OrganizationEntity[]>(INITIAL_ORGANIZATIONS);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,16 +63,16 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     fetchProjectsFromSupabase().then((prjs) => {
-      if (prjs && prjs.length > 0) setProjects(prjs);
+      if (prjs) setProjects(prjs);
     });
     fetchDepartmentsFromSupabase().then((depts) => {
-      if (depts && depts.length > 0) setDepartments(depts);
+      if (depts) setDepartments(depts);
     });
     fetchOrganizationsFromSupabase().then((orgs) => {
-      if (orgs && orgs.length > 0) setOrganizations(orgs);
+      if (orgs) setOrganizations(orgs);
     });
     fetchEmployeesFromSupabase().then((emps) => {
-      if (emps && emps.length > 0) setEmployees(emps);
+      if (emps) setEmployees(emps);
     });
   }, []);
 
@@ -205,11 +202,10 @@ export default function ProjectsPage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    setProjects((prev) => prev.filter((p) => !selectedIds.includes(p.id)));
-    for (const id of selectedIds) {
-      await deleteProjectFromSupabase(id);
-    }
+    const idsToDelete = [...selectedIds];
+    setProjects((prev) => prev.filter((p) => !idsToDelete.includes(p.id)));
     setSelectedIds([]);
+    await Promise.all(idsToDelete.map((id) => deleteProjectFromSupabase(id)));
     showToast(`${count} project(s) deleted`);
   };
 
@@ -563,7 +559,7 @@ export default function ProjectsPage() {
                   Organization (Call data from Organization)
                 </label>
                 <select
-                  value={formData.organizationId}
+                  value={formData.organizationId || (organizations[0]?.id || 'org-1')}
                   onChange={(e) => {
                     const selOrg = organizations.find((o) => o.id === e.target.value);
                     setFormData({
@@ -574,11 +570,21 @@ export default function ProjectsPage() {
                   }}
                   className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
                 >
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
+                  {organizations.length > 0 ? (
+                    organizations.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="org-1">JAAGO Foundation</option>
+                      <option value="org-2">JAAGO Foundation Trust</option>
+                      <option value="org-3">JAAGO Foundation USA</option>
+                      <option value="org-4">JAAGO Foundation UK</option>
+                      <option value="org-5">JAAGO Foundation Australia</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -600,11 +606,22 @@ export default function ProjectsPage() {
                   className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
                 >
                   <option value="">Select Parent Department</option>
-                  {departments.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
+                  {departments.length > 0 ? (
+                    departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="dept-1">Executive Office</option>
+                      <option value="dept-2">Program Implementation</option>
+                      <option value="dept-3">Digital School Program</option>
+                      <option value="dept-4">Finance & Accounts</option>
+                      <option value="dept-5">People and Culture</option>
+                      <option value="dept-6">Communications & Fundraising</option>
+                    </>
+                  )}
                 </select>
               </div>
 

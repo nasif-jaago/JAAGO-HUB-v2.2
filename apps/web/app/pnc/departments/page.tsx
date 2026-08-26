@@ -19,8 +19,6 @@ import {
 import {
   DepartmentItem,
   OrganizationEntity,
-  INITIAL_DEPARTMENTS,
-  INITIAL_ORGANIZATIONS,
   fetchDepartmentsFromSupabase,
   saveDepartmentToSupabase,
   deleteDepartmentFromSupabase,
@@ -30,8 +28,8 @@ import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
 
 export default function DepartmentsPage() {
-  const [departments, setDepartments] = useState<DepartmentItem[]>(INITIAL_DEPARTMENTS);
-  const [organizations, setOrganizations] = useState<OrganizationEntity[]>(INITIAL_ORGANIZATIONS);
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -62,13 +60,13 @@ export default function DepartmentsPage() {
 
   useEffect(() => {
     fetchDepartmentsFromSupabase().then((depts) => {
-      if (depts && depts.length > 0) setDepartments(depts);
+      if (depts) setDepartments(depts);
     });
     fetchOrganizationsFromSupabase().then((orgs) => {
-      if (orgs && orgs.length > 0) setOrganizations(orgs);
+      if (orgs) setOrganizations(orgs);
     });
     fetchEmployeesFromSupabase().then((emps) => {
-      if (emps && emps.length > 0) setEmployees(emps);
+      if (emps) setEmployees(emps);
     });
   }, []);
 
@@ -198,11 +196,10 @@ export default function DepartmentsPage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    setDepartments((prev) => prev.filter((d) => !selectedIds.includes(d.id)));
-    for (const id of selectedIds) {
-      await deleteDepartmentFromSupabase(id);
-    }
+    const idsToDelete = [...selectedIds];
+    setDepartments((prev) => prev.filter((d) => !idsToDelete.includes(d.id)));
     setSelectedIds([]);
+    await Promise.all(idsToDelete.map((id) => deleteDepartmentFromSupabase(id)));
     showToast(`${count} department(s) deleted`);
   };
 
@@ -556,7 +553,7 @@ export default function DepartmentsPage() {
                   Organization (Call data from Organization)
                 </label>
                 <select
-                  value={formData.organizationId}
+                  value={formData.organizationId || (organizations[0]?.id || 'org-1')}
                   onChange={(e) => {
                     const selOrg = organizations.find((o) => o.id === e.target.value);
                     setFormData({
@@ -567,11 +564,21 @@ export default function DepartmentsPage() {
                   }}
                   className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
                 >
-                  {organizations.map((org) => (
-                    <option key={org.id} value={org.id}>
-                      {org.name}
-                    </option>
-                  ))}
+                  {organizations.length > 0 ? (
+                    organizations.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="org-1">JAAGO Foundation</option>
+                      <option value="org-2">JAAGO Foundation Trust</option>
+                      <option value="org-3">JAAGO Foundation USA</option>
+                      <option value="org-4">JAAGO Foundation UK</option>
+                      <option value="org-5">JAAGO Foundation Australia</option>
+                    </>
+                  )}
                 </select>
               </div>
 

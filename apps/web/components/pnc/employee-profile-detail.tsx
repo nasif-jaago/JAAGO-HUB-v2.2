@@ -32,6 +32,22 @@ import {
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
+import {
+  fetchOrganizationsFromSupabase,
+  fetchBranchesFromSupabase,
+  fetchDepartmentsFromSupabase,
+  fetchProjectsFromSupabase,
+  fetchTeamsFromSupabase,
+  fetchDesignationsFromSupabase,
+  fetchInsuranceCategoriesFromSupabase,
+  type OrganizationEntity,
+  type OrganizationBranch,
+  type DepartmentItem,
+  type ProjectItem,
+  type TeamItem,
+  type DesignationItem,
+  type InsuranceCategoryItem,
+} from '@/lib/supabase-organization';
 
 export type EmployeeStatus = 'Active' | 'Terminated' | 'Resigned' | 'Incomplete' | 'Archived';
 
@@ -64,6 +80,7 @@ export interface FullEmployeeProfile {
   branch: string;
   department: string;
   project: string;
+  team?: string | undefined;
   supervisor: string;
   secondarySupervisor: string;
   workLocation: string;
@@ -121,7 +138,21 @@ export interface FullEmployeeProfile {
   assignedTeacherStaff: string;
   payrollRemark: string;
 
-  // ── Tab 4: DSP (Digital School Program) ──
+  // ── Tab 4: Insurance ──
+  insuranceStatus?: 'Active' | 'Inactive' | string | undefined;
+  insuranceCoverageCategory?: string | undefined;
+  insuranceMonthlyPremium?: number | undefined;
+  employeeHealthInsuranceId?: string | undefined;
+  spouseHealthInsuranceId?: string | undefined;
+  spouseName?: string | undefined;
+  child1HealthInsuranceId?: string | undefined;
+  child1Name?: string | undefined;
+  child2HealthInsuranceId?: string | undefined;
+  child2Name?: string | undefined;
+  child3HealthInsuranceId?: string | undefined;
+  child3Name?: string | undefined;
+
+  // ── Tab 5: DSP (Digital School Program) ──
   officeDays: string;
   customOfficeDaysFrom?: string | undefined;
   customOfficeDaysTo?: string | undefined;
@@ -130,7 +161,7 @@ export interface FullEmployeeProfile {
   leaveGroup: string;
   employeeType: 'Permanent' | 'Contractual' | 'Volunteer' | 'Intern' | 'Consultant';
 
-  // ── Tab 5: Log History ──
+  // ── Tab 6: Log History ──
   logHistory: LogHistoryEntry[];
 
   // User provisioning
@@ -168,14 +199,68 @@ export function EmployeeProfileDetail({
 }: EmployeeProfileDetailProps) {
   const isNew = !initialData?.id;
 
-  // Active Tab state: 'WORK' | 'PERSONAL' | 'PAYROLL' | 'DSP' | 'LOG_HISTORY'
-  const [activeTab, setActiveTab] = useState<'WORK' | 'PERSONAL' | 'PAYROLL' | 'DSP' | 'LOG_HISTORY'>('WORK');
+  // Active Tab state: 'WORK' | 'PERSONAL' | 'PAYROLL' | 'INSURANCE' | 'DSP' | 'LOG_HISTORY'
+  const [activeTab, setActiveTab] = useState<'WORK' | 'PERSONAL' | 'PAYROLL' | 'INSURANCE' | 'DSP' | 'LOG_HISTORY'>('WORK');
+
+  // Dynamic organization metadata options from Supabase
+  const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
+  const [branches, setBranches] = useState<OrganizationBranch[]>([]);
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [teams, setTeams] = useState<TeamItem[]>([]);
+  const [designations, setDesignations] = useState<DesignationItem[]>([]);
+  const [insuranceCategories, setInsuranceCategories] = useState<InsuranceCategoryItem[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadMetadata() {
+      try {
+        const [orgs, brs, depts, projs, tms, desigs, insCats] = await Promise.all([
+          fetchOrganizationsFromSupabase(),
+          fetchBranchesFromSupabase(),
+          fetchDepartmentsFromSupabase(),
+          fetchProjectsFromSupabase(),
+          fetchTeamsFromSupabase(),
+          fetchDesignationsFromSupabase(),
+          fetchInsuranceCategoriesFromSupabase(),
+        ]);
+        if (isMounted) {
+          setOrganizations(orgs);
+          setBranches(brs);
+          setDepartments(depts);
+          setProjects(projs);
+          setTeams(tms);
+          setDesignations(desigs);
+          setInsuranceCategories(insCats);
+        }
+      } catch (err) {
+        console.error('Error loading organization metadata:', err);
+      }
+    }
+    loadMetadata();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Form State
   const [formData, setFormData] = useState<FullEmployeeProfile>(() => {
     if (initialData) {
       return {
         ...initialData,
+        team: initialData.team || 'Core Development Team',
+        insuranceStatus: initialData.insuranceStatus || 'Active',
+        insuranceCoverageCategory: initialData.insuranceCoverageCategory || 'Standard Full-Time (Plan B)',
+        insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 1500,
+        employeeHealthInsuranceId: initialData.employeeHealthInsuranceId || '',
+        spouseHealthInsuranceId: initialData.spouseHealthInsuranceId || '',
+        spouseName: initialData.spouseName || '',
+        child1HealthInsuranceId: initialData.child1HealthInsuranceId || '',
+        child1Name: initialData.child1Name || '',
+        child2HealthInsuranceId: initialData.child2HealthInsuranceId || '',
+        child2Name: initialData.child2Name || '',
+        child3HealthInsuranceId: initialData.child3HealthInsuranceId || '',
+        child3Name: initialData.child3Name || '',
         logHistory: initialData.logHistory || [],
       };
     }
@@ -197,6 +282,7 @@ export function EmployeeProfileDetail({
       branch: 'Head Office (Banani)',
       department: 'Program Implementation',
       project: 'General Operations',
+      team: 'Core Development Team',
       supervisor: 'Nasif Kamal',
       secondarySupervisor: 'S M Nayeem Rahman',
       workLocation: 'Banani, Dhaka',
@@ -248,6 +334,20 @@ export function EmployeeProfileDetail({
       assignedTeacherStaff: 'General Staff',
       payrollRemark: 'Standard permanent payroll configuration',
 
+      // Insurance
+      insuranceStatus: 'Active',
+      insuranceCoverageCategory: 'Standard Full-Time (Plan B)',
+      insuranceMonthlyPremium: 1500,
+      employeeHealthInsuranceId: '',
+      spouseHealthInsuranceId: '',
+      spouseName: '',
+      child1HealthInsuranceId: '',
+      child1Name: '',
+      child2HealthInsuranceId: '',
+      child2Name: '',
+      child3HealthInsuranceId: '',
+      child3Name: '',
+
       // DSP
       officeDays: 'Sunday to Thursday',
       officeHours: '09:00 AM - 05:00 PM',
@@ -281,7 +381,22 @@ export function EmployeeProfileDetail({
   // Sync state whenever initialData updates asynchronously from Supabase
   useEffect(() => {
     if (initialData && initialData.code) {
-      setFormData({ ...initialData });
+      setFormData({
+        ...initialData,
+        team: initialData.team || 'Core Development Team',
+        insuranceStatus: initialData.insuranceStatus || 'Active',
+        insuranceCoverageCategory: initialData.insuranceCoverageCategory || 'Standard Full-Time (Plan B)',
+        insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 1500,
+        employeeHealthInsuranceId: initialData.employeeHealthInsuranceId || '',
+        spouseHealthInsuranceId: initialData.spouseHealthInsuranceId || '',
+        spouseName: initialData.spouseName || '',
+        child1HealthInsuranceId: initialData.child1HealthInsuranceId || '',
+        child1Name: initialData.child1Name || '',
+        child2HealthInsuranceId: initialData.child2HealthInsuranceId || '',
+        child2Name: initialData.child2Name || '',
+        child3HealthInsuranceId: initialData.child3HealthInsuranceId || '',
+        child3Name: initialData.child3Name || '',
+      });
       originalStateRef.current = { ...initialData };
       setSupervisorQuery(initialData.supervisor || '');
       setSecSupervisorQuery(initialData.secondarySupervisor || '');
@@ -820,11 +935,17 @@ export function EmployeeProfileDetail({
                 </label>
                 <input
                   type="text"
+                  list="pnc-designations-list"
                   value={formData.designation}
                   onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
                   placeholder="e.g. Program Officer"
                   className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
                 />
+                <datalist id="pnc-designations-list">
+                  {designations.map((d) => (
+                    <option key={d.id} value={d.name} />
+                  ))}
+                </datalist>
               </div>
 
               {/* Status (Color Selector) */}
@@ -912,6 +1033,7 @@ export function EmployeeProfileDetail({
           { key: 'WORK', label: 'Work', icon: Briefcase },
           { key: 'PERSONAL', label: 'Personal', icon: User },
           { key: 'PAYROLL', label: 'Payroll', icon: DollarSign },
+          { key: 'INSURANCE', label: 'Insurance', icon: Shield },
           { key: 'DSP', label: 'DSP', icon: Sparkles },
           { key: 'LOG_HISTORY', label: 'Log History', icon: History, count: formData.logHistory?.length || 0 },
         ].map((tab) => {
@@ -969,9 +1091,21 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
-                    <option value="JAAGO Foundation">JAAGO Foundation</option>
-                    <option value="JAAGO Foundation Trust">JAAGO Foundation Trust</option>
-                    <option value="EMK Center">EMK Center</option>
+                    {organizations.length > 0 ? (
+                      organizations.map((org) => (
+                        <option key={org.id} value={org.name}>
+                          {org.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="JAAGO Foundation">JAAGO Foundation</option>
+                        <option value="JAAGO Foundation Trust">JAAGO Foundation Trust</option>
+                        <option value="JAAGO Foundation INC">JAAGO Foundation INC</option>
+                        <option value="JAAGO Foundation UK">JAAGO Foundation UK</option>
+                        <option value="EMK Center">EMK Center</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -985,11 +1119,21 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
-                    <option value="Head Office (Banani)">Head Office (Banani)</option>
-                    <option value="Rayer Bazar Free School">Rayer Bazar Free School</option>
-                    <option value="Chittagong Campus">Chittagong Campus</option>
-                    <option value="Cox's Bazar Branch">Cox&apos;s Bazar Branch</option>
-                    <option value="Rajshahi Campus">Rajshahi Campus</option>
+                    {branches.length > 0 ? (
+                      branches.map((br) => (
+                        <option key={br.id} value={br.name}>
+                          {br.name} {br.code ? `(${br.code})` : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Head Office (Banani)">Head Office (Banani)</option>
+                        <option value="Rayer Bazar Free School">Rayer Bazar Free School</option>
+                        <option value="Chittagong Campus">Chittagong Campus</option>
+                        <option value="Cox's Bazar Branch">Cox&apos;s Bazar Branch</option>
+                        <option value="Rajshahi Campus">Rajshahi Campus</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -1003,13 +1147,23 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
-                    <option value="Program Implementation">Program Implementation</option>
-                    <option value="Digital School Program">Digital School Program</option>
-                    <option value="Communications">Communications</option>
-                    <option value="Executive Office">Executive Office</option>
-                    <option value="Finance & Accounts">Finance &amp; Accounts</option>
-                    <option value="People and Culture">People and Culture</option>
-                    <option value="EMK Center">EMK Center</option>
+                    {departments.length > 0 ? (
+                      departments.map((dept) => (
+                        <option key={dept.id} value={dept.name}>
+                          {dept.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Program Implementation">Program Implementation</option>
+                        <option value="Digital School Program">Digital School Program</option>
+                        <option value="Communications">Communications</option>
+                        <option value="Executive Office">Executive Office</option>
+                        <option value="Finance & Accounts">Finance &amp; Accounts</option>
+                        <option value="People and Culture">People and Culture</option>
+                        <option value="EMK Center">EMK Center</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -1020,11 +1174,37 @@ export function EmployeeProfileDetail({
                   </label>
                   <input
                     type="text"
+                    list="pnc-projects-list"
                     value={formData.project}
                     onChange={(e) => setFormData({ ...formData, project: e.target.value })}
-                    placeholder="e.g. Telco Digital School"
+                    placeholder="e.g. Tech 4 Development"
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
                   />
+                  <datalist id="pnc-projects-list">
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.name} />
+                    ))}
+                  </datalist>
+                </div>
+
+                {/* Team (Connected with Organization Teams) */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                    Team
+                  </label>
+                  <input
+                    type="text"
+                    list="pnc-teams-list"
+                    value={formData.team || ''}
+                    onChange={(e) => setFormData({ ...formData, team: e.target.value })}
+                    placeholder="e.g. Core Development Team"
+                    className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                  />
+                  <datalist id="pnc-teams-list">
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.name} />
+                    ))}
+                  </datalist>
                 </div>
 
                 {/* Supervisor (Interactive Autocomplete Search >= 3 chars) */}
@@ -1937,7 +2117,226 @@ export function EmployeeProfileDetail({
         )}
 
         {/* ═══════════════════════════════════════════════════════════════════
-            TAB 4: DSP (DIGITAL SCHOOL PROGRAM)
+            TAB: INSURANCE (HEALTH & MEDICAL COVERAGE)
+            ═══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'INSURANCE' && (
+          <div className="space-y-6">
+            <div className="border-b border-border/70 pb-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-2">
+                <div className="h-6 w-6 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                  <Shield className="h-3.5 w-3.5" />
+                </div>
+                <span>Health &amp; Medical Insurance Configuration</span>
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-xs">
+              {/* Insurance Status */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Insurance Status
+                </label>
+                <select
+                  value={formData.insuranceStatus || 'Active'}
+                  onChange={(e) => setFormData({ ...formData, insuranceStatus: e.target.value })}
+                  className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
+
+              {/* Coverage Category */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Coverage Category
+                </label>
+                <select
+                  value={formData.insuranceCoverageCategory || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const selectedCat = insuranceCategories.find((c) => c.name === val);
+                    setFormData({
+                      ...formData,
+                      insuranceCoverageCategory: val,
+                      insuranceMonthlyPremium: selectedCat ? selectedCat.monthlyPremium : formData.insuranceMonthlyPremium,
+                    });
+                  }}
+                  className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  {insuranceCategories.length > 0 ? (
+                    insuranceCategories.map((cat) => (
+                      <option key={cat.id} value={cat.name}>
+                        {cat.name} (৳{cat.monthlyPremium?.toLocaleString()}/mo)
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Standard Full-Time (Plan B)">Standard Full-Time (Plan B)</option>
+                      <option value="Executive Coverage (Plan A)">Executive Coverage (Plan A)</option>
+                      <option value="Basic Coverage (Plan C)">Basic Coverage (Plan C)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* Total Monthly Premium */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Total Monthly Premium (৳)
+                </label>
+                <select
+                  value={formData.insuranceMonthlyPremium ?? 1500}
+                  onChange={(e) => setFormData({ ...formData, insuranceMonthlyPremium: Number(e.target.value) })}
+                  className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  {insuranceCategories.length > 0 ? (
+                    insuranceCategories.map((cat) => (
+                      <option key={cat.id} value={cat.monthlyPremium}>
+                        ৳ {cat.monthlyPremium?.toLocaleString()} &bull; {cat.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value={1500}>৳ 1,500 &bull; Standard Plan</option>
+                      <option value={2500}>৳ 2,500 &bull; Executive Plan</option>
+                      <option value={1000}>৳ 1,000 &bull; Basic Plan</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* Employee Health Insurance ID */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Employee Health Insurance ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.employeeHealthInsuranceId || ''}
+                  onChange={(e) => setFormData({ ...formData, employeeHealthInsuranceId: e.target.value })}
+                  placeholder="e.g. HI-EMP-10029"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Spouse Health Insurance ID */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Spouse Health Insurance ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.spouseHealthInsuranceId || ''}
+                  onChange={(e) => setFormData({ ...formData, spouseHealthInsuranceId: e.target.value })}
+                  placeholder="e.g. HI-SPOUSE-20038"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Spouse Name */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Spouse Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.spouseName || ''}
+                  onChange={(e) => setFormData({ ...formData, spouseName: e.target.value })}
+                  placeholder="Spouse Legal Name"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Child 1 Health Insurance ID */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Child 1 Health Insurance ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.child1HealthInsuranceId || ''}
+                  onChange={(e) => setFormData({ ...formData, child1HealthInsuranceId: e.target.value })}
+                  placeholder="e.g. HI-CHILD1-3001"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Child 1 Name */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Child 1 Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.child1Name || ''}
+                  onChange={(e) => setFormData({ ...formData, child1Name: e.target.value })}
+                  placeholder="Child 1 Legal Name"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Child 2 Health Insurance ID */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Child 2 Health Insurance ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.child2HealthInsuranceId || ''}
+                  onChange={(e) => setFormData({ ...formData, child2HealthInsuranceId: e.target.value })}
+                  placeholder="e.g. HI-CHILD2-3002"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Child 2 Name */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Child 2 Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.child2Name || ''}
+                  onChange={(e) => setFormData({ ...formData, child2Name: e.target.value })}
+                  placeholder="Child 2 Legal Name"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Child 3 Health Insurance ID */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Child 3 Health Insurance ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.child3HealthInsuranceId || ''}
+                  onChange={(e) => setFormData({ ...formData, child3HealthInsuranceId: e.target.value })}
+                  placeholder="e.g. HI-CHILD3-3003"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Child 3 Name */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Child 3 Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.child3Name || ''}
+                  onChange={(e) => setFormData({ ...formData, child3Name: e.target.value })}
+                  placeholder="Child 3 Legal Name"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            TAB 5: DSP (DIGITAL SCHOOL PROGRAM)
             ═══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'DSP' && (
           <div className="space-y-6">

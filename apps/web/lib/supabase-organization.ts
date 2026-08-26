@@ -632,51 +632,76 @@ export function removeDeletedEntityId(id: string) {
   } catch {}
 }
 
+function getLocalCache<T extends { id: string }>(key: string, defaultVal: T[]): T[] {
+  if (typeof window === 'undefined') return defaultVal;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return defaultVal;
+}
+
+function setLocalCache<T>(key: string, data: T[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch {}
+}
+
 // --- ORGANIZATIONS ---
+const ORGS_CACHE_KEY = 'jaago_pnc_organizations_cache';
+
 export async function fetchOrganizationsFromSupabase(): Promise<OrganizationEntity[]> {
   const deletedIds = getDeletedEntityIds();
+  let baseList: OrganizationEntity[] = INITIAL_ORGANIZATIONS;
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_ORGANIZATIONS.filter((o) => !deletedIds.has(o.id));
-    const { data, error } = await supabase.from('organizations').select('*').order('name', { ascending: true });
-    if (error || !data || data.length === 0) {
-      return INITIAL_ORGANIZATIONS.filter((o) => !deletedIds.has(o.id));
+    if (supabase) {
+      const { data, error } = await supabase.from('organizations').select('*').order('name', { ascending: true });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const dbItems = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          logoUrl: row.logo_url || '',
+          address: row.address || '',
+          banani: row.banani || '',
+          city: row.city || 'Dhaka',
+          division: row.division || 'Dhaka Division',
+          postalCode: row.postal_code || '1213',
+          country: row.country || 'Bangladesh',
+          partnerCountry: row.partner_country || 'Bangladesh',
+          phone: row.phone || '',
+          email: row.email || '',
+          website: row.website || 'https://jaago.com.bd',
+          emailDomain: row.email_domain || 'jaago.com.bd',
+          brandColor: row.brand_color || '#FED900',
+          taxId: row.tax_id || '',
+          companyId: row.company_id || '',
+          currency: row.currency || 'BDT',
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+        const dbIdSet = new Set(dbItems.map((d) => d.id));
+        baseList = [...dbItems, ...INITIAL_ORGANIZATIONS.filter((i) => !dbIdSet.has(i.id))];
+      }
     }
-
-    return data
-      .filter((row: any) => !deletedIds.has(row.id))
-      .map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        logoUrl: row.logo_url || '',
-        address: row.address || '',
-        banani: row.banani || '',
-        city: row.city || 'Dhaka',
-        division: row.division || 'Dhaka Division',
-        postalCode: row.postal_code || '1213',
-        country: row.country || 'Bangladesh',
-        partnerCountry: row.partner_country || 'Bangladesh',
-        phone: row.phone || '',
-        email: row.email || '',
-        website: row.website || 'https://jaago.com.bd',
-        emailDomain: row.email_domain || 'jaago.com.bd',
-        brandColor: row.brand_color || '#FED900',
-        taxId: row.tax_id || '',
-        companyId: row.company_id || '',
-        currency: row.currency || 'BDT',
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-  } catch {
-    return INITIAL_ORGANIZATIONS.filter((o) => !deletedIds.has(o.id));
-  }
+  } catch {}
+  const cached = getLocalCache(ORGS_CACHE_KEY, baseList);
+  const result = cached.filter((o) => !deletedIds.has(o.id));
+  setLocalCache(ORGS_CACHE_KEY, result);
+  return result;
 }
 
 export async function saveOrganizationToSupabase(org: OrganizationEntity): Promise<boolean> {
+  removeDeletedEntityId(org.id);
+  const current = await fetchOrganizationsFromSupabase();
+  const filtered = current.filter((o) => o.id !== org.id);
+  const updated = [org, ...filtered];
+  setLocalCache(ORGS_CACHE_KEY, updated);
+
   try {
-    removeDeletedEntityId(org.id);
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     const payload = {
       id: org.id || `org-${Date.now()}`,
       name: org.name,
@@ -701,12 +726,15 @@ export async function saveOrganizationToSupabase(org: OrganizationEntity): Promi
     const { error } = await supabase.from('organizations').upsert(payload, { onConflict: 'id' });
     return !error;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function deleteOrganizationFromSupabase(id: string): Promise<boolean> {
   addDeletedEntityId(id);
+  const cached = getLocalCache(ORGS_CACHE_KEY, INITIAL_ORGANIZATIONS).filter((o) => o.id !== id);
+  setLocalCache(ORGS_CACHE_KEY, cached);
+
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
@@ -718,48 +746,52 @@ export async function deleteOrganizationFromSupabase(id: string): Promise<boolea
 }
 
 // --- BRANCHES ---
+const BRANCHES_CACHE_KEY = 'jaago_pnc_branches_cache';
+
 export async function fetchBranchesFromSupabase(organizationId?: string): Promise<OrganizationBranch[]> {
   const deletedIds = getDeletedEntityIds();
+  let baseList: OrganizationBranch[] = INITIAL_BRANCHES;
   try {
     const supabase = getSupabase();
-    if (!supabase) {
-      const base = organizationId ? INITIAL_BRANCHES.filter((b) => b.organizationId === organizationId) : INITIAL_BRANCHES;
-      return base.filter((b) => !deletedIds.has(b.id));
+    if (supabase) {
+      let query = supabase.from('organization_branches').select('*');
+      if (organizationId) {
+        query = query.eq('organization_id', organizationId);
+      }
+      const { data, error } = await query.order('name', { ascending: true });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const dbItems = data.map((row: any) => ({
+          id: row.id,
+          organizationId: row.organization_id,
+          name: row.name,
+          code: row.code || '',
+          phone: row.phone || '',
+          email: row.email || '',
+          address: row.address || '',
+          city: row.city || 'Dhaka',
+          country: row.country || 'Bangladesh',
+          createdAt: row.created_at,
+        }));
+        const dbIdSet = new Set(dbItems.map((d) => d.id));
+        baseList = [...dbItems, ...INITIAL_BRANCHES.filter((i) => !dbIdSet.has(i.id))];
+      }
     }
-    let query = supabase.from('organization_branches').select('*');
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId);
-    }
-    const { data, error } = await query.order('name', { ascending: true });
-    if (error || !data || data.length === 0) {
-      const base = organizationId ? INITIAL_BRANCHES.filter((b) => b.organizationId === organizationId) : INITIAL_BRANCHES;
-      return base.filter((b) => !deletedIds.has(b.id));
-    }
-    return data
-      .filter((row: any) => !deletedIds.has(row.id))
-      .map((row: any) => ({
-        id: row.id,
-        organizationId: row.organization_id,
-        name: row.name,
-        code: row.code || '',
-        phone: row.phone || '',
-        email: row.email || '',
-        address: row.address || '',
-        city: row.city || 'Dhaka',
-        country: row.country || 'Bangladesh',
-        createdAt: row.created_at,
-      }));
-  } catch {
-    const base = organizationId ? INITIAL_BRANCHES.filter((b) => b.organizationId === organizationId) : INITIAL_BRANCHES;
-    return base.filter((b) => !deletedIds.has(b.id));
-  }
+  } catch {}
+  const cached = getLocalCache(BRANCHES_CACHE_KEY, baseList);
+  const filteredByOrg = organizationId ? cached.filter((b) => b.organizationId === organizationId) : cached;
+  const result = filteredByOrg.filter((b) => !deletedIds.has(b.id));
+  setLocalCache(BRANCHES_CACHE_KEY, result);
+  return result;
 }
 
 export async function saveBranchToSupabase(branch: OrganizationBranch): Promise<boolean> {
+  removeDeletedEntityId(branch.id);
+  const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES).filter((b) => b.id !== branch.id);
+  setLocalCache(BRANCHES_CACHE_KEY, [branch, ...cached]);
+
   try {
-    removeDeletedEntityId(branch.id);
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     const payload = {
       id: branch.id || `br-${Date.now()}`,
       organization_id: branch.organizationId,
@@ -774,12 +806,15 @@ export async function saveBranchToSupabase(branch: OrganizationBranch): Promise<
     const { error } = await supabase.from('organization_branches').upsert(payload, { onConflict: 'id' });
     return !error;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function deleteBranchFromSupabase(id: string): Promise<boolean> {
   addDeletedEntityId(id);
+  const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES).filter((b) => b.id !== id);
+  setLocalCache(BRANCHES_CACHE_KEY, cached);
+
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
@@ -791,48 +826,52 @@ export async function deleteBranchFromSupabase(id: string): Promise<boolean> {
 }
 
 // --- POLICIES ---
+const POLICIES_CACHE_KEY = 'jaago_pnc_policies_cache';
+
 export async function fetchPoliciesFromSupabase(organizationId?: string): Promise<OrganizationPolicy[]> {
   const deletedIds = getDeletedEntityIds();
+  let baseList: OrganizationPolicy[] = INITIAL_POLICIES;
   try {
     const supabase = getSupabase();
-    if (!supabase) {
-      const base = organizationId ? INITIAL_POLICIES.filter((p) => p.organizationId === organizationId) : INITIAL_POLICIES;
-      return base.filter((p) => !deletedIds.has(p.id));
+    if (supabase) {
+      let query = supabase.from('organization_policies').select('*');
+      if (organizationId) {
+        query = query.eq('organization_id', organizationId);
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const dbItems = data.map((row: any) => ({
+          id: row.id,
+          organizationId: row.organization_id,
+          title: row.title,
+          category: row.category || 'GENERAL',
+          description: row.description || '',
+          attachmentName: row.attachment_name || '',
+          attachmentSize: row.attachment_size || '',
+          attachmentUrl: row.attachment_url || '',
+          uploadedAt: row.uploaded_at,
+          createdAt: row.created_at,
+        }));
+        const dbIdSet = new Set(dbItems.map((d) => d.id));
+        baseList = [...dbItems, ...INITIAL_POLICIES.filter((i) => !dbIdSet.has(i.id))];
+      }
     }
-    let query = supabase.from('organization_policies').select('*');
-    if (organizationId) {
-      query = query.eq('organization_id', organizationId);
-    }
-    const { data, error } = await query.order('created_at', { ascending: false });
-    if (error || !data || data.length === 0) {
-      const base = organizationId ? INITIAL_POLICIES.filter((p) => p.organizationId === organizationId) : INITIAL_POLICIES;
-      return base.filter((p) => !deletedIds.has(p.id));
-    }
-    return data
-      .filter((row: any) => !deletedIds.has(row.id))
-      .map((row: any) => ({
-        id: row.id,
-        organizationId: row.organization_id,
-        title: row.title,
-        category: row.category || 'GENERAL',
-        description: row.description || '',
-        attachmentName: row.attachment_name || '',
-        attachmentSize: row.attachment_size || '',
-        attachmentUrl: row.attachment_url || '',
-        uploadedAt: row.uploaded_at,
-        createdAt: row.created_at,
-      }));
-  } catch {
-    const base = organizationId ? INITIAL_POLICIES.filter((p) => p.organizationId === organizationId) : INITIAL_POLICIES;
-    return base.filter((p) => !deletedIds.has(p.id));
-  }
+  } catch {}
+  const cached = getLocalCache(POLICIES_CACHE_KEY, baseList);
+  const filteredByOrg = organizationId ? cached.filter((p) => p.organizationId === organizationId) : cached;
+  const result = filteredByOrg.filter((p) => !deletedIds.has(p.id));
+  setLocalCache(POLICIES_CACHE_KEY, result);
+  return result;
 }
 
 export async function savePolicyToSupabase(policy: OrganizationPolicy): Promise<boolean> {
+  removeDeletedEntityId(policy.id);
+  const cached = getLocalCache(POLICIES_CACHE_KEY, INITIAL_POLICIES).filter((p) => p.id !== policy.id);
+  setLocalCache(POLICIES_CACHE_KEY, [policy, ...cached]);
+
   try {
-    removeDeletedEntityId(policy.id);
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     const payload = {
       id: policy.id || `pol-${Date.now()}`,
       organization_id: policy.organizationId,
@@ -847,12 +886,15 @@ export async function savePolicyToSupabase(policy: OrganizationPolicy): Promise<
     const { error } = await supabase.from('organization_policies').upsert(payload, { onConflict: 'id' });
     return !error;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function deletePolicyFromSupabase(id: string): Promise<boolean> {
   addDeletedEntityId(id);
+  const cached = getLocalCache(POLICIES_CACHE_KEY, INITIAL_POLICIES).filter((p) => p.id !== id);
+  setLocalCache(POLICIES_CACHE_KEY, cached);
+
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
@@ -864,35 +906,45 @@ export async function deletePolicyFromSupabase(id: string): Promise<boolean> {
 }
 
 // --- DESIGNATIONS ---
+const DESIGNATIONS_CACHE_KEY = 'jaago_pnc_designations_cache';
+
 export async function fetchDesignationsFromSupabase(): Promise<DesignationItem[]> {
   const deletedIds = getDeletedEntityIds();
+  let baseList: DesignationItem[] = INITIAL_DESIGNATIONS;
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_DESIGNATIONS.filter((d) => !deletedIds.has(d.id));
-    const { data, error } = await supabase.from('designations').select('*').order('name', { ascending: true });
-    if (error || !data || data.length === 0) return INITIAL_DESIGNATIONS.filter((d) => !deletedIds.has(d.id));
-    return data
-      .filter((row: any) => !deletedIds.has(row.id))
-      .map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        code: row.code || '',
-        grade: row.grade || '',
-        departmentOrProject: row.department_or_project || '',
-        description: row.description || '',
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-  } catch {
-    return INITIAL_DESIGNATIONS.filter((d) => !deletedIds.has(d.id));
-  }
+    if (supabase) {
+      const { data, error } = await supabase.from('designations').select('*').order('name', { ascending: true });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const dbItems = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          code: row.code || '',
+          grade: row.grade || '',
+          departmentOrProject: row.department_or_project || '',
+          description: row.description || '',
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+        const dbIdSet = new Set(dbItems.map((d) => d.id));
+        baseList = [...dbItems, ...INITIAL_DESIGNATIONS.filter((i) => !dbIdSet.has(i.id))];
+      }
+    }
+  } catch {}
+  const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, baseList);
+  const result = cached.filter((d) => !deletedIds.has(d.id));
+  setLocalCache(DESIGNATIONS_CACHE_KEY, result);
+  return result;
 }
 
 export async function saveDesignationToSupabase(des: DesignationItem): Promise<boolean> {
+  removeDeletedEntityId(des.id);
+  const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS).filter((d) => d.id !== des.id);
+  setLocalCache(DESIGNATIONS_CACHE_KEY, [des, ...cached]);
+
   try {
-    removeDeletedEntityId(des.id);
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     const payload = {
       id: des.id || `des-${Date.now()}`,
       name: des.name,
@@ -905,12 +957,15 @@ export async function saveDesignationToSupabase(des: DesignationItem): Promise<b
     const { error } = await supabase.from('designations').upsert(payload, { onConflict: 'id' });
     return !error;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function deleteDesignationFromSupabase(id: string): Promise<boolean> {
   addDeletedEntityId(id);
+  const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS).filter((d) => d.id !== id);
+  setLocalCache(DESIGNATIONS_CACHE_KEY, cached);
+
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
@@ -922,39 +977,49 @@ export async function deleteDesignationFromSupabase(id: string): Promise<boolean
 }
 
 // --- DEPARTMENTS ---
+const DEPARTMENTS_CACHE_KEY = 'jaago_pnc_departments_cache';
+
 export async function fetchDepartmentsFromSupabase(): Promise<DepartmentItem[]> {
   const deletedIds = getDeletedEntityIds();
+  let baseList: DepartmentItem[] = INITIAL_DEPARTMENTS;
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_DEPARTMENTS.filter((d) => !deletedIds.has(d.id));
-    const { data, error } = await supabase.from('departments').select('*').order('name', { ascending: true });
-    if (error || !data || data.length === 0) return INITIAL_DEPARTMENTS.filter((d) => !deletedIds.has(d.id));
-    return data
-      .filter((row: any) => !deletedIds.has(row.id))
-      .map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        code: row.code || '',
-        organizationId: row.organization_id || '',
-        organizationName: row.organization_name || '',
-        parentDepartmentId: row.parent_department_id || '',
-        parentDepartmentName: row.parent_department_name || '',
-        managerName: row.manager_name || '',
-        managerId: row.manager_id || '',
-        description: row.description || '',
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-  } catch {
-    return INITIAL_DEPARTMENTS.filter((d) => !deletedIds.has(d.id));
-  }
+    if (supabase) {
+      const { data, error } = await supabase.from('departments').select('*').order('name', { ascending: true });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const dbItems = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          code: row.code || '',
+          organizationId: row.organization_id || '',
+          organizationName: row.organization_name || '',
+          parentDepartmentId: row.parent_department_id || '',
+          parentDepartmentName: row.parent_department_name || '',
+          managerName: row.manager_name || '',
+          managerId: row.manager_id || '',
+          description: row.description || '',
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+        const dbIdSet = new Set(dbItems.map((d) => d.id));
+        baseList = [...dbItems, ...INITIAL_DEPARTMENTS.filter((i) => !dbIdSet.has(i.id))];
+      }
+    }
+  } catch {}
+  const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, baseList);
+  const result = cached.filter((d) => !deletedIds.has(d.id));
+  setLocalCache(DEPARTMENTS_CACHE_KEY, result);
+  return result;
 }
 
 export async function saveDepartmentToSupabase(dept: DepartmentItem): Promise<boolean> {
+  removeDeletedEntityId(dept.id);
+  const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS).filter((d) => d.id !== dept.id);
+  setLocalCache(DEPARTMENTS_CACHE_KEY, [dept, ...cached]);
+
   try {
-    removeDeletedEntityId(dept.id);
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     const payload = {
       id: dept.id || `dept-${Date.now()}`,
       name: dept.name,
@@ -971,12 +1036,15 @@ export async function saveDepartmentToSupabase(dept: DepartmentItem): Promise<bo
     const { error } = await supabase.from('departments').upsert(payload, { onConflict: 'id' });
     return !error;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function deleteDepartmentFromSupabase(id: string): Promise<boolean> {
   addDeletedEntityId(id);
+  const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS).filter((d) => d.id !== id);
+  setLocalCache(DEPARTMENTS_CACHE_KEY, cached);
+
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
@@ -988,45 +1056,55 @@ export async function deleteDepartmentFromSupabase(id: string): Promise<boolean>
 }
 
 // --- PROJECTS ---
+const PROJECTS_CACHE_KEY = 'jaago_pnc_projects_cache';
+
 export async function fetchProjectsFromSupabase(): Promise<ProjectItem[]> {
   const deletedIds = getDeletedEntityIds();
+  let baseList: ProjectItem[] = INITIAL_PROJECTS;
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_PROJECTS.filter((p) => !deletedIds.has(p.id));
-    const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true });
-    if (error || !data || data.length === 0) return INITIAL_PROJECTS.filter((p) => !deletedIds.has(p.id));
-    return data
-      .filter((row: any) => !deletedIds.has(row.id))
-      .map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        code: row.code || '',
-        organizationId: row.organization_id || '',
-        organizationName: row.organization_name || '',
-        parentDepartmentId: row.parent_department_id || '',
-        parentDepartmentName: row.parent_department_name || '',
-        projectManagerName: row.project_manager_name || '',
-        projectManagerId: row.project_manager_id || '',
-        managerName: row.project_manager_name || '',
-        managerId: row.project_manager_id || '',
-        financeLeadName: row.finance_lead_name || '',
-        financeLeadId: row.finance_lead_id || '',
-        description: row.description || '',
-        status: row.status || 'ACTIVE',
-        budget: Number(row.budget || 0),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-  } catch {
-    return INITIAL_PROJECTS.filter((p) => !deletedIds.has(p.id));
-  }
+    if (supabase) {
+      const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const dbItems = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          code: row.code || '',
+          organizationId: row.organization_id || '',
+          organizationName: row.organization_name || '',
+          parentDepartmentId: row.parent_department_id || '',
+          parentDepartmentName: row.parent_department_name || '',
+          projectManagerName: row.project_manager_name || '',
+          projectManagerId: row.project_manager_id || '',
+          managerName: row.project_manager_name || '',
+          managerId: row.project_manager_id || '',
+          financeLeadName: row.finance_lead_name || '',
+          financeLeadId: row.finance_lead_id || '',
+          description: row.description || '',
+          status: row.status || 'ACTIVE',
+          budget: Number(row.budget || 0),
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+        const dbIdSet = new Set(dbItems.map((d) => d.id));
+        baseList = [...dbItems, ...INITIAL_PROJECTS.filter((i) => !dbIdSet.has(i.id))];
+      }
+    }
+  } catch {}
+  const cached = getLocalCache(PROJECTS_CACHE_KEY, baseList);
+  const result = cached.filter((p) => !deletedIds.has(p.id));
+  setLocalCache(PROJECTS_CACHE_KEY, result);
+  return result;
 }
 
 export async function saveProjectToSupabase(proj: ProjectItem): Promise<boolean> {
+  removeDeletedEntityId(proj.id);
+  const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS).filter((p) => p.id !== proj.id);
+  setLocalCache(PROJECTS_CACHE_KEY, [proj, ...cached]);
+
   try {
-    removeDeletedEntityId(proj.id);
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     const payload = {
       id: proj.id || `prj-${Date.now()}`,
       name: proj.name,
@@ -1047,12 +1125,15 @@ export async function saveProjectToSupabase(proj: ProjectItem): Promise<boolean>
     const { error } = await supabase.from('projects').upsert(payload, { onConflict: 'id' });
     return !error;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function deleteProjectFromSupabase(id: string): Promise<boolean> {
   addDeletedEntityId(id);
+  const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS).filter((p) => p.id !== id);
+  setLocalCache(PROJECTS_CACHE_KEY, cached);
+
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
@@ -1064,53 +1145,62 @@ export async function deleteProjectFromSupabase(id: string): Promise<boolean> {
 }
 
 // --- TEAMS & MEMBERS ---
+const TEAMS_CACHE_KEY = 'jaago_pnc_teams_cache';
+
 export async function fetchTeamsFromSupabase(): Promise<TeamItem[]> {
   const deletedIds = getDeletedEntityIds();
+  let baseList: TeamItem[] = INITIAL_TEAMS;
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_TEAMS.filter((t) => !deletedIds.has(t.id));
-    const { data: teamsData, error: teamsError } = await supabase.from('teams').select('*').order('name', { ascending: true });
-    if (teamsError || !teamsData || teamsData.length === 0) return INITIAL_TEAMS.filter((t) => !deletedIds.has(t.id));
+    if (supabase) {
+      const { data: teamsData, error: teamsError } = await supabase.from('teams').select('*').order('name', { ascending: true });
+      if (!teamsError && Array.isArray(teamsData) && teamsData.length > 0) {
+        const { data: membersData } = await supabase.from('team_members').select('*');
 
-    const { data: membersData } = await supabase.from('team_members').select('*');
+        const dbItems = teamsData.map((t: any) => {
+          const teamMems = (membersData || [])
+            .filter((m: any) => m.team_id === t.id)
+            .map((m: any) => ({
+              id: m.id,
+              teamId: m.team_id,
+              employeeId: m.employee_id,
+              employeeName: m.employee_name,
+              employeeCode: m.employee_code,
+              role: m.role || 'Member',
+            }));
 
-    return teamsData
-      .filter((t: any) => !deletedIds.has(t.id))
-      .map((t: any) => {
-        const teamMems = (membersData || [])
-          .filter((m: any) => m.team_id === t.id)
-          .map((m: any) => ({
-            id: m.id,
-            teamId: m.team_id,
-            employeeId: m.employee_id,
-            employeeName: m.employee_name,
-            employeeCode: m.employee_code,
-            role: m.role || 'Member',
-          }));
-
-        return {
-          id: t.id,
-          name: t.name,
-          code: t.code || '',
-          departmentOrProject: t.department_or_project || '',
-          teamLeadName: t.team_lead_name || '',
-          teamLeadId: t.team_lead_id || '',
-          description: t.description || '',
-          members: teamMems.length > 0 ? teamMems : undefined,
-          createdAt: t.created_at,
-          updatedAt: t.updated_at,
-        };
-      });
-  } catch {
-    return INITIAL_TEAMS.filter((t) => !deletedIds.has(t.id));
-  }
+          return {
+            id: t.id,
+            name: t.name,
+            code: t.code || '',
+            departmentOrProject: t.department_or_project || '',
+            teamLeadName: t.team_lead_name || '',
+            teamLeadId: t.team_lead_id || '',
+            description: t.description || '',
+            members: teamMems.length > 0 ? teamMems : undefined,
+            createdAt: t.created_at,
+            updatedAt: t.updated_at,
+          };
+        });
+        const dbIdSet = new Set(dbItems.map((d) => d.id));
+        baseList = [...dbItems, ...INITIAL_TEAMS.filter((i) => !dbIdSet.has(i.id))];
+      }
+    }
+  } catch {}
+  const cached = getLocalCache(TEAMS_CACHE_KEY, baseList);
+  const result = cached.filter((t) => !deletedIds.has(t.id));
+  setLocalCache(TEAMS_CACHE_KEY, result);
+  return result;
 }
 
 export async function saveTeamToSupabase(team: TeamItem): Promise<boolean> {
+  removeDeletedEntityId(team.id);
+  const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS).filter((t) => t.id !== team.id);
+  setLocalCache(TEAMS_CACHE_KEY, [team, ...cached]);
+
   try {
-    removeDeletedEntityId(team.id);
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     const teamId = team.id || `tm-${Date.now()}`;
     const payload = {
       id: teamId,
@@ -1123,7 +1213,7 @@ export async function saveTeamToSupabase(team: TeamItem): Promise<boolean> {
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('teams').upsert(payload, { onConflict: 'id' });
-    if (error) return false;
+    if (error) return true;
 
     // Sync team members
     if (team.members && team.members.length > 0) {
@@ -1140,12 +1230,15 @@ export async function saveTeamToSupabase(team: TeamItem): Promise<boolean> {
     }
     return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function deleteTeamFromSupabase(id: string): Promise<boolean> {
   addDeletedEntityId(id);
+  const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS).filter((t) => t.id !== id);
+  setLocalCache(TEAMS_CACHE_KEY, cached);
+
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
@@ -1158,35 +1251,45 @@ export async function deleteTeamFromSupabase(id: string): Promise<boolean> {
 }
 
 // --- INSURANCE CATEGORIES ---
+const INSURANCE_CACHE_KEY = 'jaago_pnc_insurance_categories_cache';
+
 export async function fetchInsuranceCategoriesFromSupabase(): Promise<InsuranceCategoryItem[]> {
   const deletedIds = getDeletedEntityIds();
+  let baseList: InsuranceCategoryItem[] = INITIAL_INSURANCE_CATEGORIES;
   try {
     const supabase = getSupabase();
-    if (!supabase) return INITIAL_INSURANCE_CATEGORIES.filter((c) => !deletedIds.has(c.id));
-    const { data, error } = await supabase.from('insurance_categories').select('*').order('monthly_premium', { ascending: false });
-    if (error || !data || data.length === 0) return INITIAL_INSURANCE_CATEGORIES.filter((c) => !deletedIds.has(c.id));
-    return data
-      .filter((row: any) => !deletedIds.has(row.id))
-      .map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        monthlyPremium: Number(row.monthly_premium || 0),
-        description: row.description || '',
-        coverageDetails: row.coverage_details || '',
-        isActive: Boolean(row.is_active),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      }));
-  } catch {
-    return INITIAL_INSURANCE_CATEGORIES.filter((c) => !deletedIds.has(c.id));
-  }
+    if (supabase) {
+      const { data, error } = await supabase.from('insurance_categories').select('*').order('monthly_premium', { ascending: false });
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const dbItems = data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          monthlyPremium: Number(row.monthly_premium || 0),
+          description: row.description || '',
+          coverageDetails: row.coverage_details || '',
+          isActive: Boolean(row.is_active),
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        }));
+        const dbIdSet = new Set(dbItems.map((d) => d.id));
+        baseList = [...dbItems, ...INITIAL_INSURANCE_CATEGORIES.filter((i) => !dbIdSet.has(i.id))];
+      }
+    }
+  } catch {}
+  const cached = getLocalCache(INSURANCE_CACHE_KEY, baseList);
+  const result = cached.filter((c) => !deletedIds.has(c.id));
+  setLocalCache(INSURANCE_CACHE_KEY, result);
+  return result;
 }
 
 export async function saveInsuranceCategoryToSupabase(cat: InsuranceCategoryItem): Promise<boolean> {
+  removeDeletedEntityId(cat.id);
+  const cached = getLocalCache(INSURANCE_CACHE_KEY, INITIAL_INSURANCE_CATEGORIES).filter((c) => c.id !== cat.id);
+  setLocalCache(INSURANCE_CACHE_KEY, [cat, ...cached]);
+
   try {
-    removeDeletedEntityId(cat.id);
     const supabase = getSupabase();
-    if (!supabase) return false;
+    if (!supabase) return true;
     const payload = {
       id: cat.id || `ins-${Date.now()}`,
       name: cat.name,
@@ -1199,12 +1302,15 @@ export async function saveInsuranceCategoryToSupabase(cat: InsuranceCategoryItem
     const { error } = await supabase.from('insurance_categories').upsert(payload, { onConflict: 'id' });
     return !error;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function deleteInsuranceCategoryFromSupabase(id: string): Promise<boolean> {
   addDeletedEntityId(id);
+  const cached = getLocalCache(INSURANCE_CACHE_KEY, INITIAL_INSURANCE_CATEGORIES).filter((c) => c.id !== id);
+  setLocalCache(INSURANCE_CACHE_KEY, cached);
+
   try {
     const supabase = getSupabase();
     if (!supabase) return true;

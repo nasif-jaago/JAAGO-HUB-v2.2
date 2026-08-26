@@ -16,14 +16,13 @@ import {
 } from 'lucide-react';
 import {
   InsuranceCategoryItem,
-  INITIAL_INSURANCE_CATEGORIES,
   fetchInsuranceCategoriesFromSupabase,
   saveInsuranceCategoryToSupabase,
   deleteInsuranceCategoryFromSupabase,
 } from '@/lib/supabase-organization';
 
 export default function InsurancePage() {
-  const [categories, setCategories] = useState<InsuranceCategoryItem[]>(INITIAL_INSURANCE_CATEGORIES);
+  const [categories, setCategories] = useState<InsuranceCategoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -43,7 +42,7 @@ export default function InsurancePage() {
 
   useEffect(() => {
     fetchInsuranceCategoriesFromSupabase().then((data) => {
-      if (data && data.length > 0) setCategories(data);
+      if (data) setCategories(data);
     });
   }, []);
 
@@ -148,11 +147,10 @@ export default function InsurancePage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    setCategories((prev) => prev.filter((c) => !selectedIds.includes(c.id)));
-    for (const id of selectedIds) {
-      await deleteInsuranceCategoryFromSupabase(id);
-    }
+    const idsToDelete = [...selectedIds];
+    setCategories((prev) => prev.filter((c) => !idsToDelete.includes(c.id)));
     setSelectedIds([]);
+    await Promise.all(idsToDelete.map((id) => deleteInsuranceCategoryFromSupabase(id)));
     showToast(`${count} category/categories deleted`);
   };
 

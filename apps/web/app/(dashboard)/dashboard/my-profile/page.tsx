@@ -12,7 +12,7 @@ import {
   EyeOff,
   Loader2,
 } from 'lucide-react';
-import { DashboardSubNav } from '@/components/dashboard-sub-nav';
+import Link from 'next/link';
 import {
   getActiveEmployeeProfile,
   updateEmployeeProfileDetails,
@@ -247,10 +247,30 @@ export default function MyProfilePage() {
         .toUpperCase()
     : 'NK';
 
+  const [photoError, setPhotoError] = useState(false);
+
   return (
     <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none">
-      {/* ── Sub Navigation Strip ── */}
-      <DashboardSubNav activeTab="my-profile" />
+      {/* ── Page Header & Breadcrumbs ── */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center space-x-2 text-xs font-semibold text-muted-foreground">
+          <Link
+            href="/dashboard"
+            className="hover:text-foreground transition cursor-pointer"
+          >
+            Dashboards
+          </Link>
+          <span>&gt;</span>
+          <Link
+            href="/dashboard"
+            className="hover:text-primary transition cursor-pointer"
+          >
+            My Dashboard
+          </Link>
+          <span>&gt;</span>
+          <span className="text-foreground font-bold">My Profile</span>
+        </div>
+      </div>
 
       {/* Alert Notifications */}
       {loading ? (
@@ -329,10 +349,11 @@ export default function MyProfilePage() {
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     <span className="text-[10px] font-bold">Uploading...</span>
                   </div>
-                ) : profile.avatarUrl ? (
+                ) : profile.avatarUrl && !photoError ? (
                   <img
                     src={profile.avatarUrl}
                     alt={profile.name}
+                    onError={() => setPhotoError(true)}
                     className="h-full w-full object-cover rounded-2xl"
                   />
                 ) : (

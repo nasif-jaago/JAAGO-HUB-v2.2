@@ -14,6 +14,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { signOutUser } from '@/lib/supabase-auth';
 
 
@@ -132,17 +133,35 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
 
         {/* Desktop Breadcrumbs */}
         <div className="hidden sm:flex items-center space-x-2 text-xs sm:text-sm font-semibold tracking-wide">
-          <span className="text-primary font-black tracking-wider">JAAGO HUB</span>
-          <span className="text-header-foreground/50 hidden sm:inline">Dashboards</span>
+          <Link
+            href="/dashboard"
+            className="text-primary font-black tracking-wider hover:opacity-85 transition cursor-pointer"
+          >
+            JAAGO HUB
+          </Link>
+          <Link
+            href="/dashboard"
+            className="text-header-foreground/60 hover:text-header-foreground transition hidden sm:inline cursor-pointer"
+          >
+            Dashboards
+          </Link>
           <span className="text-header-foreground/50 hidden sm:inline">&gt;</span>
-          <span className="text-header-foreground">My Dashboard</span>
+          <Link
+            href="/dashboard"
+            className="text-header-foreground hover:text-primary transition cursor-pointer"
+          >
+            My Dashboard
+          </Link>
         </div>
       </div>
 
       {/* Center on Mobile: JAAGO HUB Brand */}
-      <div className="sm:hidden text-base font-black tracking-wider text-foreground">
+      <Link
+        href="/dashboard"
+        className="sm:hidden text-base font-black tracking-wider text-foreground hover:opacity-85 transition cursor-pointer"
+      >
         <span className="text-primary">JAAGO</span> HUB
-      </div>
+      </Link>
 
       {/* Right: Actions */}
       <div className="flex items-center space-x-1.5 sm:space-x-3">

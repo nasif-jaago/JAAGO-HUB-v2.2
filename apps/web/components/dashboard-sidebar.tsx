@@ -109,10 +109,12 @@ export function DashboardSidebar({
         >
           <ChevronLeft className="h-3.5 w-3.5 text-foreground" />
         </button>
-        {/* Official JAAGO Foundation Logo Card */}
+        {/* Official JAAGO Foundation Logo Card (Clickable to Dashboard Home) */}
         <div className="flex items-center justify-center py-1">
-          <div
-            className={`inline-flex items-center justify-center p-1 rounded-2xl overflow-hidden shadow-[0_0_14px_rgba(255,230,0,0.35)] border-2 border-primary bg-surface group transition transform hover:scale-[1.02] ${
+          <Link
+            href="/dashboard"
+            title="JAAGO Foundation - Dashboard Home"
+            className={`inline-flex items-center justify-center p-1 rounded-2xl overflow-hidden shadow-[0_0_14px_rgba(255,230,0,0.35)] border-2 border-primary bg-surface group transition transform hover:scale-[1.03] active:scale-95 cursor-pointer ${
               collapsed ? 'w-12 h-12' : ''
             }`}
           >
@@ -126,7 +128,7 @@ export function DashboardSidebar({
                 collapsed ? 'w-9 h-9 object-contain' : 'w-auto h-14 sm:h-16 object-contain'
               } block rounded-xl`}
             />
-          </div>
+          </Link>
         </div>
 
         {/* Navigation Menus */}

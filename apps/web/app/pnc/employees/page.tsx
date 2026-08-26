@@ -31,6 +31,7 @@ import {
   archiveEmployeesInSupabase,
   unarchiveEmployeesInSupabase,
   deleteEmployeesFromSupabase,
+  getDeletedEmployeeCodes,
 } from '@/lib/supabase-employees';
 import { syncEmployeeToLocalUser } from '@/lib/user-profile-sync';
 
@@ -48,6 +49,7 @@ const INITIAL_EMPLOYEES: FullEmployeeProfile[] = [
     organization: 'JAAGO Foundation Trust',
     branch: 'Head Office (Banani)',
     project: 'Tech 4 Development',
+    team: 'Core Development Team',
     supervisor: 'Founder & Executive Director',
     secondarySupervisor: 'Habibur Rahman',
     workLocation: 'Banani, Dhaka',
@@ -97,6 +99,19 @@ const INITIAL_EMPLOYEES: FullEmployeeProfile[] = [
     adjustmentEndDate: '2028-12-31',
     assignedTeacherStaff: 'Core Management',
     payrollRemark: 'Coordinator payroll grade',
+
+    insuranceStatus: 'Active',
+    insuranceCoverageCategory: 'Executive Coverage (Plan A)',
+    insuranceMonthlyPremium: 2500,
+    employeeHealthInsuranceId: 'HI-EMP-10029',
+    spouseHealthInsuranceId: '',
+    spouseName: '',
+    child1HealthInsuranceId: '',
+    child1Name: '',
+    child2HealthInsuranceId: '',
+    child2Name: '',
+    child3HealthInsuranceId: '',
+    child3Name: '',
 
     officeDays: 'Sunday to Thursday',
     officeHours: '10:00 AM - 06:00 PM',
@@ -168,12 +183,13 @@ export default function PnCEmployeesPage() {
   // Hydrate state on client mount to prevent SSR mismatch
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      const deletedCodes = getDeletedEmployeeCodes();
       try {
         const saved = localStorage.getItem('jaago_pnc_employees_v2');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setEmployees(parsed);
+          if (Array.isArray(parsed)) {
+            setEmployees(parsed.filter((e: any) => !deletedCodes.has(e.code)));
           }
         }
       } catch {}
@@ -201,26 +217,28 @@ export default function PnCEmployeesPage() {
 
       // Fetch latest employees directly from Supabase PostgreSQL (Source of Truth)
       fetchEmployeesFromSupabase().then((remoteData) => {
-        if (remoteData && remoteData.length > 0) {
-          setEmployees(remoteData);
+        const currentDeleted = getDeletedEmployeeCodes();
+        if (remoteData !== null) {
+          const filtered = remoteData.filter((e) => !currentDeleted.has(e.code));
+          setEmployees(filtered);
           try {
-            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(remoteData));
+            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(filtered));
           } catch {}
 
           if (urlId) {
-            const target = remoteData.find((e) => e.id === urlId || e.code === urlId);
+            const target = filtered.find((e) => e.id === urlId || e.code === urlId);
             if (target) setSelectedProfile(target);
           }
         } else {
-          // If Supabase table is fresh/empty, seed default staff
-          setEmployees(INITIAL_EMPLOYEES);
+          // If remoteData is null (offline/error), use INITIAL_EMPLOYEES filtered by deletedCodes
+          const initialFiltered = INITIAL_EMPLOYEES.filter((e) => !currentDeleted.has(e.code));
+          setEmployees(initialFiltered);
           try {
-            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(INITIAL_EMPLOYEES));
+            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(initialFiltered));
           } catch {}
-          INITIAL_EMPLOYEES.forEach((s) => saveEmployeeToSupabase(s));
 
           if (urlId) {
-            const target = INITIAL_EMPLOYEES.find((e) => e.id === urlId || e.code === urlId);
+            const target = initialFiltered.find((e) => e.id === urlId || e.code === urlId);
             if (target) setSelectedProfile(target);
           }
         }
