@@ -335,8 +335,26 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center space-x-2 p-0.5 rounded-full hover:ring-2 hover:ring-primary/50 transition cursor-pointer"
           >
-            <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-black flex items-center justify-center text-xs shadow-md">
-              IA
+            <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-black flex items-center justify-center text-xs shadow-md overflow-hidden border border-primary/40">
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.fullName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span>
+                  {user.fullName
+                    ? user.fullName
+                        .split(' ')
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((n) => n[0])
+                        .join('')
+                        .toUpperCase()
+                    : 'NK'}
+                </span>
+              )}
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:block" />
           </button>
@@ -347,7 +365,17 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
                 <div className="text-xs font-bold text-foreground truncate">{user.fullName}</div>
                 <div className="text-[11px] text-muted-foreground truncate">{user.jobTitle}</div>
               </div>
-              <div className="pt-2">
+              <div className="pt-2 space-y-1">
+                <button
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    router.push('/dashboard/my-profile');
+                  }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition cursor-pointer"
+                >
+                  <span className="h-2 w-2 rounded-full bg-primary" />
+                  <span>My Profile</span>
+                </button>
                 <button
                   onClick={handleSignOut}
                   className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl transition cursor-pointer"

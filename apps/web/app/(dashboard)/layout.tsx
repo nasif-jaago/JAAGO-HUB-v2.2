@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DashboardHeader } from '@/components/dashboard-header';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
+import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
 
 export default function DashboardLayout({
   children,
@@ -22,7 +23,19 @@ export default function DashboardLayout({
   useEffect(() => {
     startAutoHideTimer();
 
+    const handleUserUpdated = (e: any) => {
+      if (e.detail?.user) {
+        setCurrentUser({
+          fullName: e.detail.user.fullName || 'Nasif Kamal',
+          jobTitle: e.detail.user.jobTitle || 'Coordinator',
+          avatarUrl: e.detail.user.avatarUrl || '',
+        });
+      }
+    };
+
     if (typeof window !== 'undefined') {
+      window.addEventListener('jaago_user_updated', handleUserUpdated);
+
       try {
         const storedUser = localStorage.getItem('jaago_user');
         if (storedUser) {
@@ -36,10 +49,24 @@ export default function DashboardLayout({
           }
         }
       } catch {}
+
+      // Fetch latest from Supabase
+      getActiveEmployeeProfile().then((emp) => {
+        if (emp) {
+          setCurrentUser({
+            fullName: emp.name,
+            jobTitle: emp.designation,
+            avatarUrl: emp.avatarUrl || '',
+          });
+        }
+      });
     }
 
     return () => {
       clearAutoHideTimer();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('jaago_user_updated', handleUserUpdated);
+      }
     };
   }, []);
 

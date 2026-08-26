@@ -1,5 +1,6 @@
 import { getSupabase } from './supabase-auth';
 import type { FullEmployeeProfile, LogHistoryEntry } from '@/components/pnc/employee-profile-detail';
+export type { FullEmployeeProfile, LogHistoryEntry };
 
 /**
  * Maps database snake_case row to frontend FullEmployeeProfile

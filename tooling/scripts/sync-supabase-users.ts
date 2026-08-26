@@ -41,7 +41,7 @@ const defaultUsers = [
     branch: 'Head Office (Banani)',
     jobTitle: 'Coordinator',
     phone: '+880 1711 000101',
-    password: 'Password@123',
+    password: '$PasswordKey?',
   },
   {
     email: 'masoor.rahman@jaago.com.bd',

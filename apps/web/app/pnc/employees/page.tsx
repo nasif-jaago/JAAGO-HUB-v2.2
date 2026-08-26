@@ -32,6 +32,7 @@ import {
   unarchiveEmployeesInSupabase,
   deleteEmployeesFromSupabase,
 } from '@/lib/supabase-employees';
+import { syncEmployeeToLocalUser } from '@/lib/user-profile-sync';
 
 const INITIAL_EMPLOYEES: FullEmployeeProfile[] = [
   {
@@ -290,6 +291,7 @@ export default function PnCEmployeesPage() {
 
     // Save to Supabase PostgreSQL in background
     await saveEmployeeToSupabase(updatedProfile, updatedProfile.logHistory);
+    syncEmployeeToLocalUser(updatedProfile);
   };
 
   // Create User Account from Employee and send Invite Email

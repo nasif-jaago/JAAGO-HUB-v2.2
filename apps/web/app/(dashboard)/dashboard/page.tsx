@@ -16,6 +16,8 @@ import {
   Inbox,
   Timer,
 } from 'lucide-react';
+import { DashboardSubNav } from '@/components/dashboard-sub-nav';
+import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
 
 export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
@@ -25,9 +27,10 @@ export default function DashboardPage() {
   const [user, setUser] = useState({
     fullName: 'Nasif Kamal',
     jobTitle: 'Coordinator',
-    department: "Founder's Office",
+    department: "Founder's Office / FC",
     manager: 'S M Nayeem Rahman',
     organization: 'JAAGO Foundation Trust',
+    avatarUrl: '',
   });
 
   // Hydrate view mode, attendance status & elapsed timer from localStorage
@@ -40,6 +43,21 @@ export default function DashboardPage() {
       }
     };
     window.addEventListener('jaago_view_mode_change', handleViewModeChange);
+
+    const handleUserUpdated = (e: any) => {
+      if (e.detail?.user) {
+        const u = e.detail.user;
+        setUser({
+          fullName: u.fullName || 'Nasif Kamal',
+          jobTitle: u.jobTitle || 'Coordinator',
+          department: u.department || "Founder's Office / FC",
+          manager: u.manager || 'S M Nayeem Rahman',
+          organization: u.organizationName || 'JAAGO Foundation Trust',
+          avatarUrl: u.avatarUrl || '',
+        });
+      }
+    };
+    window.addEventListener('jaago_user_updated', handleUserUpdated);
 
     try {
       const savedViewMode = localStorage.getItem('jaago_view_mode') as 'desktop' | 'mobile' | null;
@@ -54,12 +72,27 @@ export default function DashboardPage() {
           setUser({
             fullName: parsed.fullName,
             jobTitle: parsed.jobTitle || 'Coordinator',
-            department: parsed.department || "Founder's Office",
+            department: parsed.department || "Founder's Office / FC",
             manager: parsed.manager || 'S M Nayeem Rahman',
-            organization: 'JAAGO Foundation Trust',
+            organization: parsed.organizationName || 'JAAGO Foundation Trust',
+            avatarUrl: parsed.avatarUrl || '',
           });
         }
       }
+
+      // Fetch active employee from Supabase
+      getActiveEmployeeProfile().then((emp) => {
+        if (emp) {
+          setUser({
+            fullName: emp.name,
+            jobTitle: emp.designation,
+            department: emp.department || "Founder's Office / FC",
+            manager: emp.supervisor || 'S M Nayeem Rahman',
+            organization: emp.organization || 'JAAGO Foundation Trust',
+            avatarUrl: emp.avatarUrl || '',
+          });
+        }
+      });
 
       const savedState = localStorage.getItem('jaago_is_checked_in');
       const savedTime = localStorage.getItem('jaago_checkin_timestamp');
@@ -81,6 +114,7 @@ export default function DashboardPage() {
 
     return () => {
       window.removeEventListener('jaago_view_mode_change', handleViewModeChange);
+      window.removeEventListener('jaago_user_updated', handleUserUpdated);
     };
   }, []);
 
@@ -141,6 +175,9 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none">
+      {/* ── Dashboard Sub-Navigation Strip (Overview | My Profile | ...) ── */}
+      <DashboardSubNav activeTab="overview" />
+
       {/* ========================================================================= */}
       {/* 📱 MOBILE VIEW ONLY (Strictly based on Reference Images 2 & 3)            */}
       {/* ========================================================================= */}
@@ -150,13 +187,36 @@ export default function DashboardPage() {
         } space-y-4 pt-1`}
       >
         {/* User Greeting Header */}
-        <div className="space-y-0.5 px-1">
-          <h1 className="text-2xl font-black tracking-tight text-foreground">
-            Hi, {firstName}!
-          </h1>
-          <p className="text-xs font-semibold text-muted-foreground">
-            {user.jobTitle}
-          </p>
+        <div className="flex items-center space-x-3 px-1">
+          <div className="h-12 w-12 rounded-xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-sm flex-shrink-0">
+            {user.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.fullName}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-primary font-black text-base">
+                {user.fullName
+                  ? user.fullName
+                      .split(' ')
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((n) => n[0])
+                      .join('')
+                      .toUpperCase()
+                  : 'NK'}
+              </span>
+            )}
+          </div>
+          <div className="space-y-0.5 min-w-0">
+            <h1 className="text-xl font-black tracking-tight text-foreground truncate">
+              Hi, {firstName}!
+            </h1>
+            <p className="text-xs font-semibold text-muted-foreground truncate">
+              {user.jobTitle} &bull; {user.organization}
+            </p>
+          </div>
         </div>
 
         <div className="h-px bg-border/60 my-2" />
@@ -345,9 +405,25 @@ export default function DashboardPage() {
             {/* Avatar inside Yellow Border Card with Green Online Dot */}
             <div className="relative flex-shrink-0">
               <div className="h-20 w-20 rounded-2xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-md">
-                <div className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 flex items-center justify-center text-primary font-black text-2xl">
-                  NK
-                </div>
+                {user.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.fullName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 flex items-center justify-center text-primary font-black text-2xl">
+                    {user.fullName
+                      ? user.fullName
+                          .split(' ')
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase()
+                      : 'NK'}
+                  </div>
+                )}
               </div>
               {/* Online Green Indicator Dot */}
               <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-card shadow-sm animate-pulse" />

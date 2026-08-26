@@ -175,6 +175,20 @@ export function DashboardSidebar({
                   <span>Overview</span>
                 </Link>
 
+                {/* 1.2 My Profile */}
+                <Link
+                  href="/dashboard/my-profile"
+                  title="My Profile"
+                  className={`w-full flex items-center space-x-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                    pathname === '/dashboard/my-profile'
+                      ? 'bg-primary/20 text-foreground font-black border border-primary/40'
+                      : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
+                  }`}
+                >
+                  <UserCheck className="h-4 w-4 text-foreground flex-shrink-0" />
+                  <span>My Profile</span>
+                </Link>
+
                 {/* 1.2 Requests Accordion */}
                 <div className="space-y-0.5">
                   <button
