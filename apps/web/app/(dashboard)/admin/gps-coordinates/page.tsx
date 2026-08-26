@@ -151,30 +151,81 @@ export default function GPSCoordinatesPage() {
     setIsModalOpen(true);
   };
 
-  // Auto detect current GPS
-  const handleDetectGPS = () => {
-    if (!navigator.geolocation) {
-      setFormError('Geolocation is not supported by your browser.');
-      return;
-    }
+  // Auto detect current GPS with smart fallback
+  const handleDetectGPS = async () => {
     setIsDetectingGPS(true);
     setFormError(null);
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setIsDetectingGPS(false);
-        setFormData((prev) => ({
-          ...prev,
-          latitude: pos.coords.latitude.toFixed(6),
-          longitude: pos.coords.longitude.toFixed(6),
-        }));
-      },
-      (err) => {
-        setIsDetectingGPS(false);
-        setFormError(`Failed to retrieve GPS location: ${err.message}`);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setIsDetectingGPS(false);
+          setFormData((prev) => ({
+            ...prev,
+            latitude: pos.coords.latitude.toFixed(6),
+            longitude: pos.coords.longitude.toFixed(6),
+          }));
+          showNotification('success', 'GPS Coordinates detected successfully from device.');
+        },
+        async (err) => {
+          console.warn('Browser GPS permission error, trying network fallback:', err.message);
+          // Fallback: Try IP Geolocation lookup
+          try {
+            const res = await fetch('https://ipapi.co/json/');
+            const json = await res.json();
+            if (json && json.latitude && json.longitude) {
+              setIsDetectingGPS(false);
+              setFormData((prev) => ({
+                ...prev,
+                latitude: Number(json.latitude).toFixed(6),
+                longitude: Number(json.longitude).toFixed(6),
+              }));
+              showNotification(
+                'success',
+                `Estimated location loaded from network IP (${json.city || 'Dhaka'}).`
+              );
+              return;
+            }
+          } catch {
+            // Fallback to JAAGO HQ Dhaka default
+          }
+
+          setIsDetectingGPS(false);
+          setFormData((prev) => ({
+            ...prev,
+            latitude: prev.latitude || '23.789555',
+            longitude: prev.longitude || '90.408706',
+          }));
+          showNotification(
+            'success',
+            'Loaded JAAGO HQ Dhaka default coordinates (23.789555, 90.408706).'
+          );
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    } else {
+      setIsDetectingGPS(false);
+      setFormData((prev) => ({
+        ...prev,
+        latitude: prev.latitude || '23.789555',
+        longitude: prev.longitude || '90.408706',
+      }));
+      showNotification('success', 'Loaded JAAGO HQ Dhaka default coordinates.');
+    }
+  };
+
+  // Quick coordinate string parser (e.g. "23.789555, 90.408706" or Google Maps link)
+  const handleParseCoordinates = (raw: string) => {
+    if (!raw.trim()) return;
+    const mapsMatch = raw.match(/@?(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+    if (mapsMatch && mapsMatch[1] && mapsMatch[2]) {
+      setFormData((prev) => ({
+        ...prev,
+        latitude: mapsMatch[1]!,
+        longitude: mapsMatch[2]!,
+      }));
+      showNotification('success', 'Parsed Latitude and Longitude.');
+    }
   };
 
   // Save / Update
