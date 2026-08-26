@@ -41,6 +41,7 @@ import {
   savePolicyToSupabase,
   deletePolicyFromSupabase,
 } from '@/lib/supabase-organization';
+import { resizeAndCropImage } from '@/lib/supabase-storage';
 
 type PolicyCategory = 'ALL' | 'GENERAL' | 'LEAVE' | 'ATTENDANCE' | 'CODE OF CONDUCT' | 'TRAVEL' | 'EXPENSES' | 'OTHER';
 
@@ -147,6 +148,44 @@ export default function OrganizationPage() {
     setPolicies([]);
     setIsCreatingNew(true);
     setActiveTab('GENERAL');
+  };
+
+  // Handle Logo Upload
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Logo image size exceeds 5MB limit', 'error');
+      return;
+    }
+
+    try {
+      const { dataUrl } = await resizeAndCropImage(file, 500, 0.92);
+      setFormData((prev) => ({
+        ...prev,
+        logoUrl: dataUrl,
+      }));
+      showToast('Logo selected! Click Save Profile to apply changes.');
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        setFormData((prev) => ({
+          ...prev,
+          logoUrl: result,
+        }));
+        showToast('Logo selected! Click Save Profile to apply changes.');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFormData((prev) => ({ ...prev, logoUrl: '' }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    showToast('Logo removed. Click Save Profile to save.');
   };
 
   // Save Company General Info
@@ -635,24 +674,43 @@ export default function OrganizationPage() {
               <div
                 onClick={() => fileInputRef.current?.click()}
                 className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl border-2 border-dashed border-amber-500/40 bg-surface/60 hover:bg-amber-500/10 transition flex flex-col items-center justify-center text-center p-2 cursor-pointer relative overflow-hidden group flex-shrink-0"
-                title="Click to upload company logo"
+                title="Click to upload or change company logo"
               >
                 {formData.logoUrl ? (
-                  <Image
-                    src={formData.logoUrl}
-                    alt={formData.name || 'Company Logo'}
-                    fill
-                    sizes="112px"
-                    unoptimized
-                    className="object-contain p-2"
-                  />
+                  <>
+                    <Image
+                      src={formData.logoUrl}
+                      alt={formData.name || 'Company Logo'}
+                      fill
+                      sizes="112px"
+                      unoptimized
+                      className="object-contain p-2"
+                    />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex flex-col items-center justify-center text-white text-[10px] font-bold p-1">
+                      <span>Change Logo</span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="mt-1 px-1.5 py-0.5 rounded bg-rose-500 hover:bg-rose-600 text-[9px] text-white transition"
+                        title="Remove Logo"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <div className="flex flex-col items-center text-muted-foreground group-hover:text-amber-500 transition">
                     <Building2 className="h-7 w-7 mb-1 text-amber-500/80" />
-                    <span className="text-[10px] font-bold text-foreground">Your Logo</span>
+                    <span className="text-[10px] font-bold text-foreground">Upload Logo</span>
                   </div>
                 )}
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoChange}
+                  className="hidden"
+                />
               </div>
 
               {/* Right: Company Name Field */}

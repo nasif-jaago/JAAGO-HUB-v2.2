@@ -15,6 +15,7 @@ export interface UserSessionData {
   department?: string;
   manager?: string;
   employeeCode?: string;
+  workingSchedule?: string;
   roles?: string[];
   permissions?: string[];
 }
@@ -125,6 +126,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       department: employee.department,
       manager: employee.supervisor || 'Founder & Executive Director',
       employeeCode: employee.code,
+      workingSchedule: employee.workingSchedule || existing.workingSchedule || 'General Schedule (10:00 AM - 6:00 PM)',
     };
 
     localStorage.setItem('jaago_user', JSON.stringify(updatedUser));

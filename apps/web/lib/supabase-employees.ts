@@ -234,6 +234,9 @@ export async function saveEmployeeToSupabase(
   newLogs: LogHistoryEntry[] = []
 ): Promise<{ success: boolean; data?: FullEmployeeProfile; error?: string }> {
   try {
+    if (profile.code) {
+      removeDeletedEmployeeCode(profile.code);
+    }
     const payload = mapEmployeeProfileToPayload(profile);
     const body = {
       ...(profile.id && !profile.id.startsWith('emp-') ? { id: profile.id } : {}),

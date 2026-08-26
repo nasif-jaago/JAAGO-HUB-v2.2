@@ -37,8 +37,9 @@ CREATE TABLE public.employees (
     -- Tab 1: Work & Operational Hierarchy
     organization                VARCHAR(150) NOT NULL DEFAULT 'JAAGO Foundation Trust',
     branch                      VARCHAR(150) NOT NULL DEFAULT 'Head Office (Banani)',
-    department                  VARCHAR(150) NOT NULL DEFAULT "Founder's Office / FC",
+    department                  VARCHAR(150) NOT NULL DEFAULT 'Founder''s Office / FC',
     project                     VARCHAR(255) DEFAULT 'Tech 4 Development',
+    team                        VARCHAR(255) DEFAULT 'Core Development Team',
     supervisor                  VARCHAR(255),
     secondary_supervisor        VARCHAR(255),
     work_location               VARCHAR(255) DEFAULT 'Banani, Dhaka',
@@ -90,7 +91,21 @@ CREATE TABLE public.employees (
     assigned_teacher_staff      VARCHAR(255) DEFAULT 'Core Management',
     payroll_remark              TEXT,
 
-    -- Tab 4: DSP & Shift Schedule
+    -- Tab 4: Health & Life Insurance (Enterprise Covered)
+    insurance_status            VARCHAR(50) DEFAULT 'Active',
+    insurance_coverage_category VARCHAR(150) DEFAULT 'Executive Coverage (Plan A)',
+    insurance_monthly_premium   NUMERIC(15, 2) DEFAULT 2500.00,
+    employee_health_insurance_id VARCHAR(100) DEFAULT 'HI-EMP-10029',
+    spouse_health_insurance_id  VARCHAR(100),
+    spouse_name                 VARCHAR(255),
+    child1_health_insurance_id  VARCHAR(100),
+    child1_name                 VARCHAR(255),
+    child2_health_insurance_id  VARCHAR(100),
+    child2_name                 VARCHAR(255),
+    child3_health_insurance_id  VARCHAR(100),
+    child3_name                 VARCHAR(255),
+
+    -- Tab 5: DSP & Shift Schedule
     office_days                 VARCHAR(100) NOT NULL DEFAULT 'Sunday to Thursday',
     custom_office_days_from     VARCHAR(50),
     custom_office_days_to       VARCHAR(50),
@@ -132,6 +147,8 @@ CREATE INDEX idx_employees_status ON public.employees(status);
 CREATE INDEX idx_employees_dept ON public.employees(department);
 CREATE INDEX idx_employees_org ON public.employees(organization);
 CREATE INDEX idx_employees_branch ON public.employees(branch);
+CREATE INDEX idx_employees_project ON public.employees(project);
+CREATE INDEX idx_employees_team ON public.employees(team);
 CREATE INDEX idx_employees_is_archived ON public.employees(is_archived);
 CREATE INDEX idx_activity_logs_emp_id ON public.employee_activity_logs(employee_id);
 CREATE INDEX idx_activity_logs_created_at ON public.employee_activity_logs(created_at DESC);
@@ -171,8 +188,9 @@ USING (true)
 WITH CHECK (true);
 
 -- ------------------------------------------------------------------------------
--- 8. SUPABASE STORAGE BUCKET & ACCESS POLICIES
+-- 8. SUPABASE STORAGE BUCKETS & MULTI-BUCKET CONFIGURATION
 -- ------------------------------------------------------------------------------
+-- 8.1 Employee Avatars & Profile Photos Bucket
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
     'employees',
@@ -186,18 +204,46 @@ ON CONFLICT (id) DO UPDATE SET
     file_size_limit = 5242880,
     allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
+-- 8.2 Organization & Company Logos Bucket
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+    'organization-logos',
+    'organization-logos',
+    true,
+    5242880, -- 5 MB limit
+    ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']
+)
+ON CONFLICT (id) DO UPDATE SET
+    public = true,
+    file_size_limit = 5242880,
+    allowed_mime_types = ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+
+-- 8.3 Organization Policy & Attachment Documents Bucket
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+    'policy-documents',
+    'policy-documents',
+    true,
+    20971520, -- 20 MB limit
+    ARRAY['application/pdf', 'image/jpeg', 'image/png', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+)
+ON CONFLICT (id) DO UPDATE SET
+    public = true,
+    file_size_limit = 20971520,
+    allowed_mime_types = ARRAY['application/pdf', 'image/jpeg', 'image/png', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+
 -- Storage RLS Policies
-DROP POLICY IF EXISTS "Public View Access on Employees Bucket" ON storage.objects;
-DROP POLICY IF EXISTS "Full Access on Employees Bucket" ON storage.objects;
+DROP POLICY IF EXISTS "Public View Access on Storage Objects" ON storage.objects;
+DROP POLICY IF EXISTS "Full Access on Storage Objects" ON storage.objects;
 
-CREATE POLICY "Public View Access on Employees Bucket"
+CREATE POLICY "Public View Access on Storage Objects"
 ON storage.objects FOR SELECT
-USING (bucket_id = 'employees');
+USING (bucket_id IN ('employees', 'organization-logos', 'policy-documents'));
 
-CREATE POLICY "Full Access on Employees Bucket"
+CREATE POLICY "Full Access on Storage Objects"
 ON storage.objects FOR ALL
-USING (bucket_id = 'employees')
-WITH CHECK (bucket_id = 'employees');
+USING (bucket_id IN ('employees', 'organization-logos', 'policy-documents'))
+WITH CHECK (bucket_id IN ('employees', 'organization-logos', 'policy-documents'));
 
 -- ------------------------------------------------------------------------------
 -- 9. INITIAL PRODUCTION DATA: PRIMARY EMPLOYEE (Nasif Kamal)
@@ -216,6 +262,7 @@ INSERT INTO public.employees (
     branch,
     department,
     project,
+    team,
     supervisor,
     secondary_supervisor,
     work_location,
@@ -254,6 +301,10 @@ INSERT INTO public.employees (
     regular_salary,
     total_current_salary,
     currency,
+    insurance_status,
+    insurance_coverage_category,
+    insurance_monthly_premium,
+    employee_health_insurance_id,
     office_days,
     office_hours,
     rfid,
@@ -272,8 +323,9 @@ INSERT INTO public.employees (
     FALSE,
     'JAAGO Foundation Trust',
     'Head Office (Banani)',
-    "Founder's Office / FC",
+    'Founder''s Office / FC',
     'Tech 4 Development',
+    'Core Development Team',
     'Founder & Executive Director',
     'Habibur Rahman',
     'Banani, Dhaka',
@@ -312,6 +364,10 @@ INSERT INTO public.employees (
     150000.00,
     150000.00,
     'BDT',
+    'Active',
+    'Executive Coverage (Plan A)',
+    2500.00,
+    'HI-EMP-10029',
     'Sunday to Thursday',
     '10:00 AM - 06:00 PM',
     'RFID-100290',
@@ -326,9 +382,17 @@ ON CONFLICT (code) DO UPDATE SET
     status = EXCLUDED.status,
     organization = EXCLUDED.organization,
     department = EXCLUDED.department,
+    project = EXCLUDED.project,
+    team = EXCLUDED.team,
+    insurance_status = EXCLUDED.insurance_status,
+    insurance_coverage_category = EXCLUDED.insurance_coverage_category,
+    insurance_monthly_premium = EXCLUDED.insurance_monthly_premium,
+    employee_health_insurance_id = EXCLUDED.employee_health_insurance_id,
     updated_at = NOW();
 
--- Activity Log for Initial Provisioning
+-- ------------------------------------------------------------------------------
+-- 10. INITIAL AUDIT ACTIVITY LOG
+-- ------------------------------------------------------------------------------
 INSERT INTO public.employee_activity_logs (
     employee_id,
     employee_code,

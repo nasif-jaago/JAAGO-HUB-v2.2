@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -56,10 +56,27 @@ export default function TeamsPage() {
   // Autocomplete state for Team Lead (3+ characters)
   const [leadQuery, setLeadQuery] = useState('');
   const [showLeadDropdown, setShowLeadDropdown] = useState(false);
+  const leadRef = useRef<HTMLDivElement>(null);
 
   // Autocomplete state for Multiple Team Members (3+ characters)
   const [memberQuery, setMemberQuery] = useState('');
   const [showMemberDropdown, setShowMemberDropdown] = useState(false);
+  const memberRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (leadRef.current && !leadRef.current.contains(event.target as Node)) {
+        setShowLeadDropdown(false);
+      }
+      if (memberRef.current && !memberRef.current.contains(event.target as Node)) {
+        setShowMemberDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -632,7 +649,7 @@ export default function TeamsPage() {
               </div>
 
               {/* Team Lead (Data call from Employee Profile after 3 alphabets) */}
-              <div className="space-y-1 relative">
+              <div ref={leadRef} className="space-y-1 relative">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                     Team Lead
@@ -689,7 +706,7 @@ export default function TeamsPage() {
               </div>
 
               {/* Team MEMBERS (Allow Multiple add Team Members, Data call from Employee Profile after 3 alphabets) */}
-              <div className="space-y-2 pt-1 border-t border-border/60">
+              <div ref={memberRef} className="space-y-2 pt-1 border-t border-border/60">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                     Team Members (Multiple Add Allowed)

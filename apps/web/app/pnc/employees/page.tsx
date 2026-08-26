@@ -188,11 +188,21 @@ export default function PnCEmployeesPage() {
         const saved = localStorage.getItem('jaago_pnc_employees_v2');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            setEmployees(parsed.filter((e: any) => !deletedCodes.has(e.code)));
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const savedCodes = new Set(parsed.map((e: any) => e.code));
+            const nonDeletedInit = INITIAL_EMPLOYEES.filter(
+              (e) => !deletedCodes.has(e.code) && !savedCodes.has(e.code)
+            );
+            setEmployees([...parsed.filter((e: any) => !deletedCodes.has(e.code)), ...nonDeletedInit]);
+          } else {
+            setEmployees(INITIAL_EMPLOYEES.filter((e) => !deletedCodes.has(e.code)));
           }
+        } else {
+          setEmployees(INITIAL_EMPLOYEES.filter((e) => !deletedCodes.has(e.code)));
         }
-      } catch {}
+      } catch {
+        setEmployees(INITIAL_EMPLOYEES.filter((e) => !deletedCodes.has(e.code)));
+      }
 
       try {
         const userStr = localStorage.getItem('jaago_user');
@@ -218,29 +228,34 @@ export default function PnCEmployeesPage() {
       // Fetch latest employees directly from Supabase PostgreSQL (Source of Truth)
       fetchEmployeesFromSupabase().then((remoteData) => {
         const currentDeleted = getDeletedEmployeeCodes();
-        if (remoteData !== null) {
-          const filtered = remoteData.filter((e) => !currentDeleted.has(e.code));
-          setEmployees(filtered);
-          try {
-            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(filtered));
-          } catch {}
+        let combined: FullEmployeeProfile[] = [];
 
-          if (urlId) {
-            const target = filtered.find((e) => e.id === urlId || e.code === urlId);
-            if (target) setSelectedProfile(target);
-          }
+        if (remoteData && remoteData.length > 0) {
+          const remoteCodes = new Set(remoteData.map((e) => e.code));
+          const nonDeletedInitial = INITIAL_EMPLOYEES.filter(
+            (e) => !currentDeleted.has(e.code) && !remoteCodes.has(e.code)
+          );
+          combined = [
+            ...remoteData.filter((e) => !currentDeleted.has(e.code)),
+            ...nonDeletedInitial,
+          ];
         } else {
-          // If remoteData is null (offline/error), use INITIAL_EMPLOYEES filtered by deletedCodes
-          const initialFiltered = INITIAL_EMPLOYEES.filter((e) => !currentDeleted.has(e.code));
-          setEmployees(initialFiltered);
-          try {
-            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(initialFiltered));
-          } catch {}
+          // If remote is empty or errored, keep non-deleted initial employees
+          combined = INITIAL_EMPLOYEES.filter((e) => !currentDeleted.has(e.code));
+          // Auto-sync non-deleted initial employee to Supabase in background
+          combined.forEach((emp) => {
+            saveEmployeeToSupabase(emp).catch(() => {});
+          });
+        }
 
-          if (urlId) {
-            const target = initialFiltered.find((e) => e.id === urlId || e.code === urlId);
-            if (target) setSelectedProfile(target);
-          }
+        setEmployees(combined);
+        try {
+          localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(combined));
+        } catch {}
+
+        if (urlId) {
+          const target = combined.find((e) => e.id === urlId || e.code === urlId);
+          if (target) setSelectedProfile(target);
         }
       });
     }

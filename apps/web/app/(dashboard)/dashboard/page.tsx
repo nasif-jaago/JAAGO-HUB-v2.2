@@ -17,19 +17,29 @@ import {
   Timer,
 } from 'lucide-react';
 import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
+import {
+  getLocalShifts,
+  getLocalAttendanceLogs,
+  saveLocalAttendanceLogs,
+  type AttendanceLogItem,
+} from '@/lib/supabase-attendance';
 
 export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
+  const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [user, setUser] = useState({
+    id: 'emp-nasif',
     fullName: 'Nasif Kamal',
-    jobTitle: 'Coordinator',
+    jobTitle: 'Coordinator, Tech 4 Development',
     department: "Founder's Office / FC",
-    manager: 'S M Nayeem Rahman',
+    manager: 'Founder & Executive Director',
     organization: 'JAAGO Foundation Trust',
     avatarUrl: '',
+    workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
+    employeeCode: 'FO032507061190',
   });
 
   // Hydrate view mode, attendance status & elapsed timer from localStorage
@@ -46,14 +56,17 @@ export default function DashboardPage() {
     const handleUserUpdated = (e: any) => {
       if (e.detail?.user) {
         const u = e.detail.user;
-        setUser({
-          fullName: u.fullName || 'Nasif Kamal',
-          jobTitle: u.jobTitle || 'Coordinator',
-          department: u.department || "Founder's Office / FC",
-          manager: u.manager || 'S M Nayeem Rahman',
-          organization: u.organizationName || 'JAAGO Foundation Trust',
-          avatarUrl: u.avatarUrl || '',
-        });
+        setUser((prev) => ({
+          ...prev,
+          fullName: u.fullName || prev.fullName,
+          jobTitle: u.jobTitle || prev.jobTitle,
+          department: u.department || prev.department,
+          manager: u.manager || prev.manager,
+          organization: u.organizationName || prev.organization,
+          avatarUrl: u.avatarUrl || prev.avatarUrl,
+          workingSchedule: u.workingSchedule || prev.workingSchedule,
+          employeeCode: u.employeeCode || prev.employeeCode,
+        }));
       }
     };
     window.addEventListener('jaago_user_updated', handleUserUpdated);
@@ -68,14 +81,17 @@ export default function DashboardPage() {
       if (storedUser) {
         const parsed = JSON.parse(storedUser);
         if (parsed.fullName) {
-          setUser({
+          setUser((prev) => ({
+            ...prev,
             fullName: parsed.fullName,
-            jobTitle: parsed.jobTitle || 'Coordinator',
-            department: parsed.department || "Founder's Office / FC",
-            manager: parsed.manager || 'S M Nayeem Rahman',
-            organization: parsed.organizationName || 'JAAGO Foundation Trust',
-            avatarUrl: parsed.avatarUrl || '',
-          });
+            jobTitle: parsed.jobTitle || prev.jobTitle,
+            department: parsed.department || prev.department,
+            manager: parsed.manager || prev.manager,
+            organization: parsed.organizationName || prev.organization,
+            avatarUrl: parsed.avatarUrl || prev.avatarUrl,
+            workingSchedule: parsed.workingSchedule || prev.workingSchedule,
+            employeeCode: parsed.employeeCode || prev.employeeCode,
+          }));
         }
       }
 
@@ -83,12 +99,15 @@ export default function DashboardPage() {
       getActiveEmployeeProfile().then((emp) => {
         if (emp) {
           setUser({
+            id: emp.id || 'emp-nasif',
             fullName: emp.name,
             jobTitle: emp.designation,
             department: emp.department || "Founder's Office / FC",
-            manager: emp.supervisor || 'S M Nayeem Rahman',
+            manager: emp.supervisor || 'Founder & Executive Director',
             organization: emp.organization || 'JAAGO Foundation Trust',
             avatarUrl: emp.avatarUrl || '',
+            workingSchedule: emp.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
+            employeeCode: emp.code || 'FO032507061190',
           });
         }
       });
@@ -145,6 +164,22 @@ export default function DashboardPage() {
   };
 
   const handleToggleCheckIn = () => {
+    const shifts = getLocalShifts();
+    const currentSchedule = user.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)';
+    const matchedShift =
+      shifts.find(
+        (s) =>
+          currentSchedule.toLowerCase().includes(s.name.toLowerCase()) ||
+          currentSchedule.includes(s.officeStart)
+      ) ||
+      shifts[0] || {
+        name: 'General Shift',
+        officeStart: '10:00 AM',
+        startBufferMin: 15,
+        officeEnd: '06:00 PM',
+        endBufferMin: 15,
+      };
+
     if (!isCheckedIn) {
       const now = Date.now();
       const timeStr = new Date(now).toLocaleTimeString('en-US', {
@@ -152,20 +187,103 @@ export default function DashboardPage() {
         minute: '2-digit',
         hour12: true,
       });
+
+      // Calculate Late based on Shift Start Time & Start Buffer
+      let isLate = false;
+      let lateMinutes = 0;
+      try {
+        const startStr = matchedShift.officeStart || '10:00 AM';
+        const parts = startStr.split(' ');
+        const timeTokens = (parts[0] || '10:00').split(':').map(Number);
+        const sHours = timeTokens[0] ?? 10;
+        const sMins = timeTokens[1] ?? 0;
+        const meridiem = parts[1] || 'AM';
+        const shiftStartHour = (sHours % 12) + (meridiem.toUpperCase() === 'PM' ? 12 : 0);
+        const shiftStartDate = new Date();
+        shiftStartDate.setHours(shiftStartHour, sMins + (matchedShift.startBufferMin || 15), 0, 0);
+
+        if (now > shiftStartDate.getTime()) {
+          isLate = true;
+          lateMinutes = Math.max(1, Math.round((now - shiftStartDate.getTime()) / 60000));
+        }
+      } catch {
+        isLate = false;
+      }
+
       setIsCheckedIn(true);
       setCheckInTime(timeStr);
       setElapsedSeconds(0);
+
       if (typeof window !== 'undefined') {
         localStorage.setItem('jaago_is_checked_in', 'true');
         localStorage.setItem('jaago_checkin_timestamp', now.toString());
+
+        // Sync with Attendance Logs
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const logs = getLocalAttendanceLogs();
+        const existingIdx = logs.findIndex(
+          (l) => l.employeeCode === user.employeeCode && l.date === todayStr
+        );
+
+        const newLog: AttendanceLogItem = {
+          id: existingIdx >= 0 && logs[existingIdx] ? logs[existingIdx].id : `att-${Date.now()}`,
+          employeeId: user.id || 'emp-nasif',
+          employeeCode: user.employeeCode || 'FO032507061190',
+          employeeName: user.fullName || 'Nasif Kamal',
+          designation: user.jobTitle || 'Coordinator, Tech 4 Development',
+          department: user.department || "Founder's Office / FC",
+          branch: 'Head Office (Banani)',
+          status: isLate ? 'Late' : 'Present',
+          device: 'Web Portal',
+          timestamp: `${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ${timeStr}`,
+          date: todayStr,
+          checkInTime: timeStr,
+          checkOutTime: 'N/A',
+          lateByMin: isLate ? lateMinutes : 0,
+          earlyOutByMin: 0,
+          createdBy: `${user.fullName} - (${user.employeeCode})`,
+          createdAt: new Date().toLocaleString(),
+          updatedAt: new Date().toLocaleString(),
+          notes: isLate
+            ? `Late check-in by ${lateMinutes} min against ${matchedShift.name}`
+            : `On-time check-in (${matchedShift.name})`,
+        };
+
+        let updatedLogs: AttendanceLogItem[];
+        if (existingIdx >= 0) {
+          updatedLogs = [...logs];
+          updatedLogs[existingIdx] = newLog;
+        } else {
+          updatedLogs = [newLog, ...logs];
+        }
+        saveLocalAttendanceLogs(updatedLogs);
       }
     } else {
+      const now = Date.now();
+      const outTimeStr = new Date(now).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+
       setIsCheckedIn(false);
-      setCheckInTime(null);
-      setElapsedSeconds(0);
+      setCheckOutTime(outTimeStr);
+
       if (typeof window !== 'undefined') {
         localStorage.removeItem('jaago_is_checked_in');
         localStorage.removeItem('jaago_checkin_timestamp');
+        localStorage.setItem('jaago_last_checkout_time', outTimeStr);
+
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const logs = getLocalAttendanceLogs();
+        const existingIdx = logs.findIndex(
+          (l) => l.employeeCode === user.employeeCode && l.date === todayStr
+        );
+        if (existingIdx >= 0 && logs[existingIdx]) {
+          logs[existingIdx].checkOutTime = outTimeStr;
+          logs[existingIdx].updatedAt = new Date().toLocaleString();
+          saveLocalAttendanceLogs(logs);
+        }
       }
     }
   };
@@ -484,10 +602,12 @@ export default function DashboardPage() {
             {/* Check Out Box */}
             <button
               onClick={handleToggleCheckIn}
-              disabled={!isCheckedIn}
+              disabled={!isCheckedIn && !checkOutTime}
               className={`px-4 py-2.5 rounded-2xl border transition text-left flex items-center space-x-3 ${
                 isCheckedIn
                   ? 'bg-surface border-border hover:border-destructive/50 text-foreground cursor-pointer shadow-sm'
+                  : checkOutTime
+                  ? 'bg-surface border-border text-foreground'
                   : 'bg-surface/50 border-border/60 text-muted-foreground/50 cursor-not-allowed'
               }`}
             >
@@ -496,7 +616,9 @@ export default function DashboardPage() {
                 <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   CHECK OUT
                 </div>
-                <div className="text-xs font-black font-mono">--:--</div>
+                <div className="text-xs font-black font-mono">
+                  {checkOutTime || '--:--'}
+                </div>
               </div>
               <span className="text-muted-foreground/60 text-xs font-bold">-</span>
             </button>
@@ -522,7 +644,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-              Schedule: General Schedule (10:00 AM – 6:00 PM)
+              Schedule: {user.workingSchedule}
             </div>
           </div>
 

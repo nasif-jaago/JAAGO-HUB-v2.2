@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   FolderGit2,
   Plus,
@@ -58,6 +58,19 @@ export default function ProjectsPage() {
   // Autocomplete state for Project Manager (3+ characters)
   const [managerQuery, setManagerQuery] = useState('');
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const managerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (managerRef.current && !managerRef.current.contains(event.target as Node)) {
+        setShowManagerDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -626,7 +639,7 @@ export default function ProjectsPage() {
               </div>
 
               {/* Project Manager - Autocomplete (>= 3 chars) */}
-              <div className="space-y-1 relative">
+              <div ref={managerRef} className="space-y-1 relative">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Project Manager (Call from Employees after 3 alphabets)
                 </label>

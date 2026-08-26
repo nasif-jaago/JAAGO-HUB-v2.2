@@ -135,6 +135,11 @@ export default function PnCLayout({
     if (pathname.includes('/departments')) return 'Departments';
     if (pathname.includes('/projects')) return 'Projects';
     if (pathname.includes('/insurance')) return 'Insurance Info';
+    if (pathname.includes('/attendance/shifts')) return 'Working Hours & Schedules';
+    if (pathname.includes('/attendance/logs')) return 'Attendance Logs';
+    if (pathname.includes('/attendance/on-duty')) return 'On Duty Logs';
+    if (pathname.includes('/attendance/report')) return 'Attendance Report';
+    if (pathname.includes('/attendance')) return 'Attendance';
     if (pathname.includes('/time-off') || pathname.includes('/leave')) return 'Leave Calendar';
     return 'Dashboard';
   };
@@ -378,20 +383,70 @@ export default function PnCLayout({
           <div className="space-y-0.5">
             <button
               onClick={() => toggleSection('attendance')}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer"
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                pathname.startsWith('/pnc/attendance')
+                  ? 'text-primary font-black bg-primary/10'
+                  : 'text-sidebar-foreground hover:bg-surface'
+              }`}
             >
               <div className="flex items-center space-x-2.5">
-                <Fingerprint className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Fingerprint
+                  className={`h-4 w-4 flex-shrink-0 ${
+                    pathname.startsWith('/pnc/attendance')
+                      ? 'text-primary'
+                      : 'text-muted-foreground'
+                  }`}
+                />
                 <span className="uppercase tracking-wider text-[11px]">ATTENDANCE</span>
               </div>
-              {openSections['attendance'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              {openSections['attendance'] || pathname.startsWith('/pnc/attendance') ? (
+                <ChevronDown className="h-3.5 w-3.5 text-primary" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
             </button>
-            {openSections['attendance'] && (
+            {(openSections['attendance'] || pathname.startsWith('/pnc/attendance')) && (
               <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; Attendance Logs</div>
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; On Duty Logs</div>
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; Attendance Report</div>
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; Working Hours &amp; Schedules</div>
+                <Link
+                  href="/pnc/attendance/logs"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/attendance/logs' || pathname === '/pnc/attendance'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
+                  &bull; Attendance Logs
+                </Link>
+                <Link
+                  href="/pnc/attendance/on-duty"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/attendance/on-duty'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
+                  &bull; On Duty Logs
+                </Link>
+                <Link
+                  href="/pnc/attendance/report"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/attendance/report'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
+                  &bull; Attendance Report
+                </Link>
+                <Link
+                  href="/pnc/attendance/shifts"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/attendance/shifts'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
+                  &bull; Working Hours &amp; Schedules
+                </Link>
               </div>
             )}
           </div>

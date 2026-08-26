@@ -48,6 +48,7 @@ import {
   type DesignationItem,
   type InsuranceCategoryItem,
 } from '@/lib/supabase-organization';
+import { getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
 
 export type EmployeeStatus = 'Active' | 'Terminated' | 'Resigned' | 'Incomplete' | 'Archived';
 
@@ -210,6 +211,7 @@ export function EmployeeProfileDetail({
   const [teams, setTeams] = useState<TeamItem[]>([]);
   const [designations, setDesignations] = useState<DesignationItem[]>([]);
   const [insuranceCategories, setInsuranceCategories] = useState<InsuranceCategoryItem[]>([]);
+  const [shifts, setShifts] = useState<ShiftItem[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -224,6 +226,7 @@ export function EmployeeProfileDetail({
           fetchDesignationsFromSupabase(),
           fetchInsuranceCategoriesFromSupabase(),
         ]);
+        const loadedShifts = getLocalShifts();
         if (isMounted) {
           setOrganizations(orgs);
           setBranches(brs);
@@ -232,6 +235,7 @@ export function EmployeeProfileDetail({
           setTeams(tms);
           setDesignations(desigs);
           setInsuranceCategories(insCats);
+          if (loadedShifts) setShifts(loadedShifts);
         }
       } catch (err) {
         console.error('Error loading organization metadata:', err);
@@ -417,6 +421,24 @@ export function EmployeeProfileDetail({
   const [showSupervisorDropdown, setShowSupervisorDropdown] = useState(false);
   const [secSupervisorQuery, setSecSupervisorQuery] = useState(formData.secondarySupervisor || '');
   const [showSecSupervisorDropdown, setShowSecSupervisorDropdown] = useState(false);
+  const supervisorRef = useRef<HTMLDivElement>(null);
+  const secSupervisorRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to auto-close dropdowns
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (supervisorRef.current && !supervisorRef.current.contains(event.target as Node)) {
+        setShowSupervisorDropdown(false);
+      }
+      if (secSupervisorRef.current && !secSupervisorRef.current.contains(event.target as Node)) {
+        setShowSecSupervisorDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Custom Office Days state
   const [officeDaysOptions, setOfficeDaysOptions] = useState<string[]>([...DEFAULT_OFFICE_DAYS]);
@@ -907,7 +929,7 @@ export function EmployeeProfileDetail({
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. Masoor Rahman"
+                placeholder="e.g. NASIF KAMAL"
                 className="w-full h-11 px-3.5 rounded-xl bg-surface/60 border border-border text-base sm:text-lg font-bold text-foreground placeholder:text-muted-foreground/40 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm transition"
               />
             </div>
@@ -931,21 +953,31 @@ export function EmployeeProfileDetail({
               {/* Designation */}
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                  Designation
+                  Designation <span className="text-amber-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  list="pnc-designations-list"
+                <select
                   value={formData.designation}
                   onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                  placeholder="e.g. Program Officer"
-                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                />
-                <datalist id="pnc-designations-list">
-                  {designations.map((d) => (
-                    <option key={d.id} value={d.name} />
-                  ))}
-                </datalist>
+                  className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  {designations.length > 0 ? (
+                    designations.map((d) => (
+                      <option key={d.id} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Coordinator, Tech 4 Development">Coordinator, Tech 4 Development</option>
+                      <option value="Senior Program Officer">Senior Program Officer</option>
+                      <option value="Program Officer">Program Officer</option>
+                      <option value="Finance & Accounts Officer">Finance & Accounts Officer</option>
+                      <option value="HR Executive">HR Executive</option>
+                      <option value="Teacher / Educator">Teacher / Educator</option>
+                      <option value="Security Guard">Security Guard</option>
+                    </>
+                  )}
+                </select>
               </div>
 
               {/* Status (Color Selector) */}
@@ -1009,18 +1041,36 @@ export function EmployeeProfileDetail({
                 </div>
               </div>
 
-              {/* Working Schedule */}
+              {/* Working Schedule (Connected with Attendance Shift Management) */}
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
                   Working Schedule
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.workingSchedule}
                   onChange={(e) => setFormData({ ...formData, workingSchedule: e.target.value })}
-                  placeholder="General Schedule (10:00 AM - 6:00 PM)"
-                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                />
+                  className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  {shifts.length > 0 ? (
+                    shifts.map((s) => {
+                      const val = `${s.name} (${s.officeStart} - ${s.officeEnd})`;
+                      return (
+                        <option key={s.id} value={val}>
+                          {s.name} ({s.officeStart} - {s.officeEnd})
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <option value="General Schedule (10:00 AM - 6:00 PM)">General Schedule (10:00 AM - 6:00 PM)</option>
+                      <option value="JAAGO HQ (10:00 AM - 06:00 PM)">JAAGO HQ (10:00 AM - 06:00 PM)</option>
+                      <option value="Full Time Shift 1 (09:00 AM - 05:00 PM)">Full Time Shift 1 (09:00 AM - 05:00 PM)</option>
+                      <option value="Full Time Shift 2 (10:00 AM - 06:00 PM)">Full Time Shift 2 (10:00 AM - 06:00 PM)</option>
+                      <option value="Full Time Shift 3 (07:30 AM - 04:30 PM)">Full Time Shift 3 (07:30 AM - 04:30 PM)</option>
+                      <option value="Full Time Shift 4 (08:00 AM - 05:00 PM)">Full Time Shift 4 (08:00 AM - 05:00 PM)</option>
+                    </>
+                  )}
+                </select>
               </div>
             </div>
           </div>
@@ -1172,19 +1222,27 @@ export function EmployeeProfileDetail({
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
                     Project
                   </label>
-                  <input
-                    type="text"
-                    list="pnc-projects-list"
+                  <select
                     value={formData.project}
                     onChange={(e) => setFormData({ ...formData, project: e.target.value })}
-                    placeholder="e.g. Tech 4 Development"
-                    className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                  />
-                  <datalist id="pnc-projects-list">
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.name} />
-                    ))}
-                  </datalist>
+                    className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                  >
+                    <option value="">Select Project</option>
+                    {projects.length > 0 ? (
+                      projects.map((p) => (
+                        <option key={p.id} value={p.name}>
+                          {p.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Tech 4 Development">Tech 4 Development</option>
+                        <option value="Telco Digital School">Telco Digital School</option>
+                        <option value="Free School Education for Underprivileged">Free School Education for Underprivileged</option>
+                        <option value="Universal Youth Development & Volunteer Voice">Universal Youth Development & Volunteer Voice</option>
+                      </>
+                    )}
+                  </select>
                 </div>
 
                 {/* Team (Connected with Organization Teams) */}
@@ -1192,23 +1250,31 @@ export function EmployeeProfileDetail({
                   <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
                     Team
                   </label>
-                  <input
-                    type="text"
-                    list="pnc-teams-list"
+                  <select
                     value={formData.team || ''}
                     onChange={(e) => setFormData({ ...formData, team: e.target.value })}
-                    placeholder="e.g. Core Development Team"
-                    className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                  />
-                  <datalist id="pnc-teams-list">
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.name} />
-                    ))}
-                  </datalist>
+                    className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                  >
+                    <option value="">Select Team</option>
+                    {teams.length > 0 ? (
+                      teams.map((t) => (
+                        <option key={t.id} value={t.name}>
+                          {t.name}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="Core Development Team">Core Development Team</option>
+                        <option value="Tech 4 Development Engineering Core">Tech 4 Development Engineering Core</option>
+                        <option value="Curriculum & Pedagogy Team">Curriculum & Pedagogy Team</option>
+                        <option value="Banani Campus Security Squad">Banani Campus Security Squad</option>
+                      </>
+                    )}
+                  </select>
                 </div>
 
                 {/* Supervisor (Interactive Autocomplete Search >= 3 chars) */}
-                <div className="space-y-1 relative">
+                <div ref={supervisorRef} className="space-y-1 relative">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
                       Supervisor <span className="text-amber-500">*</span>
@@ -1261,7 +1327,7 @@ export function EmployeeProfileDetail({
                 </div>
 
                 {/* Secondary Supervisor (Interactive Autocomplete Search >= 3 chars) */}
-                <div className="space-y-1 relative">
+                <div ref={secSupervisorRef} className="space-y-1 relative">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
                       Secondary Supervisor
@@ -1564,7 +1630,7 @@ export function EmployeeProfileDetail({
                       type="text"
                       value={formData.nickName}
                       onChange={(e) => setFormData({ ...formData, nickName: e.target.value })}
-                      placeholder="e.g. Masoor"
+                      placeholder="e.g. Nasif"
                       className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
                     />
                   </div>
