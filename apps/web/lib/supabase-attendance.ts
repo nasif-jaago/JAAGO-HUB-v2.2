@@ -1,3 +1,5 @@
+import { getSupabase } from './supabase-auth';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & INTERFACES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -286,9 +288,154 @@ export const INITIAL_ON_DUTY_LOGS: OnDutyLogItem[] = [
 // 3. PERSISTENCE HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. SHIFTS SUPABASE & LOCAL PERSISTENCE
+// ═══════════════════════════════════════════════════════════════════════════
+
 const STORAGE_KEY_SHIFTS = 'jaago_pnc_shifts_v2';
 const STORAGE_KEY_ATTENDANCE = 'jaago_pnc_attendance_logs_v2';
 const STORAGE_KEY_ONDUTY = 'jaago_pnc_onduty_logs_v2';
+
+export function mapRowToShift(row: any): ShiftItem {
+  return {
+    id: String(row.id || `shift-${Date.now()}`),
+    name: row.name || 'General Shift',
+    officeStart: row.office_start || '09:00 AM',
+    startBufferMin: Number(row.start_buffer_min ?? 15),
+    officeEnd: row.office_end || '05:00 PM',
+    endBufferMin: Number(row.end_buffer_min ?? 15),
+    checkInStart: row.check_in_start || '05:00 AM',
+    checkInEnd: row.check_in_end || '05:00 PM',
+    checkOutStart: row.check_out_start || '09:30 AM',
+    checkOutEnd: row.check_out_end || '11:30 PM',
+    isDefault: Boolean(row.is_default),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapShiftToRow(shift: ShiftItem): any {
+  return {
+    id: shift.id,
+    name: shift.name,
+    office_start: shift.officeStart,
+    start_buffer_min: shift.startBufferMin,
+    office_end: shift.officeEnd,
+    end_buffer_min: shift.endBufferMin,
+    check_in_start: shift.checkInStart,
+    check_in_end: shift.checkInEnd,
+    check_out_start: shift.checkOutStart,
+    check_out_end: shift.checkOutEnd,
+    is_default: Boolean(shift.isDefault),
+  };
+}
+
+/**
+ * Fetch shifts from Supabase PostgreSQL, caching and merging with local data
+ */
+export async function fetchShiftsFromSupabase(): Promise<ShiftItem[]> {
+  try {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('shifts')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.warn('Supabase shifts fetch warning:', error.message);
+      return getLocalShifts();
+    }
+
+    if (data && data.length > 0) {
+      const mapped = data.map(mapRowToShift);
+      saveLocalShifts(mapped);
+      return mapped;
+    }
+  } catch (err) {
+    console.warn('Error connecting to Supabase for shifts:', err);
+  }
+
+  return getLocalShifts();
+}
+
+/**
+ * Save / Upsert a shift in Supabase and local storage
+ */
+export async function saveShiftToSupabase(shift: ShiftItem): Promise<boolean> {
+  // Always update local storage first for snappy UI
+  const current = getLocalShifts();
+  const existingIdx = current.findIndex((s) => s.id === shift.id || s.name.toLowerCase() === shift.name.toLowerCase());
+  let updatedList: ShiftItem[];
+  if (existingIdx >= 0) {
+    updatedList = [...current];
+    updatedList[existingIdx] = shift;
+  } else {
+    updatedList = [shift, ...current];
+  }
+  saveLocalShifts(updatedList);
+
+  try {
+    const supabase = getSupabase();
+    const payload = mapShiftToRow(shift);
+    const { error } = await supabase.from('shifts').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.warn('Supabase shift upsert warning:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Error saving shift to Supabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Bulk save / upsert multiple shifts in Supabase and local storage
+ */
+export async function bulkSaveShiftsToSupabase(newShifts: ShiftItem[]): Promise<boolean> {
+  const current = getLocalShifts();
+  const shiftMap = new Map<string, ShiftItem>();
+  current.forEach((s) => shiftMap.set(s.id, s));
+  newShifts.forEach((s) => shiftMap.set(s.id, s));
+  const combined = Array.from(shiftMap.values());
+  saveLocalShifts(combined);
+
+  try {
+    const supabase = getSupabase();
+    const payloads = newShifts.map(mapShiftToRow);
+    const { error } = await supabase.from('shifts').upsert(payloads, { onConflict: 'id' });
+    if (error) {
+      console.warn('Supabase bulk shifts upsert warning:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Error bulk saving shifts to Supabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Delete a shift from Supabase and local storage
+ */
+export async function deleteShiftFromSupabase(id: string): Promise<boolean> {
+  const current = getLocalShifts();
+  const filtered = current.filter((s) => s.id !== id);
+  saveLocalShifts(filtered);
+
+  try {
+    const supabase = getSupabase();
+    const { error } = await supabase.from('shifts').delete().eq('id', id);
+    if (error) {
+      console.warn('Supabase shift delete warning:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Error deleting shift from Supabase:', err);
+    return false;
+  }
+}
 
 export function getLocalShifts(): ShiftItem[] {
   if (typeof window === 'undefined') return INITIAL_SHIFTS;

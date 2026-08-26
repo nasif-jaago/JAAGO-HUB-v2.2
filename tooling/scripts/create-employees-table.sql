@@ -30,7 +30,7 @@ CREATE TABLE public.employees (
     designation                 VARCHAR(150) NOT NULL DEFAULT 'Program Officer',
     work_email                  VARCHAR(255),
     work_mobile                 VARCHAR(50),
-    working_schedule            VARCHAR(150) NOT NULL DEFAULT 'General Schedule (10:00 AM - 6:00 PM)',
+    working_schedule            VARCHAR(150) NOT NULL DEFAULT 'JAAGO HQ (10:00 AM - 06:00 PM)',
     status                      VARCHAR(50) NOT NULL DEFAULT 'Active',
     is_archived                 BOOLEAN NOT NULL DEFAULT FALSE,
 
@@ -105,14 +105,30 @@ CREATE TABLE public.employees (
     child3_health_insurance_id  VARCHAR(100),
     child3_name                 VARCHAR(255),
 
-    -- Tab 5: DSP & Shift Schedule
+    -- Tab 5: DSP (Digital School Program)
     office_days                 VARCHAR(100) NOT NULL DEFAULT 'Sunday to Thursday',
     custom_office_days_from     VARCHAR(50),
     custom_office_days_to       VARCHAR(50),
     office_hours                VARCHAR(100) NOT NULL DEFAULT '10:00 AM - 06:00 PM',
-    rfid                        VARCHAR(100),
+    rfid                        VARCHAR(100) DEFAULT 'RFID-165951',
     leave_group                 VARCHAR(100) NOT NULL DEFAULT 'Standard Full-time',
     employee_type               VARCHAR(50) NOT NULL DEFAULT 'Permanent',
+
+    -- Tab 6: Leave & Attendance Configurations (NEW)
+    leave_policy                VARCHAR(150) NOT NULL DEFAULT 'Standard Full-time Employee Policy',
+    casual_leave_allocated      NUMERIC(5, 2) NOT NULL DEFAULT 14.00,
+    casual_leave_used           NUMERIC(5, 2) NOT NULL DEFAULT 3.00,
+    sick_leave_allocated        NUMERIC(5, 2) NOT NULL DEFAULT 10.00,
+    sick_leave_used             NUMERIC(5, 2) NOT NULL DEFAULT 1.00,
+    earned_leave_allocated      NUMERIC(5, 2) NOT NULL DEFAULT 15.00,
+    earned_leave_used           NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    special_leave_allocated     NUMERIC(5, 2) NOT NULL DEFAULT 5.00,
+    special_leave_used          NUMERIC(5, 2) NOT NULL DEFAULT 0.00,
+    weekend_days                VARCHAR(100) NOT NULL DEFAULT 'Friday & Saturday',
+    overtime_eligible           VARCHAR(50) NOT NULL DEFAULT 'No',
+    attendance_grace_period_min INTEGER NOT NULL DEFAULT 15,
+    late_penalty_rule           VARCHAR(100) NOT NULL DEFAULT '3_LATES_HALF_DAY',
+    attendance_verification_method VARCHAR(100) NOT NULL DEFAULT 'HYBRID',
 
     -- System & IAM Authentication Link
     is_user                     BOOLEAN NOT NULL DEFAULT TRUE,
@@ -149,6 +165,7 @@ CREATE INDEX idx_employees_org ON public.employees(organization);
 CREATE INDEX idx_employees_branch ON public.employees(branch);
 CREATE INDEX idx_employees_project ON public.employees(project);
 CREATE INDEX idx_employees_team ON public.employees(team);
+CREATE INDEX idx_employees_working_schedule ON public.employees(working_schedule);
 CREATE INDEX idx_employees_is_archived ON public.employees(is_archived);
 CREATE INDEX idx_activity_logs_emp_id ON public.employee_activity_logs(employee_id);
 CREATE INDEX idx_activity_logs_created_at ON public.employee_activity_logs(created_at DESC);
@@ -178,12 +195,14 @@ ALTER TABLE public.employee_activity_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow full access on employees" ON public.employees;
 CREATE POLICY "Allow full access on employees"
 ON public.employees FOR ALL
+TO anon, authenticated
 USING (true)
 WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow full access on employee_activity_logs" ON public.employee_activity_logs;
 CREATE POLICY "Allow full access on employee_activity_logs"
 ON public.employee_activity_logs FOR ALL
+TO anon, authenticated
 USING (true)
 WITH CHECK (true);
 
@@ -238,15 +257,17 @@ DROP POLICY IF EXISTS "Full Access on Storage Objects" ON storage.objects;
 
 CREATE POLICY "Public View Access on Storage Objects"
 ON storage.objects FOR SELECT
+TO anon, authenticated
 USING (bucket_id IN ('employees', 'organization-logos', 'policy-documents'));
 
 CREATE POLICY "Full Access on Storage Objects"
 ON storage.objects FOR ALL
+TO anon, authenticated
 USING (bucket_id IN ('employees', 'organization-logos', 'policy-documents'))
 WITH CHECK (bucket_id IN ('employees', 'organization-logos', 'policy-documents'));
 
 -- ------------------------------------------------------------------------------
--- 9. INITIAL PRODUCTION DATA: PRIMARY EMPLOYEE (Nasif Kamal)
+-- 9. INITIAL PRODUCTION DATA: MASTER EMPLOYEE PROFILE (Nasif Kamal)
 -- ------------------------------------------------------------------------------
 INSERT INTO public.employees (
     id,
@@ -310,6 +331,21 @@ INSERT INTO public.employees (
     rfid,
     leave_group,
     employee_type,
+    -- Tab 6: Leave & Attendance
+    leave_policy,
+    casual_leave_allocated,
+    casual_leave_used,
+    sick_leave_allocated,
+    sick_leave_used,
+    earned_leave_allocated,
+    earned_leave_used,
+    special_leave_allocated,
+    special_leave_used,
+    weekend_days,
+    overtime_eligible,
+    attendance_grace_period_min,
+    late_penalty_rule,
+    attendance_verification_method,
     is_user
 ) VALUES (
     '71a38594-d803-4e6d-b6e9-79767a16c4c6',
@@ -318,7 +354,7 @@ INSERT INTO public.employees (
     'Coordinator, Tech 4 Development',
     'nasif.kamal@jaago.com.bd',
     '+880 1711 000001',
-    'General Schedule (10:00 AM - 6:00 PM)',
+    'JAAGO HQ (10:00 AM - 06:00 PM)',
     'Active',
     FALSE,
     'JAAGO Foundation Trust',
@@ -370,24 +406,51 @@ INSERT INTO public.employees (
     'HI-EMP-10029',
     'Sunday to Thursday',
     '10:00 AM - 06:00 PM',
-    'RFID-100290',
+    'RFID-165951',
     'Standard Full-time',
     'Permanent',
+    -- Leave & Attendance
+    'Standard Full-time Employee Policy',
+    14.00,
+    3.00,
+    10.00,
+    1.00,
+    15.00,
+    0.00,
+    5.00,
+    0.00,
+    'Friday & Saturday',
+    'No',
+    15,
+    '3_LATES_HALF_DAY',
+    'HYBRID',
     TRUE
 )
 ON CONFLICT (code) DO UPDATE SET
     name = EXCLUDED.name,
     designation = EXCLUDED.designation,
     work_email = EXCLUDED.work_email,
+    working_schedule = EXCLUDED.working_schedule,
     status = EXCLUDED.status,
     organization = EXCLUDED.organization,
     department = EXCLUDED.department,
     project = EXCLUDED.project,
     team = EXCLUDED.team,
-    insurance_status = EXCLUDED.insurance_status,
-    insurance_coverage_category = EXCLUDED.insurance_coverage_category,
-    insurance_monthly_premium = EXCLUDED.insurance_monthly_premium,
-    employee_health_insurance_id = EXCLUDED.employee_health_insurance_id,
+    rfid = EXCLUDED.rfid,
+    leave_policy = EXCLUDED.leave_policy,
+    casual_leave_allocated = EXCLUDED.casual_leave_allocated,
+    casual_leave_used = EXCLUDED.casual_leave_used,
+    sick_leave_allocated = EXCLUDED.sick_leave_allocated,
+    sick_leave_used = EXCLUDED.sick_leave_used,
+    earned_leave_allocated = EXCLUDED.earned_leave_allocated,
+    earned_leave_used = EXCLUDED.earned_leave_used,
+    special_leave_allocated = EXCLUDED.special_leave_allocated,
+    special_leave_used = EXCLUDED.special_leave_used,
+    weekend_days = EXCLUDED.weekend_days,
+    overtime_eligible = EXCLUDED.overtime_eligible,
+    attendance_grace_period_min = EXCLUDED.attendance_grace_period_min,
+    late_penalty_rule = EXCLUDED.late_penalty_rule,
+    attendance_verification_method = EXCLUDED.attendance_verification_method,
     updated_at = NOW();
 
 -- ------------------------------------------------------------------------------
@@ -409,6 +472,6 @@ INSERT INTO public.employee_activity_logs (
     'Super Admin',
     'Profile Provisioning',
     'None',
-    'Active Master Record Created',
+    'Active Master Record Created with Leave & Attendance Schema',
     'create'
 );

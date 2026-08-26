@@ -28,6 +28,7 @@ import {
   GitFork,
   BookUser,
   UserCheck,
+  MapPin,
   Star,
   TrendingUp,
   ClipboardList,
@@ -415,6 +416,17 @@ export function DashboardSidebar({
                 >
                   <Users className="h-3.5 w-3.5 flex-shrink-0" />
                   <span>User Management</span>
+                </Link>
+                <Link
+                  href="/admin/gps-coordinates"
+                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    pathname === '/admin/gps-coordinates'
+                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                  } transition`}
+                >
+                  <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span>GPS Coordinates</span>
                 </Link>
                 <Link
                   href="/admin/modules"

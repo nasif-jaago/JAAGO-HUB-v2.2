@@ -130,9 +130,31 @@ export default function DashboardPage() {
       // Fallback gracefully
     }
 
+    const handleStorageRefresh = () => {
+      getActiveEmployeeProfile().then((emp) => {
+        if (emp) {
+          setUser({
+            id: emp.id || 'emp-nasif',
+            fullName: emp.name,
+            jobTitle: emp.designation,
+            department: emp.department || "Founder's Office / FC",
+            manager: emp.supervisor || 'Founder & Executive Director',
+            organization: emp.organization || 'JAAGO Foundation Trust',
+            avatarUrl: emp.avatarUrl || '',
+            workingSchedule: emp.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
+            employeeCode: emp.code || 'FO032507061190',
+          });
+        }
+      });
+    };
+    window.addEventListener('focus', handleStorageRefresh);
+    window.addEventListener('storage', handleStorageRefresh);
+
     return () => {
       window.removeEventListener('jaago_view_mode_change', handleViewModeChange);
       window.removeEventListener('jaago_user_updated', handleUserUpdated);
+      window.removeEventListener('focus', handleStorageRefresh);
+      window.removeEventListener('storage', handleStorageRefresh);
     };
   }, []);
 
@@ -353,6 +375,9 @@ export default function DashboardPage() {
           {/* Subtitle */}
           <div className="text-xs font-medium text-muted-foreground">
             Working Hours Today
+          </div>
+          <div className="text-[10px] text-muted-foreground pt-1 border-t border-border/40">
+            Schedule: {user.workingSchedule}
           </div>
         </div>
 

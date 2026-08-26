@@ -14,7 +14,7 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     designation: row.designation || 'Program Officer',
     workEmail: row.work_email || '',
     workMobile: row.work_mobile || '',
-    workingSchedule: row.working_schedule || 'General Schedule (10:00 AM - 6:00 PM)',
+    workingSchedule: row.working_schedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
     status: (row.status as any) || 'Active',
     isArchived: row.status === 'Archived' || Boolean(row.is_archived),
 
@@ -98,7 +98,21 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     leaveGroup: row.leave_group || 'Standard Full-time',
     employeeType: row.employee_type || 'Permanent',
 
-    // Tab 6: Logs
+    // Tab 6: Leave & Attendance
+    leavePolicy: row.leave_policy || 'Standard Full-time Employee Policy',
+    casualLeaveAllocated: Number(row.casual_leave_allocated ?? 14),
+    casualLeaveUsed: Number(row.casual_leave_used ?? 3),
+    sickLeaveAllocated: Number(row.sick_leave_allocated ?? 10),
+    sickLeaveUsed: Number(row.sick_leave_used ?? 1),
+    earnedLeaveAllocated: Number(row.earned_leave_allocated ?? 15),
+    earnedLeaveUsed: Number(row.earned_leave_used ?? 0),
+    specialLeaveAllocated: Number(row.special_leave_allocated ?? 5),
+    specialLeaveUsed: Number(row.special_leave_used ?? 0),
+    weekendDays: row.weekend_days || 'Friday & Saturday',
+    overtimeEligible: row.overtime_eligible || 'No',
+    attendanceGracePeriodMin: Number(row.attendance_grace_period_min ?? 15),
+
+    // Tab 7: Logs
     logHistory: [],
     isUser: Boolean(row.is_user),
     userId: row.user_id || undefined,
@@ -199,6 +213,20 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     rfid: profile.rfid || null,
     leave_group: profile.leaveGroup,
     employee_type: profile.employeeType,
+
+    // Tab 6: Leave & Attendance
+    leave_policy: profile.leavePolicy || null,
+    casual_leave_allocated: profile.casualLeaveAllocated ?? 14,
+    casual_leave_used: profile.casualLeaveUsed ?? 3,
+    sick_leave_allocated: profile.sickLeaveAllocated ?? 10,
+    sick_leave_used: profile.sickLeaveUsed ?? 1,
+    earned_leave_allocated: profile.earnedLeaveAllocated ?? 15,
+    earned_leave_used: profile.earnedLeaveUsed ?? 0,
+    special_leave_allocated: profile.specialLeaveAllocated ?? 5,
+    special_leave_used: profile.specialLeaveUsed ?? 0,
+    weekend_days: profile.weekendDays || 'Friday & Saturday',
+    overtime_eligible: profile.overtimeEligible || 'No',
+    attendance_grace_period_min: profile.attendanceGracePeriodMin ?? 15,
 
     is_user: Boolean(profile.isUser),
     user_id: profile.userId || null,

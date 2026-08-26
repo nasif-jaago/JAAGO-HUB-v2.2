@@ -43,7 +43,7 @@ const INITIAL_EMPLOYEES: FullEmployeeProfile[] = [
     avatarUrl: '',
     workEmail: 'nasif.kamal@jaago.com.bd',
     workMobile: '+880 1711 000001',
-    workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
+    workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
     department: "Founder's Office / FC",
     designation: 'Coordinator, Tech 4 Development',
     organization: 'JAAGO Foundation Trust',

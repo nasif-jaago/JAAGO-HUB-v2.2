@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
 import { getLocalAttendanceLogs } from '@/lib/supabase-attendance';
+import { TimePickerInput } from '@/components/ui/time-picker-input';
 
 interface ReportRow {
   id: string;
@@ -768,13 +769,10 @@ export default function AttendanceReportPage() {
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Check-in Time
                 </label>
-                <input
-                  type="text"
-                  required
+                <TimePickerInput
                   value={manualCheckIn}
-                  onChange={(e) => setManualCheckIn(e.target.value)}
+                  onChange={(val) => setManualCheckIn(val)}
                   placeholder="09:00 AM"
-                  className="w-full h-11 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
                 />
               </div>
 
@@ -782,13 +780,10 @@ export default function AttendanceReportPage() {
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Check-out Time
                 </label>
-                <input
-                  type="text"
-                  required
+                <TimePickerInput
                   value={manualCheckOut}
-                  onChange={(e) => setManualCheckOut(e.target.value)}
+                  onChange={(val) => setManualCheckOut(val)}
                   placeholder="06:00 PM"
-                  className="w-full h-11 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
                 />
               </div>
 

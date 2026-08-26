@@ -29,9 +29,12 @@ import {
   UserCheck,
   Layers,
   Move,
+  CalendarDays,
+  ArrowUpRight,
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
+import { getLocalAttendanceLogs, getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
 import {
   fetchOrganizationsFromSupabase,
   fetchBranchesFromSupabase,
@@ -48,7 +51,6 @@ import {
   type DesignationItem,
   type InsuranceCategoryItem,
 } from '@/lib/supabase-organization';
-import { getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
 
 export type EmployeeStatus = 'Active' | 'Terminated' | 'Resigned' | 'Incomplete' | 'Archived';
 
@@ -162,7 +164,21 @@ export interface FullEmployeeProfile {
   leaveGroup: string;
   employeeType: 'Permanent' | 'Contractual' | 'Volunteer' | 'Intern' | 'Consultant';
 
-  // ── Tab 6: Log History ──
+  // ── Tab 6: Leave & Attendance ──
+  leavePolicy?: string | undefined;
+  casualLeaveAllocated?: number | undefined;
+  casualLeaveUsed?: number | undefined;
+  sickLeaveAllocated?: number | undefined;
+  sickLeaveUsed?: number | undefined;
+  earnedLeaveAllocated?: number | undefined;
+  earnedLeaveUsed?: number | undefined;
+  specialLeaveAllocated?: number | undefined;
+  specialLeaveUsed?: number | undefined;
+  weekendDays?: string | undefined;
+  overtimeEligible?: string | undefined;
+  attendanceGracePeriodMin?: number | undefined;
+
+  // ── Tab 7: Log History ──
   logHistory: LogHistoryEntry[];
 
   // User provisioning
@@ -200,8 +216,8 @@ export function EmployeeProfileDetail({
 }: EmployeeProfileDetailProps) {
   const isNew = !initialData?.id;
 
-  // Active Tab state: 'WORK' | 'PERSONAL' | 'PAYROLL' | 'INSURANCE' | 'DSP' | 'LOG_HISTORY'
-  const [activeTab, setActiveTab] = useState<'WORK' | 'PERSONAL' | 'PAYROLL' | 'INSURANCE' | 'DSP' | 'LOG_HISTORY'>('WORK');
+  // Active Tab state: 'WORK' | 'PERSONAL' | 'PAYROLL' | 'INSURANCE' | 'DSP' | 'LEAVE_ATTENDANCE' | 'LOG_HISTORY'
+  const [activeTab, setActiveTab] = useState<'WORK' | 'PERSONAL' | 'PAYROLL' | 'INSURANCE' | 'DSP' | 'LEAVE_ATTENDANCE' | 'LOG_HISTORY'>('WORK');
 
   // Dynamic organization metadata options from Supabase
   const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
@@ -279,7 +295,7 @@ export function EmployeeProfileDetail({
       workEmail: '',
       workMobile: '+880 17',
       status: 'Active',
-      workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
+      workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
 
       // Work
       organization: 'JAAGO Foundation Trust',
@@ -1085,6 +1101,7 @@ export function EmployeeProfileDetail({
           { key: 'PAYROLL', label: 'Payroll', icon: DollarSign },
           { key: 'INSURANCE', label: 'Insurance', icon: Shield },
           { key: 'DSP', label: 'DSP', icon: Sparkles },
+          { key: 'LEAVE_ATTENDANCE', label: 'Leave & Attendance', icon: CalendarDays },
           { key: 'LOG_HISTORY', label: 'Log History', icon: History, count: formData.logHistory?.length || 0 },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -2564,7 +2581,432 @@ export function EmployeeProfileDetail({
         )}
 
         {/* ═══════════════════════════════════════════════════════════════════
-            TAB 5: LOG HISTORY (ODOO-STYLE WORKING HISTORY TRACKER)
+            TAB 6: LEAVE & ATTENDANCE
+            ═══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'LEAVE_ATTENDANCE' && (
+          <div className="space-y-6">
+            {/* Header Banner */}
+            <div className="border-b border-border/70 pb-2.5 flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-2">
+                <div className="h-6 w-6 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                </div>
+                <span>Leave Entitlements &amp; Attendance Tracking Configuration</span>
+              </h3>
+              <a
+                href="/pnc/attendance/report"
+                className="text-[11px] font-bold text-amber-500 hover:text-amber-400 flex items-center space-x-1 transition"
+              >
+                <span>View Full Attendance Report</span>
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </a>
+            </div>
+
+            {/* ── 1. LEAVE BALANCES ENTITLEMENT CARDS ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Casual Leave Card */}
+              <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm space-y-3 relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Casual Leave (CL)
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/20">
+                    Annual Quota
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-2xl font-black text-foreground">
+                    {Math.max(0, (formData.casualLeaveAllocated ?? 14) - (formData.casualLeaveUsed ?? 3))}{' '}
+                    <span className="text-xs font-semibold text-muted-foreground">Days Left</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground font-semibold">
+                    Used: <span className="text-amber-500 font-bold">{formData.casualLeaveUsed ?? 3}</span> / {formData.casualLeaveAllocated ?? 14}
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden border border-border/40">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (((formData.casualLeaveAllocated ?? 14) - (formData.casualLeaveUsed ?? 3)) /
+                          (formData.casualLeaveAllocated || 14)) *
+                          100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Sick / Medical Leave Card */}
+              <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm space-y-3 relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Sick Leave (SL)
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-500 font-bold border border-sky-500/20">
+                    Medical
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-2xl font-black text-foreground">
+                    {Math.max(0, (formData.sickLeaveAllocated ?? 10) - (formData.sickLeaveUsed ?? 1))}{' '}
+                    <span className="text-xs font-semibold text-muted-foreground">Days Left</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground font-semibold">
+                    Used: <span className="text-sky-500 font-bold">{formData.sickLeaveUsed ?? 1}</span> / {formData.sickLeaveAllocated ?? 10}
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden border border-border/40">
+                  <div
+                    className="h-full bg-sky-500 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (((formData.sickLeaveAllocated ?? 10) - (formData.sickLeaveUsed ?? 1)) /
+                          (formData.sickLeaveAllocated || 10)) *
+                          100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Earned / Annual Leave Card */}
+              <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm space-y-3 relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Earned Leave (EL)
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/20">
+                    Accrued
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-2xl font-black text-foreground">
+                    {Math.max(0, (formData.earnedLeaveAllocated ?? 15) - (formData.earnedLeaveUsed ?? 0))}{' '}
+                    <span className="text-xs font-semibold text-muted-foreground">Days Left</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground font-semibold">
+                    Used: <span className="text-amber-500 font-bold">{formData.earnedLeaveUsed ?? 0}</span> / {formData.earnedLeaveAllocated ?? 15}
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden border border-border/40">
+                  <div
+                    className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (((formData.earnedLeaveAllocated ?? 15) - (formData.earnedLeaveUsed ?? 0)) /
+                          (formData.earnedLeaveAllocated || 15)) *
+                          100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Special / Compensatory Leave Card */}
+              <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm space-y-3 relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Special Leave
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-bold border border-purple-500/20">
+                    Policy
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-2xl font-black text-foreground">
+                    {Math.max(0, (formData.specialLeaveAllocated ?? 5) - (formData.specialLeaveUsed ?? 0))}{' '}
+                    <span className="text-xs font-semibold text-muted-foreground">Days Left</span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground font-semibold">
+                    Used: <span className="text-purple-500 font-bold">{formData.specialLeaveUsed ?? 0}</span> / {formData.specialLeaveAllocated ?? 5}
+                  </div>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden border border-border/40">
+                  <div
+                    className="h-full bg-purple-500 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (((formData.specialLeaveAllocated ?? 5) - (formData.specialLeaveUsed ?? 0)) /
+                          (formData.specialLeaveAllocated || 5)) *
+                          100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ── 2. POLICY & SCHEDULE SETTINGS GRID ── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+              {/* Working Schedule Shift (Master Link) */}
+              <div className="space-y-1 sm:col-span-2 lg:col-span-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Assigned Working Schedule / Shift <span className="text-amber-500">*</span>
+                </label>
+                <select
+                  value={formData.workingSchedule}
+                  onChange={(e) => setFormData({ ...formData, workingSchedule: e.target.value })}
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  {shifts.length > 0 ? (
+                    shifts.map((s) => (
+                      <option key={s.id} value={`${s.name} (${s.officeStart} - ${s.officeEnd})`}>
+                        {s.name} ({s.officeStart} - {s.officeEnd})
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="JAAGO HQ (10:00 AM - 06:00 PM)">JAAGO HQ (10:00 AM - 06:00 PM)</option>
+                      <option value="Full Time Shift 1 (09:00 AM - 05:00 PM)">Full Time Shift 1 (09:00 AM - 05:00 PM)</option>
+                      <option value="Full Time Shift 2 (10:00 AM - 06:00 PM)">Full Time Shift 2 (10:00 AM - 06:00 PM)</option>
+                      <option value="Full Time Shift 3 (07:30 AM - 04:30 PM)">Full Time Shift 3 (07:30 AM - 04:30 PM)</option>
+                      <option value="Full Time Shift 4 (08:00 AM - 05:00 PM)">Full Time Shift 4 (08:00 AM - 05:00 PM)</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* Leave Policy Group */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Leave Policy Group
+                </label>
+                <select
+                  value={formData.leavePolicy || 'Standard Full-time Employee Policy'}
+                  onChange={(e) => setFormData({ ...formData, leavePolicy: e.target.value })}
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  <option value="Standard Full-time Employee Policy">Standard Full-time Employee Policy (14 CL + 10 SL + 15 EL)</option>
+                  <option value="Executive & Management Policy">Executive &amp; Management Policy (16 CL + 14 SL + 18 EL)</option>
+                  <option value="DSP School Faculty Policy">DSP School Faculty Policy (Academic Calendar Based)</option>
+                  <option value="Contractual & Project Staff Policy">Contractual &amp; Project Staff Policy (Pro-rated)</option>
+                  <option value="Probationary Staff Policy">Probationary Staff Policy (Emergency Only)</option>
+                </select>
+              </div>
+
+              {/* Weekend Days */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Weekly Off / Weekend Days
+                </label>
+                <select
+                  value={formData.weekendDays || 'Friday & Saturday'}
+                  onChange={(e) => setFormData({ ...formData, weekendDays: e.target.value })}
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  <option value="Friday & Saturday">Friday &amp; Saturday (Standard 5-Day Week)</option>
+                  <option value="Friday Only">Friday Only (6-Day Field/School Week)</option>
+                  <option value="Sunday to Thursday">Sunday to Thursday (Rotational 5-Day)</option>
+                  <option value="Saturday Only">Saturday Only (Rotational Single Off)</option>
+                </select>
+              </div>
+
+              {/* Attendance Grace Period */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Late Grace / Buffer (min)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={formData.attendanceGracePeriodMin ?? 15}
+                  onChange={(e) =>
+                    setFormData({ ...formData, attendanceGracePeriodMin: Number(e.target.value) })
+                  }
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Late Penalty Rule */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Late Penalty &amp; Deduction Rule
+                </label>
+                <select
+                  defaultValue="3_LATES_HALF_DAY"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  <option value="3_LATES_HALF_DAY">3 Consecutive Lates = 0.5 Day CL Deduction</option>
+                  <option value="4_LATES_FULL_DAY">4 Lates in a Month = 1.0 Day CL Deduction</option>
+                  <option value="GRACE_AND_WARNING">Grace Period + Line Manager Warning</option>
+                  <option value="NO_AUTOMATED_PENALTY">No Automated Penalty (Manual Review)</option>
+                </select>
+              </div>
+
+              {/* Overtime Eligibility */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Overtime Eligibility
+                </label>
+                <select
+                  value={formData.overtimeEligible || 'No'}
+                  onChange={(e) => setFormData({ ...formData, overtimeEligible: e.target.value })}
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  <option value="No">No / Not Applicable (Salaried Staff)</option>
+                  <option value="Yes">Yes (Standard 1.5x Hourly Rate)</option>
+                  <option value="Fixed">Yes (Fixed Overtime Allowance / Shift)</option>
+                </select>
+              </div>
+
+              {/* RFID / Biometric Device ID */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  RFID / Biometric Card ID
+                </label>
+                <input
+                  type="text"
+                  value={formData.rfid || ''}
+                  onChange={(e) => setFormData({ ...formData, rfid: e.target.value })}
+                  placeholder="e.g. RFID-884920"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-mono font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+
+              {/* Biometric Verification Method */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Attendance Verification Method
+                </label>
+                <select
+                  defaultValue="HYBRID"
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                >
+                  <option value="HYBRID">RFID Card + Mobile GPS + Web Check-in</option>
+                  <option value="RFID_ONLY">Biometric RFID Scanner Only</option>
+                  <option value="WEB_MOBILE">Web Portal &amp; Mobile App Only</option>
+                  <option value="MANUAL">Manual HR Entry Only</option>
+                </select>
+              </div>
+
+              {/* Leave Entitlement Adjustment (CL Allocation) */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  CL Quota (Days / Year)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={formData.casualLeaveAllocated ?? 14}
+                  onChange={(e) =>
+                    setFormData({ ...formData, casualLeaveAllocated: Number(e.target.value) })
+                  }
+                  className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                />
+              </div>
+            </div>
+
+            {/* ── 3. RECENT ATTENDANCE ACTIVITY LOG TABLE ── */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-1.5">
+                  <Clock className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Recent Attendance Logs ({formData.name || 'Employee'})</span>
+                </h4>
+                <span className="text-[11px] font-semibold text-muted-foreground">
+                  Shift: <strong className="text-foreground">{formData.workingSchedule}</strong>
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-border/80 overflow-hidden bg-card shadow-sm">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface/70 border-b border-border/60 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-3">Check In</th>
+                      <th className="py-3 px-3">Check Out</th>
+                      <th className="py-3 px-3">Working Hours</th>
+                      <th className="py-3 px-3">Device / Method</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40 font-medium">
+                    {/* Render recent logs */}
+                    {(() => {
+                      const allLogs = getLocalAttendanceLogs();
+                      const filtered = allLogs.filter(
+                        (l) => l.employeeCode === formData.code || l.employeeId === formData.id
+                      );
+                      const displayList =
+                        filtered.length > 0
+                          ? filtered.slice(0, 5)
+                          : [
+                              {
+                                id: 'mock-1',
+                                date: new Date().toISOString().slice(0, 10),
+                                checkInTime: '09:55 AM',
+                                checkOutTime: '06:05 PM',
+                                device: 'Web Portal',
+                                status: 'Present',
+                              },
+                              {
+                                id: 'mock-2',
+                                date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
+                                checkInTime: '10:08 AM',
+                                checkOutTime: '06:12 PM',
+                                device: 'RFID Scanner',
+                                status: 'Late',
+                              },
+                              {
+                                id: 'mock-3',
+                                date: new Date(Date.now() - 172800000).toISOString().slice(0, 10),
+                                checkInTime: '09:50 AM',
+                                checkOutTime: '06:00 PM',
+                                device: 'Web Portal',
+                                status: 'Present',
+                              },
+                            ];
+
+                      return displayList.map((log: any) => (
+                        <tr key={log.id} className="hover:bg-surface/40 transition">
+                          <td className="py-3 px-4 font-mono text-[11px] text-foreground font-bold">
+                            {log.date}
+                          </td>
+                          <td className="py-3 px-3 font-semibold text-emerald-500">
+                            {log.checkInTime || '09:55 AM'}
+                          </td>
+                          <td className="py-3 px-3 font-semibold text-rose-500">
+                            {log.checkOutTime || '06:05 PM'}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-muted-foreground">
+                            8h 10m
+                          </td>
+                          <td className="py-3 px-3 text-muted-foreground text-[11px]">
+                            {log.device || 'Web Portal'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                log.status === 'Present'
+                                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                  : log.status === 'Late'
+                                  ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                                  : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                              }`}
+                            >
+                              {log.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            TAB 7: LOG HISTORY (ODOO-STYLE WORKING HISTORY TRACKER)
             ═══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'LOG_HISTORY' && (
           <div className="space-y-6">

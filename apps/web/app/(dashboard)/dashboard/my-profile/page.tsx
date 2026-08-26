@@ -30,7 +30,7 @@ const INITIAL_FALLBACK_PROFILE: FullEmployeeProfile = {
   workEmail: 'nasif.kamal@jaago.com.bd',
   workMobile: '+880 1711 000001',
   status: 'Active',
-  workingSchedule: 'General Schedule (10:00 AM - 6:00 PM)',
+  workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
   organization: 'JAAGO Foundation Trust',
   branch: 'Head Office (Banani)',
   department: "Founder's Office / FC",
