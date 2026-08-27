@@ -122,7 +122,7 @@ export const INITIAL_SHIFTS: ShiftItem[] = [
 
 export const INITIAL_ATTENDANCE_LOGS: AttendanceLogItem[] = [
   {
-    id: 'att-nasif-today',
+    id: 'att-nasif-27',
     employeeId: 'emp-nasif',
     employeeCode: 'FO032507061190',
     employeeName: 'Nasif Kamal',
@@ -136,7 +136,7 @@ export const INITIAL_ATTENDANCE_LOGS: AttendanceLogItem[] = [
     date: '2026-08-27',
     checkInTime: '02:50 PM',
     checkOutTime: '06:48 PM',
-    lateByMin: 0,
+    lateByMin: 290,
     earlyOutByMin: 0,
     createdBy: 'Nasif Kamal - (FO032507061190)',
     createdAt: '27 Aug 2026 2:50 pm',
@@ -144,7 +144,7 @@ export const INITIAL_ATTENDANCE_LOGS: AttendanceLogItem[] = [
     notes: 'Banani Head Office Web Punch',
   },
   {
-    id: 'att-1',
+    id: 'att-nasif-26',
     employeeId: 'emp-nasif',
     employeeCode: 'FO032507061190',
     employeeName: 'Nasif Kamal',
@@ -197,7 +197,7 @@ export const INITIAL_ATTENDANCE_LOGS: AttendanceLogItem[] = [
     avatarUrl: '',
     status: 'Late',
     device: 'Device Login',
-    timestamp: '24 Aug 2026 6:00 pm',
+    timestamp: '24 Aug 2026 6:05 pm',
     date: '2026-08-24',
     checkInTime: '10:22 AM',
     checkOutTime: '06:05 PM',
@@ -206,6 +206,216 @@ export const INITIAL_ATTENDANCE_LOGS: AttendanceLogItem[] = [
     createdBy: 'Nasif Kamal - (FO032507061190)',
     createdAt: '24 Aug 2026 10:22 am',
     updatedAt: '24 Aug 2026 6:05 pm',
+  },
+  {
+    id: 'att-nasif-23',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Web Portal',
+    timestamp: '23 Aug 2026 6:00 pm',
+    date: '2026-08-23',
+    checkInTime: '09:50 AM',
+    checkOutTime: '06:00 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '23 Aug 2026 9:50 am',
+    updatedAt: '23 Aug 2026 6:00 pm',
+  },
+  {
+    id: 'att-nasif-20',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Device Login',
+    timestamp: '20 Aug 2026 6:05 pm',
+    date: '2026-08-20',
+    checkInTime: '09:52 AM',
+    checkOutTime: '06:05 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '20 Aug 2026 9:52 am',
+    updatedAt: '20 Aug 2026 6:05 pm',
+  },
+  {
+    id: 'att-nasif-19',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Web Portal',
+    timestamp: '19 Aug 2026 6:12 pm',
+    date: '2026-08-19',
+    checkInTime: '09:58 AM',
+    checkOutTime: '06:12 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '19 Aug 2026 9:58 am',
+    updatedAt: '19 Aug 2026 6:12 pm',
+  },
+  {
+    id: 'att-nasif-18',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Device Login',
+    timestamp: '18 Aug 2026 6:00 pm',
+    date: '2026-08-18',
+    checkInTime: '09:55 AM',
+    checkOutTime: '06:00 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '18 Aug 2026 9:55 am',
+    updatedAt: '18 Aug 2026 6:00 pm',
+  },
+  {
+    id: 'att-nasif-17',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Late',
+    device: 'Web Portal',
+    timestamp: '17 Aug 2026 6:00 pm',
+    date: '2026-08-17',
+    checkInTime: '10:15 AM',
+    checkOutTime: '06:00 PM',
+    lateByMin: 15,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '17 Aug 2026 10:15 am',
+    updatedAt: '17 Aug 2026 6:00 pm',
+  },
+  {
+    id: 'att-nasif-16',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Device Login',
+    timestamp: '16 Aug 2026 6:05 pm',
+    date: '2026-08-16',
+    checkInTime: '09:50 AM',
+    checkOutTime: '06:05 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '16 Aug 2026 9:50 am',
+    updatedAt: '16 Aug 2026 6:05 pm',
+  },
+  {
+    id: 'att-nasif-13',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Web Portal',
+    timestamp: '13 Aug 2026 6:10 pm',
+    date: '2026-08-13',
+    checkInTime: '09:55 AM',
+    checkOutTime: '06:10 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '13 Aug 2026 9:55 am',
+    updatedAt: '13 Aug 2026 6:10 pm',
+  },
+  {
+    id: 'att-nasif-12',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Device Login',
+    timestamp: '12 Aug 2026 6:00 pm',
+    date: '2026-08-12',
+    checkInTime: '09:58 AM',
+    checkOutTime: '06:00 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '12 Aug 2026 9:58 am',
+    updatedAt: '12 Aug 2026 6:00 pm',
+  },
+  {
+    id: 'att-nasif-11',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Web Portal',
+    timestamp: '11 Aug 2026 6:15 pm',
+    date: '2026-08-11',
+    checkInTime: '09:52 AM',
+    checkOutTime: '06:15 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '11 Aug 2026 9:52 am',
+    updatedAt: '11 Aug 2026 6:15 pm',
+  },
+  {
+    id: 'att-nasif-10',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Device Login',
+    timestamp: '10 Aug 2026 6:05 pm',
+    date: '2026-08-10',
+    checkInTime: '09:50 AM',
+    checkOutTime: '06:05 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '10 Aug 2026 9:50 am',
+    updatedAt: '10 Aug 2026 6:05 pm',
   },
   {
     id: 'att-2',
@@ -524,15 +734,99 @@ export function saveLocalShifts(shifts: ShiftItem[]): void {
   }
 }
 
+export const STORAGE_KEY_DELETED_LOGS = 'jaago_pnc_deleted_attendance_logs';
+
+export function getDeletedAttendanceLogKeys(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DELETED_LOGS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveDeletedAttendanceLogKeys(keys: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_DELETED_LOGS, JSON.stringify(keys));
+  } catch (err) {
+    console.error('Error saving deleted attendance log keys', err);
+  }
+}
+
 export function getLocalAttendanceLogs(): AttendanceLogItem[] {
   if (typeof window === 'undefined') return INITIAL_ATTENDANCE_LOGS;
   try {
+    const deletedKeysSet = new Set(getDeletedAttendanceLogKeys());
     const raw = localStorage.getItem(STORAGE_KEY_ATTENDANCE);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY_ATTENDANCE, JSON.stringify(INITIAL_ATTENDANCE_LOGS));
-      return INITIAL_ATTENDANCE_LOGS;
+    let parsed: AttendanceLogItem[] = [];
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = [];
+      }
     }
-    return JSON.parse(raw);
+
+    // Merge INITIAL_ATTENDANCE_LOGS ONLY if not deleted
+    const logMap = new Map<string, AttendanceLogItem>();
+    INITIAL_ATTENDANCE_LOGS.forEach((item) => {
+      const key = `${item.employeeCode}_${item.date}`;
+      if (!deletedKeysSet.has(item.id) && !deletedKeysSet.has(key)) {
+        logMap.set(key, item);
+      }
+    });
+
+    parsed.forEach((item) => {
+      const key = `${item.employeeCode}_${item.date}`;
+      if (!deletedKeysSet.has(item.id) && !deletedKeysSet.has(key)) {
+        logMap.set(key, item);
+      }
+    });
+
+    // Auto-sync today's punch from localStorage only if not deleted
+    const todayNasifKey = 'FO032507061190_2026-08-27';
+    if (!deletedKeysSet.has('att-nasif-27') && !deletedKeysSet.has(todayNasifKey)) {
+      const todayIn = localStorage.getItem('jaago_first_checkin_time') || '02:50 PM';
+      const todayOut = localStorage.getItem('jaago_last_checkout_time') || '06:48 PM';
+      const isCheckedIn = localStorage.getItem('jaago_is_checked_in') === 'true';
+
+      const existingToday = logMap.get(todayNasifKey);
+      const actualIn = existingToday?.checkInTime || todayIn;
+      const actualOut = isCheckedIn ? undefined : (existingToday?.checkOutTime || todayOut);
+
+      logMap.set(todayNasifKey, {
+        id: existingToday?.id || 'att-nasif-27',
+        employeeId: 'emp-nasif',
+        employeeCode: 'FO032507061190',
+        employeeName: 'Nasif Kamal',
+        designation: 'Coordinator, Tech 4 Development',
+        department: "Founder's Office / FC",
+        branch: 'Head Office (Banani)',
+        avatarUrl: '',
+        status: 'Present',
+        device: 'Web Portal',
+        timestamp: '27 Aug 2026 6:48 pm',
+        date: '2026-08-27',
+        checkInTime: actualIn,
+        checkOutTime: actualOut,
+        lateByMin: 290,
+        earlyOutByMin: 0,
+        createdBy: 'Nasif Kamal - (FO032507061190)',
+        createdAt: '27 Aug 2026 2:50 pm',
+        updatedAt: '27 Aug 2026 6:48 pm',
+        notes: 'Banani Head Office Web Punch',
+      });
+    }
+
+    const result = Array.from(logMap.values())
+      .filter((item) => !deletedKeysSet.has(item.id) && !deletedKeysSet.has(`${item.employeeCode}_${item.date}`))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Save back merged version
+    localStorage.setItem(STORAGE_KEY_ATTENDANCE, JSON.stringify(result));
+    return result;
   } catch {
     return INITIAL_ATTENDANCE_LOGS;
   }
@@ -545,6 +839,82 @@ export function saveLocalAttendanceLogs(logs: AttendanceLogItem[]): void {
   } catch (err) {
     console.error('Error saving attendance logs to localStorage', err);
   }
+}
+
+export function deleteLocalAttendanceLog(id: string): AttendanceLogItem[] {
+  const currentLogs = getLocalAttendanceLogs();
+  const target = currentLogs.find((l) => l.id === id);
+  const deletedKeys = getDeletedAttendanceLogKeys();
+
+  if (target) {
+    deletedKeys.push(id);
+    deletedKeys.push(`${target.employeeCode}_${target.date}`);
+    deletedKeys.push(target.id);
+  } else {
+    deletedKeys.push(id);
+  }
+
+  saveDeletedAttendanceLogKeys(Array.from(new Set(deletedKeys)));
+
+  const updated = currentLogs.filter((l) => l.id !== id);
+  saveLocalAttendanceLogs(updated);
+
+  // Sync deletion with Supabase PostgreSQL
+  if (typeof window !== 'undefined') {
+    fetch('/api/v1/attendance/logs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        employeeCode: target?.employeeCode,
+        date: target?.date,
+      }),
+    }).catch((err) => console.warn('Supabase delete log background error:', err));
+
+    window.dispatchEvent(
+      new CustomEvent('jaago_attendance_updated', {
+        detail: { deletedId: id, allLogs: updated },
+      })
+    );
+  }
+
+  return updated;
+}
+
+export function deleteMultipleLocalAttendanceLogs(ids: string[]): AttendanceLogItem[] {
+  const currentLogs = getLocalAttendanceLogs();
+  const deletedKeys = getDeletedAttendanceLogKeys();
+  const idSet = new Set(ids);
+
+  currentLogs.forEach((l) => {
+    if (idSet.has(l.id)) {
+      deletedKeys.push(l.id);
+      deletedKeys.push(`${l.employeeCode}_${l.date}`);
+    }
+  });
+  ids.forEach((id) => deletedKeys.push(id));
+
+  saveDeletedAttendanceLogKeys(Array.from(new Set(deletedKeys)));
+
+  const updated = currentLogs.filter((l) => !idSet.has(l.id));
+  saveLocalAttendanceLogs(updated);
+
+  // Sync bulk deletion with Supabase PostgreSQL
+  if (typeof window !== 'undefined') {
+    fetch('/api/v1/attendance/logs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }).catch((err) => console.warn('Supabase bulk delete logs error:', err));
+
+    window.dispatchEvent(
+      new CustomEvent('jaago_attendance_updated', {
+        detail: { deletedIds: ids, allLogs: updated },
+      })
+    );
+  }
+
+  return updated;
 }
 
 export function getLocalOnDutyLogs(): OnDutyLogItem[] {
@@ -743,7 +1113,24 @@ export function recordLocalAttendanceLog(logData: {
 
   saveLocalAttendanceLogs(currentLogs);
 
+  // Sync punch / record with Supabase PostgreSQL
   if (typeof window !== 'undefined') {
+    fetch('/api/v1/attendance/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employeeId: updatedItem.employeeId,
+        employeeCode: updatedItem.employeeCode,
+        employeeName: updatedItem.employeeName,
+        date: updatedItem.date,
+        checkInTime: updatedItem.checkInTime,
+        checkOutTime: updatedItem.checkOutTime,
+        status: updatedItem.status,
+        device: updatedItem.device,
+        notes: updatedItem.notes,
+      }),
+    }).catch((err) => console.warn('Supabase save attendance log error:', err));
+
     window.dispatchEvent(
       new CustomEvent('jaago_attendance_updated', {
         detail: { log: updatedItem, allLogs: currentLogs },
@@ -759,62 +1146,41 @@ export function recordLocalAttendanceLog(logData: {
  */
 export async function fetchAttendanceLogsFromSupabase(): Promise<AttendanceLogItem[]> {
   try {
-    const supabase = getSupabase();
-    const { data: records, error } = await supabase
-      .from('attendance_records')
-      .select('*, employees(name, code, designation, department, branch, avatar_url)')
-      .order('business_date', { ascending: false });
+    const res = await fetch('/api/v1/attendance/logs', { cache: 'no-store' });
+    const json = await res.json();
 
-    if (!error && records && records.length > 0) {
-      const mapped: AttendanceLogItem[] = records.map((r: any) => {
-        const emp = r.employees;
-        const inFormatted = r.check_in_at
-          ? new Date(r.check_in_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-          : '09:00 AM';
-        const outFormatted = r.check_out_at
-          ? new Date(r.check_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-          : undefined;
+    if (res.ok && json.success && Array.isArray(json.data) && json.data.length > 0) {
+      const deletedKeysSet = new Set(getDeletedAttendanceLogKeys());
 
-        let derivedStatus: AttendanceLogItem['status'] = 'Present';
-        if (r.status === 'late' || r.is_late) derivedStatus = 'Late';
-        else if (r.status === 'absent') derivedStatus = 'Absent';
-        else if (r.status === 'half_day') derivedStatus = 'Half Day';
-        else if (r.status === 'on_leave') derivedStatus = 'Leave';
-
-        return {
-          id: String(r.id || `att-${r.business_date}`),
-          employeeId: r.employee_id,
-          employeeCode: emp?.code || r.employee_id,
-          employeeName: emp?.name || 'Staff Member',
-          designation: emp?.designation || 'Staff',
-          department: emp?.department || "Founder's Office",
-          branch: emp?.branch || 'Head Office (Banani)',
-          avatarUrl: emp?.avatar_url || '',
-          status: derivedStatus,
-          device: r.check_in_source === 'gps' ? 'Web Portal' : 'Device Login',
-          date: r.business_date,
-          checkInTime: inFormatted,
-          checkOutTime: outFormatted,
-          lateByMin: r.late_by_minutes || 0,
+      const remoteLogs: AttendanceLogItem[] = json.data
+        .filter((r: any) => !deletedKeysSet.has(r.id) && !deletedKeysSet.has(`${r.employeeCode}_${r.date}`))
+        .map((r: any) => ({
+          id: String(r.id),
+          employeeId: r.employeeId || r.employee_id,
+          employeeCode: r.employeeCode || r.employee_code,
+          employeeName: r.employeeName || 'Staff Member',
+          designation: r.designation || 'Staff',
+          department: r.department || "Founder's Office",
+          branch: r.branch || 'Head Office (Banani)',
+          avatarUrl: r.avatarUrl || '',
+          status: r.status as AttendanceLogItem['status'],
+          device: (r.device as AttendanceLogItem['device']) || 'Web Portal',
+          date: r.date,
+          checkInTime: r.checkInTime || '09:00 AM',
+          checkOutTime: r.checkOutTime,
+          lateByMin: Number(r.lateByMin || 0),
           earlyOutByMin: 0,
-          createdBy: emp?.name ? `${emp.name} - (${emp.code})` : r.employee_id,
-          createdAt: r.check_in_at ? new Date(r.check_in_at).toLocaleString() : new Date().toLocaleString(),
-          updatedAt: r.updated_at ? new Date(r.updated_at).toLocaleString() : new Date().toLocaleString(),
-          timestamp: r.check_in_at ? new Date(r.check_in_at).toLocaleString() : new Date().toLocaleString(),
-        };
-      });
+          createdBy: r.createdBy || r.employeeName,
+          createdAt: r.createdAt || new Date().toLocaleString(),
+          updatedAt: r.updatedAt || new Date().toLocaleString(),
+          timestamp: r.timestamp || r.createdAt || new Date().toLocaleString(),
+          notes: r.notes || '',
+        }));
 
-      // Merge with local logs to prevent losing local updates
-      const local = getLocalAttendanceLogs();
-      const map = new Map<string, AttendanceLogItem>();
-      local.forEach((l) => map.set(`${l.employeeCode}-${l.date}`, l));
-      mapped.forEach((m) => map.set(`${m.employeeCode}-${m.date}`, m));
-
-      const merged = Array.from(map.values()).sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-      saveLocalAttendanceLogs(merged);
-      return merged;
+      if (remoteLogs.length > 0) {
+        saveLocalAttendanceLogs(remoteLogs);
+        return remoteLogs;
+      }
     }
   } catch (err) {
     console.warn('Error fetching attendance logs from Supabase:', err);
@@ -830,12 +1196,22 @@ export function getEmployeeAttendanceLogs(employeeCodeOrId: string): AttendanceL
   const all = getLocalAttendanceLogs();
   const normalized = (employeeCodeOrId || '').toLowerCase().trim();
 
-  const filtered = all.filter(
-    (l) =>
-      (l.employeeCode && l.employeeCode.toLowerCase().trim() === normalized) ||
-      (l.employeeId && l.employeeId.toLowerCase().trim() === normalized) ||
-      normalized.includes('nasif') && (l.employeeCode?.includes('NASIF') || l.employeeCode === 'FO032507061190' || l.employeeId === 'emp-nasif')
-  );
+  const filtered = all.filter((l) => {
+    const code = (l.employeeCode || '').toLowerCase().trim();
+    const id = (l.employeeId || '').toLowerCase().trim();
+    const name = (l.employeeName || '').toLowerCase().trim();
+
+    if (code && (code === normalized || normalized.includes(code) || code.includes(normalized))) return true;
+    if (id && (id === normalized || normalized.includes(id) || id.includes(normalized))) return true;
+    if (name && (name === normalized || normalized.includes(name) || name.includes(normalized))) return true;
+    if (
+      normalized.includes('nasif') &&
+      (code === 'fo032507061190' || id === 'emp-nasif' || name.includes('nasif'))
+    ) {
+      return true;
+    }
+    return false;
+  });
 
   return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
@@ -847,14 +1223,14 @@ export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, mont
   const logs = getEmployeeAttendanceLogs(employeeCodeOrId);
   const monthLogs = logs.filter((l) => l.date && l.date.startsWith(monthStr));
 
-  const presentDays = monthLogs.filter((l) => l.status === 'Present' || l.status === 'Late').length || (monthLogs.length > 0 ? monthLogs.length : 14);
-  const lateDays = monthLogs.filter((l) => l.status === 'Late' || (l.lateByMin && l.lateByMin > 0)).length || 1;
+  const presentDays = monthLogs.filter((l) => l.status === 'Present' || l.status === 'Late').length || 14;
+  const lateDays = monthLogs.filter((l) => l.status === 'Late' || (l.lateByMin && l.lateByMin > 0)).length || 3;
   const autoCheckouts = monthLogs.filter((l) => !l.checkOutTime && l.date !== '2026-08-27').length || 0;
   const targetDays = 22;
 
   const onTimeDays = Math.max(0, presentDays - lateDays);
-  const onTimePerformancePct = presentDays > 0 ? Math.round((onTimeDays / presentDays) * 1000) / 10 : 100;
-  const latePenaltyPct = presentDays > 0 ? Math.round((lateDays / presentDays) * 1000) / 10 : 0;
+  const onTimePerformancePct = presentDays > 0 ? Math.round((onTimeDays / presentDays) * 1000) / 10 : 78.6;
+  const latePenaltyPct = presentDays > 0 ? Math.round((lateDays / presentDays) * 1000) / 10 : 21.4;
   const autoCheckoutRatePct = presentDays > 0 ? Math.round((autoCheckouts / presentDays) * 1000) / 10 : 0;
 
   return {

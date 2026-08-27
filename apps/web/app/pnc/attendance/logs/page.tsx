@@ -15,9 +15,11 @@ import {
 import {
   AttendanceLogItem,
   getLocalAttendanceLogs,
-  saveLocalAttendanceLogs,
+  recordLocalAttendanceLog,
   fetchAttendanceLogsFromSupabase,
   calculateWorkingHoursString,
+  deleteLocalAttendanceLog,
+  deleteMultipleLocalAttendanceLogs,
 } from '@/lib/supabase-attendance';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
 
@@ -32,6 +34,15 @@ export default function AttendanceLogsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingLog, setEditingLog] = useState<AttendanceLogItem | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    ids: string[];
+    names: string;
+  }>({
+    isOpen: false,
+    ids: [],
+    names: '',
+  });
 
   // Form State
   const [formData, setFormData] = useState<{
@@ -156,67 +167,55 @@ export default function AttendanceLogsPage() {
       return;
     }
 
-    const nowFormatted = new Date().toLocaleString('en-US', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
+    recordLocalAttendanceLog({
+      employeeId: formData.employeeId,
+      employeeCode: formData.employeeCode,
+      employeeName: formData.employeeName,
+      designation: formData.designation,
+      department: formData.department,
+      branch: formData.branch,
+      date: formData.date,
+      checkInTime: formData.time,
+      status: formData.status,
+      device: formData.device,
+      notes: formData.notes,
     });
 
-    let updated: AttendanceLogItem[];
-    if (editingLog) {
-      updated = logs.map((l) =>
-        l.id === editingLog.id
-          ? {
-              ...l,
-              ...formData,
-              checkInTime: formData.time,
-              timestamp: `${new Date(formData.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ${formData.time}`,
-              updatedAt: nowFormatted,
-            }
-          : l
-      );
-      showToast(`Record for ${formData.employeeName} updated successfully!`);
-    } else {
-      const newLog: AttendanceLogItem = {
-        id: `att-${Date.now()}`,
-        employeeId: formData.employeeId,
-        employeeCode: formData.employeeCode,
-        employeeName: formData.employeeName,
-        designation: formData.designation,
-        department: formData.department,
-        branch: formData.branch,
-        status: formData.status,
-        device: formData.device,
-        timestamp: `${new Date(formData.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ${formData.time}`,
-        date: formData.date,
-        checkInTime: formData.time,
-        checkOutTime: '06:00 PM',
-        lateByMin: 0,
-        earlyOutByMin: 0,
-        createdBy: `${formData.employeeName} - (${formData.employeeCode})`,
-        createdAt: nowFormatted,
-        updatedAt: nowFormatted,
-        notes: formData.notes,
-      };
-      updated = [newLog, ...logs];
-      showToast(`Attendance record logged for ${formData.employeeName}!`);
-    }
-
-    setLogs(updated);
-    saveLocalAttendanceLogs(updated);
+    setLogs(getLocalAttendanceLogs());
+    showToast(`Record for ${formData.employeeName} saved successfully!`);
     setShowModal(false);
   };
 
   const handleDeleteRecord = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete attendance record for ${name}?`)) {
-      const updated = logs.filter((l) => l.id !== id);
+    setDeleteConfirm({
+      isOpen: true,
+      ids: [id],
+      names: name,
+    });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    setDeleteConfirm({
+      isOpen: true,
+      ids: [...selectedIds],
+      names: `${selectedIds.length} selected record(s)`,
+    });
+  };
+
+  const executeDelete = () => {
+    if (deleteConfirm.ids.length === 1 && deleteConfirm.ids[0]) {
+      const updated = deleteLocalAttendanceLog(deleteConfirm.ids[0]);
       setLogs(updated);
-      saveLocalAttendanceLogs(updated);
-      showToast(`Record for ${name} removed.`);
+      showToast(`Attendance record deleted successfully!`);
+    } else if (deleteConfirm.ids.length > 1) {
+      const updated = deleteMultipleLocalAttendanceLogs(deleteConfirm.ids);
+      setLogs(updated);
+      showToast(`${deleteConfirm.ids.length} attendance records deleted successfully!`);
     }
+    const deletedIdSet = new Set(deleteConfirm.ids);
+    setSelectedIds((prev) => prev.filter((id) => !deletedIdSet.has(id)));
+    setDeleteConfirm({ isOpen: false, ids: [], names: '' });
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -286,14 +285,27 @@ export default function AttendanceLogsPage() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenAddModal}
-          className="flex items-center justify-center space-x-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition active:scale-95 cursor-pointer"
-        >
-          <Plus className="h-4 w-4" />
-          <span>New Record</span>
-        </button>
+        <div className="flex items-center space-x-2.5">
+          {selectedIds.length > 0 && (
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="flex items-center justify-center space-x-1.5 px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-rose-500/25 transition active:scale-95 cursor-pointer animate-in fade-in zoom-in-95"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleOpenAddModal}
+            className="flex items-center justify-center space-x-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition active:scale-95 cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Record</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Toolbar (Screenshot 4 layout) */}
@@ -367,6 +379,43 @@ export default function AttendanceLogsPage() {
           </div>
         </div>
       </div>
+
+      {/* ── BULK SELECTION ACTION BAR ── */}
+      {selectedIds.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs shadow-md animate-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center space-x-3 text-rose-500 font-bold">
+            <div className="h-8 w-8 rounded-xl bg-rose-500/20 flex items-center justify-center">
+              <Trash2 className="h-4 w-4 text-rose-500" />
+            </div>
+            <div>
+              <span className="text-sm font-black text-foreground">
+                {selectedIds.length} Record{selectedIds.length > 1 ? 's' : ''} Selected
+              </span>
+              <p className="text-[11px] text-muted-foreground font-normal">
+                Choose an action for selected attendance log entries
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds([])}
+              className="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface/80 border border-border text-foreground font-bold text-xs transition cursor-pointer"
+            >
+              Deselect All
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md shadow-rose-500/20 transition cursor-pointer flex items-center space-x-1.5 active:scale-95"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Delete Selected ({selectedIds.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Attendance Logs Table */}
       <div className="bg-card border border-border/70 rounded-2xl overflow-hidden shadow-sm">
@@ -672,6 +721,56 @@ export default function AttendanceLogsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── DELETE CONFIRMATION MODAL ────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {deleteConfirm.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-card border border-border/80 rounded-3xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-border/50">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center shadow-xs">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-foreground">Confirm Deletion</h3>
+                  <p className="text-xs text-muted-foreground">Permanent attendance log removal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm({ isOpen: false, ids: [], names: '' })}
+                className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-xs sm:text-sm text-foreground/85 leading-relaxed">
+              Are you sure you want to delete attendance record(s) for <strong className="text-foreground font-bold">{deleteConfirm.names}</strong>? This action will permanently remove the entries from attendance logs and summaries.
+            </p>
+
+            <div className="flex items-center justify-end space-x-2.5 pt-2 border-t border-border/50">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm({ isOpen: false, ids: [], names: '' })}
+                className="px-4 py-2 rounded-xl bg-surface hover:bg-surface/80 border border-border text-xs font-bold text-foreground transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeDelete}
+                className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold shadow-md shadow-rose-500/20 transition flex items-center space-x-1.5 cursor-pointer active:scale-95"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete Now</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

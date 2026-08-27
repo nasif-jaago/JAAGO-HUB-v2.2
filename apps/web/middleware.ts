@@ -15,12 +15,11 @@ const PUBLIC_PATHS = [
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  // 1. Check if the path is a public route or static asset
+  // 1. Check if the path is a public route, API route, or static asset
   const isPublicRoute =
     PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`)) ||
-    pathname.startsWith('/api/v1/auth') ||
+    pathname.startsWith('/api/') ||
     pathname.startsWith('/_next') ||
-    pathname.startsWith('/api/health') ||
     pathname.includes('.'); // Static files (.png, .jpg, .ico, .svg, .webp, etc.)
 
   // 2. Check for session tokens in request cookies

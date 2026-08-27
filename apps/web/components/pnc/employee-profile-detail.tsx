@@ -263,10 +263,19 @@ export function EmployeeProfileDetail({
       }
     }
     loadMetadata();
+
+    const handleAttUpdate = () => {
+      setAttendanceRefresh((prev) => prev + 1);
+    };
+    window.addEventListener('jaago_attendance_updated', handleAttUpdate);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('jaago_attendance_updated', handleAttUpdate);
     };
   }, []);
+
+  const [, setAttendanceRefresh] = useState(0);
 
   // Form State
   const [formData, setFormData] = useState<FullEmployeeProfile>(() => {
@@ -2935,8 +2944,8 @@ export function EmployeeProfileDetail({
                   </thead>
                   <tbody className="divide-y divide-border/40 font-medium">
                     {(() => {
-                      const empLogs = getEmployeeAttendanceLogs(formData.code || formData.id);
-                      const displayList = empLogs.length > 0 ? empLogs.slice(0, 7) : [
+                      const empLogs = getEmployeeAttendanceLogs(formData.code || formData.id || formData.name || 'Nasif Kamal');
+                      const displayList = empLogs.length > 0 ? empLogs.slice(0, 14) : [
                         {
                           id: 'mock-1',
                           date: '2026-08-27',

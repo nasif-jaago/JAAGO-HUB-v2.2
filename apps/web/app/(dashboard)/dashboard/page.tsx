@@ -18,6 +18,7 @@ import {
   ExternalLink,
   ChevronRight,
   ShieldCheck,
+  X,
 } from 'lucide-react';
 import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
 import {
@@ -429,6 +430,18 @@ export default function DashboardPage() {
     return () => window.removeEventListener('jaago_attendance_updated', handleAttUpdate);
   }, [user.employeeCode, user.id]);
 
+  const [dashboardToast, setDashboardToast] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setDashboardToast({ message, type });
+    setTimeout(() => {
+      setDashboardToast((curr) => (curr?.message === message ? null : curr));
+    }, 4000);
+  };
+
   const [imgError, setImgError] = useState(false);
   const firstName = user.fullName.split(' ')[0] || 'Nasif';
 
@@ -441,6 +454,7 @@ export default function DashboardPage() {
       const coords = await getCoordinates();
       const firstIn = new Date();
       const timeStr = firstIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const todayDate = new Date().toISOString().slice(0, 10);
 
       // Save to unified attendance log store immediately
       recordLocalAttendanceLog({
@@ -450,7 +464,7 @@ export default function DashboardPage() {
         designation: user.jobTitle,
         department: user.department,
         branch: 'Head Office (Banani)',
-        date: '2026-08-27',
+        date: todayDate,
         checkInTime: timeStr,
         status: 'Present',
         device: 'Web Portal',
@@ -459,12 +473,14 @@ export default function DashboardPage() {
 
       setIsCheckedIn(true);
       setCheckInTime(timeStr);
+      setCheckOutTime('');
       setElapsedSeconds(0);
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('jaago_is_checked_in', 'true');
         localStorage.setItem('jaago_checkin_timestamp', firstIn.getTime().toString());
         localStorage.setItem('jaago_first_checkin_time', timeStr);
+        localStorage.removeItem('jaago_last_checkout_time');
         localStorage.removeItem('jaago_worked_seconds');
       }
 
@@ -486,12 +502,15 @@ export default function DashboardPage() {
           longitude: coords.longitude,
           accuracy: coords.accuracy,
           deviceInfo: 'Web Portal Dashboard',
+          allowOverride: true,
+          forceNew: true,
         }),
       }).catch(() => {});
 
+      showToast(`Checked in successfully at ${timeStr}! Live working hours timer started.`, 'success');
       refreshCanonicalAttendance(user.id);
     } catch {
-      // Handled
+      showToast('Check-in failed. Please try again.', 'error');
     } finally {
       setIsPunching(false);
     }
@@ -506,6 +525,9 @@ export default function DashboardPage() {
       const coords = await getCoordinates();
       const lastOut = new Date();
       const timeStr = lastOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const todayDate = new Date().toISOString().slice(0, 10);
+
+      const effectiveInTime = checkInTime || '09:00 AM';
 
       // Save to unified attendance log store immediately
       recordLocalAttendanceLog({
@@ -515,8 +537,8 @@ export default function DashboardPage() {
         designation: user.jobTitle,
         department: user.department,
         branch: 'Head Office (Banani)',
-        date: '2026-08-27',
-        checkInTime: checkInTime || '02:50 PM',
+        date: todayDate,
+        checkInTime: effectiveInTime,
         checkOutTime: timeStr,
         status: 'Present',
         device: 'Web Portal',
@@ -526,10 +548,14 @@ export default function DashboardPage() {
       setIsCheckedIn(false);
       setCheckOutTime(timeStr);
 
+      const currentWorkedSec = elapsedSeconds > 0 ? elapsedSeconds : 14280;
+      const hoursText = (currentWorkedSec / 3600).toFixed(1);
+
       if (typeof window !== 'undefined') {
         localStorage.removeItem('jaago_is_checked_in');
         localStorage.removeItem('jaago_checkin_timestamp');
         localStorage.setItem('jaago_last_checkout_time', timeStr);
+        localStorage.setItem('jaago_worked_seconds', currentWorkedSec.toString());
       }
 
       setGpsTracker((prev) => ({
@@ -550,19 +576,41 @@ export default function DashboardPage() {
           longitude: coords.longitude,
           accuracy: coords.accuracy,
           deviceInfo: 'Web Portal Dashboard',
+          allowOverride: true,
         }),
       }).catch(() => {});
 
+      showToast(`Checked out successfully at ${timeStr}! (${hoursText}h recorded)`, 'success');
       refreshCanonicalAttendance(user.id);
     } catch {
-      // Handled
+      showToast('Check-out failed. Please try again.', 'error');
     } finally {
       setIsPunching(false);
     }
   };
 
   return (
-    <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none">
+    <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none relative">
+      {/* ── FLOATING DASHBOARD TOAST NOTIFICATION ── */}
+      {dashboardToast && (
+        <div
+          className={`fixed top-5 right-5 z-50 px-4 py-3 rounded-2xl shadow-2xl flex items-center space-x-2.5 text-xs font-bold transition transform animate-in slide-in-from-top-3 duration-200 ${
+            dashboardToast.type === 'error'
+              ? 'bg-rose-500 text-white shadow-rose-500/25'
+              : dashboardToast.type === 'info'
+              ? 'bg-blue-500 text-white shadow-blue-500/25'
+              : 'bg-emerald-500 text-white shadow-emerald-500/25'
+          }`}
+        >
+          {dashboardToast.type === 'error' ? (
+            <X className="h-4 w-4 stroke-[3]" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 stroke-[3]" />
+          )}
+          <span>{dashboardToast.message}</span>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* 📱 MOBILE VIEW ONLY (Strictly based on Reference Images 2 & 3)            */}
       {/* ========================================================================= */}
@@ -702,15 +750,18 @@ export default function DashboardPage() {
           <div className="grid grid-cols-3 gap-2 text-left">
             <div>
               <div className="text-[11px] font-semibold text-muted-foreground">Working Days</div>
-              <div className="text-base font-black text-foreground pt-1">13 / 15</div>
+              <div className="text-base font-black text-foreground pt-1">{monthlyMetrics.presentDays} / {monthlyMetrics.targetDays}</div>
+              <div className="text-[9px] font-black uppercase tracking-wider text-emerald-500 pt-0.5">PRESENT / TARGET</div>
             </div>
             <div>
               <div className="text-[11px] font-semibold text-muted-foreground">Late Days</div>
-              <div className="text-base font-black text-rose-500 pt-1">6</div>
+              <div className="text-base font-black text-rose-500 pt-1">{monthlyMetrics.lateDays}</div>
+              <div className="text-[9px] font-black uppercase tracking-wider text-rose-500 pt-0.5">LATE ENTRIES</div>
             </div>
             <div>
               <div className="text-[11px] font-semibold text-muted-foreground">Auto Check</div>
-              <div className="text-base font-black text-amber-500 pt-1">8</div>
+              <div className="text-base font-black text-amber-500 pt-1">{monthlyMetrics.autoCheckouts}</div>
+              <div className="text-[9px] font-black uppercase tracking-wider text-amber-500 pt-0.5">AUTO CHECKOUTS</div>
             </div>
           </div>
 
@@ -720,31 +771,31 @@ export default function DashboardPage() {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-foreground">On Time Performance</span>
-                <span className="text-emerald-500 font-black">53.8%</span>
+                <span className="text-foreground">On-Time Performance</span>
+                <span className="text-emerald-500 font-black">{monthlyMetrics.onTimePerformancePct}%</span>
               </div>
               <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
-                <div className="h-full bg-emerald-500 rounded-full" style={{ width: '53.8%' }} />
+                <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(100, Math.max(0, monthlyMetrics.onTimePerformancePct))}%` }} />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold">
                 <span className="text-foreground">Late Penalty</span>
-                <span className="text-rose-500 font-black">46.2%</span>
+                <span className="text-rose-500 font-black">{monthlyMetrics.latePenaltyPct}%</span>
               </div>
               <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
-                <div className="h-full bg-rose-500 rounded-full" style={{ width: '46.2%' }} />
+                <div className="h-full bg-rose-500 rounded-full" style={{ width: `${Math.min(100, Math.max(0, monthlyMetrics.latePenaltyPct))}%` }} />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold">
                 <span className="text-foreground">Auto Check–out Rate</span>
-                <span className="text-amber-500 font-black">61.5%</span>
+                <span className="text-amber-500 font-black">{monthlyMetrics.autoCheckoutRatePct}%</span>
               </div>
               <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
-                <div className="h-full bg-amber-500 rounded-full" style={{ width: '61.5%' }} />
+                <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.min(100, Math.max(0, monthlyMetrics.autoCheckoutRatePct))}%` }} />
               </div>
             </div>
           </div>

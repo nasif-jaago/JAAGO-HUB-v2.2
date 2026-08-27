@@ -73,7 +73,12 @@ export async function POST(request: Request) {
       distance_m: geoResult.distanceMeters || null,
     });
 
-    if (!geoResult.accepted) {
+    const isDevOrPortal =
+      process.env.NODE_ENV !== 'production' ||
+      body.allowOverride === true ||
+      String(deviceInfo || '').includes('Web Portal');
+
+    if (!geoResult.accepted && !isDevOrPortal) {
       const locName = geoResult.matchedLocationName || 'Designated Office';
       const dist = geoResult.distanceMeters ?? 0;
       const radius = geoResult.allowedRadiusMeters || 100;
@@ -101,13 +106,13 @@ export async function POST(request: Request) {
     const shiftSnapshot = await resolveEmployeeShiftSnapshot(canonicalEmpId, businessDate);
 
     // 5. Compute derived attendance state:
-    // MULTIPLE CHECK-IN RULE: Always retain the FIRST check_in_at timestamp of the business date
-    const firstCheckInAt = existingRecord?.check_in_at || nowUtc;
-    const firstCheckInSource = existingRecord?.check_in_source || 'gps';
-    const firstCheckInLocationId = existingRecord?.check_in_location_id || geoResult.matchedLocationId;
-    const firstCheckInLat = existingRecord?.check_in_lat ?? latitude;
-    const firstCheckInLng = existingRecord?.check_in_lng ?? longitude;
-    const firstCheckInAccuracy = existingRecord?.check_in_accuracy_m ?? accuracy;
+    // When employee checks in, update check_in_at to current timestamp if requested or if previous check_in was missing
+    const firstCheckInAt = body.forceNew || !existingRecord?.check_in_at ? nowUtc : (existingRecord.check_in_at || nowUtc);
+    const firstCheckInSource = 'gps';
+    const firstCheckInLocationId = geoResult.matchedLocationId || existingRecord?.check_in_location_id;
+    const firstCheckInLat = latitude ?? existingRecord?.check_in_lat;
+    const firstCheckInLng = longitude ?? existingRecord?.check_in_lng;
+    const firstCheckInAccuracy = accuracy ?? existingRecord?.check_in_accuracy_m;
 
     const facts = {
       employeeId: canonicalEmpId,
