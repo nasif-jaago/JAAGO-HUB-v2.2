@@ -10,3 +10,4 @@ export interface TenantScopedEntity extends BaseEntity {
 
 export * from './accounting/journal-engine';
 export * from './studio/custom-field-validator';
+export * from './attendance';

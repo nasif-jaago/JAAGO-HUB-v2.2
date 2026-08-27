@@ -505,3 +505,71 @@ export function saveLocalOnDutyLogs(logs: OnDutyLogItem[]): void {
     console.error('Error saving on duty logs to localStorage', err);
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. CANONICAL ATTENDANCE API INTEGRATIONS (ONE SOURCE OF TRUTH)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function performGpsCheckIn(payload: {
+  employeeId: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  deviceInfo?: string;
+}) {
+  const res = await fetch('/api/v1/attendance/check-in', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...payload,
+      capturedAt: new Date().toISOString(),
+    }),
+  });
+  return res.json();
+}
+
+export async function performGpsCheckOut(payload: {
+  employeeId: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  deviceInfo?: string;
+}) {
+  const res = await fetch('/api/v1/attendance/check-out', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...payload,
+      capturedAt: new Date().toISOString(),
+    }),
+  });
+  return res.json();
+}
+
+export async function fetchTodayAttendanceSession(employeeId: string) {
+  const res = await fetch(`/api/v1/attendance/me/today?employeeId=${encodeURIComponent(employeeId)}`);
+  return res.json();
+}
+
+export async function fetchMonthlyAttendanceSummary(employeeId: string, month?: string) {
+  const url = month
+    ? `/api/v1/attendance/me/summary?employeeId=${encodeURIComponent(employeeId)}&month=${month}`
+    : `/api/v1/attendance/me/summary?employeeId=${encodeURIComponent(employeeId)}`;
+  const res = await fetch(url);
+  return res.json();
+}
+
+export async function adjustAttendanceLog(payload: {
+  recordId: string;
+  checkInTime?: string;
+  checkOutTime?: string;
+  reason: string;
+  changedBy?: string;
+}) {
+  const res = await fetch('/api/v1/attendance/adjust', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}

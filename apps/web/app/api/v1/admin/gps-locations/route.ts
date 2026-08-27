@@ -40,6 +40,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 
+    // Mirror to geofence_locations for unified canonical schema
+    try {
+      await supabase.from('geofence_locations').upsert(
+        {
+          id: body.id,
+          name: body.name,
+          branch_office: body.branch_office || body.branchOffice,
+          latitude: body.latitude,
+          longitude: body.longitude,
+          radius_meters: body.radius_meters || 100,
+          is_active: body.status !== 'Inactive',
+          notes: body.notes || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
+    } catch {
+      // Non-blocking mirror
+    }
+
     return NextResponse.json({ success: true, data });
   } catch (err: any) {
     return NextResponse.json(
@@ -60,6 +80,13 @@ export async function DELETE(request: Request) {
 
     const supabase = getSupabaseAdminClient();
     const { error } = await supabase.from('gps_locations').delete().eq('id', id);
+
+    // Also delete from geofence_locations
+    try {
+      await supabase.from('geofence_locations').delete().eq('id', id);
+    } catch {
+      // Ignore
+    }
 
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 });
