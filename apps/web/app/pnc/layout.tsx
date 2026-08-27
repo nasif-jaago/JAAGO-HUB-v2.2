@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { getSupabase } from '@/lib/supabase-auth';
 import {
   LayoutDashboard,
   Users,
@@ -27,6 +28,8 @@ import {
   Moon,
   Coffee,
   Menu,
+  Shield,
+  Lock,
 } from 'lucide-react';
 
 export type ThemeMode = 'dark' | 'light' | 'espresso';
@@ -40,6 +43,67 @@ export default function PnCLayout({
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Strict Enterprise Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  // Client-Side ERP Authentication Verification
+  useEffect(() => {
+    let isMounted = true;
+    const supabase = getSupabase();
+
+    async function verifySession() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const storedToken =
+          typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
+        const storedUser =
+          typeof window !== 'undefined' ? localStorage.getItem('jaago_user') : null;
+
+        if (!session && !storedToken && !storedUser) {
+          if (isMounted) {
+            setIsAuthenticated(false);
+            const redirectPath = window.location.pathname + window.location.search;
+            window.location.href = `/login?redirect=${encodeURIComponent(redirectPath)}`;
+          }
+          return;
+        }
+
+        if (isMounted) {
+          setIsAuthenticated(true);
+        }
+      } catch {
+        if (isMounted) {
+          setIsAuthenticated(false);
+          window.location.href = '/login';
+        }
+      }
+    }
+
+    verifySession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        if (isMounted) {
+          setIsAuthenticated(false);
+          window.location.href = '/login';
+        }
+      } else if (session) {
+        if (isMounted) {
+          setIsAuthenticated(true);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Auto-hide after 3 seconds on initial load
   useEffect(() => {
@@ -143,6 +207,39 @@ export default function PnCLayout({
     if (pathname.includes('/time-off') || pathname.includes('/leave')) return 'Leave Calendar';
     return 'Dashboard';
   };
+
+  // ── ZERO CONTENT LEAK GUARD ──
+  if (isAuthenticated === null || isAuthenticated === false) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background text-foreground p-6 text-center select-none">
+        <div className="w-full max-w-sm space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          <div className="relative mx-auto h-20 w-20 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-3xl bg-primary/10 border border-primary/25 animate-ping opacity-25" />
+            <div className="relative h-16 w-16 rounded-2xl bg-card border border-border flex items-center justify-center text-primary shadow-xl">
+              <Shield className="h-8 w-8 stroke-[2.2] animate-pulse" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-center space-x-2 text-xs font-black uppercase tracking-widest text-primary">
+              <Lock className="h-3.5 w-3.5" />
+              <span>Enterprise Identity Verification</span>
+            </div>
+            <h2 className="text-xl font-extrabold text-foreground tracking-tight">
+              Authenticating JAAGO HUB Session
+            </h2>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Verifying authorized organization access credentials. Redirecting to login...
+            </p>
+          </div>
+
+          <div className="w-48 h-1 bg-surface rounded-full mx-auto overflow-hidden border border-border">
+            <div className="w-full h-full bg-primary animate-pulse" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden">

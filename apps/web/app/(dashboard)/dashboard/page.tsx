@@ -880,11 +880,11 @@ export default function DashboardPage() {
               {/* Check In Box - Matt Green with Auto Theme & Text Adjustment */}
               <button
                 onClick={handleCheckInAction}
-                disabled={isPunching || isCheckedIn}
-                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
+                disabled={isPunching}
+                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs cursor-pointer ${
                   isCheckedIn
-                    ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 cursor-default'
-                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60 cursor-pointer'
+                    ? 'bg-emerald-500/25 dark:bg-emerald-500/30 border-emerald-600/50 dark:border-emerald-400/50 text-emerald-950 dark:text-emerald-50 shadow-sm'
+                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60'
                 }`}
               >
                 <div className="h-8 w-8 rounded-xl bg-emerald-500/20 dark:bg-emerald-500/25 flex items-center justify-center text-emerald-700 dark:text-emerald-300 flex-shrink-0">
@@ -904,13 +904,11 @@ export default function DashboardPage() {
               {/* Check Out Box - Matt Red with Auto Theme & Text Adjustment */}
               <button
                 onClick={handleCheckOutAction}
-                disabled={isPunching || !isCheckedIn}
-                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
-                  isCheckedIn
-                    ? 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60 cursor-pointer'
-                    : checkOutTime
-                    ? 'bg-rose-500/10 dark:bg-rose-500/15 border-rose-500/30 text-rose-800 dark:text-rose-300 cursor-default'
-                    : 'bg-rose-500/5 dark:bg-rose-500/10 border-rose-500/20 text-rose-900/40 dark:text-rose-300/40 opacity-70 cursor-not-allowed'
+                disabled={isPunching}
+                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs cursor-pointer ${
+                  !isCheckedIn && checkOutTime
+                    ? 'bg-rose-500/25 dark:bg-rose-500/30 border-rose-600/50 dark:border-rose-400/50 text-rose-950 dark:text-rose-50 shadow-sm'
+                    : 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60'
                 }`}
               >
                 <div className="h-8 w-8 rounded-xl bg-rose-500/20 dark:bg-rose-500/25 flex items-center justify-center text-rose-700 dark:text-rose-300 flex-shrink-0">
