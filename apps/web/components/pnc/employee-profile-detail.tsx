@@ -34,7 +34,12 @@ import {
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
-import { getLocalAttendanceLogs, getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
+import {
+  getEmployeeAttendanceLogs,
+  calculateWorkingHoursString,
+  getLocalShifts,
+  ShiftItem,
+} from '@/lib/supabase-attendance';
 import {
   fetchOrganizationsFromSupabase,
   fetchBranchesFromSupabase,
@@ -2929,74 +2934,62 @@ export function EmployeeProfileDetail({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40 font-medium">
-                    {/* Render recent logs */}
                     {(() => {
-                      const allLogs = getLocalAttendanceLogs();
-                      const filtered = allLogs.filter(
-                        (l) => l.employeeCode === formData.code || l.employeeId === formData.id
-                      );
-                      const displayList =
-                        filtered.length > 0
-                          ? filtered.slice(0, 5)
-                          : [
-                              {
-                                id: 'mock-1',
-                                date: new Date().toISOString().slice(0, 10),
-                                checkInTime: '09:55 AM',
-                                checkOutTime: '06:05 PM',
-                                device: 'Web Portal',
-                                status: 'Present',
-                              },
-                              {
-                                id: 'mock-2',
-                                date: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
-                                checkInTime: '10:08 AM',
-                                checkOutTime: '06:12 PM',
-                                device: 'RFID Scanner',
-                                status: 'Late',
-                              },
-                              {
-                                id: 'mock-3',
-                                date: new Date(Date.now() - 172800000).toISOString().slice(0, 10),
-                                checkInTime: '09:50 AM',
-                                checkOutTime: '06:00 PM',
-                                device: 'Web Portal',
-                                status: 'Present',
-                              },
-                            ];
+                      const empLogs = getEmployeeAttendanceLogs(formData.code || formData.id);
+                      const displayList = empLogs.length > 0 ? empLogs.slice(0, 7) : [
+                        {
+                          id: 'mock-1',
+                          date: '2026-08-27',
+                          checkInTime: '02:50 PM',
+                          checkOutTime: '06:48 PM',
+                          device: 'Web Portal',
+                          status: 'Present',
+                        },
+                        {
+                          id: 'mock-2',
+                          date: '2026-08-26',
+                          checkInTime: '09:58 AM',
+                          checkOutTime: '06:15 PM',
+                          device: 'Device Login',
+                          status: 'Present',
+                        },
+                      ];
 
-                      return displayList.map((log: any) => (
-                        <tr key={log.id} className="hover:bg-surface/40 transition">
-                          <td className="py-3 px-4 font-mono text-[11px] text-foreground font-bold">
-                            {log.date}
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-emerald-500">
-                            {log.checkInTime || '09:55 AM'}
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-rose-500">
-                            {log.checkOutTime || '06:05 PM'}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-muted-foreground">
-                            8h 10m
-                          </td>
-                          <td className="py-3 px-3 text-muted-foreground text-[11px]">
-                            {log.device || 'Web Portal'}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                log.status === 'Present'
-                                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                                  : log.status === 'Late'
-                                  ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
-                                  : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
-                              }`}
-                            >
-                              {log.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ));
+                      return displayList.map((log: any) => {
+                        const durationStr = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
+                        return (
+                          <tr key={log.id} className="hover:bg-surface/40 transition">
+                            <td className="py-3 px-4 font-mono text-[11px] text-foreground font-bold">
+                              {log.date}
+                            </td>
+                            <td className="py-3 px-3 font-semibold text-emerald-500 font-mono">
+                              {log.checkInTime || '--:--'}
+                            </td>
+                            <td className="py-3 px-3 font-semibold text-rose-500 font-mono">
+                              {log.checkOutTime || '--:--'}
+                            </td>
+                            <td className="py-3 px-3 font-mono text-[11px] text-foreground font-bold">
+                              {durationStr}
+                            </td>
+                            <td className="py-3 px-3 text-muted-foreground text-[11px]">
+                              {log.device || 'Web Portal'}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  log.status === 'Present'
+                                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                    : log.status === 'Late'
+                                    ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                                    : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                                }`}
+                              >
+                                {log.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      });
                     })()}
                   </tbody>
                 </table>

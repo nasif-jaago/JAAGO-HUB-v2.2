@@ -32,6 +32,15 @@ export function middleware(request: NextRequest) {
 
   const isAuthenticated = hasAccessToken || hasUserCookie || hasSupabaseCookie;
 
+  // Root path routing
+  if (pathname === '/') {
+    if (isAuthenticated) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    } else {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
   // ── 3. STRICT ERP AUTHENTICATION ENFORCEMENT ──
   // If accessing a protected route without authentication, immediately redirect to /login
   if (!isPublicRoute && !isAuthenticated) {

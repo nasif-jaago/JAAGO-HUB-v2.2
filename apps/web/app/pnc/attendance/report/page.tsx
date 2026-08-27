@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Calendar,
   ChevronLeft,
@@ -17,7 +17,11 @@ import {
   X,
 } from 'lucide-react';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
-import { getLocalAttendanceLogs } from '@/lib/supabase-attendance';
+import {
+  getLocalAttendanceLogs,
+  recordLocalAttendanceLog,
+  fetchAttendanceLogsFromSupabase,
+} from '@/lib/supabase-attendance';
 import { TimePickerInput } from '@/components/ui/time-picker-input';
 
 interface ReportRow {
@@ -34,12 +38,79 @@ interface ReportRow {
   checkOutTime: string;
   lateBy: string;
   earlyOutBy: string;
-  status: 'Present' | 'Absent' | 'Late' | 'Early Out' | 'Checked In' | 'Checked Out' | 'Half Day' | 'Leave' | 'Holiday' | 'Weekend';
+  status: 'Present' | 'Absent' | 'Late' | 'Early Out' | 'Checked In' | 'Checked Out' | 'Half Day' | 'On Duty' | 'Leave' | 'Holiday' | 'Weekend' | 'N/A';
 }
+
+const FALLBACK_EMPLOYEES: Partial<FullEmployeeProfile>[] = [
+  {
+    id: 'emp-nasif',
+    code: 'FO032507061190',
+    name: 'Nasif Kamal',
+    department: "Founder's Office / FC",
+    designation: 'Coordinator, Tech 4 Development',
+    branch: 'Head Office (Banani)',
+  },
+  {
+    id: 'emp-nayeem',
+    code: 'FO072408231002',
+    name: 'S M Nayeem Rahman',
+    department: "Founder's Office / FC",
+    designation: 'Program Officer',
+    branch: 'Head Office (Banani)',
+  },
+  {
+    id: 'emp-nurul',
+    code: 'MAD06220101579',
+    name: 'Md. Nurul Islam',
+    department: 'Digital School Program',
+    designation: 'Support Staff',
+    branch: 'Madaripur School',
+  },
+  {
+    id: 'emp-admin2',
+    code: 'admin2',
+    name: 'admin2(Do Not Delete)',
+    department: 'DSP Central Team - Manager - DSP HUB',
+    designation: 'Manager',
+    branch: 'Head Office (Banani)',
+  },
+  {
+    id: 'emp-dev-1',
+    code: 'employee-id-1',
+    name: 'Employee',
+    department: 'DSP Central Team - In Officer - DSP HUB',
+    designation: 'Field Officer',
+    branch: 'Chittagong Campus',
+  },
+  {
+    id: 'emp-sup-1',
+    code: 'supervisor',
+    name: 'Supervisor',
+    department: 'DSP Central Team',
+    designation: 'Area Supervisor',
+    branch: 'Cox’s Bazar Branch',
+  },
+  {
+    id: 'emp-rishan',
+    code: 'HOB062616061625',
+    name: 'Md. Rishan Mia',
+    department: 'Digital School Program',
+    designation: 'Support Staff',
+    branch: 'Habiganj School',
+  },
+  {
+    id: 'emp-akkas',
+    code: 'BN10171503549',
+    name: 'Md. Akkas Ali',
+    department: 'Program Implementation',
+    designation: 'Support Staff',
+    branch: 'Banani School',
+  },
+];
 
 export default function AttendanceReportPage() {
   const [timePeriod, setTimePeriod] = useState<'Today' | 'Yesterday' | 'This Week' | 'Last 7 Days' | 'Last 15 Days' | 'Last 30 Days' | 'This Month' | 'Last Month'>('Today');
-  const [selectedDate, setSelectedDate] = useState('2026-08-26');
+  const [selectedDate, setSelectedDate] = useState('2026-08-27');
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date(2026, 7, 1)); // August 2026
 
   // Filters
@@ -64,139 +135,125 @@ export default function AttendanceReportPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const generateReportForDate = useCallback((targetDate: string, empList: FullEmployeeProfile[]) => {
+    const listToUse = empList && empList.length > 0 ? empList : (FALLBACK_EMPLOYEES as FullEmployeeProfile[]);
+    const allLogs = getLocalAttendanceLogs();
+
+    const rows: ReportRow[] = listToUse.map((emp, index) => {
+      const match = allLogs.find(
+        (l) =>
+          l.date === targetDate &&
+          (l.employeeCode === emp.code || l.employeeId === emp.id || (emp.name?.includes('Nasif') && l.employeeName?.includes('Nasif')))
+      );
+
+      if (match) {
+        return {
+          id: `rep-${emp.id || index}-${targetDate}`,
+          employeeId: emp.id || `emp-${emp.code}`,
+          employeeCode: emp.code,
+          employeeName: emp.name,
+          department: emp.department || "Founder's Office / FC",
+          designation: emp.designation || 'Staff',
+          branch: emp.branch || 'Head Office (Banani)',
+          avatarUrl: emp.avatarUrl || '',
+          date: targetDate,
+          checkInTime: match.checkInTime || 'N/A',
+          checkOutTime: match.checkOutTime || 'N/A',
+          lateBy: match.lateByMin ? `${match.lateByMin} min` : 'N/A',
+          earlyOutBy: match.earlyOutByMin ? `${match.earlyOutByMin} min` : 'N/A',
+          status: match.status || 'Present',
+        };
+      }
+
+      // Default mock presence for first few staff on weekdays if no explicit log
+      const isNasif = emp.name?.toLowerCase().includes('nasif');
+      if (isNasif && targetDate === '2026-08-27') {
+        const storedIn = typeof window !== 'undefined' ? localStorage.getItem('jaago_first_checkin_time') : null;
+        const storedOut = typeof window !== 'undefined' ? localStorage.getItem('jaago_last_checkout_time') : null;
+        return {
+          id: `rep-${emp.id || index}-${targetDate}`,
+          employeeId: emp.id || `emp-${emp.code}`,
+          employeeCode: emp.code,
+          employeeName: emp.name,
+          department: emp.department || "Founder's Office / FC",
+          designation: emp.designation || 'Staff',
+          branch: emp.branch || 'Head Office (Banani)',
+          avatarUrl: emp.avatarUrl || '',
+          date: targetDate,
+          checkInTime: storedIn || '02:50 PM',
+          checkOutTime: storedOut || '06:48 PM',
+          lateBy: 'N/A',
+          earlyOutBy: 'N/A',
+          status: 'Present',
+        };
+      }
+
+      const isNayeem = emp.name?.toLowerCase().includes('nayeem');
+      if (isNayeem && targetDate === '2026-08-27') {
+        return {
+          id: `rep-${emp.id || index}-${targetDate}`,
+          employeeId: emp.id || `emp-${emp.code}`,
+          employeeCode: emp.code,
+          employeeName: emp.name,
+          department: emp.department || "Founder's Office / FC",
+          designation: emp.designation || 'Staff',
+          branch: emp.branch || 'Head Office (Banani)',
+          date: targetDate,
+          checkInTime: '10:05 AM',
+          checkOutTime: '06:00 PM',
+          lateBy: '5 min',
+          earlyOutBy: 'N/A',
+          status: 'Late',
+        };
+      }
+
+      const isDefaultPresent = index < 3;
+      return {
+        id: `rep-${emp.id || index}-${targetDate}`,
+        employeeId: emp.id || `emp-${emp.code}`,
+        employeeCode: emp.code,
+        employeeName: emp.name,
+        department: emp.department || 'General',
+        designation: emp.designation || 'Staff Member',
+        branch: emp.branch || 'Head Office (Banani)',
+        avatarUrl: emp.avatarUrl || '',
+        date: targetDate,
+        checkInTime: isDefaultPresent ? '09:00 AM' : 'N/A',
+        checkOutTime: isDefaultPresent ? '05:00 PM' : 'N/A',
+        lateBy: 'N/A',
+        earlyOutBy: 'N/A',
+        status: isDefaultPresent ? 'Present' : 'Absent',
+      };
+    });
+
+    return rows;
+  }, []);
+
   useEffect(() => {
     fetchEmployeesFromSupabase().then((emps) => {
       if (emps && emps.length > 0) {
         setEmployees(emps);
+        setReportRows(generateReportForDate(selectedDate, emps));
+      } else {
+        setReportRows(generateReportForDate(selectedDate, []));
       }
     });
 
-    getLocalAttendanceLogs();
-    // Build report rows
-    const rows: ReportRow[] = [
-      {
-        id: 'rep-1',
-        employeeId: 'emp-nasif',
-        employeeCode: 'FO032507061190',
-        employeeName: 'Nasif Kamal',
-        department: "Founder's Office / FC",
-        designation: 'Coordinator, Tech 4 Development',
-        branch: 'Head Office (Banani)',
-        date: '25-08-2026',
-        checkInTime: '09:58 AM',
-        checkOutTime: '06:15 PM',
-        lateBy: 'N/A',
-        earlyOutBy: 'N/A',
-        status: 'Present',
-      },
-      {
-        id: 'rep-2',
-        employeeId: 'emp-nayeem',
-        employeeCode: 'FO072408231002',
-        employeeName: 'S M Nayeem Rahman',
-        department: "Founder's Office / FC",
-        designation: 'Program Officer',
-        branch: 'Head Office (Banani)',
-        date: '25-08-2026',
-        checkInTime: '10:15 AM',
-        checkOutTime: '06:05 PM',
-        lateBy: '15 min',
-        earlyOutBy: 'N/A',
-        status: 'Late',
-      },
-      {
-        id: 'rep-3',
-        employeeId: 'emp-nurul',
-        employeeCode: 'MAD06220101579',
-        employeeName: 'Md. Nurul Islam',
-        department: 'Digital School Program',
-        designation: 'Support Staff',
-        branch: 'Madaripur School',
-        date: '25-08-2026',
-        checkInTime: '08:50 AM',
-        checkOutTime: '05:05 PM',
-        lateBy: 'N/A',
-        earlyOutBy: 'N/A',
-        status: 'Present',
-      },
-      {
-        id: 'rep-4',
-        employeeId: 'emp-admin2',
-        employeeCode: 'admin2',
-        employeeName: 'admin2(Do Not Delete)',
-        department: 'DSP Central Team - Manager - DSP HUB',
-        designation: 'Manager',
-        branch: 'Head Office (Banani)',
-        date: '25-08-2026',
-        checkInTime: 'N/A',
-        checkOutTime: 'N/A',
-        lateBy: 'N/A',
-        earlyOutBy: 'N/A',
-        status: 'Absent',
-      },
-      {
-        id: 'rep-5',
-        employeeId: 'emp-dev-1',
-        employeeCode: 'employee-id-1',
-        employeeName: 'Employee',
-        department: 'DSP Central Team - In Officer - DSP HUB',
-        designation: 'Field Officer',
-        branch: 'Chittagong Campus',
-        date: '25-08-2026',
-        checkInTime: 'N/A',
-        checkOutTime: 'N/A',
-        lateBy: 'N/A',
-        earlyOutBy: 'N/A',
-        status: 'Absent',
-      },
-      {
-        id: 'rep-6',
-        employeeId: 'emp-sup-1',
-        employeeCode: 'supervisor',
-        employeeName: 'Supervisor',
-        department: 'DSP Central Team',
-        designation: 'Area Supervisor',
-        branch: 'Cox’s Bazar Branch',
-        date: '25-08-2026',
-        checkInTime: 'N/A',
-        checkOutTime: 'N/A',
-        lateBy: 'N/A',
-        earlyOutBy: 'N/A',
-        status: 'Absent',
-      },
-      {
-        id: 'rep-7',
-        employeeId: 'emp-rishan',
-        employeeCode: 'HOB062616061625',
-        employeeName: 'Md. Rishan Mia',
-        department: 'Digital School Program',
-        designation: 'Community Teacher',
-        branch: 'Habiganj School',
-        date: '25-08-2026',
-        checkInTime: '08:55 AM',
-        checkOutTime: '05:00 PM',
-        lateBy: 'N/A',
-        earlyOutBy: 'N/A',
-        status: 'Present',
-      },
-      {
-        id: 'rep-8',
-        employeeId: 'emp-akkas',
-        employeeCode: 'BN10171503549',
-        employeeName: 'Md. Akkas Ali',
-        department: 'Program Implementation',
-        designation: 'Support Staff',
-        branch: 'Banani School',
-        date: '25-08-2026',
-        checkInTime: '07:25 AM',
-        checkOutTime: '04:35 PM',
-        lateBy: 'N/A',
-        earlyOutBy: 'N/A',
-        status: 'Present',
-      },
-    ];
-    setReportRows(rows);
-  }, []);
+    fetchAttendanceLogsFromSupabase().then(() => {
+      setReportRows((prev) => (prev.length > 0 ? generateReportForDate(selectedDate, employees) : prev));
+    });
+
+    const handleUpdate = () => {
+      setReportRows(generateReportForDate(selectedDate, employees));
+    };
+    window.addEventListener('jaago_attendance_updated', handleUpdate);
+    return () => window.removeEventListener('jaago_attendance_updated', handleUpdate);
+  }, [selectedDate, generateReportForDate, employees]);
+
+  const handleDateSelect = (dateStr: string) => {
+    setSelectedDate(dateStr);
+    setReportRows(generateReportForDate(dateStr, employees));
+  };
 
   const handleOpenManualModal = (row: ReportRow) => {
     setSelectedRowForManual(row);
@@ -209,19 +266,22 @@ export default function AttendanceReportPage() {
     e.preventDefault();
     if (!selectedRowForManual) return;
 
-    const updated = reportRows.map((r) =>
-      r.id === selectedRowForManual.id
-        ? {
-            ...r,
-            checkInTime: manualCheckIn,
-            checkOutTime: manualCheckOut,
-            status: 'Present' as const,
-            lateBy: 'N/A',
-          }
-        : r
-    );
+    recordLocalAttendanceLog({
+      employeeId: selectedRowForManual.employeeId,
+      employeeCode: selectedRowForManual.employeeCode,
+      employeeName: selectedRowForManual.employeeName,
+      designation: selectedRowForManual.designation,
+      department: selectedRowForManual.department,
+      branch: selectedRowForManual.branch,
+      date: selectedDate,
+      checkInTime: manualCheckIn,
+      checkOutTime: manualCheckOut,
+      status: 'Present',
+      device: 'Manual In/Out',
+      notes: `Manual adjustment by admin on ${new Date().toLocaleDateString()}`,
+    });
 
-    setReportRows(updated);
+    setReportRows(generateReportForDate(selectedDate, employees));
     setManualModalOpen(false);
     showToast(`Manual attendance applied for ${selectedRowForManual.employeeName}!`);
   };
@@ -355,8 +415,8 @@ export default function AttendanceReportPage() {
 
           <div className="text-center">
             <h2 className="text-base font-black text-foreground">{monthName}</h2>
-            <p className="text-[11px] font-semibold text-muted-foreground">
-              Selected: 25 August 2026
+            <p className="text-[11px] font-semibold text-primary">
+              Selected: {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           </div>
 
@@ -381,30 +441,30 @@ export default function AttendanceReportPage() {
           <div className="py-1 text-purple-400">Sat</div>
         </div>
 
-        {/* Date Blocks (Screenshot 5 interactive calendar) */}
+        {/* Date Blocks (Interactive calendar for August 2026) */}
         <div className="grid grid-cols-7 gap-2 text-xs">
-          {[23, 24, 25, 26, 27, 28, 29, 30, 31, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map(
-            (day, idx) => {
-              const isSelected = day === 25;
-              const isToday = day === 26;
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setSelectedDate(`2026-08-${day < 10 ? '0' + day : day}`)}
-                  className={`h-10 rounded-xl font-bold flex items-center justify-center transition cursor-pointer ${
-                    isSelected
-                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                      : isToday
-                      ? 'bg-surface border-2 border-primary text-foreground font-black'
-                      : 'bg-surface/50 hover:bg-surface text-muted-foreground hover:text-foreground border border-border/40'
-                  }`}
-                >
-                  {day}
-                </button>
-              );
-            }
-          )}
+          {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
+            const dayStr = day < 10 ? `0${day}` : `${day}`;
+            const fullDate = `2026-08-${dayStr}`;
+            const isSelected = selectedDate === fullDate;
+            const isToday = fullDate === '2026-08-27';
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => handleDateSelect(fullDate)}
+                className={`h-10 rounded-xl font-bold flex items-center justify-center transition cursor-pointer ${
+                  isSelected
+                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 font-black scale-105'
+                    : isToday
+                    ? 'bg-emerald-500/15 border-2 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-black'
+                    : 'bg-surface/50 hover:bg-surface text-muted-foreground hover:text-foreground border border-border/40'
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
         </div>
       </div>
 

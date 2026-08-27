@@ -16,6 +16,8 @@ import {
   AttendanceLogItem,
   getLocalAttendanceLogs,
   saveLocalAttendanceLogs,
+  fetchAttendanceLogsFromSupabase,
+  calculateWorkingHoursString,
 } from '@/lib/supabase-attendance';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
 
@@ -69,11 +71,23 @@ export default function AttendanceLogsPage() {
     const loadedLogs = getLocalAttendanceLogs();
     setLogs(loadedLogs);
 
+    fetchAttendanceLogsFromSupabase().then((supaLogs) => {
+      if (supaLogs && supaLogs.length > 0) {
+        setLogs(supaLogs);
+      }
+    });
+
     fetchEmployeesFromSupabase().then((emps) => {
       if (emps && emps.length > 0) {
         setEmployees(emps);
       }
     });
+
+    const handleUpdate = () => {
+      setLogs(getLocalAttendanceLogs());
+    };
+    window.addEventListener('jaago_attendance_updated', handleUpdate);
+    return () => window.removeEventListener('jaago_attendance_updated', handleUpdate);
   }, []);
 
   const handleOpenAddModal = () => {
@@ -447,10 +461,18 @@ export default function AttendanceLogsPage() {
                       </span>
                     </td>
 
-                    {/* Timestamp */}
+                    {/* Timestamp & Working Times */}
                     <td className="py-4 px-4">
-                      <div className="text-foreground font-medium text-xs">
-                        {log.timestamp}
+                      <div className="text-foreground font-mono font-bold text-xs">
+                        {log.date || log.timestamp}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground flex items-center space-x-1.5 pt-0.5 font-mono">
+                        <span className="text-emerald-500 font-semibold">In: {log.checkInTime || '--:--'}</span>
+                        <span>&bull;</span>
+                        <span className="text-rose-500 font-semibold">Out: {log.checkOutTime || '--:--'}</span>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground/80 font-bold pt-0.5">
+                        Duration: {calculateWorkingHoursString(log.checkInTime, log.checkOutTime)}
                       </div>
                     </td>
 

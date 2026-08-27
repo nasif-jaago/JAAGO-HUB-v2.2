@@ -104,8 +104,9 @@ export default function LoginPage() {
         localStorage.setItem('jaago_access_token', session.access_token);
         localStorage.setItem('jaago_user', JSON.stringify(userPayload));
         document.cookie = `jaago_access_token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
-        document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=604800; SameSite=Lax`;
-        window.location.href = '/dashboard';
+        const params = new URLSearchParams(window.location.search);
+        const redirectTarget = params.get('redirect') || '/dashboard';
+        window.location.href = redirectTarget;
       }
     });
 
@@ -146,7 +147,10 @@ export default function LoginPage() {
         localStorage.setItem('jaago_user', JSON.stringify(userPayload));
         document.cookie = `jaago_access_token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
         document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=604800; SameSite=Lax`;
-        window.location.href = '/dashboard';
+        
+        const params = new URLSearchParams(window.location.search);
+        const redirectTarget = params.get('redirect') || '/dashboard';
+        window.location.href = redirectTarget;
       }
     });
 
@@ -169,6 +173,9 @@ export default function LoginPage() {
       return;
     }
 
+    const searchParams = new URLSearchParams(window.location.search);
+    const redirectTarget = searchParams.get('redirect') || '/dashboard';
+
     try {
       // ── 2. SUPABASE DIRECT AUTHENTICATION ──
       const supabase = getSupabase();
@@ -177,11 +184,7 @@ export default function LoginPage() {
         password,
       });
 
-      if (supaError) {
-        throw new Error(supaError.message || 'Invalid email or password.');
-      }
-
-      if (supaData?.session && supaData?.user) {
+      if (!supaError && supaData?.session && supaData?.user) {
         const userPayload = {
           id: supaData.user.id,
           email: supaData.user.email,
@@ -200,11 +203,33 @@ export default function LoginPage() {
           document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=604800; SameSite=Lax`;
         }
 
-        window.location.href = '/dashboard';
+        window.location.href = redirectTarget;
         return;
       }
 
-      throw new Error('Authentication failed. Please verify your credentials.');
+      // ── 3. FALLBACK API AUTHENTICATION ──
+      try {
+        const apiRes = await fetch('/api/v1/auth/sign-in', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password }),
+        });
+        const apiData = await apiRes.json();
+        if (apiRes.ok && apiData.user && apiData.session) {
+          const userPayload = apiData.user;
+          const token = apiData.session.accessToken;
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('jaago_access_token', token);
+            localStorage.setItem('jaago_user', JSON.stringify(userPayload));
+            document.cookie = `jaago_access_token=${token}; path=/; max-age=604800; SameSite=Lax`;
+            document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=604800; SameSite=Lax`;
+          }
+          window.location.href = redirectTarget;
+          return;
+        }
+      } catch {}
+
+      throw new Error(supaError?.message || 'Invalid email or password.');
     } catch (err: any) {
       setErrorMessage(err.message || 'Invalid email or password');
     } finally {

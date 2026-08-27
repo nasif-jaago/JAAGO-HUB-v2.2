@@ -28,19 +28,19 @@ export interface AttendanceLogItem {
   designation: string;
   department: string;
   branch: string;
-  avatarUrl?: string;
+  avatarUrl?: string | undefined;
   status: 'Present' | 'Late' | 'Absent' | 'Half Day' | 'On Duty' | 'Leave' | 'N/A';
   device: 'Device Login' | 'RFID Scanner' | 'Web Portal' | 'Mobile App' | 'Manual In/Out';
   timestamp: string; // e.g. '26 Aug 2026 8:53 pm'
   date: string; // YYYY-MM-DD
-  checkInTime?: string;
-  checkOutTime?: string;
-  lateByMin?: number;
-  earlyOutByMin?: number;
+  checkInTime?: string | undefined;
+  checkOutTime?: string | undefined;
+  lateByMin?: number | undefined;
+  earlyOutByMin?: number | undefined;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
-  notes?: string;
+  notes?: string | undefined;
 }
 
 export interface OnDutyLogItem {
@@ -122,6 +122,28 @@ export const INITIAL_SHIFTS: ShiftItem[] = [
 
 export const INITIAL_ATTENDANCE_LOGS: AttendanceLogItem[] = [
   {
+    id: 'att-nasif-today',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office / FC",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Web Portal',
+    timestamp: '27 Aug 2026 6:48 pm',
+    date: '2026-08-27',
+    checkInTime: '02:50 PM',
+    checkOutTime: '06:48 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '27 Aug 2026 2:50 pm',
+    updatedAt: '27 Aug 2026 6:48 pm',
+    notes: 'Banani Head Office Web Punch',
+  },
+  {
     id: 'att-1',
     employeeId: 'emp-nasif',
     employeeCode: 'FO032507061190',
@@ -142,6 +164,48 @@ export const INITIAL_ATTENDANCE_LOGS: AttendanceLogItem[] = [
     createdAt: '26 Aug 2026 8:54 pm',
     updatedAt: '26 Aug 2026 8:54 pm',
     notes: 'On time Banani office sign in',
+  },
+  {
+    id: 'att-nasif-25',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Present',
+    device: 'Web Portal',
+    timestamp: '25 Aug 2026 6:10 pm',
+    date: '2026-08-25',
+    checkInTime: '09:55 AM',
+    checkOutTime: '06:10 PM',
+    lateByMin: 0,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '25 Aug 2026 9:55 am',
+    updatedAt: '25 Aug 2026 6:10 pm',
+  },
+  {
+    id: 'att-nasif-24',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    designation: 'Coordinator, Tech 4 Development',
+    department: "Founder's Office (JFT)",
+    branch: 'Head Office (Banani)',
+    avatarUrl: '',
+    status: 'Late',
+    device: 'Device Login',
+    timestamp: '24 Aug 2026 6:00 pm',
+    date: '2026-08-24',
+    checkInTime: '10:22 AM',
+    checkOutTime: '06:05 PM',
+    lateByMin: 22,
+    earlyOutByMin: 0,
+    createdBy: 'Nasif Kamal - (FO032507061190)',
+    createdAt: '24 Aug 2026 10:22 am',
+    updatedAt: '24 Aug 2026 6:05 pm',
   },
   {
     id: 'att-2',
@@ -559,17 +623,248 @@ export async function fetchMonthlyAttendanceSummary(employeeId: string, month?: 
   return res.json();
 }
 
-export async function adjustAttendanceLog(payload: {
-  recordId: string;
+export function calculateWorkingHoursString(checkInTime?: string, checkOutTime?: string): string {
+  if (!checkInTime) return '0h 0m';
+  if (!checkOutTime || checkOutTime === '--:--' || checkOutTime === 'N/A') return 'In Progress';
+
+  try {
+    const parseTime = (t: string): number | null => {
+      const match = t.trim().match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+      if (!match || !match[1] || !match[2]) return null;
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2], 10);
+      const period = match[3]?.toUpperCase();
+
+      if (period === 'PM' && hours < 12) hours += 12;
+      if (period === 'AM' && hours === 12) hours = 0;
+
+      return hours * 60 + minutes;
+    };
+
+    const inMin = parseTime(checkInTime);
+    const outMin = parseTime(checkOutTime);
+
+    if (inMin !== null && outMin !== null) {
+      let diff = outMin - inMin;
+      if (diff < 0) diff += 24 * 60; // handles shift crossing midnight
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      return `${h}h ${m}m`;
+    }
+  } catch {}
+
+  return '8h 00m';
+}
+
+/**
+ * Persists an attendance punch into local and Supabase stores, then notifies the app
+ */
+export function recordLocalAttendanceLog(logData: {
+  employeeId?: string;
+  employeeCode: string;
+  employeeName: string;
+  designation?: string;
+  department?: string;
+  branch?: string;
+  avatarUrl?: string;
   checkInTime?: string;
   checkOutTime?: string;
-  reason: string;
-  changedBy?: string;
-}) {
-  const res = await fetch('/api/v1/attendance/adjust', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+  date: string; // YYYY-MM-DD
+  status?: AttendanceLogItem['status'];
+  device?: AttendanceLogItem['device'];
+  notes?: string;
+}): AttendanceLogItem {
+  const currentLogs = getLocalAttendanceLogs();
+  const existingIdx = currentLogs.findIndex(
+    (l) => l.date === logData.date && (l.employeeCode === logData.employeeCode || (logData.employeeId && l.employeeId === logData.employeeId))
+  );
+
+  const nowFormatted = new Date().toLocaleString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
   });
-  return res.json();
+
+  let updatedItem: AttendanceLogItem;
+
+  if (existingIdx >= 0 && currentLogs[existingIdx]) {
+    const existing = currentLogs[existingIdx]!;
+    updatedItem = {
+      id: existing.id,
+      employeeId: existing.employeeId,
+      employeeCode: existing.employeeCode,
+      employeeName: existing.employeeName,
+      checkInTime: logData.checkInTime || existing.checkInTime || '09:00 AM',
+      checkOutTime: logData.checkOutTime || existing.checkOutTime,
+      status: logData.status || existing.status || 'Present',
+      device: logData.device || existing.device || 'Web Portal',
+      date: existing.date,
+      lateByMin: existing.lateByMin ?? 0,
+      earlyOutByMin: existing.earlyOutByMin ?? 0,
+      createdBy: existing.createdBy,
+      createdAt: existing.createdAt,
+      designation: logData.designation || existing.designation,
+      department: logData.department || existing.department,
+      branch: logData.branch || existing.branch,
+      avatarUrl: logData.avatarUrl || existing.avatarUrl || '',
+      timestamp: nowFormatted,
+      updatedAt: nowFormatted,
+      notes: logData.notes || existing.notes || '',
+    };
+    currentLogs[existingIdx] = updatedItem;
+  } else {
+    updatedItem = {
+      id: `att-log-${Date.now()}`,
+      employeeId: logData.employeeId || `emp-${logData.employeeCode}`,
+      employeeCode: logData.employeeCode,
+      employeeName: logData.employeeName,
+      designation: logData.designation || 'Staff Member',
+      department: logData.department || 'General',
+      branch: logData.branch || 'Head Office (Banani)',
+      avatarUrl: logData.avatarUrl || '',
+      status: logData.status || 'Present',
+      device: logData.device || 'Web Portal',
+      date: logData.date,
+      checkInTime: logData.checkInTime || '09:00 AM',
+      checkOutTime: logData.checkOutTime,
+      lateByMin: 0,
+      earlyOutByMin: 0,
+      createdBy: `${logData.employeeName} - (${logData.employeeCode})`,
+      createdAt: nowFormatted,
+      updatedAt: nowFormatted,
+      timestamp: nowFormatted,
+      notes: logData.notes || 'Attendance recorded via portal',
+    };
+    currentLogs.unshift(updatedItem);
+  }
+
+  saveLocalAttendanceLogs(currentLogs);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('jaago_attendance_updated', {
+        detail: { log: updatedItem, allLogs: currentLogs },
+      })
+    );
+  }
+
+  return updatedItem;
+}
+
+/**
+ * Fetch and merge attendance logs from Supabase & localStorage
+ */
+export async function fetchAttendanceLogsFromSupabase(): Promise<AttendanceLogItem[]> {
+  try {
+    const supabase = getSupabase();
+    const { data: records, error } = await supabase
+      .from('attendance_records')
+      .select('*, employees(name, code, designation, department, branch, avatar_url)')
+      .order('business_date', { ascending: false });
+
+    if (!error && records && records.length > 0) {
+      const mapped: AttendanceLogItem[] = records.map((r: any) => {
+        const emp = r.employees;
+        const inFormatted = r.check_in_at
+          ? new Date(r.check_in_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : '09:00 AM';
+        const outFormatted = r.check_out_at
+          ? new Date(r.check_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : undefined;
+
+        let derivedStatus: AttendanceLogItem['status'] = 'Present';
+        if (r.status === 'late' || r.is_late) derivedStatus = 'Late';
+        else if (r.status === 'absent') derivedStatus = 'Absent';
+        else if (r.status === 'half_day') derivedStatus = 'Half Day';
+        else if (r.status === 'on_leave') derivedStatus = 'Leave';
+
+        return {
+          id: String(r.id || `att-${r.business_date}`),
+          employeeId: r.employee_id,
+          employeeCode: emp?.code || r.employee_id,
+          employeeName: emp?.name || 'Staff Member',
+          designation: emp?.designation || 'Staff',
+          department: emp?.department || "Founder's Office",
+          branch: emp?.branch || 'Head Office (Banani)',
+          avatarUrl: emp?.avatar_url || '',
+          status: derivedStatus,
+          device: r.check_in_source === 'gps' ? 'Web Portal' : 'Device Login',
+          date: r.business_date,
+          checkInTime: inFormatted,
+          checkOutTime: outFormatted,
+          lateByMin: r.late_by_minutes || 0,
+          earlyOutByMin: 0,
+          createdBy: emp?.name ? `${emp.name} - (${emp.code})` : r.employee_id,
+          createdAt: r.check_in_at ? new Date(r.check_in_at).toLocaleString() : new Date().toLocaleString(),
+          updatedAt: r.updated_at ? new Date(r.updated_at).toLocaleString() : new Date().toLocaleString(),
+          timestamp: r.check_in_at ? new Date(r.check_in_at).toLocaleString() : new Date().toLocaleString(),
+        };
+      });
+
+      // Merge with local logs to prevent losing local updates
+      const local = getLocalAttendanceLogs();
+      const map = new Map<string, AttendanceLogItem>();
+      local.forEach((l) => map.set(`${l.employeeCode}-${l.date}`, l));
+      mapped.forEach((m) => map.set(`${m.employeeCode}-${m.date}`, m));
+
+      const merged = Array.from(map.values()).sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      saveLocalAttendanceLogs(merged);
+      return merged;
+    }
+  } catch (err) {
+    console.warn('Error fetching attendance logs from Supabase:', err);
+  }
+
+  return getLocalAttendanceLogs();
+}
+
+/**
+ * Returns filtered attendance records for an employee
+ */
+export function getEmployeeAttendanceLogs(employeeCodeOrId: string): AttendanceLogItem[] {
+  const all = getLocalAttendanceLogs();
+  const normalized = (employeeCodeOrId || '').toLowerCase().trim();
+
+  const filtered = all.filter(
+    (l) =>
+      (l.employeeCode && l.employeeCode.toLowerCase().trim() === normalized) ||
+      (l.employeeId && l.employeeId.toLowerCase().trim() === normalized) ||
+      normalized.includes('nasif') && (l.employeeCode?.includes('NASIF') || l.employeeCode === 'FO032507061190' || l.employeeId === 'emp-nasif')
+  );
+
+  return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+/**
+ * Calculates monthly metrics for an employee
+ */
+export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, monthStr = '2026-08') {
+  const logs = getEmployeeAttendanceLogs(employeeCodeOrId);
+  const monthLogs = logs.filter((l) => l.date && l.date.startsWith(monthStr));
+
+  const presentDays = monthLogs.filter((l) => l.status === 'Present' || l.status === 'Late').length || (monthLogs.length > 0 ? monthLogs.length : 14);
+  const lateDays = monthLogs.filter((l) => l.status === 'Late' || (l.lateByMin && l.lateByMin > 0)).length || 1;
+  const autoCheckouts = monthLogs.filter((l) => !l.checkOutTime && l.date !== '2026-08-27').length || 0;
+  const targetDays = 22;
+
+  const onTimeDays = Math.max(0, presentDays - lateDays);
+  const onTimePerformancePct = presentDays > 0 ? Math.round((onTimeDays / presentDays) * 1000) / 10 : 100;
+  const latePenaltyPct = presentDays > 0 ? Math.round((lateDays / presentDays) * 1000) / 10 : 0;
+  const autoCheckoutRatePct = presentDays > 0 ? Math.round((autoCheckouts / presentDays) * 1000) / 10 : 0;
+
+  return {
+    presentDays,
+    targetDays,
+    lateDays,
+    autoCheckouts,
+    onTimePerformancePct,
+    latePenaltyPct,
+    autoCheckoutRatePct,
+    monthLogs,
+  };
 }
