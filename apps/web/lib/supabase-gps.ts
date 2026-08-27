@@ -309,6 +309,24 @@ export const INITIAL_GPS_LOCATIONS: GPSLocationItem[] = [
     radiusMeters: 100,
     status: 'Active',
   },
+  {
+    id: 'gps-1787822156051',
+    name: 'Nasif Home (Uttara)',
+    branchOffice: 'Uttara, Dhaka',
+    latitude: 23.856484,
+    longitude: 90.384588,
+    radiusMeters: 100,
+    status: 'Active',
+  },
+  {
+    id: 'gps-nasif-desktop-gateway',
+    name: 'Nasif Home (Workstation)',
+    branchOffice: 'Uttara, Dhaka',
+    latitude: 23.772900,
+    longitude: 90.365700,
+    radiusMeters: 100,
+    status: 'Active',
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════

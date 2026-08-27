@@ -625,41 +625,33 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── CARD 1.5: LIVE GPS GEOFENCE TRACKER (MOBILE) ── */}
-        <div className="p-4 rounded-2xl bg-card border border-border/80 text-center space-y-1.5 shadow-sm">
-          <div className="flex items-center justify-between text-[11px]">
-            <div className="flex items-center space-x-1.5 text-muted-foreground font-bold">
-              <MapPin className="h-3.5 w-3.5 text-primary" />
-              <span>GPS Geofence Tracker</span>
-            </div>
-            {gpsTracker.status === 'inside' ? (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 border border-emerald-500/30 text-emerald-500">
-                ● IN GEOFENCE
-              </span>
-            ) : gpsTracker.status === 'outside' ? (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500/10 border border-rose-500/30 text-rose-500">
+        {/* ── CARD 1.5: LIVE GPS GEOFENCE TRACKER (MOBILE - Only shown when outside geofence or error) ── */}
+        {(gpsTracker.status === 'outside' || gpsTracker.status === 'error') && (
+          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-center space-y-1.5 shadow-sm">
+            <div className="flex items-center justify-between text-[11px]">
+              <div className="flex items-center space-x-1.5 text-rose-500 font-bold">
+                <MapPin className="h-3.5 w-3.5 text-rose-500" />
+                <span>Attendance Blocked</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-500/20 border border-rose-500/40 text-rose-500">
                 ● OUT OF GEOFENCE
               </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/10 border border-amber-500/30 text-amber-500">
-                ● SCANNING GPS
-              </span>
+            </div>
+            <div className="text-xs font-black text-foreground pt-0.5">
+              {gpsTracker.locationName ? `Office: ${gpsTracker.locationName}` : 'Outside Office Boundary'}
+            </div>
+            <div className="text-[11px] font-semibold text-rose-500">
+              {gpsTracker.distanceMeters !== null
+                ? `${gpsTracker.distanceMeters}m away (Max allowed: ${gpsTracker.allowedRadiusMeters}m)`
+                : gpsTracker.errorMsg || 'Calculating distance to office...'}
+            </div>
+            {gpsTracker.latitude && (
+              <div className="text-[10px] font-mono text-muted-foreground/70 pt-0.5">
+                Lat: {gpsTracker.latitude.toFixed(5)} &bull; Lng: {gpsTracker.longitude?.toFixed(5)} (±{gpsTracker.accuracy}m)
+              </div>
             )}
           </div>
-          <div className="text-xs font-black text-foreground pt-0.5">
-            {gpsTracker.locationName ? `Office: ${gpsTracker.locationName}` : 'Acquiring Nearest Office...'}
-          </div>
-          <div className="text-[11px] font-semibold text-muted-foreground">
-            {gpsTracker.distanceMeters !== null
-              ? `${gpsTracker.distanceMeters}m away (Max allowed: ${gpsTracker.allowedRadiusMeters}m)`
-              : gpsTracker.errorMsg || 'Calculating distance to office...'}
-          </div>
-          {gpsTracker.latitude && (
-            <div className="text-[10px] font-mono text-muted-foreground/70 pt-0.5">
-              Lat: {gpsTracker.latitude.toFixed(5)} &bull; Lng: {gpsTracker.longitude?.toFixed(5)} (±{gpsTracker.accuracy}m)
-            </div>
-          )}
-        </div>
+        )}
 
         {/* ── CARD 2: BIG INSTANT ONE-TAP CHECK-IN / CHECK-OUT BUTTON ── */}
         <div className="space-y-2">
@@ -885,107 +877,98 @@ export default function DashboardPage() {
                 <Radio className={`h-5 w-5 ${isPunching ? 'animate-spin text-amber-500' : 'animate-pulse'}`} />
               </div>
 
-              {/* Check In Box */}
+              {/* Check In Box - Matt Green with Auto Theme & Text Adjustment */}
               <button
                 onClick={handleCheckInAction}
                 disabled={isPunching || isCheckedIn}
-                className={`px-4 py-2.5 rounded-2xl border transition text-left flex items-center space-x-3 shadow-sm ${
+                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
                   isCheckedIn
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 cursor-default'
-                    : 'bg-surface border-border hover:border-primary/50 text-foreground cursor-pointer'
+                    ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 cursor-default'
+                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60 cursor-pointer'
                 }`}
               >
-                <Clock className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                <div className="h-8 w-8 rounded-xl bg-emerald-500/20 dark:bg-emerald-500/25 flex items-center justify-center text-emerald-700 dark:text-emerald-300 flex-shrink-0">
+                  <Clock className="h-4 w-4 stroke-[2.2]" />
+                </div>
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700/90 dark:text-emerald-300/90">
                     CHECK IN
                   </div>
-                  <div className="text-xs font-black font-mono">
+                  <div className="text-xs font-black font-mono text-emerald-950 dark:text-emerald-100">
                     {checkInTime || '--:--'}
                   </div>
                 </div>
-                <span className="text-muted-foreground/60 text-xs font-bold">-</span>
+                <span className="text-emerald-600/50 dark:text-emerald-400/40 text-xs font-bold">-</span>
               </button>
 
-              {/* Check Out Box */}
+              {/* Check Out Box - Matt Red with Auto Theme & Text Adjustment */}
               <button
                 onClick={handleCheckOutAction}
                 disabled={isPunching || !isCheckedIn}
-                className={`px-4 py-2.5 rounded-2xl border transition text-left flex items-center space-x-3 shadow-sm ${
+                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
                   isCheckedIn
-                    ? 'bg-surface border-border hover:border-destructive/50 text-foreground cursor-pointer'
+                    ? 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60 cursor-pointer'
                     : checkOutTime
-                    ? 'bg-surface border-border text-foreground cursor-default'
-                    : 'bg-surface/50 border-border/60 text-muted-foreground/50 cursor-not-allowed'
+                    ? 'bg-rose-500/10 dark:bg-rose-500/15 border-rose-500/30 text-rose-800 dark:text-rose-300 cursor-default'
+                    : 'bg-rose-500/5 dark:bg-rose-500/10 border-rose-500/20 text-rose-900/40 dark:text-rose-300/40 opacity-70 cursor-not-allowed'
                 }`}
               >
-                <Flag className="h-4 w-4 text-destructive/80 flex-shrink-0" />
+                <div className="h-8 w-8 rounded-xl bg-rose-500/20 dark:bg-rose-500/25 flex items-center justify-center text-rose-700 dark:text-rose-300 flex-shrink-0">
+                  <Flag className="h-4 w-4 stroke-[2.2]" />
+                </div>
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700/90 dark:text-rose-300/90">
                     CHECK OUT
                   </div>
-                  <div className="text-xs font-black font-mono">
+                  <div className="text-xs font-black font-mono text-rose-950 dark:text-rose-100">
                     {checkOutTime || '--:--'}
                   </div>
                 </div>
-                <span className="text-muted-foreground/60 text-xs font-bold">-</span>
+                <span className="text-rose-600/50 dark:text-rose-400/40 text-xs font-bold">-</span>
               </button>
             </div>
 
-            {/* Live GPS Tracker Status Line */}
-            <div className="flex flex-col items-end space-y-1 pt-0.5">
-              {gpsTracker.status === 'inside' ? (
-                <div className="flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 px-3 py-1 rounded-xl text-xs font-bold shadow-xs">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>
-                    📍 {gpsTracker.locationName} &bull; {gpsTracker.distanceMeters ?? 0}m away
-                  </span>
-                  <span className="text-[10px] uppercase px-1.5 py-0.5 bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 font-extrabold rounded-md">
-                    Inside {gpsTracker.allowedRadiusMeters}m Geofence
-                  </span>
-                </div>
-              ) : gpsTracker.status === 'outside' ? (
-                <div className="flex items-center space-x-2 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 px-3 py-1 rounded-xl text-xs font-bold shadow-xs">
-                  <span className="h-2 w-2 rounded-full bg-rose-500" />
-                  <span>
-                    🚫 Outside Geofence &bull; {gpsTracker.distanceMeters ?? 0}m from {gpsTracker.locationName || 'Office'}
-                  </span>
-                  <span className="text-[10px] uppercase px-1.5 py-0.5 bg-rose-500/20 text-rose-600 dark:text-rose-300 font-extrabold rounded-md">
-                    Blocked (Max {gpsTracker.allowedRadiusMeters}m)
-                  </span>
-                </div>
-              ) : gpsTracker.status === 'checking' ? (
-                <div className="flex items-center space-x-2 bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 px-3 py-1 rounded-xl text-xs font-semibold animate-pulse">
-                  <Radio className="h-3.5 w-3.5 animate-spin" />
-                  <span>Acquiring live GPS & calculating distance to office...</span>
-                </div>
-              ) : gpsTracker.status === 'error' ? (
-                <div className="flex items-center space-x-2 bg-rose-500/10 border border-rose-500/20 text-rose-500 px-3 py-1 rounded-xl text-xs font-semibold">
-                  <span>⚠️ {gpsTracker.errorMsg}</span>
-                  <button
-                    onClick={checkLiveGeofence}
-                    className="underline hover:text-rose-600 font-bold ml-1 cursor-pointer"
-                  >
-                    Retry GPS
-                  </button>
-                </div>
-              ) : null}
+            {/* Live GPS Tracker Status Line (Only shown when outside geofence or error occurs) */}
+            {gpsTracker.status === 'outside' || gpsTracker.status === 'error' ? (
+              <div className="flex flex-col items-end space-y-1 pt-0.5">
+                {gpsTracker.status === 'outside' ? (
+                  <div className="flex items-center space-x-2 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 px-3 py-1 rounded-xl text-xs font-bold shadow-xs">
+                    <span className="h-2 w-2 rounded-full bg-rose-500" />
+                    <span>
+                      🚫 Outside Geofence &bull; {gpsTracker.distanceMeters ?? 0}m from {gpsTracker.locationName || 'Office'}
+                    </span>
+                    <span className="text-[10px] uppercase px-1.5 py-0.5 bg-rose-500/20 text-rose-600 dark:text-rose-300 font-extrabold rounded-md">
+                      Blocked (Max {gpsTracker.allowedRadiusMeters}m)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2 bg-rose-500/10 border border-rose-500/20 text-rose-500 px-3 py-1 rounded-xl text-xs font-semibold">
+                    <span>⚠️ {gpsTracker.errorMsg}</span>
+                    <button
+                      onClick={checkLiveGeofence}
+                      className="underline hover:text-rose-600 font-bold ml-1 cursor-pointer"
+                    >
+                      Retry GPS
+                    </button>
+                  </div>
+                )}
 
-              {gpsTracker.latitude && (
-                <div className="text-[10px] font-mono text-muted-foreground/70 flex items-center space-x-2">
-                  <span>
-                    Lat: {gpsTracker.latitude.toFixed(5)}, Lng: {gpsTracker.longitude?.toFixed(5)} (±{gpsTracker.accuracy}m)
-                  </span>
-                  <button
-                    onClick={checkLiveGeofence}
-                    className="hover:text-primary underline cursor-pointer font-bold"
-                    title="Refresh GPS Coordinates"
-                  >
-                    Refresh
-                  </button>
-                </div>
-              )}
-            </div>
+                {gpsTracker.latitude && (
+                  <div className="text-[10px] font-mono text-muted-foreground/70 flex items-center space-x-2">
+                    <span>
+                      Lat: {gpsTracker.latitude.toFixed(5)}, Lng: {gpsTracker.longitude?.toFixed(5)} (±{gpsTracker.accuracy}m)
+                    </span>
+                    <button
+                      onClick={checkLiveGeofence}
+                      className="hover:text-primary underline cursor-pointer font-bold"
+                      title="Refresh GPS Coordinates"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
 
