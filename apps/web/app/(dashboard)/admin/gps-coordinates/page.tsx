@@ -47,7 +47,7 @@ export default function GPSCoordinatesPage() {
 
   // Form Fields
   const [formData, setFormData] = useState<{
-    id?: string;
+    id?: string | undefined;
     name: string;
     branchOffice: string;
     latitude: string;
@@ -632,21 +632,68 @@ export default function GPSCoordinatesPage() {
                 />
               </div>
 
-              {/* Coordinates: Latitude & Longitude with Auto-detect button */}
+              {/* Quick Preset / Autofill Selector */}
+              <div className="space-y-1 p-3 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+                <div className="flex items-center justify-between text-[11px] font-bold text-amber-500">
+                  <span>Quick Location Presets:</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">Click to auto-fill details</span>
+                </div>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const found = INITIAL_GPS_LOCATIONS.find((l) => l.name === e.target.value);
+                    if (found) {
+                      setFormData({
+                        id: editingItem?.id,
+                        name: found.name,
+                        branchOffice: found.branchOffice,
+                        latitude: found.latitude.toString(),
+                        longitude: found.longitude.toString(),
+                        radiusMeters: found.radiusMeters,
+                        status: found.status,
+                        notes: found.notes || '',
+                      });
+                      showNotification('success', `Populated "${found.name}" preset.`);
+                    }
+                  }}
+                  className="w-full h-9 px-3 rounded-xl bg-card border border-border text-xs text-foreground font-medium focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                >
+                  <option value="">-- Choose a standard JAAGO Location Preset --</option>
+                  {INITIAL_GPS_LOCATIONS.map((preset) => (
+                    <option key={preset.id} value={preset.name}>
+                      {preset.name} ({preset.latitude.toFixed(4)}, {preset.longitude.toFixed(4)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Coordinates: Latitude & Longitude with Auto-detect button & Paste parser */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                     Coordinates (Lat / Lng) <span className="text-amber-500">*</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleDetectGPS}
-                    disabled={isDetectingGPS}
-                    className="text-[10px] font-bold text-amber-500 hover:text-amber-400 flex items-center space-x-1 cursor-pointer"
-                  >
-                    <Navigation className={`h-3 w-3 ${isDetectingGPS ? 'animate-spin' : ''}`} />
-                    <span>{isDetectingGPS ? 'Detecting...' : 'Get Current GPS'}</span>
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={handleDetectGPS}
+                      disabled={isDetectingGPS}
+                      className="text-[10px] font-bold text-amber-500 hover:text-amber-400 flex items-center space-x-1 cursor-pointer bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20"
+                    >
+                      <Navigation className={`h-3 w-3 ${isDetectingGPS ? 'animate-spin' : ''}`} />
+                      <span>{isDetectingGPS ? 'Detecting...' : 'Get Current GPS'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Paste coordinates string or maps link helper */}
+                <div className="flex items-center space-x-1.5 pb-1">
+                  <input
+                    type="text"
+                    placeholder="Quick paste Lat, Lng or Google Maps link..."
+                    onChange={(e) => handleParseCoordinates(e.target.value)}
+                    className="w-full h-7 px-2.5 rounded-lg bg-surface/50 border border-border/70 font-mono text-[10px] text-foreground placeholder:text-muted-foreground/40"
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
