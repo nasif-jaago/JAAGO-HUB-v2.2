@@ -215,11 +215,8 @@ export default function DesignationsPage() {
             <span className="text-foreground font-bold">Designations</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sans">
-            Job Designations &amp; Hierarchy
+            Designations
           </h1>
-          <p className="text-xs text-muted-foreground pt-0.5">
-            Configure official position titles, pay grades, and role hierarchies.
-          </p>
         </div>
 
         <button

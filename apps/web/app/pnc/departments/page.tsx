@@ -266,11 +266,8 @@ export default function DepartmentsPage() {
             <span className="text-foreground font-bold">Departments</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sans">
-            Department Hierarchy &amp; Governance
+            Departments
           </h1>
-          <p className="text-xs text-muted-foreground pt-0.5">
-            Manage functional divisions, parent reporting lines, and appointed department leadership.
-          </p>
         </div>
 
         <button
