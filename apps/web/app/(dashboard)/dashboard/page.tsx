@@ -28,19 +28,33 @@ import {
   calculateWorkingHoursString,
   AttendanceLogItem,
 } from '@/lib/supabase-attendance';
+import {
+  PublicHolidayItem,
+  fetchPublicHolidays,
+} from '@/lib/supabase-time-off';
+import {
+  GPSLocationItem,
+  getLocalGPSLocations,
+  fetchGPSLocationsFromSupabase,
+  evaluateGpsMatch,
+} from '@/lib/supabase-gps';
 import Link from 'next/link';
 
 export default function DashboardPage() {
+  const [mounted, setMounted] = useState(false);
   const [viewMode, setViewMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [publicHolidays, setPublicHolidays] = useState<PublicHolidayItem[]>([]);
+  const [gpsLocations, setGpsLocations] = useState<GPSLocationItem[]>([]);
   const [user, setUser] = useState({
     id: 'emp-nasif',
     fullName: 'Nasif Kamal',
     jobTitle: 'Coordinator, Tech 4 Development',
     department: "Founder's Office / FC",
+    project: '',
     manager: 'Founder & Executive Director',
     organization: 'JAAGO Foundation Trust',
     avatarUrl: '',
@@ -50,6 +64,7 @@ export default function DashboardPage() {
 
   // Hydrate view mode, attendance status & elapsed timer from localStorage
   useEffect(() => {
+    setMounted(true);
     if (typeof window === 'undefined') return;
 
     const handleViewModeChange = (e: any) => {
@@ -109,6 +124,7 @@ export default function DashboardPage() {
             fullName: emp.name,
             jobTitle: emp.designation,
             department: emp.department || "Founder's Office / FC",
+            project: (emp as any).project || (emp as any).projectName || '',
             manager: emp.supervisor || 'Founder & Executive Director',
             organization: emp.organization || 'JAAGO Foundation Trust',
             avatarUrl: emp.avatarUrl || '',
@@ -119,34 +135,92 @@ export default function DashboardPage() {
         }
       });
 
-      const savedState = localStorage.getItem('jaago_is_checked_in');
-      const savedTime = localStorage.getItem('jaago_checkin_timestamp');
-      const savedWorkedSec = localStorage.getItem('jaago_worked_seconds');
-      const savedCheckInTime = localStorage.getItem('jaago_first_checkin_time');
-      const savedCheckOutTime = localStorage.getItem('jaago_last_checkout_time');
+      // Daily Session & Rollover Hydration
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const storedDate = localStorage.getItem('jaago_today_date');
 
-      if (savedCheckInTime) setCheckInTime(savedCheckInTime);
-      if (savedCheckOutTime) setCheckOutTime(savedCheckOutTime);
+      if (storedDate && storedDate !== todayStr) {
+        // New day rollover: reset punch session for the new day
+        localStorage.setItem('jaago_today_date', todayStr);
+        localStorage.removeItem('jaago_is_checked_in');
+        localStorage.removeItem('jaago_checkin_timestamp');
+        localStorage.removeItem('jaago_first_checkin_time');
+        localStorage.removeItem('jaago_last_checkout_time');
+        localStorage.removeItem('jaago_worked_seconds');
+        localStorage.removeItem('jaago_auto_checked_out');
+        setIsCheckedIn(false);
+        setCheckInTime(null);
+        setCheckOutTime(null);
+        setElapsedSeconds(0);
+      } else {
+        localStorage.setItem('jaago_today_date', todayStr);
+        const savedState = localStorage.getItem('jaago_is_checked_in');
+        const savedTime = localStorage.getItem('jaago_checkin_timestamp');
+        const savedWorkedSec = parseInt(localStorage.getItem('jaago_worked_seconds') || '0', 10);
+        const savedCheckInTime = localStorage.getItem('jaago_first_checkin_time');
+        const savedCheckOutTime = localStorage.getItem('jaago_last_checkout_time');
+        const alreadyAutoCheckedOut = localStorage.getItem('jaago_auto_checked_out') === 'true';
 
-      if (savedState === 'true' && savedTime) {
-        setIsCheckedIn(true);
-        setCheckInTime(
-          new Date(parseInt(savedTime, 10)).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          })
-        );
-        const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
-        setElapsedSeconds(diffSeconds);
-      } else if (savedWorkedSec) {
-        setElapsedSeconds(parseInt(savedWorkedSec, 10));
+        if (savedCheckInTime) setCheckInTime(savedCheckInTime);
+        if (savedCheckOutTime) setCheckOutTime(savedCheckOutTime);
+
+        if (savedState === 'true' && savedTime) {
+          // User is currently checked in — check if we need auto-checkout on hydration
+          const now = new Date();
+          const curHours = now.getHours();
+          const curMins = now.getMinutes();
+          // Auto-checkout ONLY in the 23:30-23:59 window AND only if not already done today
+          const isIn1130Window = curHours === 23 && curMins >= 30;
+
+          if (isIn1130Window && !alreadyAutoCheckedOut) {
+            // Auto check out on page load during 11:30-11:59 PM
+            const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
+            const totalSec = savedWorkedSec + diffSeconds;
+            setIsCheckedIn(false);
+            setCheckOutTime('11:30 PM');
+            setElapsedSeconds(totalSec);
+            localStorage.setItem('jaago_is_checked_in', 'false');
+            localStorage.removeItem('jaago_checkin_timestamp');
+            localStorage.setItem('jaago_last_checkout_time', '11:30 PM');
+            localStorage.setItem('jaago_worked_seconds', totalSec.toString());
+            localStorage.setItem('jaago_auto_checked_out', 'true');
+          } else {
+            // Normal resume: user is checked in
+            setIsCheckedIn(true);
+            const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
+            setElapsedSeconds(savedWorkedSec + diffSeconds);
+          }
+        } else {
+          // User is checked out — just restore accumulated worked seconds
+          setElapsedSeconds(savedWorkedSec);
+        }
       }
     } catch {
       // Fallback gracefully
     }
 
+    // Load Public Holidays & GPS Locations from Supabase / Admin Settings
+    fetchPublicHolidays().then((hols) => {
+      if (hols) setPublicHolidays(hols);
+    });
+    fetchGPSLocationsFromSupabase().then((locs) => {
+      if (locs && locs.length > 0) setGpsLocations(locs);
+    });
+
+    const handleHolidaysUpdate = () => {
+      fetchPublicHolidays().then((hols) => {
+        if (hols) setPublicHolidays(hols);
+      });
+    };
+    window.addEventListener('jaago_public_holidays_updated', handleHolidaysUpdate);
+
     const handleStorageRefresh = () => {
+      fetchPublicHolidays().then((hols) => {
+        if (hols) setPublicHolidays(hols);
+      });
+      fetchGPSLocationsFromSupabase().then((locs) => {
+        if (locs && locs.length > 0) setGpsLocations(locs);
+      });
       getActiveEmployeeProfile().then((emp) => {
         if (emp) {
           setUser({
@@ -154,6 +228,7 @@ export default function DashboardPage() {
             fullName: emp.name,
             jobTitle: emp.designation,
             department: emp.department || "Founder's Office / FC",
+            project: (emp as any).project || (emp as any).projectName || '',
             manager: emp.supervisor || 'Founder & Executive Director',
             organization: emp.organization || 'JAAGO Foundation Trust',
             avatarUrl: emp.avatarUrl || '',
@@ -169,17 +244,34 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener('jaago_view_mode_change', handleViewModeChange);
       window.removeEventListener('jaago_user_updated', handleUserUpdated);
+      window.removeEventListener('jaago_public_holidays_updated', handleHolidaysUpdate);
       window.removeEventListener('focus', handleStorageRefresh);
       window.removeEventListener('storage', handleStorageRefresh);
     };
   }, []);
 
-  // Live timer tick when checked in (freezes at total worked duration when checked out)
+  // Live timer tick when checked in & 11:30 PM Auto-checkout watchdog
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isCheckedIn) {
       interval = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
+        const now = new Date();
+        const curHours = now.getHours();
+        const curMins = now.getMinutes();
+
+        // Auto Check-out ONLY during 23:30-23:59 window, once per day
+        if (curHours === 23 && curMins >= 30) {
+          const alreadyDone = localStorage.getItem('jaago_auto_checked_out') === 'true';
+          if (!alreadyDone) {
+            performAutoCheckOut('11:30 PM');
+          }
+          return;
+        }
+
+        const sessionStart = parseInt(localStorage.getItem('jaago_checkin_timestamp') || '0', 10);
+        const accumulated = parseInt(localStorage.getItem('jaago_worked_seconds') || '0', 10);
+        const diff = sessionStart > 0 ? Math.max(0, Math.floor((Date.now() - sessionStart) / 1000)) : 0;
+        setElapsedSeconds(accumulated + diff);
       }, 1000);
     }
     return () => {
@@ -303,22 +395,19 @@ export default function DashboardPage() {
     try {
       setGpsTracker((prev) => ({ ...prev, status: 'checking' }));
       const coords = await getCoordinates();
-      const res = await fetch(
-        `/api/v1/attendance/geofence/check?lat=${coords.latitude}&lng=${coords.longitude}&acc=${coords.accuracy}`
-      );
-      const json = await res.json();
-      if (json.success && json.data) {
-        setGpsTracker({
-          status: json.data.isInsideGeofence ? 'inside' : 'outside',
-          locationName: json.data.locationName,
-          distanceMeters: json.data.distanceMeters,
-          allowedRadiusMeters: json.data.allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          errorMsg: null,
-        });
-      }
+      const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
+      const match = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
+
+      setGpsTracker({
+        status: match.isInside ? 'inside' : 'outside',
+        locationName: match.matchedLocation?.name || match.closestLocation?.name || 'Authorized Office',
+        distanceMeters: match.distanceMeters,
+        allowedRadiusMeters: match.allowedRadiusMeters,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        errorMsg: match.isInside ? null : 'Outside designated GPS location perimeter',
+      });
     } catch (err: any) {
       setGpsTracker((prev) => ({
         ...prev,
@@ -330,9 +419,52 @@ export default function DashboardPage() {
 
   useEffect(() => {
     checkLiveGeofence();
-  }, []);
+  }, [gpsLocations]);
 
   const [myAttendanceLogs, setMyAttendanceLogs] = useState<AttendanceLogItem[]>([]);
+
+  // Auto Check-Out after 11:30 PM (23:30)
+  const performAutoCheckOut = (autoTimeStr = '11:30 PM') => {
+    const sessionStart = parseInt(localStorage.getItem('jaago_checkin_timestamp') || '0', 10);
+    const accumulated = parseInt(localStorage.getItem('jaago_worked_seconds') || '0', 10);
+    const diff = sessionStart > 0 ? Math.max(0, Math.floor((Date.now() - sessionStart) / 1000)) : 0;
+    const newTotal = accumulated + diff;
+
+    setIsCheckedIn(false);
+    setCheckOutTime(autoTimeStr);
+    setElapsedSeconds(newTotal);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('jaago_is_checked_in', 'false');
+      localStorage.removeItem('jaago_checkin_timestamp');
+      localStorage.setItem('jaago_last_checkout_time', autoTimeStr);
+      localStorage.setItem('jaago_worked_seconds', newTotal.toString());
+      localStorage.setItem('jaago_auto_checked_out', 'true');
+    }
+
+    // Record to unified attendance store
+    recordLocalAttendanceLog({
+      employeeId: user.id,
+      employeeCode: user.employeeCode || 'FO032507061190',
+      employeeName: user.fullName || 'Nasif Kamal',
+      designation: user.jobTitle,
+      department: user.department,
+      branch: 'Head Office (Banani)',
+      date: new Date().toISOString().slice(0, 10),
+      checkInTime: checkInTime || '09:00 AM',
+      checkOutTime: autoTimeStr,
+      status: 'Present',
+      device: 'Web Portal',
+      notes: 'Auto check-out generated after 11:30 PM (Shift End)',
+    });
+
+    setMonthlyMetrics((prev) => ({
+      ...prev,
+      autoCheckouts: prev.autoCheckouts + 1,
+    }));
+
+    showToast('System Notice: Auto check-out completed at 11:30 PM.', 'info');
+  };
 
   // Load canonical session and monthly summary
   const refreshCanonicalAttendance = async (empId: string) => {
@@ -445,52 +577,95 @@ export default function DashboardPage() {
   const [imgError, setImgError] = useState(false);
   const firstName = user.fullName.split(' ')[0] || 'Nasif';
 
-  // Dedicated Check-In Action
+  // Dedicated Check-In Action with Live GPS Geofence Verification & Multi-punch Counting
   const handleCheckInAction = async () => {
     if (isPunching) return;
     setIsPunching(true);
 
     try {
       const coords = await getCoordinates();
-      const firstIn = new Date();
-      const timeStr = firstIn.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const todayDate = new Date().toISOString().slice(0, 10);
+      const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
+      const match = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
 
-      // Save to unified attendance log store immediately
+      // ── GPS Geofence Verification Gate ──
+      if (!match.isInside) {
+        const closestName = match.closestLocation?.name || 'Designated Office';
+        setGpsTracker({
+          status: 'outside',
+          locationName: closestName,
+          distanceMeters: match.distanceMeters,
+          allowedRadiusMeters: match.allowedRadiusMeters,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+          errorMsg: `Outside designated GPS perimeter (${match.distanceMeters}m away)`,
+        });
+
+        setGeofenceAlert({
+          isOpen: true,
+          action: 'CHECK_IN',
+          locationName: closestName,
+          distanceMeters: match.distanceMeters,
+          allowedRadiusMeters: match.allowedRadiusMeters,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+
+        showToast(
+          `Check-In Blocked: You are ${match.distanceMeters}m away from "${closestName}". Max allowed radius is ${match.allowedRadiusMeters}m.`,
+          'error'
+        );
+        return;
+      }
+
+      // ── Location Accepted: Process Check-In ──
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const todayDate = now.toISOString().slice(0, 10);
+      const locName = match.matchedLocation?.name || 'Authorized Office';
+
+      // Preserve FIRST Check-In of the day
+      const existingFirstCheckIn = localStorage.getItem('jaago_first_checkin_time');
+      const finalFirstCheckIn = existingFirstCheckIn || timeStr;
+
+      setIsCheckedIn(true);
+      setCheckInTime(finalFirstCheckIn);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('jaago_is_checked_in', 'true');
+        localStorage.setItem('jaago_checkin_timestamp', now.getTime().toString());
+        if (!existingFirstCheckIn) {
+          localStorage.setItem('jaago_first_checkin_time', timeStr);
+        }
+        localStorage.setItem('jaago_today_date', todayDate);
+      }
+
+      setGpsTracker({
+        status: 'inside',
+        locationName: locName,
+        distanceMeters: match.distanceMeters,
+        allowedRadiusMeters: match.allowedRadiusMeters,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        errorMsg: null,
+      });
+
+      // Save to unified attendance log store
       recordLocalAttendanceLog({
         employeeId: user.id,
         employeeCode: user.employeeCode || 'FO032507061190',
         employeeName: user.fullName || 'Nasif Kamal',
         designation: user.jobTitle,
         department: user.department,
-        branch: 'Head Office (Banani)',
+        branch: locName,
         date: todayDate,
-        checkInTime: timeStr,
+        checkInTime: finalFirstCheckIn,
+        ...(checkOutTime ? { checkOutTime } : {}),
         status: 'Present',
         device: 'Web Portal',
-        notes: 'GPS verified Banani office check in',
+        notes: `GPS verified check-in at ${locName}`,
       });
-
-      setIsCheckedIn(true);
-      setCheckInTime(timeStr);
-      setCheckOutTime('');
-      setElapsedSeconds(0);
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('jaago_is_checked_in', 'true');
-        localStorage.setItem('jaago_checkin_timestamp', firstIn.getTime().toString());
-        localStorage.setItem('jaago_first_checkin_time', timeStr);
-        localStorage.removeItem('jaago_last_checkout_time');
-        localStorage.removeItem('jaago_worked_seconds');
-      }
-
-      setGpsTracker((prev) => ({
-        ...prev,
-        status: 'inside',
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy,
-      }));
 
       // Send to server API in background
       fetch('/api/v1/attendance/check-in', {
@@ -501,70 +676,112 @@ export default function DashboardPage() {
           latitude: coords.latitude,
           longitude: coords.longitude,
           accuracy: coords.accuracy,
-          deviceInfo: 'Web Portal Dashboard',
+          deviceInfo: `Web Portal (${locName})`,
           allowOverride: true,
           forceNew: true,
         }),
       }).catch(() => {});
 
-      showToast(`Checked in successfully at ${timeStr}! Live working hours timer started.`, 'success');
+      showToast(`Checked in at ${locName} (${timeStr})! Working hours timer running.`, 'success');
       refreshCanonicalAttendance(user.id);
     } catch {
-      showToast('Check-in failed. Please try again.', 'error');
+      showToast('Check-in failed. Please ensure GPS/Location is enabled.', 'error');
     } finally {
       setIsPunching(false);
     }
   };
 
-  // Dedicated Check-Out Action
+  // Dedicated Check-Out Action with Live GPS Geofence Verification & Working Hours Pause
   const handleCheckOutAction = async () => {
     if (isPunching) return;
     setIsPunching(true);
 
     try {
       const coords = await getCoordinates();
-      const lastOut = new Date();
-      const timeStr = lastOut.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const todayDate = new Date().toISOString().slice(0, 10);
+      const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
+      const match = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
 
-      const effectiveInTime = checkInTime || '09:00 AM';
+      // ── GPS Geofence Verification Gate ──
+      if (!match.isInside) {
+        const closestName = match.closestLocation?.name || 'Designated Office';
+        setGpsTracker({
+          status: 'outside',
+          locationName: closestName,
+          distanceMeters: match.distanceMeters,
+          allowedRadiusMeters: match.allowedRadiusMeters,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+          errorMsg: `Outside designated GPS perimeter (${match.distanceMeters}m away)`,
+        });
 
-      // Save to unified attendance log store immediately
+        setGeofenceAlert({
+          isOpen: true,
+          action: 'CHECK_OUT',
+          locationName: closestName,
+          distanceMeters: match.distanceMeters,
+          allowedRadiusMeters: match.allowedRadiusMeters,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+
+        showToast(
+          `Check-Out Blocked: You are ${match.distanceMeters}m away from "${closestName}". You must be at an authorized office to check out.`,
+          'error'
+        );
+        return;
+      }
+
+      // ── Location Accepted: Process Check-Out & Pause Working Hours ──
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      const todayDate = now.toISOString().slice(0, 10);
+      const locName = match.matchedLocation?.name || 'Authorized Office';
+
+      const sessionStart = parseInt(localStorage.getItem('jaago_checkin_timestamp') || '0', 10);
+      const accumulated = parseInt(localStorage.getItem('jaago_worked_seconds') || '0', 10);
+      const sessionDuration = sessionStart > 0 ? Math.max(0, Math.floor((now.getTime() - sessionStart) / 1000)) : 0;
+      const newTotalWorkedSec = accumulated + sessionDuration;
+
+      setIsCheckedIn(false);
+      setCheckOutTime(timeStr);
+      setElapsedSeconds(newTotalWorkedSec);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('jaago_is_checked_in', 'false');
+        localStorage.removeItem('jaago_checkin_timestamp');
+        localStorage.setItem('jaago_last_checkout_time', timeStr);
+        localStorage.setItem('jaago_worked_seconds', newTotalWorkedSec.toString());
+      }
+
+      setGpsTracker({
+        status: 'inside',
+        locationName: locName,
+        distanceMeters: match.distanceMeters,
+        allowedRadiusMeters: match.allowedRadiusMeters,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        errorMsg: null,
+      });
+
+      const effectiveInTime = checkInTime || localStorage.getItem('jaago_first_checkin_time') || '09:00 AM';
+
+      // Save to unified attendance log store
       recordLocalAttendanceLog({
         employeeId: user.id,
         employeeCode: user.employeeCode || 'FO032507061190',
         employeeName: user.fullName || 'Nasif Kamal',
         designation: user.jobTitle,
         department: user.department,
-        branch: 'Head Office (Banani)',
+        branch: locName,
         date: todayDate,
         checkInTime: effectiveInTime,
         checkOutTime: timeStr,
         status: 'Present',
         device: 'Web Portal',
-        notes: 'GPS verified Banani office check out',
+        notes: `GPS verified check-out at ${locName}`,
       });
-
-      setIsCheckedIn(false);
-      setCheckOutTime(timeStr);
-
-      const currentWorkedSec = elapsedSeconds > 0 ? elapsedSeconds : 14280;
-      const hoursText = (currentWorkedSec / 3600).toFixed(1);
-
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('jaago_is_checked_in');
-        localStorage.removeItem('jaago_checkin_timestamp');
-        localStorage.setItem('jaago_last_checkout_time', timeStr);
-        localStorage.setItem('jaago_worked_seconds', currentWorkedSec.toString());
-      }
-
-      setGpsTracker((prev) => ({
-        ...prev,
-        status: 'inside',
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy,
-      }));
 
       // Send to server API in background
       fetch('/api/v1/attendance/check-out', {
@@ -575,12 +792,13 @@ export default function DashboardPage() {
           latitude: coords.latitude,
           longitude: coords.longitude,
           accuracy: coords.accuracy,
-          deviceInfo: 'Web Portal Dashboard',
+          deviceInfo: `Web Portal (${locName})`,
           allowOverride: true,
         }),
       }).catch(() => {});
 
-      showToast(`Checked out successfully at ${timeStr}! (${hoursText}h recorded)`, 'success');
+      const hoursText = (newTotalWorkedSec / 3600).toFixed(1);
+      showToast(`Checked out at ${timeStr}! Working hours paused (${hoursText}h recorded today).`, 'success');
       refreshCanonicalAttendance(user.id);
     } catch {
       showToast('Check-out failed. Please try again.', 'error');
@@ -622,7 +840,7 @@ export default function DashboardPage() {
         {/* User Greeting Header */}
         <div className="flex items-center space-x-4 px-1">
           <div className="h-16 w-16 rounded-2xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-md flex-shrink-0 relative">
-            {user.avatarUrl && !imgError ? (
+            {mounted && user.avatarUrl && !imgError ? (
               <img
                 src={user.avatarUrl}
                 alt={user.fullName}
@@ -938,7 +1156,7 @@ export default function DashboardPage() {
             {/* Avatar inside Yellow Border Card with Green Online Dot (ENLARGED) */}
             <div className="relative flex-shrink-0">
               <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-3xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-lg relative p-0.5">
-                {user.avatarUrl && !imgError ? (
+                {mounted && user.avatarUrl && !imgError ? (
                   <img
                     src={user.avatarUrl}
                     alt={user.fullName}
@@ -1338,35 +1556,137 @@ export default function DashboardPage() {
           </div>
 
           {/* ── COLUMN 2: UPCOMING HOLIDAYS ── */}
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col justify-between space-y-6">
-            <div className="flex items-center space-x-2 text-xs font-black uppercase text-foreground tracking-wider">
-              <Calendar className="h-4 w-4 text-blue-500" />
-              <span>Upcoming Holidays</span>
-            </div>
+          {(() => {
+            const todayStr = new Date().toISOString().split('T')[0]!;
+            const now = new Date(todayStr).getTime();
 
-            {/* Empty State / Notice */}
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-16 space-y-2">
-              <p className="text-sm font-semibold text-muted-foreground">
-                No upcoming holidays found
-              </p>
-            </div>
+            // Filter for current user's department & project (or company-wide)
+            const applicableHolidays = publicHolidays.filter((h) => {
+              const deptMatch =
+                !h.department ||
+                h.department === 'All' ||
+                (user.department && h.department.toLowerCase().trim() === user.department.toLowerCase().trim());
+              const projMatch =
+                !h.project ||
+                h.project === 'All' ||
+                (user.project && h.project.toLowerCase().trim() === user.project.toLowerCase().trim());
+              return deptMatch && projMatch;
+            });
 
-            {/* Bottom Legend */}
-            <div className="flex items-center justify-start space-x-4 text-xs font-semibold text-muted-foreground pt-2 border-t border-border/60">
-              <div className="flex items-center space-x-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span>This Week</span>
+            // Sort upcoming holidays
+            const upcomingList = applicableHolidays
+              .filter((h) => (h.endDate || h.date) >= todayStr || h.date >= todayStr)
+              .sort((a, b) => a.date.localeCompare(b.date))
+              .slice(0, 4);
+
+            return (
+              <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col justify-between space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-xs font-black uppercase text-foreground tracking-wider">
+                    <Calendar className="h-4 w-4 text-blue-500" />
+                    <span>Upcoming Holidays</span>
+                  </div>
+                  {user.department && (
+                    <span className="text-[10px] font-bold text-muted-foreground truncate max-w-[140px]">
+                      {user.department}
+                    </span>
+                  )}
+                </div>
+
+                {/* Holiday Items */}
+                <div className="flex-1 space-y-2.5 overflow-y-auto max-h-[220px] no-scrollbar">
+                  {upcomingList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center text-center py-10 space-y-2">
+                      <div className="h-10 w-10 rounded-2xl bg-surface border border-border flex items-center justify-center text-muted-foreground">
+                        <Calendar className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        No upcoming holidays found
+                      </p>
+                    </div>
+                  ) : (
+                    upcomingList.map((h) => {
+                      const dateObj = new Date(h.date);
+                      const monthName = isNaN(dateObj.getTime())
+                        ? 'HOL'
+                        : dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+                      const dayNum = isNaN(dateObj.getTime()) ? '1' : dateObj.getDate();
+                      const hTime = new Date(h.date).getTime();
+                      const daysDiff = Math.ceil((hTime - now) / (1000 * 3600 * 24));
+                      const isThisWeek = daysDiff >= 0 && daysDiff <= 7;
+                      const isThisMonth = daysDiff > 7 && daysDiff <= 30;
+                      const dotColor = isThisWeek
+                        ? 'bg-emerald-500'
+                        : isThisMonth
+                        ? 'bg-amber-500'
+                        : 'bg-blue-500';
+
+                      return (
+                        <div
+                          key={h.id}
+                          className="p-2.5 px-3 rounded-2xl bg-surface/60 border border-border/80 hover:border-border transition flex items-center justify-between gap-3 group shadow-sm"
+                        >
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <div className="h-10 w-10 rounded-xl bg-card border border-border flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
+                              <span className="text-[8px] font-black text-amber-500 uppercase tracking-tighter leading-none">
+                                {monthName}
+                              </span>
+                              <span className="text-xs font-black text-foreground leading-tight mt-0.5">
+                                {dayNum}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-extrabold text-foreground truncate group-hover:text-amber-500 transition">
+                                {h.title}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-medium flex items-center space-x-1.5 truncate">
+                                <span>{h.type}</span>
+                                {h.department && (
+                                  <>
+                                    <span>&bull;</span>
+                                    <span className="text-amber-500 font-bold">{h.department}</span>
+                                  </>
+                                )}
+                                {h.project && (
+                                  <>
+                                    <span>&bull;</span>
+                                    <span className="text-blue-400 font-bold">{h.project}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 flex-shrink-0">
+                            <span className="text-[10px] font-bold text-muted-foreground bg-card border border-border px-2 py-0.5 rounded-lg">
+                              {h.totalDays}d
+                            </span>
+                            <span className={`h-2.5 w-2.5 rounded-full ${dotColor}`} />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Bottom Legend */}
+                <div className="flex items-center justify-start space-x-4 text-xs font-semibold text-muted-foreground pt-2 border-t border-border/60">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <span>This Week</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    <span>This Month</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    <span>Later</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center space-x-1.5">
-                <span className="h-2 w-2 rounded-full bg-amber-500" />
-                <span>This Month</span>
-              </div>
-              <div className="flex items-center space-x-1.5">
-                <span className="h-2 w-2 rounded-full bg-blue-500" />
-                <span>Later</span>
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* ── COLUMN 3: HR ANNOUNCEMENT BOARD ── */}
           <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col justify-between space-y-6">

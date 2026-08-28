@@ -32,6 +32,7 @@ export type ViewMode = 'desktop' | 'mobile';
 
 export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps) {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [viewMode, setViewMode] = useState<ViewMode>('desktop');
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -42,6 +43,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
 
   // Load saved theme and view mode from localStorage on mount
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('jaago_theme') as ThemeMode | null;
       const root = document.documentElement;
@@ -355,7 +357,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
             className="flex items-center space-x-2 p-0.5 rounded-full hover:ring-2 hover:ring-primary/50 transition cursor-pointer"
           >
             <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-black flex items-center justify-center text-xs shadow-md overflow-hidden border border-primary/40">
-              {user.avatarUrl ? (
+              {mounted && user.avatarUrl ? (
                 <img
                   src={user.avatarUrl}
                   alt={user.fullName}

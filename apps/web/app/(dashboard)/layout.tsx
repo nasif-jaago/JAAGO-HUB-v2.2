@@ -14,18 +14,24 @@ export default function DashboardLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [currentUser, setCurrentUser] = useState(() => {
-    const session = getCurrentUserSession();
-    return {
-      fullName: session?.fullName || 'Nasif Kamal',
-      jobTitle: session?.jobTitle || 'Coordinator',
-      avatarUrl: session?.avatarUrl || '',
-    };
+  const [currentUser, setCurrentUser] = useState({
+    fullName: 'Nasif Kamal',
+    jobTitle: 'Coordinator',
+    avatarUrl: '',
   });
 
   // Client-Side User Session Sync & Auth Listener
   useEffect(() => {
     let isMounted = true;
+    const session = getCurrentUserSession();
+    if (session && isMounted) {
+      setCurrentUser({
+        fullName: session.fullName || 'Nasif Kamal',
+        jobTitle: session.jobTitle || 'Coordinator',
+        avatarUrl: session.avatarUrl || '',
+      });
+    }
+
     const supabase = getSupabase();
 
     // Hydrate user from stored session

@@ -452,3 +452,80 @@ export async function deleteGPSLocationFromSupabase(id: string): Promise<boolean
     return false;
   }
 }
+
+/**
+ * Haversine distance calculation in meters
+ */
+export function calculateGpsDistanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371000; // meters
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
+ * Evaluates whether user coordinates match ANY active GPS location created in Admin Settings
+ */
+export function evaluateGpsMatch(
+  userLat: number,
+  userLng: number,
+  locations: GPSLocationItem[]
+): {
+  isInside: boolean;
+  matchedLocation: GPSLocationItem | null;
+  closestLocation: GPSLocationItem | null;
+  distanceMeters: number;
+  allowedRadiusMeters: number;
+} {
+  const activeLocations = locations.filter((l) => l.status === 'Active');
+  if (activeLocations.length === 0) {
+    return {
+      isInside: false,
+      matchedLocation: null,
+      closestLocation: null,
+      distanceMeters: 0,
+      allowedRadiusMeters: 100,
+    };
+  }
+
+  let minDistance = Infinity;
+  let closest: GPSLocationItem = activeLocations[0]!;
+
+  for (const loc of activeLocations) {
+    const dist = calculateGpsDistanceMeters(userLat, userLng, loc.latitude, loc.longitude);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closest = loc;
+    }
+    const radius = loc.radiusMeters || 100;
+    if (dist <= radius) {
+      return {
+        isInside: true,
+        matchedLocation: loc,
+        closestLocation: loc,
+        distanceMeters: Math.round(dist),
+        allowedRadiusMeters: radius,
+      };
+    }
+  }
+
+  return {
+    isInside: false,
+    matchedLocation: null,
+    closestLocation: closest,
+    distanceMeters: Math.round(minDistance),
+    allowedRadiusMeters: closest?.radiusMeters || 100,
+  };
+}

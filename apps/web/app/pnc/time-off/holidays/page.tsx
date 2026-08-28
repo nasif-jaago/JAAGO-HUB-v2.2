@@ -12,6 +12,9 @@ import {
   RotateCw,
   X,
   Sparkles,
+  Building2,
+  Briefcase,
+  Globe2,
 } from 'lucide-react';
 import {
   PublicHolidayItem,
@@ -19,13 +22,23 @@ import {
   savePublicHoliday,
   deletePublicHoliday,
 } from '@/lib/supabase-time-off';
+import {
+  fetchDepartmentsFromSupabase,
+  DepartmentItem,
+  fetchProjectsFromSupabase,
+  ProjectItem,
+} from '@/lib/supabase-organization';
 
 const HOLIDAY_TYPES = ['National', 'Religious', 'Executive Order', 'Institutional'] as const;
 
 export default function PublicHolidaysPage() {
   const [holidays, setHolidays] = useState<PublicHolidayItem[]>([]);
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(2026);
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('');
+  const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('');
+  const [selectedProjFilter, setSelectedProjFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -41,15 +54,33 @@ export default function PublicHolidaysPage() {
     type: 'National',
     description: '',
     year: 2026,
+    department: '',
+    project: '',
   });
 
   const loadData = async () => {
-    const data = await fetchPublicHolidays();
-    if (data) setHolidays(data);
+    try {
+      const [hols, depts, projs] = await Promise.all([
+        fetchPublicHolidays(),
+        fetchDepartmentsFromSupabase(),
+        fetchProjectsFromSupabase(),
+      ]);
+      if (hols) setHolidays(hols);
+      if (depts) setDepartments(depts);
+      if (projs) setProjects(projs);
+    } catch {}
   };
 
   useEffect(() => {
     loadData();
+
+    const handleHolidaysUpdate = () => {
+      loadData();
+    };
+    window.addEventListener('jaago_public_holidays_updated', handleHolidaysUpdate);
+    return () => {
+      window.removeEventListener('jaago_public_holidays_updated', handleHolidaysUpdate);
+    };
   }, []);
 
   const showToastMsg = (message: string, type: 'success' | 'error' = 'success') => {
@@ -68,6 +99,8 @@ export default function PublicHolidaysPage() {
       type: 'National',
       description: '',
       year: selectedYear,
+      department: '',
+      project: '',
     });
     setShowModal(true);
   };
@@ -122,12 +155,17 @@ export default function PublicHolidaysPage() {
   // Filtered
   const filtered = yearHolidays.filter((h) => {
     if (selectedTypeFilter && h.type !== selectedTypeFilter) return false;
+    if (selectedDeptFilter && h.department !== selectedDeptFilter) return false;
+    if (selectedProjFilter && h.project !== selectedProjFilter) return false;
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
         h.title.toLowerCase().includes(q) ||
         h.description?.toLowerCase().includes(q) ||
-        h.type.toLowerCase().includes(q)
+        h.type.toLowerCase().includes(q) ||
+        h.department?.toLowerCase().includes(q) ||
+        h.project?.toLowerCase().includes(q)
       );
     }
     return true;
@@ -227,50 +265,97 @@ export default function PublicHolidaysPage() {
         </div>
       </div>
 
-      {/* Year Tabs */}
-      <div className="flex items-center space-x-4 border-b border-border/60 text-xs font-extrabold tracking-wider text-muted-foreground">
-        {[2026, 2027].map((yr) => (
-          <button
-            key={yr}
-            type="button"
-            onClick={() => setSelectedYear(yr)}
-            className={`pb-3 transition relative cursor-pointer ${
-              selectedYear === yr ? 'text-amber-500 font-black' : 'hover:text-foreground'
-            }`}
-          >
-            CALENDAR YEAR {yr}
-            {selectedYear === yr && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Search & Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-center gap-3">
-        <div className="relative flex-1 w-full">
+      {/* Filter Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* Search */}
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search holiday name, description, or festival..."
-            className="w-full h-10 pl-9 pr-4 rounded-2xl bg-card border border-border text-xs font-medium text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
+            placeholder="Search holidays, department, project..."
+            className="w-full h-10 pl-10 pr-4 rounded-2xl bg-card border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
           />
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         </div>
 
-        <select
-          value={selectedTypeFilter}
-          onChange={(e) => setSelectedTypeFilter(e.target.value)}
-          className="w-full sm:w-64 h-10 px-3.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
-        >
-          <option value="">Holiday Category (All)</option>
-          {HOLIDAY_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Year Selector */}
+          <div className="flex items-center space-x-1 p-1 rounded-2xl bg-card border border-border text-xs font-bold shadow-sm">
+            <button
+              type="button"
+              onClick={() => setSelectedYear(2025)}
+              className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                selectedYear === 2025 ? 'bg-amber-500 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              2025
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedYear(2026)}
+              className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                selectedYear === 2026 ? 'bg-amber-500 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              2026
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedYear(2027)}
+              className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                selectedYear === 2027 ? 'bg-amber-500 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              2027
+            </button>
+          </div>
+
+          {/* Department Filter */}
+          <select
+            value={selectedDeptFilter}
+            onChange={(e) => setSelectedDeptFilter(e.target.value)}
+            className="h-10 px-3 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+          >
+            <option value="">Department (All)</option>
+            {departments.map((d) => (
+              <option key={d.id || d.name} value={d.name}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+
+          {/* Project Filter */}
+          {projects.length > 0 && (
+            <select
+              value={selectedProjFilter}
+              onChange={(e) => setSelectedProjFilter(e.target.value)}
+              className="h-10 px-3 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+            >
+              <option value="">Project (All)</option>
+              {projects.map((p) => (
+                <option key={p.id || p.name} value={p.name}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Category Filter */}
+          <select
+            value={selectedTypeFilter}
+            onChange={(e) => setSelectedTypeFilter(e.target.value)}
+            className="h-10 px-3 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+          >
+            <option value="">Category (All)</option>
+            {HOLIDAY_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Table */}
@@ -283,6 +368,7 @@ export default function PublicHolidaysPage() {
                 <th className="py-3.5 px-4">Category</th>
                 <th className="py-3.5 px-4">Observed Date(s)</th>
                 <th className="py-3.5 px-4">Duration</th>
+                <th className="py-3.5 px-4">Applicable Scope</th>
                 <th className="py-3.5 px-4">Description / Significance</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
@@ -290,8 +376,8 @@ export default function PublicHolidaysPage() {
             <tbody className="divide-y divide-border/40 font-medium">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-muted-foreground text-xs font-semibold">
-                    No public holidays configured for {selectedYear}.
+                  <td colSpan={7} className="py-12 text-center text-muted-foreground text-xs font-semibold">
+                    No public holidays configured matching filters for {selectedYear}.
                   </td>
                 </tr>
               ) : (
@@ -322,6 +408,24 @@ export default function PublicHolidaysPage() {
                       </td>
                       <td className="py-3.5 px-4 font-bold text-foreground">
                         {h.totalDays} {h.totalDays === 1 ? 'day' : 'days'}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {h.department ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-500 text-[10px] font-bold">
+                            <Building2 className="h-3 w-3" />
+                            <span>Dept: {h.department}</span>
+                          </span>
+                        ) : h.project ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[10px] font-bold">
+                            <Briefcase className="h-3 w-3" />
+                            <span>Project: {h.project}</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 text-[10px] font-bold">
+                            <Globe2 className="h-3 w-3" />
+                            <span>All Organization</span>
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-muted-foreground max-w-xs truncate">
                         {h.description || 'Institutional public holiday observance.'}
@@ -358,11 +462,16 @@ export default function PublicHolidaysPage() {
       {/* ── MODAL: ADD / EDIT HOLIDAY ── */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="w-full max-w-lg rounded-3xl bg-card border border-border shadow-2xl p-6 sm:p-8 space-y-5">
+          <div className="w-full max-w-lg rounded-3xl bg-card border border-border shadow-2xl p-6 sm:p-8 space-y-5 animate-in zoom-in-95 max-h-[92vh] overflow-y-auto no-scrollbar">
             <div className="flex items-center justify-between border-b border-border/70 pb-3">
-              <h3 className="text-lg font-serif font-black text-foreground">
-                {editingItem ? 'Edit Public Holiday' : 'Add Public Holiday'}
-              </h3>
+              <div>
+                <h3 className="text-lg font-serif font-black text-foreground">
+                  {editingItem ? 'Edit Public Holiday' : 'Add Public Holiday'}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Configure holiday dates and targeted department or project.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowModal(false)}
@@ -372,7 +481,7 @@ export default function PublicHolidaysPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="space-y-4 text-xs">
+            <form onSubmit={handleSave} className="space-y-4 text-xs font-medium">
               <div className="space-y-1">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Holiday Title <span className="text-amber-500">*</span>
@@ -444,6 +553,49 @@ export default function PublicHolidaysPage() {
                 </div>
               </div>
 
+              {/* ── DEPARTMENT & PROJECT TARGETING (MATCHING SCREENSHOT 1) ── */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Department (Optional)
+                  </label>
+                  <select
+                    value={formData.department || ''}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+                  >
+                    <option value="">All Departments (Company-wide)</option>
+                    {departments.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Project (Optional)
+                  </label>
+                  <select
+                    value={formData.project || ''}
+                    onChange={(e) => setFormData({ ...formData, project: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+                  >
+                    <option value="">All Projects (Company-wide)</option>
+                    {projects.map((p) => (
+                      <option key={p.id || p.name} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-500 font-medium leading-relaxed">
+                💡 <strong>Scope Rule:</strong> If Department or Project is selected, only employees in that department/project will observe this holiday. If neither is selected, it applies to all employees company-wide.
+              </div>
+
               <div className="space-y-1">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Description / Significance
@@ -481,7 +633,7 @@ export default function PublicHolidaysPage() {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
+                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer active:scale-95"
                   >
                     {editingItem ? 'UPDATE HOLIDAY' : 'CREATE HOLIDAY'}
                   </button>

@@ -411,16 +411,6 @@ export default function PnCLayout({
                   &bull; Leave Calendar
                 </Link>
                 <Link
-                  href="/leaves"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/leaves'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; My Leave
-                </Link>
-                <Link
                   href="/pnc/time-off/requests"
                   className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                     pathname === '/pnc/time-off/requests'
