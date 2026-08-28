@@ -10,20 +10,15 @@ import {
   X,
   CheckCircle2,
   AlertCircle,
-  Building2,
   Archive,
   RotateCw,
   Check,
 } from 'lucide-react';
 import {
   DesignationItem,
-  DepartmentItem,
-  ProjectItem,
   fetchDesignationsFromSupabase,
   saveDesignationToSupabase,
   deleteDesignationFromSupabase,
-  fetchDepartmentsFromSupabase,
-  fetchProjectsFromSupabase,
 } from '@/lib/supabase-organization';
 
 const COMMON_GRADES = [
@@ -44,11 +39,9 @@ const COMMON_GRADES = [
 
 export default function DesignationsPage() {
   const [designations, setDesignations] = useState<DesignationItem[]>([]);
-  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
-  const [projects, setProjects] = useState<ProjectItem[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState('');
+  const [selectedGradeFilter, setSelectedGradeFilter] = useState('');
   const [viewMode, setViewMode] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -59,7 +52,6 @@ export default function DesignationsPage() {
     name: '',
     code: '',
     grade: 'Grade 5 (Officer / Specialist)',
-    departmentOrProject: 'Program Implementation',
     description: '',
   });
 
@@ -68,12 +60,6 @@ export default function DesignationsPage() {
   useEffect(() => {
     fetchDesignationsFromSupabase().then((data) => {
       if (data) setDesignations(data);
-    });
-    fetchDepartmentsFromSupabase().then((depts) => {
-      if (depts) setDepartments(depts);
-    });
-    fetchProjectsFromSupabase().then((prjs) => {
-      if (prjs) setProjects(prjs);
     });
   }, []);
 
@@ -88,7 +74,6 @@ export default function DesignationsPage() {
       name: '',
       code: `DES-${String(designations.length + 1).padStart(3, '0')}`,
       grade: 'Grade 5 (Officer / Specialist)',
-      departmentOrProject: departments[0]?.name || 'Program Implementation',
       description: '',
     });
     setShowModal(true);
@@ -111,7 +96,6 @@ export default function DesignationsPage() {
       name: formData.name.trim(),
       code: formData.code || `DES-${Date.now()}`,
       grade: formData.grade || 'Staff',
-      departmentOrProject: formData.departmentOrProject || 'Program Implementation',
       description: formData.description || '',
       isArchived: editingItem ? editingItem.isArchived : false,
     };
@@ -182,6 +166,7 @@ export default function DesignationsPage() {
   };
 
   // Filtered List
+  // Filtered List
   const filtered = designations.filter((des) => {
     const isArchived = Boolean(des.isArchived);
     if (viewMode === 'ARCHIVED') {
@@ -190,7 +175,7 @@ export default function DesignationsPage() {
       if (isArchived) return false;
     }
 
-    if (selectedDeptFilter && !des.departmentOrProject?.toLowerCase().includes(selectedDeptFilter.toLowerCase())) {
+    if (selectedGradeFilter && des.grade !== selectedGradeFilter) {
       return false;
     }
     if (searchQuery.trim()) {
@@ -233,7 +218,7 @@ export default function DesignationsPage() {
             Job Designations &amp; Hierarchy
           </h1>
           <p className="text-xs text-muted-foreground pt-0.5">
-            Configure official position titles, pay grades, and department/project alignments.
+            Configure official position titles, pay grades, and role hierarchies.
           </p>
         </div>
 
@@ -295,19 +280,14 @@ export default function DesignationsPage() {
         </div>
 
         <select
-          value={selectedDeptFilter}
-          onChange={(e) => setSelectedDeptFilter(e.target.value)}
+          value={selectedGradeFilter}
+          onChange={(e) => setSelectedGradeFilter(e.target.value)}
           className="w-full sm:w-64 h-10 px-3.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
         >
-          <option value="">Department / Project (All)</option>
-          {departments.map((d) => (
-            <option key={d.id} value={d.name}>
-              {d.name}
-            </option>
-          ))}
-          {projects.map((p) => (
-            <option key={p.id} value={p.name}>
-              {p.name}
+          <option value="">Grade Level (All)</option>
+          {COMMON_GRADES.map((g) => (
+            <option key={g} value={g}>
+              {g}
             </option>
           ))}
         </select>
@@ -386,7 +366,6 @@ export default function DesignationsPage() {
                 <th className="py-3.5 px-4">Designation Name</th>
                 <th className="py-3.5 px-4">Code</th>
                 <th className="py-3.5 px-4">Grade</th>
-                <th className="py-3.5 px-4">Department / Project</th>
                 <th className="py-3.5 px-4">Description</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
@@ -435,12 +414,6 @@ export default function DesignationsPage() {
                       <span className="px-2.5 py-1 rounded-lg bg-surface border border-border text-[11px] font-bold text-foreground">
                         {des.grade || 'Staff'}
                       </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-foreground font-semibold">
-                      <div className="flex items-center space-x-1.5">
-                        <Building2 className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                        <span>{des.departmentOrProject || 'General Operations'}</span>
-                      </div>
                     </td>
                     <td className="py-3.5 px-4 text-muted-foreground max-w-xs truncate">
                       {des.description || 'Standard institutional role responsibilities.'}
@@ -537,53 +510,6 @@ export default function DesignationsPage() {
                       {g}
                     </option>
                   ))}
-                </select>
-              </div>
-
-              {/* Department / Project (Called from Department/Project both) */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Department / Project (Call data from Department/Project both)
-                </label>
-                <select
-                  value={formData.departmentOrProject || ''}
-                  onChange={(e) => setFormData({ ...formData, departmentOrProject: e.target.value })}
-                  className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
-                >
-                  <option value="">Select Department or Project</option>
-                  <optgroup label="── Departments ──">
-                    {departments.length > 0 ? (
-                      departments.map((d) => (
-                        <option key={d.id} value={d.name}>
-                          {d.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="Executive Office">Executive Office</option>
-                        <option value="Program Implementation">Program Implementation</option>
-                        <option value="Digital School Program">Digital School Program</option>
-                        <option value="Finance & Accounts">Finance & Accounts</option>
-                        <option value="People and Culture">People and Culture</option>
-                        <option value="Communications & Fundraising">Communications & Fundraising</option>
-                      </>
-                    )}
-                  </optgroup>
-                  <optgroup label="── Projects ──">
-                    {projects.length > 0 ? (
-                      projects.map((p) => (
-                        <option key={p.id} value={p.name}>
-                          {p.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="Telco Digital School">Telco Digital School</option>
-                        <option value="Free School Education for Underprivileged">Free School Education for Underprivileged</option>
-                        <option value="Universal Youth Development & Volunteer Voice">Universal Youth Development & Volunteer Voice</option>
-                      </>
-                    )}
-                  </optgroup>
                 </select>
               </div>
 

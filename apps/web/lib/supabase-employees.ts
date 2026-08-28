@@ -254,17 +254,11 @@ export async function fetchEmployeesFromSupabase(): Promise<FullEmployeeProfile[
   }
 }
 
-/**
- * Save / Upsert an employee profile to Supabase
- */
 export async function saveEmployeeToSupabase(
   profile: FullEmployeeProfile,
   newLogs: LogHistoryEntry[] = []
 ): Promise<{ success: boolean; data?: FullEmployeeProfile; error?: string }> {
   try {
-    if (profile.code) {
-      removeDeletedEmployeeCode(profile.code);
-    }
     const payload = mapEmployeeProfileToPayload(profile);
     const body = {
       ...(profile.id && !profile.id.startsWith('emp-') ? { id: profile.id } : {}),
@@ -292,31 +286,12 @@ export async function saveEmployeeToSupabase(
 }
 
 export function getDeletedEmployeeCodes(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
-  try {
-    const raw = localStorage.getItem('jaago_pnc_deleted_employee_codes');
-    if (raw) return new Set(JSON.parse(raw));
-  } catch {}
   return new Set();
 }
 
-export function addDeletedEmployeeCode(code: string) {
-  if (typeof window === 'undefined' || !code) return;
-  try {
-    const codes = getDeletedEmployeeCodes();
-    codes.add(code);
-    localStorage.setItem('jaago_pnc_deleted_employee_codes', JSON.stringify(Array.from(codes)));
-  } catch {}
-}
+export function addDeletedEmployeeCode(_code: string) {}
 
-export function removeDeletedEmployeeCode(code: string) {
-  if (typeof window === 'undefined' || !code) return;
-  try {
-    const codes = getDeletedEmployeeCodes();
-    codes.delete(code);
-    localStorage.setItem('jaago_pnc_deleted_employee_codes', JSON.stringify(Array.from(codes)));
-  } catch {}
-}
+export function removeDeletedEmployeeCode(_code: string) {}
 
 /**
  * Bulk archive employees

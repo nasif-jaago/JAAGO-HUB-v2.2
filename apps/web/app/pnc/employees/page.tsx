@@ -31,186 +31,11 @@ import {
   archiveEmployeesInSupabase,
   unarchiveEmployeesInSupabase,
   deleteEmployeesFromSupabase,
-  getDeletedEmployeeCodes,
-  mapRowToEmployeeProfile,
 } from '@/lib/supabase-employees';
 import { syncEmployeeToLocalUser } from '@/lib/user-profile-sync';
 
-const RAW_INITIAL_EMPLOYEES = [
-  {
-    id: '71a38594-d803-4e6d-b6e9-79767a16c4c6',
-    name: 'Nasif Kamal',
-    code: 'FO032507061190',
-    avatar_url: 'https://fnemsvwejymnqpufumhj.supabase.co/storage/v1/object/public/employees/avatars/emp_fo032507061190_1787759276649.jpg',
-    work_email: 'nasif.kamal@jaago.com.bd',
-    work_mobile: '+880 1780522666',
-    working_schedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
-    department: "Founder's Office / FC",
-    designation: 'Coordinator, Tech 4 Development',
-    organization: 'JAAGO Foundation Trust',
-    branch: 'Head Office (Banani)',
-    project: 'Tech 4 Development',
-    team: 'Core Development Team',
-    supervisor: 'Founder & Executive Director',
-    secondary_supervisor: 'Habibur Rahman',
-    work_location: 'Banani, Dhaka',
-    remark: 'Lead Developer & System Administrator',
-    status: 'Active',
-    personal_email: 'nasif.personal@gmail.com',
-    personal_phone: '+880 1811 000001',
-    bank_name: 'Eastern Bank Ltd',
-    bank_account_number: '1041234567800',
-    nick_name: 'Nasif',
-    nid: '1996269123456789',
-    blood_group: 'B+',
-    birthday: '1996-05-15',
-    gender: 'MALE',
-    religion: 'Islam',
-    marital_status: 'Single',
-    emergency_contact_name: 'Kamal Hossain (Father)',
-    emergency_phone: '+880 1811 999000',
-    nationality: 'Bangladeshi',
-    passport_no: 'A09876543',
-    home_address: 'Road 11, Banani, Dhaka-1213',
-    dependent_children: 0,
-    joining_date: '2026-08-24',
-    contract_end_date: '2028-12-31',
-    wage_type: 'Fixed',
-    wage: 150000,
-    salary_jul_dec: 150000,
-    salary_jan_jun: 150000,
-    monthly_total_allowance: 'Yes',
-    six_months_completion_status: 'Yes',
-    probationary_status: 'Confirmed',
-    contract_type: 'Full Time',
-    no_tax_deduction: false,
-    bonus_eligibility: 'Yes',
-    pf_applies: 'Yes',
-    pf_rate: 10.0,
-    regular_salary: 150000,
-    extra_hours: 0,
-    extra_payment: 0,
-    calculation_value: '1.0x',
-    temporary_salary: 0,
-    total_current_salary: 150000,
-    currency: 'BDT',
-    adjustment_start_date: '2026-08-24',
-    adjustment_end_date: '2028-12-31',
-    assigned_teacher_staff: 'Core Management',
-    payroll_remark: 'Coordinator payroll grade',
-    insurance_status: 'Active',
-    insurance_coverage_category: 'Executive Coverage (Plan A)',
-    insurance_monthly_premium: 2500,
-    employee_health_insurance_id: 'HI-EMP-10029',
-    office_days: 'Sunday to Thursday',
-    office_hours: '10:00 AM - 06:00 PM',
-    rfid: 'RFID-165951',
-    leave_group: 'Standard Full-time',
-    employee_type: 'Permanent',
-    is_user: true,
-  },
-  {
-    id: '4b4842e8-f9d9-430c-b457-1cd4dc69bffb',
-    name: 'S M Nayeem Rahman',
-    code: 'FO072408231002',
-    work_email: 'nayeem.rahman@jaago.com.bd',
-    work_mobile: '+880 1711 000002',
-    working_schedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
-    department: "Founder's Office (JFT)",
-    designation: 'Program Officer',
-    organization: 'JAAGO Foundation Trust',
-    branch: 'Head Office (Banani)',
-    project: 'General Operations',
-    team: 'Core Development Team',
-    supervisor: 'Nasif Kamal',
-    work_location: 'Banani, Dhaka',
-    status: 'Active',
-    joining_date: '2026-08-24',
-    rfid: 'RFID-182930',
-    office_days: 'Sunday to Thursday',
-    office_hours: '10:00 AM - 06:00 PM',
-    leave_group: 'Standard Full-time',
-    employee_type: 'Permanent',
-    is_user: false,
-  },
-  {
-    id: 'a1111111-2222-3333-4444-555555555551',
-    name: 'Md. Nurul Islam',
-    code: 'MAD06220101579',
-    work_email: 'nurul.islam@jaago.com.bd',
-    work_mobile: '+880 1711 000003',
-    working_schedule: 'School Shift (08:30 AM - 05:00 PM)',
-    department: 'Digital School Program',
-    designation: 'Support Staff',
-    organization: 'JAAGO Foundation Trust',
-    branch: 'Madaripur School',
-    project: 'Digital Classroom',
-    team: 'Madaripur Branch Team',
-    supervisor: 'Branch Manager',
-    work_location: 'Madaripur',
-    status: 'Active',
-    joining_date: '2022-06-01',
-    rfid: 'RFID-192837',
-    office_days: 'Sunday to Thursday',
-    office_hours: '08:30 AM - 05:00 PM',
-    leave_group: 'DSP Faculty Group',
-    employee_type: 'Permanent',
-    is_user: false,
-  },
-  {
-    id: 'a1111111-2222-3333-4444-555555555552',
-    name: 'Md. Rishan Mia',
-    code: 'HOB062616061625',
-    work_email: 'rishan.mia@jaago.com.bd',
-    work_mobile: '+880 1711 000004',
-    working_schedule: 'School Shift (08:30 AM - 05:00 PM)',
-    department: 'Digital School Program',
-    designation: 'Support Staff',
-    organization: 'JAAGO Foundation Trust',
-    branch: 'Habiganj School',
-    project: 'Digital Classroom',
-    team: 'Habiganj Branch Team',
-    supervisor: 'Branch Manager',
-    work_location: 'Habiganj',
-    status: 'Active',
-    joining_date: '2022-06-01',
-    rfid: 'RFID-192838',
-    office_days: 'Sunday to Thursday',
-    office_hours: '08:30 AM - 05:00 PM',
-    leave_group: 'DSP Faculty Group',
-    employee_type: 'Permanent',
-    is_user: false,
-  },
-  {
-    id: 'a1111111-2222-3333-4444-555555555553',
-    name: 'Md. Akkas Ali',
-    code: 'BN10171503549',
-    work_email: 'akkas.ali@jaago.com.bd',
-    work_mobile: '+880 1711 000005',
-    working_schedule: 'Early Shift (07:30 AM - 04:30 PM)',
-    department: 'Program Implementation',
-    designation: 'Support Staff',
-    organization: 'JAAGO Foundation Trust',
-    branch: 'Banani School',
-    project: 'Campus Support',
-    team: 'Banani School Team',
-    supervisor: 'Head Teacher',
-    work_location: 'Banani, Dhaka',
-    status: 'Active',
-    joining_date: '2021-10-15',
-    rfid: 'RFID-192839',
-    office_days: 'Sunday to Thursday',
-    office_hours: '07:30 AM - 04:30 PM',
-    leave_group: 'Standard Full-time',
-    employee_type: 'Permanent',
-    is_user: false,
-  },
-];
-
-const INITIAL_EMPLOYEES: FullEmployeeProfile[] = RAW_INITIAL_EMPLOYEES.map(mapRowToEmployeeProfile);
-
 export default function PnCEmployeesPage() {
-  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(INITIAL_EMPLOYEES);
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   // Current selected employee for the rich tab-wise profile view (null = Table view)
   const [selectedProfile, setSelectedProfile] = useState<FullEmployeeProfile | null>(null);
@@ -253,29 +78,18 @@ export default function PnCEmployeesPage() {
 
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
 
-  // Hydrate state on client mount to prevent SSR mismatch
+  // Hydrate state on client mount and fetch Supabase Source of Truth
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const deletedCodes = getDeletedEmployeeCodes();
       try {
         const saved = localStorage.getItem('jaago_pnc_employees_v2');
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const savedCodes = new Set(parsed.map((e: any) => e.code));
-            const nonDeletedInit = INITIAL_EMPLOYEES.filter(
-              (e) => !deletedCodes.has(e.code) && !savedCodes.has(e.code)
-            );
-            setEmployees([...parsed.filter((e: any) => !deletedCodes.has(e.code)), ...nonDeletedInit]);
-          } else {
-            setEmployees(INITIAL_EMPLOYEES.filter((e) => !deletedCodes.has(e.code)));
+          if (Array.isArray(parsed)) {
+            setEmployees(parsed);
           }
-        } else {
-          setEmployees(INITIAL_EMPLOYEES.filter((e) => !deletedCodes.has(e.code)));
         }
-      } catch {
-        setEmployees(INITIAL_EMPLOYEES.filter((e) => !deletedCodes.has(e.code)));
-      }
+      } catch {}
 
       try {
         const userStr = localStorage.getItem('jaago_user');
@@ -298,39 +112,21 @@ export default function PnCEmployeesPage() {
         setSelectedProfile({} as FullEmployeeProfile);
       }
 
-      // Fetch latest employees directly from Supabase PostgreSQL (Source of Truth)
-      fetchEmployeesFromSupabase().then((remoteData) => {
-        const currentDeleted = getDeletedEmployeeCodes();
-        let combined: FullEmployeeProfile[] = [];
+      // Fetch latest employees directly from Supabase PostgreSQL (Single Source of Truth)
+      fetchEmployeesFromSupabase()
+        .then((remoteData) => {
+          if (remoteData !== null) {
+            setEmployees(remoteData);
+            try {
+              localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(remoteData));
+            } catch {}
 
-        if (remoteData && remoteData.length > 0) {
-          const remoteCodes = new Set(remoteData.map((e) => e.code));
-          const nonDeletedInitial = INITIAL_EMPLOYEES.filter(
-            (e) => !currentDeleted.has(e.code) && !remoteCodes.has(e.code)
-          );
-          combined = [
-            ...remoteData.filter((e) => !currentDeleted.has(e.code)),
-            ...nonDeletedInitial,
-          ];
-        } else {
-          // If remote is empty or errored, keep non-deleted initial employees
-          combined = INITIAL_EMPLOYEES.filter((e) => !currentDeleted.has(e.code));
-          // Auto-sync non-deleted initial employee to Supabase in background
-          combined.forEach((emp) => {
-            saveEmployeeToSupabase(emp).catch(() => {});
-          });
-        }
-
-        setEmployees(combined);
-        try {
-          localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(combined));
-        } catch {}
-
-        if (urlId) {
-          const target = combined.find((e) => e.id === urlId || e.code === urlId);
-          if (target) setSelectedProfile(target);
-        }
-      });
+            if (urlId) {
+              const target = remoteData.find((e) => e.id === urlId || e.code === urlId);
+              if (target) setSelectedProfile(target);
+            }
+          }
+        });
     }
   }, []);
 
