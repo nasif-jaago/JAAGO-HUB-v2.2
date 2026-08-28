@@ -162,6 +162,10 @@ export default function PnCLayout({
     if (pathname.includes('/attendance/on-duty')) return 'On Duty Logs';
     if (pathname.includes('/attendance/report')) return 'Attendance Report';
     if (pathname.includes('/attendance')) return 'Attendance';
+    if (pathname.includes('/time-off/requests')) return 'Leave Requests';
+    if (pathname.includes('/time-off/allocations')) return 'Leave Allocations';
+    if (pathname.includes('/time-off/holidays')) return 'Public Holidays';
+    if (pathname.includes('/time-off/config')) return 'Leave Configuration';
     if (pathname.includes('/time-off') || pathname.includes('/leave')) return 'Leave Calendar';
     return 'Dashboard';
   };
@@ -374,29 +378,86 @@ export default function PnCLayout({
           <div className="space-y-0.5">
             <button
               onClick={() => toggleSection('timeOff')}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer"
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                pathname.startsWith('/pnc/time-off')
+                  ? 'text-primary font-black bg-primary/10'
+                  : 'text-sidebar-foreground hover:bg-surface'
+              }`}
             >
               <div className="flex items-center space-x-2.5">
-                <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Calendar className={`h-4 w-4 flex-shrink-0 ${
+                  pathname.startsWith('/pnc/time-off')
+                    ? 'text-primary'
+                    : 'text-muted-foreground'
+                }`} />
                 <span className="uppercase tracking-wider text-[11px]">TIME OFF</span>
               </div>
-              {openSections['timeOff'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              {openSections['timeOff'] || pathname.startsWith('/pnc/time-off') ? (
+                <ChevronDown className="h-3.5 w-3.5 text-primary" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
             </button>
-            {openSections['timeOff'] && (
+            {(openSections['timeOff'] || pathname.startsWith('/pnc/time-off')) && (
               <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <Link href="/pnc/time-off/calendar" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/time-off/calendar"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/time-off/calendar' || pathname === '/pnc/time-off'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Leave Calendar
                 </Link>
-                <Link href="/pnc/time-off/calendar" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/leaves"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/leaves'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
+                  &bull; My Leave
+                </Link>
+                <Link
+                  href="/pnc/time-off/requests"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/time-off/requests'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Leave Requests
                 </Link>
-                <Link href="/pnc/time-off/calendar" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/time-off/allocations"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/time-off/allocations'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Allocations
                 </Link>
-                <Link href="/pnc/time-off/calendar" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/time-off/holidays"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/time-off/holidays'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Public Holidays
                 </Link>
-                <Link href="/pnc/time-off/calendar" className="block py-1 hover:text-primary uppercase text-[10px] font-bold">
+                <Link
+                  href="/pnc/time-off/config"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname === '/pnc/time-off/config'
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
                   &bull; Leave Config
                 </Link>
               </div>

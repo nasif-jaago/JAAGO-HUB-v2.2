@@ -31,6 +31,8 @@ import {
   Move,
   CalendarDays,
   ArrowUpRight,
+  Plus,
+  X,
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
@@ -56,6 +58,18 @@ import {
   type DesignationItem,
   type InsuranceCategoryItem,
 } from '@/lib/supabase-organization';
+import {
+  fetchLeaveAllocations,
+  fetchLeaveRequests,
+  saveLeaveRequest,
+  type LeaveAllocationItem,
+  type LeaveRequestItem,
+  type LeaveType,
+  type HalfDayType,
+  BEREAVEMENT_RELATIONSHIPS,
+  type BereavementRelationship,
+  QUICK_LEAVE_POLICIES,
+} from '@/lib/supabase-time-off';
 
 export type EmployeeStatus = 'Active' | 'Terminated' | 'Resigned' | 'Incomplete' | 'Archived';
 
@@ -478,6 +492,61 @@ export function EmployeeProfileDetail({
 
   // Notification / Save feedback
   const [saveToast, setSaveToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Leave & Attendance live connection
+  const [empLeaveAllocation, setEmpLeaveAllocation] = useState<LeaveAllocationItem | null>(null);
+  const [empLeaveRequests, setEmpLeaveRequests] = useState<LeaveRequestItem[]>([]);
+  const [showProfileLeaveModal, setShowProfileLeaveModal] = useState(false);
+  const [profileLeaveForm, setProfileLeaveForm] = useState<{
+    leaveType: LeaveType;
+    fromDate: string;
+    toDate: string;
+    totalDays: number;
+    halfDayType: HalfDayType;
+    reason: string;
+    pregnancyConfirmationDate: string;
+    expectedDeliveryDate: string;
+    intendedMaternityStartDate: string;
+    bereavementRelationship: BereavementRelationship | '';
+  }>({
+    leaveType: 'Casual Leave',
+    fromDate: new Date().toISOString().split('T')[0]!,
+    toDate: new Date().toISOString().split('T')[0]!,
+    totalDays: 1,
+    halfDayType: 'Full Day',
+    reason: '',
+    pregnancyConfirmationDate: '',
+    expectedDeliveryDate: '',
+    intendedMaternityStartDate: '',
+    bereavementRelationship: '',
+  });
+  const [profileLeaveError, setProfileLeaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadEmpLeaveData() {
+      if (formData.code) {
+        try {
+          const [allocs, reqs] = await Promise.all([
+            fetchLeaveAllocations(),
+            fetchLeaveRequests(),
+          ]);
+          const found = allocs.find((a) => a.employeeCode === formData.code) || null;
+          setEmpLeaveAllocation(found);
+          const filtered = reqs.filter((r) => r.employeeCode === formData.code);
+          setEmpLeaveRequests(filtered);
+        } catch {}
+      }
+    }
+    loadEmpLeaveData();
+
+    const handleAllocationUpdate = () => {
+      loadEmpLeaveData();
+    };
+    window.addEventListener('jaago_leave_allocation_updated', handleAllocationUpdate);
+    return () => {
+      window.removeEventListener('jaago_leave_allocation_updated', handleAllocationUpdate);
+    };
+  }, [formData.code]);
 
   // Sync total calculated salary whenever regular or extra payment changes
   useEffect(() => {
@@ -2600,159 +2669,410 @@ export function EmployeeProfileDetail({
         {activeTab === 'LEAVE_ATTENDANCE' && (
           <div className="space-y-6">
             {/* Header Banner */}
-            <div className="border-b border-border/70 pb-2.5 flex items-center justify-between">
+            <div className="border-b border-border/70 pb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-2">
                 <div className="h-6 w-6 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
                   <CalendarDays className="h-3.5 w-3.5" />
                 </div>
                 <span>Leave Entitlements &amp; Attendance Tracking Configuration</span>
               </h3>
-              <a
-                href="/pnc/attendance/report"
-                className="text-[11px] font-bold text-amber-500 hover:text-amber-400 flex items-center space-x-1 transition"
-              >
-                <span>View Full Attendance Report</span>
-                <ArrowUpRight className="h-3.5 w-3.5" />
-              </a>
+              <div className="flex items-center space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileLeaveForm({
+                      leaveType: 'Casual Leave',
+                      fromDate: new Date().toISOString().split('T')[0]!,
+                      toDate: new Date().toISOString().split('T')[0]!,
+                      totalDays: 1,
+                      halfDayType: 'Full Day',
+                      reason: '',
+                      pregnancyConfirmationDate: '',
+                      expectedDeliveryDate: '',
+                      intendedMaternityStartDate: '',
+                      bereavementRelationship: '',
+                    });
+                    setProfileLeaveError(null);
+                    setShowProfileLeaveModal(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs uppercase tracking-wider transition flex items-center space-x-1.5 shadow-md shadow-amber-500/20 cursor-pointer active:scale-95"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>APPLY FOR LEAVE</span>
+                </button>
+                <a
+                  href="/pnc/attendance/report"
+                  className="text-[11px] font-bold text-muted-foreground hover:text-foreground flex items-center space-x-1 transition"
+                >
+                  <span>Attendance Report</span>
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </a>
+              </div>
             </div>
 
-            {/* ── 1. LEAVE BALANCES ENTITLEMENT CARDS ── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Casual Leave Card */}
-              <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm space-y-3 relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Casual Leave (CL)
+            {/* ── 1. LEAVE BALANCES ENTITLEMENT CARDS (LIVE CONNECTED) ── */}
+            {(() => {
+              const hasAllocation = Boolean(empLeaveAllocation);
+              const clAlloc = empLeaveAllocation ? (empLeaveAllocation.casualAllocated ?? 0) : 0;
+              const clUsed = empLeaveAllocation ? (empLeaveAllocation.casualUsed ?? 0) : 0;
+              const clRem = Math.max(0, clAlloc - clUsed);
+
+              const mlAlloc = empLeaveAllocation ? (empLeaveAllocation.medicalAllocated ?? 0) : 0;
+              const mlUsed = empLeaveAllocation ? (empLeaveAllocation.medicalUsed ?? 0) : 0;
+              const mlRem = Math.max(0, mlAlloc - mlUsed);
+
+              const elAlloc = empLeaveAllocation ? (empLeaveAllocation.emergencyAllocated ?? 0) : 0;
+              const elUsed = empLeaveAllocation ? (empLeaveAllocation.emergencyUsed ?? 0) : 0;
+              const elRem = Math.max(0, elAlloc - elUsed);
+
+              const alAlloc = empLeaveAllocation ? (empLeaveAllocation.annualAllocated ?? 0) : 0;
+              const alUsed = empLeaveAllocation ? (empLeaveAllocation.annualUsed ?? 0) : 0;
+              const alRem = Math.max(0, alAlloc - alUsed);
+
+              const coAlloc = empLeaveAllocation ? (empLeaveAllocation.compOffAllocated ?? 0) : 0;
+              const coUsed = empLeaveAllocation ? (empLeaveAllocation.compOffUsed ?? 0) : 0;
+              const coRem = Math.max(0, coAlloc - coUsed);
+
+              const plAlloc = empLeaveAllocation ? (empLeaveAllocation.paternityAllocated ?? 0) : 0;
+              const plUsed = empLeaveAllocation ? (empLeaveAllocation.paternityUsed ?? 0) : 0;
+              const plRem = Math.max(0, plAlloc - plUsed);
+
+              const matAlloc = empLeaveAllocation ? (empLeaveAllocation.maternityAllocated ?? 0) : 0;
+              const matUsed = empLeaveAllocation ? (empLeaveAllocation.maternityUsed ?? 0) : 0;
+              const matRem = Math.max(0, matAlloc - matUsed);
+
+              const blAlloc = empLeaveAllocation ? 5 : 0;
+              const blUsed = empLeaveAllocation ? (empLeaveAllocation.bereavementUsed ?? 0) : 0;
+              const blRem = Math.max(0, blAlloc - blUsed);
+
+              const clPct = clAlloc > 0 ? (clRem / clAlloc) * 100 : 0;
+              const mlPct = mlAlloc > 0 ? (mlRem / mlAlloc) * 100 : 0;
+              const elPct = elAlloc > 0 ? (elRem / elAlloc) * 100 : 0;
+              const alPct = alAlloc > 0 ? (alRem / alAlloc) * 100 : 0;
+              const coPct = coAlloc > 0 ? (coRem / coAlloc) * 100 : 0;
+              const plPct = plAlloc > 0 ? (plRem / plAlloc) * 100 : 0;
+              const matPct = matAlloc > 0 ? (matRem / matAlloc) * 100 : 0;
+              const blPct = blAlloc > 0 ? (blRem / blAlloc) * 100 : 0;
+
+              const renderRing = (pct: number, stroke: string) => {
+                const size = 56;
+                const strokeWidth = 5;
+                const radius = (size - strokeWidth) / 2;
+                const circ = 2 * Math.PI * radius;
+                const clamped = Math.min(100, Math.max(0, pct));
+                const offset = circ - (clamped / 100) * circ;
+                return (
+                  <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
+                    <svg className="w-full h-full -rotate-90" viewBox={`0 0 ${size} ${size}`}>
+                      <circle
+                        cx={size / 2}
+                        cy={size / 2}
+                        r={radius}
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={strokeWidth}
+                        className="text-foreground/10 opacity-40"
+                      />
+                      <circle
+                        cx={size / 2}
+                        cy={size / 2}
+                        r={radius}
+                        fill="none"
+                        stroke={stroke}
+                        strokeWidth={strokeWidth}
+                        strokeDasharray={circ}
+                        strokeDashoffset={offset}
+                        strokeLinecap="round"
+                        className="transition-all duration-500 ease-out"
+                      />
+                    </svg>
+                    <span className="absolute inset-0 flex items-center justify-center font-black text-[11px] text-foreground">
+                      {Math.round(clamped)}%
+                    </span>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold border border-emerald-500/20">
-                    Annual Quota
-                  </span>
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <div className="text-2xl font-black text-foreground">
-                    {Math.max(0, (formData.casualLeaveAllocated ?? 14) - (formData.casualLeaveUsed ?? 3))}{' '}
-                    <span className="text-xs font-semibold text-muted-foreground">Days Left</span>
+                );
+              };
+
+              return (
+                <div className="space-y-4">
+                  {!hasAllocation && (
+                    <div className="flex items-center justify-between p-3 px-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-semibold animate-in fade-in">
+                      <div className="flex items-center space-x-2">
+                        <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                        <span>No leave quota allocated for this employee. Balances are 0 until allocated in Time Off &gt; Allocations.</span>
+                      </div>
+                      <a
+                        href="/pnc/time-off/allocations"
+                        className="px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] transition shadow-sm flex-shrink-0"
+                      >
+                        + Allocate Quota
+                      </a>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* 1. Casual Leave Card */}
+                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-emerald-500 rounded-l-2xl" />
+                    <div className="flex items-center justify-between pl-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <span className="text-xs font-bold text-foreground">Casual</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">CL</span>
+                    </div>
+                    <div className="flex items-center space-x-3 pl-2 pt-1">
+                      {renderRing(clPct, '#10b981')}
+                      <div className="space-y-0.5">
+                        <div className="text-xl font-black text-foreground">
+                          {clRem}
+                          <span className="text-xs font-semibold text-muted-foreground">/{clAlloc}d</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-medium">
+                          Used <strong className="text-foreground font-bold">{clUsed}</strong> &bull; {clAlloc} total
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-muted-foreground font-semibold">
-                    Used: <span className="text-amber-500 font-bold">{formData.casualLeaveUsed ?? 3}</span> / {formData.casualLeaveAllocated ?? 14}
+
+                  {/* 2. Medical Leave Card */}
+                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-500 rounded-l-2xl" />
+                    <div className="flex items-center justify-between pl-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="h-2 w-2 rounded-full bg-blue-500" />
+                        <span className="text-xs font-bold text-foreground">Medical</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">ML</span>
+                    </div>
+                    <div className="flex items-center space-x-3 pl-2 pt-1">
+                      {renderRing(mlPct, '#3b82f6')}
+                      <div className="space-y-0.5">
+                        <div className="text-xl font-black text-foreground">
+                          {mlRem}
+                          <span className="text-xs font-semibold text-muted-foreground">/{mlAlloc}d</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-medium">
+                          Used <strong className="text-foreground font-bold">{mlUsed}</strong> &bull; {mlAlloc} total
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                {/* Progress bar */}
-                <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden border border-border/40">
-                  <div
-                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (((formData.casualLeaveAllocated ?? 14) - (formData.casualLeaveUsed ?? 3)) /
-                          (formData.casualLeaveAllocated || 14)) *
-                          100
-                      )}%`,
-                    }}
-                  />
+
+                  {/* 3. Emergency Leave Card */}
+                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-amber-600 rounded-l-2xl" />
+                    <div className="flex items-center justify-between pl-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="h-2 w-2 rounded-full bg-amber-600" />
+                        <span className="text-xs font-bold text-foreground">Emergency</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">EL</span>
+                    </div>
+                    <div className="flex items-center space-x-3 pl-2 pt-1">
+                      {renderRing(elPct, '#d97706')}
+                      <div className="space-y-0.5">
+                        <div className="text-xl font-black text-foreground">
+                          {elRem}
+                          <span className="text-xs font-semibold text-muted-foreground">/{elAlloc}d</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-medium">
+                          Used <strong className="text-foreground font-bold">{elUsed}</strong> &bull; {elAlloc} total
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Annual Leave Card */}
+                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-purple-500 rounded-l-2xl" />
+                    <div className="flex items-center justify-between pl-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="h-2 w-2 rounded-full bg-purple-500" />
+                        <span className="text-xs font-bold text-foreground">Annual</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">AL</span>
+                    </div>
+                    <div className="flex items-center space-x-3 pl-2 pt-1">
+                      {renderRing(alPct, '#8b5cf6')}
+                      <div className="space-y-0.5">
+                        <div className="text-xl font-black text-foreground">
+                          {alRem}
+                          <span className="text-xs font-semibold text-muted-foreground">/{alAlloc}d</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-medium">
+                          Used <strong className="text-foreground font-bold">{alUsed}</strong> &bull; {alAlloc} total
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 5. Compensatory Leave Card */}
+                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-cyan-500 rounded-l-2xl" />
+                    <div className="flex items-center justify-between pl-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="h-2 w-2 rounded-full bg-cyan-500" />
+                        <span className="text-xs font-bold text-foreground">Compensatory</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">CO</span>
+                    </div>
+                    <div className="flex items-center space-x-3 pl-2 pt-1">
+                      {renderRing(coPct, '#06b6d4')}
+                      <div className="space-y-0.5">
+                        <div className="text-xl font-black text-foreground">
+                          {coRem}
+                          <span className="text-xs font-semibold text-muted-foreground">/{coAlloc}h</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-medium">
+                          Used <strong className="text-foreground font-bold">{coUsed}h</strong> &bull; {coAlloc}h total
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 6. Paternity Leave Card */}
+                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-2xl" />
+                    <div className="flex items-center justify-between pl-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                        <span className="text-xs font-bold text-foreground">Paternity</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">PL</span>
+                    </div>
+                    <div className="flex items-center space-x-3 pl-2 pt-1">
+                      {renderRing(plPct, '#6366f1')}
+                      <div className="space-y-0.5">
+                        <div className="text-xl font-black text-foreground">
+                          {plRem}
+                          <span className="text-xs font-semibold text-muted-foreground">/{plAlloc}d</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-medium">
+                          Used <strong className="text-foreground font-bold">{plUsed}</strong> &bull; {plAlloc} total
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 7. Maternity Leave Card */}
+                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 rounded-l-2xl" />
+                    <div className="flex items-center justify-between pl-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="h-2 w-2 rounded-full bg-rose-500" />
+                        <span className="text-xs font-bold text-foreground">Maternity</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">MAT</span>
+                    </div>
+                    <div className="flex items-center space-x-3 pl-2 pt-1">
+                      {renderRing(matPct, '#f43f5e')}
+                      <div className="space-y-0.5">
+                        <div className="text-xl font-black text-foreground">
+                          {matRem}
+                          <span className="text-xs font-semibold text-muted-foreground">/{matAlloc}d</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-medium">
+                          Used <strong className="text-foreground font-bold">{matUsed}</strong> &bull; {matAlloc} total
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 8. Bereavement Leave Card */}
+                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-slate-500 rounded-l-2xl" />
+                    <div className="flex items-center justify-between pl-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="h-2 w-2 rounded-full bg-slate-500" />
+                        <span className="text-xs font-bold text-foreground">Bereavement</span>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">BL</span>
+                    </div>
+                    <div className="flex items-center space-x-3 pl-2 pt-1">
+                      {renderRing(blPct, '#64748b')}
+                      <div className="space-y-0.5">
+                        <div className="text-xl font-black text-foreground">
+                          {blRem}
+                          <span className="text-xs font-semibold text-muted-foreground">/5d</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground font-medium">
+                          Used <strong className="text-foreground font-bold">{blUsed}</strong> &bull; 5d / incident
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+            );
+          })()}
 
-              {/* Sick / Medical Leave Card */}
-              <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm space-y-3 relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Sick Leave (SL)
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-500 font-bold border border-sky-500/20">
-                    Medical
-                  </span>
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <div className="text-2xl font-black text-foreground">
-                    {Math.max(0, (formData.sickLeaveAllocated ?? 10) - (formData.sickLeaveUsed ?? 1))}{' '}
-                    <span className="text-xs font-semibold text-muted-foreground">Days Left</span>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground font-semibold">
-                    Used: <span className="text-sky-500 font-bold">{formData.sickLeaveUsed ?? 1}</span> / {formData.sickLeaveAllocated ?? 10}
-                  </div>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden border border-border/40">
-                  <div
-                    className="h-full bg-sky-500 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (((formData.sickLeaveAllocated ?? 10) - (formData.sickLeaveUsed ?? 1)) /
-                          (formData.sickLeaveAllocated || 10)) *
-                          100
-                      )}%`,
-                    }}
-                  />
-                </div>
+            {/* ── 1.5 EMPLOYEE LEAVE APPLICATIONS SUB-TABLE ── */}
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-1.5">
+                  <CalendarDays className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Leave Application Records ({empLeaveRequests.length} Total)</span>
+                </h4>
+                <span className="text-[11px] font-semibold text-muted-foreground">
+                  Policy Group: <strong className="text-foreground">{formData.leaveGroup || 'Standard Full-time'}</strong>
+                </span>
               </div>
 
-              {/* Earned / Annual Leave Card */}
-              <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm space-y-3 relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Earned Leave (EL)
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/20">
-                    Accrued
-                  </span>
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <div className="text-2xl font-black text-foreground">
-                    {Math.max(0, (formData.earnedLeaveAllocated ?? 15) - (formData.earnedLeaveUsed ?? 0))}{' '}
-                    <span className="text-xs font-semibold text-muted-foreground">Days Left</span>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground font-semibold">
-                    Used: <span className="text-amber-500 font-bold">{formData.earnedLeaveUsed ?? 0}</span> / {formData.earnedLeaveAllocated ?? 15}
-                  </div>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden border border-border/40">
-                  <div
-                    className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (((formData.earnedLeaveAllocated ?? 15) - (formData.earnedLeaveUsed ?? 0)) /
-                          (formData.earnedLeaveAllocated || 15)) *
-                          100
-                      )}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Special / Compensatory Leave Card */}
-              <div className="p-4 rounded-2xl bg-card border border-border/80 shadow-sm space-y-3 relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Special Leave
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-500 font-bold border border-purple-500/20">
-                    Policy
-                  </span>
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <div className="text-2xl font-black text-foreground">
-                    {Math.max(0, (formData.specialLeaveAllocated ?? 5) - (formData.specialLeaveUsed ?? 0))}{' '}
-                    <span className="text-xs font-semibold text-muted-foreground">Days Left</span>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground font-semibold">
-                    Used: <span className="text-purple-500 font-bold">{formData.specialLeaveUsed ?? 0}</span> / {formData.specialLeaveAllocated ?? 5}
-                  </div>
-                </div>
-                <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden border border-border/40">
-                  <div
-                    className="h-full bg-purple-500 rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        (((formData.specialLeaveAllocated ?? 5) - (formData.specialLeaveUsed ?? 0)) /
-                          (formData.specialLeaveAllocated || 5)) *
-                          100
-                      )}%`,
-                    }}
-                  />
-                </div>
+              <div className="rounded-2xl border border-border/80 overflow-hidden bg-card shadow-sm">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface/70 border-b border-border/60 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="py-3 px-4">Leave Category</th>
+                      <th className="py-3 px-3">Date Range &amp; Shift</th>
+                      <th className="py-3 px-3">Total Days</th>
+                      <th className="py-3 px-3">Reason</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40 font-medium">
+                    {empLeaveRequests.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-muted-foreground text-xs font-semibold">
+                          No leave applications recorded for this employee yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      empLeaveRequests.map((req) => (
+                        <tr key={req.id} className="hover:bg-surface/40 transition">
+                          <td className="py-3 px-4 font-bold text-foreground">
+                            {req.leaveType}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-[11px] text-foreground">
+                            {req.fromDate} &rarr; {req.toDate}
+                            {req.halfDayType && req.halfDayType !== 'Full Day' && (
+                              <span className="text-amber-500 font-sans font-bold ml-1">({req.halfDayType})</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-bold text-foreground">
+                            {req.totalDays} {req.totalDays === 1 ? 'day' : 'days'}
+                          </td>
+                          <td className="py-3 px-3 text-muted-foreground truncate max-w-xs">
+                            {req.bereavementRelationship ? `[${req.bereavementRelationship}] ` : ''}
+                            {req.reason}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                req.status === 'Approved'
+                                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                  : req.status === 'Pending'
+                                  ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                                  : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                              }`}
+                            >
+                              {req.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -2944,27 +3264,18 @@ export function EmployeeProfileDetail({
                   </thead>
                   <tbody className="divide-y divide-border/40 font-medium">
                     {(() => {
-                      const empLogs = getEmployeeAttendanceLogs(formData.code || formData.id || formData.name || 'Nasif Kamal');
-                      const displayList = empLogs.length > 0 ? empLogs.slice(0, 14) : [
-                        {
-                          id: 'mock-1',
-                          date: '2026-08-27',
-                          checkInTime: '02:50 PM',
-                          checkOutTime: '06:48 PM',
-                          device: 'Web Portal',
-                          status: 'Present',
-                        },
-                        {
-                          id: 'mock-2',
-                          date: '2026-08-26',
-                          checkInTime: '09:58 AM',
-                          checkOutTime: '06:15 PM',
-                          device: 'Device Login',
-                          status: 'Present',
-                        },
-                      ];
+                      const empLogs = getEmployeeAttendanceLogs(formData.code || formData.id || formData.name || '');
+                      if (empLogs.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="py-6 text-center text-muted-foreground text-xs font-semibold">
+                              No attendance logs recorded for this employee yet.
+                            </td>
+                          </tr>
+                        );
+                      }
 
-                      return displayList.map((log: any) => {
+                      return empLogs.slice(0, 14).map((log: any) => {
                         const durationStr = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
                         return (
                           <tr key={log.id} className="hover:bg-surface/40 transition">
@@ -2990,6 +3301,10 @@ export function EmployeeProfileDetail({
                                     ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
                                     : log.status === 'Late'
                                     ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                                    : log.status === 'Leave'
+                                    ? 'bg-purple-500/10 text-purple-500 border-purple-500/30'
+                                    : log.status === 'Half Day'
+                                    ? 'bg-sky-500/10 text-sky-500 border-sky-500/30'
                                     : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
                                 }`}
                               >
@@ -3121,6 +3436,320 @@ export function EmployeeProfileDetail({
             fileInputRef.current?.click();
           }}
         />
+      )}
+
+      {/* ── 7. APPLY FOR LEAVE MODAL (FOR THIS EMPLOYEE) ── */}
+      {showProfileLeaveModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl bg-card border border-border shadow-2xl p-6 sm:p-8 space-y-5 no-scrollbar">
+            <div className="flex items-center justify-between border-b border-border/70 pb-3">
+              <div>
+                <h3 className="text-lg font-serif font-black text-foreground">
+                  Apply for Leave ({formData.name || 'Employee'})
+                </h3>
+                <p className="text-xs text-muted-foreground font-mono">
+                  {formData.code} &bull; {formData.department}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProfileLeaveModal(false)}
+                className="p-1 rounded-xl text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!profileLeaveForm.reason) {
+                  setProfileLeaveError('Please enter the reason for leave');
+                  return;
+                }
+
+                if (profileLeaveForm.leaveType === 'Bereavement Leave' && !profileLeaveForm.bereavementRelationship) {
+                  setProfileLeaveError('Please select immediate family relationship for Bereavement Leave');
+                  return;
+                }
+
+                const newReq: LeaveRequestItem = {
+                  id: `lv-${Date.now()}`,
+                  employeeCode: formData.code,
+                  employeeName: formData.name,
+                  department: formData.department,
+                  designation: formData.designation,
+                  leaveType: profileLeaveForm.leaveType,
+                  fromDate: profileLeaveForm.fromDate,
+                  toDate: profileLeaveForm.toDate,
+                  totalDays: profileLeaveForm.totalDays,
+                  halfDayType: profileLeaveForm.halfDayType,
+                  reason: profileLeaveForm.reason,
+                  pregnancyConfirmationDate: profileLeaveForm.pregnancyConfirmationDate,
+                  expectedDeliveryDate: profileLeaveForm.expectedDeliveryDate,
+                  intendedMaternityStartDate: profileLeaveForm.intendedMaternityStartDate,
+                  bereavementRelationship: profileLeaveForm.bereavementRelationship as BereavementRelationship,
+                  status: 'Pending',
+                  appliedAt: new Date().toISOString(),
+                };
+
+                const updatedReqs = [newReq, ...empLeaveRequests];
+                setEmpLeaveRequests(updatedReqs);
+                setShowProfileLeaveModal(false);
+                await saveLeaveRequest(newReq);
+                setSaveToast({ message: 'Leave application submitted successfully', type: 'success' });
+                setTimeout(() => setSaveToast(null), 3500);
+              }}
+              className="space-y-4 text-xs"
+            >
+              {/* Category */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Leave Category <span className="text-amber-500">*</span>
+                </label>
+                <select
+                  value={profileLeaveForm.leaveType}
+                  onChange={(e) => {
+                    const newType = e.target.value as LeaveType;
+                    const d1 = new Date(profileLeaveForm.fromDate);
+                    const d2 = new Date(profileLeaveForm.toDate);
+                    let diffDays = 1;
+                    if (newType === 'Maternity Leave') diffDays = 120;
+                    else if (profileLeaveForm.halfDayType !== 'Full Day' && newType === 'Casual Leave') diffDays = 0.5;
+                    else if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+                      diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                    }
+                    setProfileLeaveForm({
+                      ...profileLeaveForm,
+                      leaveType: newType,
+                      totalDays: diffDays > 0 ? diffDays : 1,
+                    });
+                  }}
+                  className="w-full h-10 px-3 rounded-xl bg-surface border border-border font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+                >
+                  <option value="Casual Leave">Casual Leave (CL)</option>
+                  <option value="Medical Leave">Medical Leave (ML)</option>
+                  <option value="Emergency Leave">Emergency Leave (EL)</option>
+                  <option value="Annual Leave">Annual Leave (AL)</option>
+                  <option value="Paternity Leave">Paternity Leave (15 Days)</option>
+                  <option value="Maternity Leave">Maternity Leave (120 Days)</option>
+                  <option value="Bereavement Leave">Bereavement Leave</option>
+                </select>
+              </div>
+
+              {/* Leave Duration & Period Dropdowns */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Leave Duration
+                  </label>
+                  {(profileLeaveForm.leaveType === 'Casual Leave' ||
+                    profileLeaveForm.leaveType === 'Medical Leave' ||
+                    profileLeaveForm.leaveType === 'Emergency Leave' ||
+                    profileLeaveForm.leaveType === 'Compensatory Leave') ? (
+                    <select
+                      value={profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF'}
+                      onChange={(e) => {
+                        const isHalf = e.target.value === 'HALF';
+                        setProfileLeaveForm({
+                          ...profileLeaveForm,
+                          halfDayType: isHalf ? 'First Half' : 'Full Day',
+                          totalDays: isHalf ? 0.5 : 1,
+                        });
+                      }}
+                      className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+                    >
+                      <option value="HALF">HALF</option>
+                      <option value="FULL">FULL</option>
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      disabled
+                      value="FULL"
+                      className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs font-semibold text-muted-foreground cursor-not-allowed shadow-sm"
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Period (First Half / Second Half)
+                  </label>
+                  {(profileLeaveForm.leaveType === 'Casual Leave' ||
+                    profileLeaveForm.leaveType === 'Medical Leave' ||
+                    profileLeaveForm.leaveType === 'Emergency Leave' ||
+                    profileLeaveForm.leaveType === 'Compensatory Leave') &&
+                  profileLeaveForm.halfDayType !== 'Full Day' ? (
+                    <select
+                      value={profileLeaveForm.halfDayType}
+                      onChange={(e) => {
+                        setProfileLeaveForm({
+                          ...profileLeaveForm,
+                          halfDayType: e.target.value as HalfDayType,
+                        });
+                      }}
+                      className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+                    >
+                      <option value="First Half">First Half</option>
+                      <option value="Second Half">Second Half</option>
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      disabled
+                      value="Full Day"
+                      className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs font-semibold text-muted-foreground cursor-not-allowed shadow-sm"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Date Ranges */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    From Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={profileLeaveForm.fromDate}
+                    onChange={(e) => {
+                      const d1 = new Date(e.target.value);
+                      const d2 = new Date(profileLeaveForm.toDate);
+                      let diffDays = 1;
+                      if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+                        diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                      }
+                      setProfileLeaveForm({
+                        ...profileLeaveForm,
+                        fromDate: e.target.value,
+                        totalDays: diffDays > 0 ? diffDays : 1,
+                      });
+                    }}
+                    className="w-full h-10 px-3 rounded-xl bg-surface border border-border font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    To Date
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    disabled={profileLeaveForm.leaveType === 'Maternity Leave' || profileLeaveForm.halfDayType !== 'Full Day'}
+                    value={
+                      profileLeaveForm.halfDayType !== 'Full Day'
+                        ? profileLeaveForm.fromDate
+                        : profileLeaveForm.toDate
+                    }
+                    onChange={(e) => {
+                      const d1 = new Date(profileLeaveForm.fromDate);
+                      const d2 = new Date(e.target.value);
+                      let diffDays = 1;
+                      if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+                        diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                      }
+                      setProfileLeaveForm({
+                        ...profileLeaveForm,
+                        toDate: e.target.value,
+                        totalDays: diffDays > 0 ? diffDays : 1,
+                      });
+                    }}
+                    className="w-full h-10 px-3 rounded-xl bg-surface border border-border font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* Bereavement Dropdown */}
+              {profileLeaveForm.leaveType === 'Bereavement Leave' && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Immediate Family Relationship <span className="text-amber-500">*</span>
+                  </label>
+                  <select
+                    value={profileLeaveForm.bereavementRelationship}
+                    onChange={(e) =>
+                      setProfileLeaveForm({
+                        ...profileLeaveForm,
+                        bereavementRelationship: e.target.value as BereavementRelationship,
+                      })
+                    }
+                    className="w-full h-10 px-3 rounded-xl bg-surface border border-border font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+                  >
+                    <option value="">Select Relationship</option>
+                    {BEREAVEMENT_RELATIONSHIPS.map((rel) => (
+                      <option key={rel} value={rel}>
+                        {rel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Reason */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Reason for Leave <span className="text-amber-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={profileLeaveForm.reason}
+                  onChange={(e) => setProfileLeaveForm({ ...profileLeaveForm, reason: e.target.value })}
+                  placeholder="Detail the purpose of leave and handover arrangements..."
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm resize-none"
+                />
+              </div>
+
+              {/* ── QUICK LEAVE POLICY BANNER ── */}
+              {(() => {
+                const pol = QUICK_LEAVE_POLICIES[profileLeaveForm.leaveType] || QUICK_LEAVE_POLICIES['Casual Leave'];
+                return (
+                  <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-1.5">
+                    <div className="flex items-center space-x-1.5 text-amber-500 font-bold uppercase text-[10px]">
+                      <div className="h-4 w-4 rounded-full bg-amber-500 text-white flex items-center justify-center text-[9px] font-bold">
+                        i
+                      </div>
+                      <span>{pol.title}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-muted-foreground font-medium pl-1">
+                      {pol.points.map((pt, i) => (
+                        <div key={i} className="flex items-start space-x-1.5">
+                          <span className="text-amber-500 font-bold">&bull;</span>
+                          <span>{pt}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {profileLeaveError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-semibold">
+                  {profileLeaveError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-border/70">
+                <button
+                  type="button"
+                  onClick={() => setShowProfileLeaveModal(false)}
+                  className="px-4 py-2 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-bold transition cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
+                >
+                  SUBMIT LEAVE
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
