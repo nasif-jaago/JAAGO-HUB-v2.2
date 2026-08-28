@@ -272,11 +272,8 @@ export default function ProjectsPage() {
             <span className="text-foreground font-bold">Projects</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sans">
-            Initiatives &amp; Strategic Projects
+            Projects
           </h1>
-          <p className="text-xs text-muted-foreground pt-0.5">
-            Define programmatic interventions, affiliate parent departments, and appoint dedicated Project Managers.
-          </p>
         </div>
 
         <button

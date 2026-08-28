@@ -538,7 +538,21 @@ export default function OrganizationPage() {
                 <tbody className="divide-y divide-border/40 font-medium">
                   {filteredOrgs.map((org) => {
                     const isSelected = selectedIds.includes(org.id);
-                    const initials = org.name.slice(0, 2).toUpperCase() || 'JA';
+                    
+                    const getOrgBadge = (name: string) => {
+                      const clean = (name || '').trim();
+                      const lower = clean.toLowerCase();
+                      if (lower.includes('uk') || lower.endsWith('uk')) return 'JF UK';
+                      if (lower.includes('inc') || lower.endsWith('inc')) return 'JF INC';
+                      if (lower.includes('trust') || lower.endsWith('trust') || lower === 'jft') return 'JFT';
+                      if (lower.startsWith('jaago foundation') || lower === 'jf') return 'JF';
+                      if (lower.includes('emk')) return 'EMK';
+                      const words = clean.split(/\s+/).filter(Boolean);
+                      if (words.length === 1 && words[0]) return words[0].slice(0, 3).toUpperCase();
+                      return words.map((w) => w[0] || '').join('').slice(0, 4).toUpperCase() || 'JF';
+                    };
+
+                    const initials = getOrgBadge(org.name);
                     const brandColor = org.brandColor || '#FED900';
 
                     return (
@@ -569,7 +583,7 @@ export default function OrganizationPage() {
                             {/* Colorful Initials Badge */}
                             <div
                               style={{ backgroundColor: brandColor }}
-                              className="h-8 w-8 rounded-lg flex items-center justify-center font-black text-xs text-white shadow-sm flex-shrink-0"
+                              className="h-8 min-w-[36px] px-1.5 rounded-lg flex items-center justify-center font-black text-[11px] text-white shadow-sm flex-shrink-0 tracking-tight"
                             >
                               {initials}
                             </div>

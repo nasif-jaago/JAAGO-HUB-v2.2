@@ -201,9 +201,6 @@ export default function InsurancePage() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sans">
             Insurance Info &amp; Coverage Categories
           </h1>
-          <p className="text-xs text-muted-foreground pt-0.5">
-            Configure employee medical insurance plans, hospitalization benefit caps, and monthly premium rates.
-          </p>
         </div>
 
         <button
