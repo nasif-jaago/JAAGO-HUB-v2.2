@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Camera,
   Upload,
@@ -788,11 +789,17 @@ export function EmployeeProfileDetail({
           </button>
           <div>
             <div className="flex items-center space-x-2 text-xs font-semibold text-muted-foreground">
-              <span>People and Culture</span>
+              <Link href="/pnc" className="hover:text-primary hover:underline transition cursor-pointer">
+                People and Culture
+              </Link>
               <span>/</span>
-              <span className="hover:text-foreground cursor-pointer" onClick={onBack}>
+              <button
+                type="button"
+                className="hover:text-primary hover:underline transition cursor-pointer font-semibold"
+                onClick={onBack}
+              >
                 Employees
-              </span>
+              </button>
               <span>/</span>
               <span className="text-foreground font-bold">
                 {formData.name || (isNew ? 'New Profile' : 'Employee Details')}

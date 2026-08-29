@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Building2,
   Plus,
@@ -379,6 +380,13 @@ export default function OrganizationPage() {
         <div className="space-y-5">
           {/* Header */}
           <div>
+            <div className="flex items-center space-x-2 text-xs font-semibold text-muted-foreground pb-1">
+              <Link href="/pnc" className="hover:text-primary hover:underline transition cursor-pointer">
+                People and Culture
+              </Link>
+              <span>/</span>
+              <span className="text-foreground font-bold">Organization &amp; Branches</span>
+            </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sans">
               Organization &amp; Branches
             </h1>
@@ -634,9 +642,17 @@ export default function OrganizationPage() {
               </button>
               <div>
                 <div className="flex items-center space-x-1.5 text-xs font-semibold text-muted-foreground">
-                  <span className="cursor-pointer hover:underline" onClick={() => setSelectedOrg(null)}>
-                    Companies
-                  </span>
+                  <Link href="/pnc" className="hover:text-primary hover:underline transition cursor-pointer">
+                    People and Culture
+                  </Link>
+                  <span>/</span>
+                  <button
+                    type="button"
+                    className="cursor-pointer hover:text-primary hover:underline transition font-semibold"
+                    onClick={() => setSelectedOrg(null)}
+                  >
+                    Organization &amp; Branches
+                  </button>
                   <span>/</span>
                   <span className="text-foreground font-bold">{formData.name || 'New Company'}</span>
                 </div>

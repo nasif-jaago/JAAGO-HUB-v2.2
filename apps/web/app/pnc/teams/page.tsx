@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import {
   Plus,
   Search,
@@ -306,7 +307,9 @@ export default function TeamsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/70 pb-4">
         <div>
           <div className="flex items-center space-x-2 text-xs font-semibold text-muted-foreground">
-            <span>People and Culture</span>
+            <Link href="/pnc" className="hover:text-primary hover:underline transition cursor-pointer">
+              People and Culture
+            </Link>
             <span>/</span>
             <span className="text-foreground font-bold">Teams</span>
           </div>

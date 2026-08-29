@@ -150,25 +150,26 @@ export default function PnCLayout({
   };
 
   const getBreadcrumb = () => {
-    if (pathname.includes('/employees')) return 'Employees';
-    if (pathname.includes('/organization')) return 'Organization & Branches';
-    if (pathname.includes('/designations')) return 'Designations';
-    if (pathname.includes('/teams')) return 'Teams';
-    if (pathname.includes('/departments')) return 'Departments';
-    if (pathname.includes('/projects')) return 'Projects';
-    if (pathname.includes('/insurance')) return 'Insurance Info';
-    if (pathname.includes('/attendance/shifts')) return 'Working Hours & Schedules';
-    if (pathname.includes('/attendance/logs')) return 'Attendance Logs';
-    if (pathname.includes('/attendance/on-duty')) return 'On Duty Logs';
-    if (pathname.includes('/attendance/report')) return 'Attendance Report';
-    if (pathname.includes('/attendance')) return 'Attendance';
-    if (pathname.includes('/time-off/requests')) return 'Leave Requests';
-    if (pathname.includes('/time-off/allocations')) return 'Leave Allocations';
-    if (pathname.includes('/time-off/holidays')) return 'Public Holidays';
-    if (pathname.includes('/time-off/config')) return 'Leave Configuration';
-    if (pathname.includes('/time-off') || pathname.includes('/leave')) return 'Leave Calendar';
-    return 'Dashboard';
+    if (pathname.includes('/employees')) return { label: 'Employees', href: '/pnc/employees' };
+    if (pathname.includes('/organization')) return { label: 'Organization & Branches', href: '/pnc/organization' };
+    if (pathname.includes('/designations')) return { label: 'Designations', href: '/pnc/designations' };
+    if (pathname.includes('/teams')) return { label: 'Teams', href: '/pnc/teams' };
+    if (pathname.includes('/departments')) return { label: 'Departments', href: '/pnc/departments' };
+    if (pathname.includes('/projects')) return { label: 'Projects', href: '/pnc/projects' };
+    if (pathname.includes('/insurance')) return { label: 'Insurance Info', href: '/pnc/insurance' };
+    if (pathname.includes('/attendance/shifts')) return { label: 'Working Hours & Schedules', href: '/pnc/attendance/shifts' };
+    if (pathname.includes('/attendance/logs')) return { label: 'Attendance Logs', href: '/pnc/attendance/logs' };
+    if (pathname.includes('/attendance/on-duty')) return { label: 'On Duty Logs', href: '/pnc/attendance/on-duty' };
+    if (pathname.includes('/attendance/report')) return { label: 'Attendance Report', href: '/pnc/attendance/report' };
+    if (pathname.includes('/attendance')) return { label: 'Attendance', href: '/pnc/attendance/logs' };
+    if (pathname.includes('/time-off/requests')) return { label: 'Leave Requests', href: '/pnc/time-off/requests' };
+    if (pathname.includes('/time-off/allocations')) return { label: 'Leave Allocations', href: '/pnc/time-off/allocations' };
+    if (pathname.includes('/time-off/holidays')) return { label: 'Public Holidays', href: '/pnc/time-off/holidays' };
+    if (pathname.includes('/time-off/config')) return { label: 'Leave Configuration', href: '/pnc/time-off/config' };
+    if (pathname.includes('/time-off') || pathname.includes('/leave')) return { label: 'Leave Calendar', href: '/pnc/time-off/calendar' };
+    return { label: 'Dashboard', href: '/pnc' };
   };
+  const currentCrumb = getBreadcrumb();
 
 
 
@@ -647,10 +648,20 @@ export default function PnCLayout({
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="flex items-center space-x-2">
-              <span className="text-primary">People and Culture</span>
+            <div className="flex items-center space-x-2 text-xs sm:text-sm font-bold">
+              <Link
+                href="/pnc"
+                className="text-primary hover:underline hover:text-primary/80 transition cursor-pointer"
+              >
+                People and Culture
+              </Link>
               <span className="text-header-foreground/40">&gt;</span>
-              <span className="text-foreground">{getBreadcrumb()}</span>
+              <Link
+                href={currentCrumb.href}
+                className="text-foreground hover:underline hover:text-primary transition cursor-pointer"
+              >
+                {currentCrumb.label}
+              </Link>
             </div>
           </div>
 

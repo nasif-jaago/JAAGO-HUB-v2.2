@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Upload,
   Download,
@@ -19,6 +20,12 @@ import {
   Trash2,
   Send,
   Loader2,
+  FileText,
+  AlertTriangle,
+  SlidersHorizontal,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
 } from 'lucide-react';
 import {
   EmployeeProfileDetail,
@@ -33,6 +40,16 @@ import {
   deleteEmployeesFromSupabase,
 } from '@/lib/supabase-employees';
 import { syncEmployeeToLocalUser } from '@/lib/user-profile-sync';
+import {
+  exportEmployeesToComprehensiveCSV,
+  parseComprehensiveEmployeeCSV,
+} from '@/lib/employee-csv-helper';
+import {
+  ALL_EMPLOYEE_COLUMNS,
+  DEFAULT_VISIBLE_COLUMN_KEYS,
+  getCategorizedColumns,
+  EmployeeColumnConfig,
+} from '@/lib/employee-columns-config';
 
 export default function PnCEmployeesPage() {
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
@@ -47,6 +64,14 @@ export default function PnCEmployeesPage() {
   const [selectedDesignation, setSelectedDesignation] = useState('');
 
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importParsedResult, setImportParsedResult] = useState<{
+    employees: FullEmployeeProfile[];
+    errors: string[];
+    totalParsed: number;
+  } | null>(null);
+  const [isProcessingImport, setIsProcessingImport] = useState(false);
+  const [importErrorMsg, setImportErrorMsg] = useState<string | null>(null);
 
   // Current logged in user info
   const [currentUser, setCurrentUser] = useState({
@@ -77,6 +102,105 @@ export default function PnCEmployeesPage() {
   >('ALL');
 
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
+
+  // ── COLUMN SELECTION & CUSTOMIZATION ──
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<(keyof FullEmployeeProfile)[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('jaago_pnc_employee_custom_columns_v2');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return DEFAULT_VISIBLE_COLUMN_KEYS;
+  });
+  const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
+  const [columnSearchQuery, setColumnSearchQuery] = useState('');
+  const columnsMenuRef = useRef<HTMLDivElement>(null);
+
+  // ── SORTING STATE ──
+  const [sortKey, setSortKey] = useState<keyof FullEmployeeProfile | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+
+  // Categorized Columns for Dropdown Popover
+  const categorizedColumns = useMemo(() => getCategorizedColumns(), []);
+
+  // Visible Column Config Objects
+  const visibleColumnConfigs = useMemo(() => {
+    return visibleColumnKeys
+      .map((key) => ALL_EMPLOYEE_COLUMNS.find((c) => c.key === key))
+      .filter((c): c is EmployeeColumnConfig => Boolean(c));
+  }, [visibleColumnKeys]);
+
+  // Click outside to close Columns Popover
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (columnsMenuRef.current && !columnsMenuRef.current.contains(event.target as Node)) {
+        setIsColumnsMenuOpen(false);
+      }
+    }
+    if (isColumnsMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isColumnsMenuOpen]);
+
+  // Column Selection Handlers
+  const handleToggleColumn = (key: keyof FullEmployeeProfile) => {
+    let nextKeys: (keyof FullEmployeeProfile)[];
+    if (visibleColumnKeys.includes(key)) {
+      if (visibleColumnKeys.length <= 1) return;
+      nextKeys = visibleColumnKeys.filter((k) => k !== key);
+    } else {
+      nextKeys = [...visibleColumnKeys, key];
+    }
+    setVisibleColumnKeys(nextKeys);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('jaago_pnc_employee_custom_columns_v2', JSON.stringify(nextKeys));
+      } catch {}
+    }
+  };
+
+  const handleResetColumns = () => {
+    setVisibleColumnKeys(DEFAULT_VISIBLE_COLUMN_KEYS);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('jaago_pnc_employee_custom_columns_v2', JSON.stringify(DEFAULT_VISIBLE_COLUMN_KEYS));
+      } catch {}
+    }
+  };
+
+  const handleSelectAllColumns = () => {
+    const allKeys = ALL_EMPLOYEE_COLUMNS.map((c) => c.key);
+    setVisibleColumnKeys(allKeys);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('jaago_pnc_employee_custom_columns_v2', JSON.stringify(allKeys));
+      } catch {}
+    }
+  };
+
+  // Sorting Handler
+  const handleSort = (key: keyof FullEmployeeProfile) => {
+    if (sortKey === key) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        setSortKey(null);
+        setSortDirection(null);
+      } else {
+        setSortDirection('asc');
+      }
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  };
 
   // Hydrate state on client mount and fetch Supabase Source of Truth
   useEffect(() => {
@@ -140,39 +264,177 @@ export default function PnCEmployeesPage() {
     }
   };
 
-  // Filter employees for table list
-  const filtered = employees.filter((emp) => {
-    const isArchived = emp.status === 'Archived' || Boolean(emp.isArchived);
+  // Filter & Sort employees
+  const filtered = useMemo(() => {
+    const list = employees.filter((emp) => {
+      const isArchived = emp.status === 'Archived' || Boolean(emp.isArchived);
 
-    // If ARCHIVED tab is selected, show ONLY archived employees
-    if (activeTab === 'ARCHIVED') {
-      if (!isArchived) return false;
-    } else {
-      // In all standard tabs, NEVER show archived employees
-      if (isArchived) return false;
+      // If ARCHIVED tab is selected, show ONLY archived employees
+      if (activeTab === 'ARCHIVED') {
+        if (!isArchived) return false;
+      } else {
+        // In all standard tabs, NEVER show archived employees
+        if (isArchived) return false;
+      }
+
+      if (activeTab === 'ACTIVE' && emp.status !== 'Active') return false;
+      if (activeTab === 'TERMINATED' && emp.status !== 'Terminated') return false;
+      if (activeTab === 'RESIGNED' && emp.status !== 'Resigned') return false;
+      if (activeTab === 'INCOMPLETE' && emp.status !== 'Incomplete') return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchName = emp.name.toLowerCase().includes(q);
+        const matchCode = emp.code.toLowerCase().includes(q);
+        const matchEmail = (emp.workEmail || '').toLowerCase().includes(q);
+        const matchDesig = (emp.designation || '').toLowerCase().includes(q);
+        const matchDept = (emp.department || '').toLowerCase().includes(q);
+        if (!matchName && !matchCode && !matchEmail && !matchDesig && !matchDept) return false;
+      }
+
+      if (selectedDept && emp.department !== selectedDept) return false;
+      if (selectedOrg && emp.organization !== selectedOrg) return false;
+      if (selectedBranch && emp.branch !== selectedBranch) return false;
+      if (selectedDesignation && emp.designation !== selectedDesignation) return false;
+
+      return true;
+    });
+
+    if (sortKey && sortDirection) {
+      list.sort((a, b) => {
+        const valA = a[sortKey];
+        const valB = b[sortKey];
+
+        if (valA === undefined || valA === null || valA === '') return 1;
+        if (valB === undefined || valB === null || valB === '') return -1;
+
+        let cmp = 0;
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          cmp = valA - valB;
+        } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+          cmp = valA === valB ? 0 : valA ? -1 : 1;
+        } else {
+          cmp = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+        }
+
+        return sortDirection === 'asc' ? cmp : -cmp;
+      });
     }
 
-    if (activeTab === 'ACTIVE' && emp.status !== 'Active') return false;
-    if (activeTab === 'TERMINATED' && emp.status !== 'Terminated') return false;
-    if (activeTab === 'RESIGNED' && emp.status !== 'Resigned') return false;
-    if (activeTab === 'INCOMPLETE' && emp.status !== 'Incomplete') return false;
+    return list;
+  }, [employees, activeTab, searchQuery, selectedDept, selectedOrg, selectedBranch, selectedDesignation, sortKey, sortDirection]);
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = emp.name.toLowerCase().includes(q);
-      const matchCode = emp.code.toLowerCase().includes(q);
-      const matchEmail = (emp.workEmail || '').toLowerCase().includes(q);
-      const matchDesig = (emp.designation || '').toLowerCase().includes(q);
-      if (!matchName && !matchCode && !matchEmail && !matchDesig) return false;
+  // Dynamic Cell Content Renderer
+  const renderCellContent = (emp: FullEmployeeProfile, colKey: keyof FullEmployeeProfile) => {
+    const val = emp[colKey];
+
+    if (colKey === 'name') {
+      const initials = emp.name
+        ? emp.name
+            .split(' ')
+            .map((n) => n[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase()
+        : 'EM';
+      return (
+        <div className="flex items-center space-x-3">
+          {emp.avatarUrl ? (
+            <div className="h-9 w-9 rounded-full overflow-hidden relative shadow-sm border border-border flex-shrink-0">
+              <Image
+                src={emp.avatarUrl}
+                alt={emp.name}
+                fill
+                sizes="36px"
+                unoptimized
+                className="object-cover"
+              />
+            </div>
+          ) : (
+            <div className="h-9 w-9 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center font-black text-xs shadow-sm flex-shrink-0 border border-amber-500/20">
+              {initials}
+            </div>
+          )}
+          <div>
+            <div className="font-extrabold text-foreground group-hover:text-amber-500 transition">
+              {emp.name}
+            </div>
+            <div className="text-[10px] font-mono text-muted-foreground">
+              ID: {emp.code}
+            </div>
+            {emp.workEmail && (
+              <div className="text-[10px] text-muted-foreground/80">{emp.workEmail}</div>
+            )}
+          </div>
+        </div>
+      );
     }
 
-    if (selectedDept && emp.department !== selectedDept) return false;
-    if (selectedOrg && emp.organization !== selectedOrg) return false;
-    if (selectedBranch && emp.branch !== selectedBranch) return false;
-    if (selectedDesignation && emp.designation !== selectedDesignation) return false;
+    if (colKey === 'status') {
+      return <div className="text-center">{getStatusBadge(emp.status)}</div>;
+    }
 
-    return true;
-  });
+    if (colKey === 'isUser') {
+      return (
+        <div className="text-center">
+          {emp.isUser ? (
+            <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-bold inline-flex items-center space-x-1">
+              <CheckCircle2 className="h-3 w-3" />
+              <span>User Active</span>
+            </span>
+          ) : (
+            <span className="px-2 py-0.5 rounded-lg bg-muted text-muted-foreground text-[10px] font-medium">
+              No
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    if (colKey === 'noTaxDeduction') {
+      return <span>{emp.noTaxDeduction ? 'Yes' : 'No'}</span>;
+    }
+
+    if (
+      [
+        'wage',
+        'salaryJulDec',
+        'salaryJanJun',
+        'regularSalary',
+        'temporarySalary',
+        'totalCurrentSalary',
+        'extraPayment',
+        'insuranceMonthlyPremium',
+      ].includes(colKey as string)
+    ) {
+      const num = Number(val || 0);
+      return (
+        <span className="font-mono font-bold text-foreground">
+          ৳{num.toLocaleString()}
+        </span>
+      );
+    }
+
+    if (
+      colKey === 'joiningDate' ||
+      colKey === 'contractEndDate' ||
+      colKey === 'birthday' ||
+      colKey === 'adjustmentStartDate' ||
+      colKey === 'adjustmentEndDate'
+    ) {
+      return (
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {val ? String(val).slice(0, 10) : '—'}
+        </span>
+      );
+    }
+
+    if (val === undefined || val === null || val === '') {
+      return <span className="text-muted-foreground/40 text-[11px]">—</span>;
+    }
+
+    return <span className="text-foreground/90 font-medium">{String(val)}</span>;
+  };
 
   // Handle saving employee profile from detail view
   const handleSaveProfile = async (updatedProfile: FullEmployeeProfile) => {
@@ -241,44 +503,79 @@ export default function PnCEmployeesPage() {
     }
   };
 
-  // Export CSV Handler
+  // Comprehensive Export CSV Handler (All 88 fields from all 7 tabs)
   const handleExportCSV = () => {
-    const headers = [
-      'Employee Name',
-      'Employee Code',
-      'Designation',
-      'Department',
-      'Organization',
-      'Work Email',
-      'Mobile',
-      'Joining Date',
-      'Wage',
-      'Status',
-      'Working Schedule',
-    ];
-    const rows = employees.map((e) => [
-      `"${e.name}"`,
-      `"${e.code}"`,
-      `"${e.designation}"`,
-      `"${e.department}"`,
-      `"${e.organization}"`,
-      `"${e.workEmail || ''}"`,
-      `"${e.workMobile || ''}"`,
-      `"${e.joiningDate}"`,
-      `"${e.wage}"`,
-      `"${e.status}"`,
-      `"${e.workingSchedule}"`,
-    ]);
+    try {
+      const csvContent = exportEmployeesToComprehensiveCSV(employees);
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `jaago_employees_all_fields_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setToastMessage(`✓ Exported all ${employees.length} employee records with complete 88 fields`);
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch (err: any) {
+      alert('Failed to generate CSV export: ' + err.message);
+    }
+  };
 
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `jaago_employees_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // CSV File Selection & Instant Parsing
+  const handleCSVFileSelect = (file: File) => {
+    setImportFile(file);
+    setImportErrorMsg(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = (e.target?.result as string) || '';
+        const result = parseComprehensiveEmployeeCSV(text);
+        if (!result.success && result.employees.length === 0) {
+          setImportErrorMsg(result.errors.join('\n') || 'Failed to parse CSV file.');
+          setImportParsedResult(null);
+        } else {
+          setImportParsedResult(result);
+        }
+      } catch (err: any) {
+        setImportErrorMsg(err.message || 'Error reading CSV file');
+        setImportParsedResult(null);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Process Batch Import & Upsert to Supabase + Local State
+  const handleProcessImport = async () => {
+    if (!importParsedResult || importParsedResult.employees.length === 0) return;
+    setIsProcessingImport(true);
+    try {
+      const newOrUpdated = importParsedResult.employees;
+      
+      // Merge into state and storage
+      const existingMap = new Map(employees.map((e) => [e.code.toLowerCase(), e]));
+      newOrUpdated.forEach((emp) => {
+        existingMap.set(emp.code.toLowerCase(), emp);
+      });
+      const mergedList = Array.from(existingMap.values());
+      
+      setEmployees(mergedList);
+      persistEmployees(mergedList);
+
+      // Save all to Supabase in parallel
+      await Promise.all(newOrUpdated.map((emp) => saveEmployeeToSupabase(emp)));
+
+      setShowImportModal(false);
+      setImportFile(null);
+      setImportParsedResult(null);
+      setToastMessage(`✓ Successfully imported & synchronized ${newOrUpdated.length} employee records across all 7 tabs!`);
+      setTimeout(() => setToastMessage(null), 5000);
+    } catch (err: any) {
+      alert(err.message || 'Import processing error');
+    } finally {
+      setIsProcessingImport(false);
+    }
   };
 
   // Helper for Status Badge in Table
@@ -407,6 +704,13 @@ export default function PnCEmployeesPage() {
       {/* ── 1. HEADER SECTION ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
+          <div className="flex items-center space-x-2 text-xs font-semibold text-muted-foreground pb-1">
+            <Link href="/pnc" className="hover:text-primary hover:underline transition cursor-pointer">
+              People and Culture
+            </Link>
+            <span>/</span>
+            <span className="text-foreground font-bold">Employees</span>
+          </div>
           <h1 className="text-3xl sm:text-4xl font-serif font-black tracking-tight text-foreground">
             Employee List
           </h1>
@@ -602,9 +906,120 @@ export default function PnCEmployeesPage() {
         </div>
       )}
 
-      {/* ── 4. EMPLOYEE DATA TABLE ── */}
-      <div className="rounded-3xl bg-card border border-border shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
+      {/* ── 4. EMPLOYEE DATA TABLE WITH DYNAMIC COLUMNS & SORTING ── */}
+      <div className="rounded-3xl bg-card border border-border shadow-xl relative">
+        {/* ── COLUMNS CUSTOMIZER POPOVER (Positioned right below button) ── */}
+        {isColumnsMenuOpen && (
+          <div
+            ref={columnsMenuRef}
+            className="absolute right-4 top-14 z-50 w-80 sm:w-96 max-h-[500px] bg-card/95 backdrop-blur-xl border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95"
+          >
+            {/* Popover Header */}
+            <div className="p-3 px-4 border-b border-border flex items-center justify-between bg-surface/60">
+              <div className="text-[11px] font-black uppercase tracking-wider text-foreground flex items-center space-x-1.5">
+                <span>COLUMNS</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-mono text-[10px] font-extrabold">
+                  ({visibleColumnKeys.length}/{ALL_EMPLOYEE_COLUMNS.length})
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={handleResetColumns}
+                  className="text-muted-foreground hover:text-foreground hover:underline transition cursor-pointer"
+                >
+                  RESET
+                </button>
+                <span className="text-border">|</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (visibleColumnKeys.length === ALL_EMPLOYEE_COLUMNS.length) {
+                      handleResetColumns();
+                    } else {
+                      handleSelectAllColumns();
+                    }
+                  }}
+                  className="px-2.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 transition cursor-pointer font-extrabold"
+                >
+                  {visibleColumnKeys.length === ALL_EMPLOYEE_COLUMNS.length ? 'DESELECT' : 'SELECT ALL'}
+                </button>
+              </div>
+            </div>
+
+            {/* Column Search Box */}
+            <div className="p-2.5 px-3 border-b border-border/60 bg-surface/30">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={columnSearchQuery}
+                  onChange={(e) => setColumnSearchQuery(e.target.value)}
+                  placeholder="Search columns..."
+                  className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+                {columnSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setColumnSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Categorized Column Checkboxes */}
+            <div className="overflow-y-auto p-2 space-y-3 flex-1 max-h-80 divide-y divide-border/30">
+              {categorizedColumns.map((cat) => {
+                const matchingCols = cat.columns.filter(
+                  (c) =>
+                    c.label.toLowerCase().includes(columnSearchQuery.toLowerCase()) ||
+                    c.key.toLowerCase().includes(columnSearchQuery.toLowerCase())
+                );
+                if (matchingCols.length === 0) return null;
+
+                return (
+                  <div key={cat.id} className="pt-2 first:pt-0 space-y-1">
+                    <div className="px-2 text-[10px] font-black uppercase tracking-wider text-muted-foreground/80">
+                      {cat.name}
+                    </div>
+                    <div className="space-y-0.5">
+                      {matchingCols.map((col) => {
+                        const isChecked = visibleColumnKeys.includes(col.key);
+                        return (
+                          <div
+                            key={col.key}
+                            onClick={() => handleToggleColumn(col.key)}
+                            className={`flex items-center space-x-2.5 px-2 py-1.5 rounded-xl cursor-pointer transition text-xs select-none ${
+                              isChecked
+                                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold'
+                                : 'hover:bg-surface/80 text-foreground/80'
+                            }`}
+                          >
+                            <div
+                              className={`h-4 w-4 rounded-md flex items-center justify-center border transition flex-shrink-0 ${
+                                isChecked
+                                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                                  : 'border-border bg-card'
+                              }`}
+                            >
+                              {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                            </div>
+                            <span className="truncate">{col.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="overflow-x-auto rounded-3xl">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-border/80 text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground bg-surface/40">
@@ -623,27 +1038,70 @@ export default function PnCEmployeesPage() {
                     className="rounded accent-amber-500 cursor-pointer w-4 h-4"
                   />
                 </th>
-                <th className="py-3.5 px-4">EMPLOYEE</th>
-                <th className="py-3.5 px-4">WORKING SCHEDULE</th>
-                <th className="py-3.5 px-4">DEPARTMENT</th>
-                <th className="py-3.5 px-4">DESIGNATION</th>
-                <th className="py-3.5 px-4">ORGANIZATION</th>
-                <th className="py-3.5 px-4">JOINING DATE</th>
-                <th className="py-3.5 px-4 text-center">STATUS</th>
-                <th className="py-3.5 px-4 text-right">ACTIONS</th>
+
+                {/* Dynamic Visible Columns with Sorting */}
+                {visibleColumnConfigs.map((col) => {
+                  const isSorted = sortKey === col.key;
+                  return (
+                    <th
+                      key={col.key}
+                      style={{ minWidth: col.minWidth }}
+                      className={`py-3.5 px-4 select-none ${
+                        col.align === 'center'
+                          ? 'text-center'
+                          : col.align === 'right'
+                          ? 'text-right'
+                          : 'text-left'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSort(col.key)}
+                        className={`group inline-flex items-center space-x-1.5 font-black uppercase tracking-wider transition cursor-pointer ${
+                          isSorted
+                            ? 'text-amber-500 dark:text-amber-400'
+                            : 'hover:text-foreground text-muted-foreground'
+                        }`}
+                        title={`Click to sort whole dataset by ${col.label}`}
+                      >
+                        <span>{col.label}</span>
+                        <span className="inline-flex items-center">
+                          {isSorted && sortDirection === 'asc' ? (
+                            <ArrowUp className="h-3.5 w-3.5 text-amber-500 font-bold" />
+                          ) : isSorted && sortDirection === 'desc' ? (
+                            <ArrowDown className="h-3.5 w-3.5 text-amber-500 font-bold" />
+                          ) : (
+                            <ChevronsUpDown className="h-3 w-3 opacity-30 group-hover:opacity-100 transition text-muted-foreground" />
+                          )}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
+
+                {/* Rightmost Actions Header with Columns Popover Trigger */}
+                <th className="py-3.5 px-4 text-right">
+                  <div className="inline-flex items-center space-x-2.5 justify-end">
+                    <span>ACTIONS</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsColumnsMenuOpen(!isColumnsMenuOpen)}
+                      className={`p-1.5 rounded-xl border transition cursor-pointer ${
+                        isColumnsMenuOpen
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20'
+                          : 'bg-surface hover:bg-surface/80 border-border text-foreground hover:border-amber-500/50'
+                      }`}
+                      title="Add Custom Columns / View Fields"
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40 font-medium">
               {filtered.map((emp) => {
                 const isSelected = selectedCodes.includes(emp.code);
-                const initials = emp.name
-                  ? emp.name
-                      .split(' ')
-                      .map((n) => n[0])
-                      .join('')
-                      .slice(0, 2)
-                      .toUpperCase()
-                  : 'EM';
 
                 return (
                   <tr
@@ -668,55 +1126,23 @@ export default function PnCEmployeesPage() {
                         className="rounded accent-amber-500 cursor-pointer w-4 h-4"
                       />
                     </td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center space-x-3">
-                        {emp.avatarUrl ? (
-                          <div className="h-9 w-9 rounded-full overflow-hidden relative shadow-sm border border-border flex-shrink-0">
-                            <Image
-                              src={emp.avatarUrl}
-                              alt={emp.name}
-                              fill
-                              sizes="36px"
-                              unoptimized
-                              className="object-cover"
-                            />
-                          </div>
-                        ) : (
-                          <div className="h-9 w-9 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center font-black text-xs shadow-sm flex-shrink-0 border border-amber-500/20">
-                            {initials}
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-extrabold text-foreground group-hover:text-amber-500 transition">
-                            {emp.name}
-                          </div>
-                          <div className="text-[10px] font-mono text-muted-foreground">
-                            ID: {emp.code}
-                          </div>
-                          {emp.workEmail && (
-                            <div className="text-[10px] text-muted-foreground/80">{emp.workEmail}</div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-muted-foreground font-medium">
-                      {emp.workingSchedule}
-                    </td>
-                    <td className="py-3.5 px-4 text-foreground font-semibold">
-                      {emp.department}
-                    </td>
-                    <td className="py-3.5 px-4 text-muted-foreground font-medium">
-                      {emp.designation}
-                    </td>
-                    <td className="py-3.5 px-4 text-muted-foreground font-medium">
-                      {emp.organization}
-                    </td>
-                    <td className="py-3.5 px-4 text-muted-foreground font-mono text-[11px]">
-                      {emp.joiningDate}
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      {getStatusBadge(emp.status)}
-                    </td>
+
+                    {/* Dynamic Visible Data Cells */}
+                    {visibleColumnConfigs.map((col) => (
+                      <td
+                        key={col.key}
+                        className={`py-3.5 px-4 ${
+                          col.align === 'center'
+                            ? 'text-center'
+                            : col.align === 'right'
+                            ? 'text-right'
+                            : 'text-left'
+                        }`}
+                      >
+                        {renderCellContent(emp, col.key)}
+                      </td>
+                    ))}
+
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end space-x-2">
                         {/* If NOT a user, show Create User button */}
@@ -764,43 +1190,138 @@ export default function PnCEmployeesPage() {
         </div>
       </div>
 
-      {/* ── 5. IMPORT CSV MODAL ── */}
+      {/* ── 5. IMPORT CSV MODAL (Full 88-Field Comprehensive Engine) ── */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+          <div className="bg-card border border-border rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h2 className="text-base font-extrabold text-foreground">Import Employee CSV</h2>
+              <div className="flex items-center space-x-2.5">
+                <div className="h-9 w-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
+                  <Upload className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-extrabold text-foreground">Import Employee Records</h2>
+                  <p className="text-[11px] text-muted-foreground font-semibold">
+                    Supports all 88 fields across all 7 profile tabs
+                  </p>
+                </div>
+              </div>
               <button
-                onClick={() => setShowImportModal(false)}
-                className="p-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setImportFile(null);
+                  setImportParsedResult(null);
+                  setImportErrorMsg(null);
+                }}
+                className="p-1 text-muted-foreground hover:text-foreground cursor-pointer rounded-lg transition"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="p-6 rounded-2xl border-2 border-dashed border-border hover:border-primary text-center space-y-2 cursor-pointer bg-surface/50">
-              <Upload className="h-8 w-8 text-primary mx-auto" />
-              <div className="text-xs font-bold text-foreground">Click to upload CSV or drag &amp; drop</div>
-              <div className="text-[10px] text-muted-foreground font-mono">Supports all 5 tabs data columns</div>
+            <div className="space-y-3 overflow-y-auto pr-1 flex-1">
+              {/* File Dropzone / Selector */}
+              <label className="p-6 rounded-2xl border-2 border-dashed border-border hover:border-amber-500/60 text-center space-y-2 cursor-pointer bg-surface/50 hover:bg-surface/80 transition flex flex-col items-center justify-center block">
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleCSVFileSelect(f);
+                  }}
+                />
+                <FileText className="h-8 w-8 text-amber-500" />
+                <div className="text-xs font-bold text-foreground">
+                  {importFile ? importFile.name : 'Click to select CSV or drag & drop'}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {importFile
+                    ? `${(importFile.size / 1024).toFixed(1)} KB — Ready to analyze`
+                    : 'Upload your complete employee database spreadsheet'}
+                </div>
+              </label>
+
+              {/* Error Alert */}
+              {importErrorMsg && (
+                <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start space-x-2">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <div className="whitespace-pre-line">{importErrorMsg}</div>
+                </div>
+              )}
+
+              {/* Parsed Preview */}
+              {importParsedResult && (
+                <div className="p-3.5 rounded-2xl bg-surface border border-border/80 space-y-2 text-xs">
+                  <div className="flex items-center justify-between font-bold">
+                    <span className="text-emerald-600 dark:text-emerald-400 flex items-center space-x-1.5">
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>{importParsedResult.employees.length} Employee Records Recognized</span>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      88 columns verified
+                    </span>
+                  </div>
+
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 pt-1 divide-y divide-border/40 font-mono text-[11px]">
+                    {importParsedResult.employees.slice(0, 5).map((emp, i) => (
+                      <div key={i} className="pt-1.5 flex items-center justify-between text-muted-foreground">
+                        <span className="font-bold text-foreground truncate max-w-[200px]">
+                          {emp.name} ({emp.code})
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {emp.designation} • {emp.department}
+                        </span>
+                      </div>
+                    ))}
+                    {importParsedResult.employees.length > 5 && (
+                      <div className="pt-1.5 text-center text-[10px] text-muted-foreground font-sans">
+                        + {importParsedResult.employees.length - 5} more employee records
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-2">
+            <div className="flex items-center justify-between text-xs pt-3 border-t border-border">
               <a
-                href="/demo_users_import_template.csv"
-                download
-                className="text-primary hover:underline font-bold"
+                href="/demo_employees_comprehensive_template.csv"
+                download="demo_employees_comprehensive_template.csv"
+                className="text-primary hover:underline font-bold flex items-center space-x-1"
               >
-                Download Demo Template
+                <Download className="h-3.5 w-3.5" />
+                <span>Download All-Field Template</span>
               </a>
-              <button
-                onClick={() => {
-                  setShowImportModal(false);
-                  alert('Batch import completed: Employee records synchronized successfully!');
-                }}
-                className="px-4 py-2 rounded-xl bg-amber-500 text-white font-bold cursor-pointer"
-              >
-                Process File
-              </button>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                    setImportParsedResult(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-surface border border-border text-muted-foreground hover:text-foreground font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!importParsedResult || importParsedResult.employees.length === 0 || isProcessingImport}
+                  onClick={handleProcessImport}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50 text-white font-black cursor-pointer flex items-center space-x-2 shadow-md shadow-amber-500/20"
+                >
+                  {isProcessingImport ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Syncing...</span>
+                    </>
+                  ) : (
+                    <span>Process &amp; Sync</span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
