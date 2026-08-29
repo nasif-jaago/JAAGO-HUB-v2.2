@@ -202,7 +202,7 @@ export default function OrganizationPage() {
       updatedAt: new Date().toISOString(),
     };
 
-    await saveOrganizationToSupabase(payload);
+    await saveOrganizationToSupabase(payload, selectedOrg?.name);
 
     setOrganizations((prev) => {
       const idx = prev.findIndex((o) => o.id === payload.id);

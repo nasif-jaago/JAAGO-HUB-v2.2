@@ -158,7 +158,7 @@ export default function ProjectsPage() {
       isArchived: editingItem ? editingItem.isArchived : false,
     };
 
-    await saveProjectToSupabase(payload);
+    await saveProjectToSupabase(payload, editingItem?.name);
 
     setProjects((prev) => {
       const idx = prev.findIndex((p) => p.id === payload.id);

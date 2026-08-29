@@ -35,6 +35,7 @@ import {
 import {
   fetchEmployeesFromSupabase,
   saveEmployeeToSupabase,
+  bulkImportEmployeesToSupabase,
   archiveEmployeesInSupabase,
   unarchiveEmployeesInSupabase,
   deleteEmployeesFromSupabase,
@@ -50,6 +51,16 @@ import {
   getCategorizedColumns,
   EmployeeColumnConfig,
 } from '@/lib/employee-columns-config';
+import {
+  OrganizationEntity,
+  OrganizationBranch,
+  DepartmentItem,
+  DesignationItem,
+  fetchOrganizationsFromSupabase,
+  fetchBranchesFromSupabase,
+  fetchDepartmentsFromSupabase,
+  fetchDesignationsFromSupabase,
+} from '@/lib/supabase-organization';
 
 export default function PnCEmployeesPage() {
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
@@ -62,6 +73,12 @@ export default function PnCEmployeesPage() {
   const [selectedOrg, setSelectedOrg] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedDesignation, setSelectedDesignation] = useState('');
+
+  // Master Organization Data for Filters & Cascades
+  const [masterOrganizations, setMasterOrganizations] = useState<OrganizationEntity[]>([]);
+  const [masterBranches, setMasterBranches] = useState<OrganizationBranch[]>([]);
+  const [masterDepartments, setMasterDepartments] = useState<DepartmentItem[]>([]);
+  const [masterDesignations, setMasterDesignations] = useState<DesignationItem[]>([]);
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -239,7 +256,7 @@ export default function PnCEmployeesPage() {
       // Fetch latest employees directly from Supabase PostgreSQL (Single Source of Truth)
       fetchEmployeesFromSupabase()
         .then((remoteData) => {
-          if (remoteData !== null) {
+          if (remoteData !== null && remoteData.length > 0) {
             setEmployees(remoteData);
             try {
               localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(remoteData));
@@ -249,10 +266,220 @@ export default function PnCEmployeesPage() {
               const target = remoteData.find((e) => e.id === urlId || e.code === urlId);
               if (target) setSelectedProfile(target);
             }
+          } else if (remoteData !== null && remoteData.length === 0) {
+            // Check if local cache has imported employees to restore and auto-sync to Supabase
+            try {
+              const cached = localStorage.getItem('jaago_pnc_employees_v2');
+              if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  setEmployees(parsed);
+                  bulkImportEmployeesToSupabase(parsed);
+                }
+              }
+            } catch {}
           }
         });
+
+      // Fetch Organization Master Data for dynamic filters
+      Promise.all([
+        fetchOrganizationsFromSupabase(),
+        fetchBranchesFromSupabase(),
+        fetchDepartmentsFromSupabase(),
+        fetchDesignationsFromSupabase(),
+      ]).then(([orgs, branches, depts, desigs]) => {
+        if (orgs) setMasterOrganizations(orgs);
+        if (branches) setMasterBranches(branches);
+        if (depts) setMasterDepartments(depts);
+        if (desigs) setMasterDesignations(desigs);
+      });
     }
   }, []);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FILTER NORMALIZATION & CANONICAL DEDUPLICATION UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════
+
+function normalizeFilterKey(str: string | null | undefined): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function normalizeOrgKey(str: string | null | undefined): string {
+  if (!str) return '';
+  const lower = str.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (lower.includes('trust') || lower.includes('jft')) return 'jaago foundation trust';
+  if (lower.includes('inc') || lower.includes('jfi')) return 'jaago foundation inc';
+  if (lower.includes('uk')) return 'jaago foundation uk';
+  if (lower.includes('emk')) return 'emk center';
+  if (lower.includes('jaago foundation') || lower === 'jf') return 'jaago foundation';
+  return lower;
+}
+
+function toCanonicalOrgName(raw: string): string {
+  const norm = normalizeOrgKey(raw);
+  if (norm === 'jaago foundation trust') return 'JAAGO Foundation Trust';
+  if (norm === 'jaago foundation inc') return 'JAAGO Foundation INC';
+  if (norm === 'jaago foundation uk') return 'JAAGO Foundation UK';
+  if (norm === 'jaago foundation') return 'JAAGO Foundation';
+  if (norm === 'emk center') return 'EMK Center';
+  return raw
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function toCleanDeptName(raw: string): string {
+  let clean = raw.replace(/\s*\((JFT|JF|JFI|Trust|Foundation)\)\s*/gi, '').trim();
+  clean = clean.replace(/&/g, '&');
+  return clean;
+}
+
+  // ── DYNAMIC FILTERS DATA (BOUND TO ORGANIZATION MASTER DATA) ──
+  // 1. Available Organizations (Deduplicated, canonical display, sorted)
+  const availableOrganizations = useMemo(() => {
+    const orgMap = new Map<string, string>();
+
+    masterOrganizations.forEach((o) => {
+      if (o.name && !o.isArchived) {
+        const key = normalizeOrgKey(o.name);
+        if (!orgMap.has(key)) {
+          orgMap.set(key, toCanonicalOrgName(o.name));
+        }
+      }
+    });
+
+    employees.forEach((e) => {
+      if (e.organization && e.organization.trim()) {
+        const key = normalizeOrgKey(e.organization);
+        if (!orgMap.has(key)) {
+          orgMap.set(key, toCanonicalOrgName(e.organization));
+        }
+      }
+    });
+
+    return Array.from(orgMap.values()).sort((a, b) => a.localeCompare(b));
+  }, [masterOrganizations, employees]);
+
+  // Selected Organization Entity (matched by name)
+  const selectedOrgEntity = useMemo(() => {
+    if (!selectedOrg) return null;
+    return (
+      masterOrganizations.find(
+        (o) => normalizeOrgKey(o.name) === normalizeOrgKey(selectedOrg)
+      ) || null
+    );
+  }, [selectedOrg, masterOrganizations]);
+
+  // 2. Available Departments (Deduplicated, cascaded based on selected organization)
+  const availableDepartments = useMemo(() => {
+    const deptMap = new Map<string, string>();
+
+    masterDepartments.forEach((d) => {
+      if (!d.name || d.isArchived) return;
+      if (selectedOrg) {
+        const matchOrgName =
+          normalizeOrgKey(d.organizationName) === normalizeOrgKey(selectedOrg);
+        const matchOrgId = selectedOrgEntity && d.organizationId === selectedOrgEntity.id;
+        if (matchOrgName || matchOrgId || !d.organizationId) {
+          const key = normalizeFilterKey(d.name);
+          if (!deptMap.has(key)) {
+            deptMap.set(key, toCleanDeptName(d.name));
+          }
+        }
+      } else {
+        const key = normalizeFilterKey(d.name);
+        if (!deptMap.has(key)) {
+          deptMap.set(key, toCleanDeptName(d.name));
+        }
+      }
+    });
+
+    employees.forEach((e) => {
+      if (!e.department || !e.department.trim()) return;
+      if (selectedOrg) {
+        if (normalizeOrgKey(e.organization) === normalizeOrgKey(selectedOrg)) {
+          const key = normalizeFilterKey(e.department);
+          if (!deptMap.has(key)) {
+            deptMap.set(key, toCleanDeptName(e.department));
+          }
+        }
+      } else {
+        const key = normalizeFilterKey(e.department);
+        if (!deptMap.has(key)) {
+          deptMap.set(key, toCleanDeptName(e.department));
+        }
+      }
+    });
+
+    return Array.from(deptMap.values()).sort((a, b) => a.localeCompare(b));
+  }, [masterDepartments, employees, selectedOrg, selectedOrgEntity]);
+
+  // 3. Available Branches (Deduplicated, cascaded based on selected organization)
+  const availableBranches = useMemo(() => {
+    const branchMap = new Map<string, string>();
+
+    masterBranches.forEach((b) => {
+      if (!b.name) return;
+      if (selectedOrg) {
+        if (selectedOrgEntity && b.organizationId === selectedOrgEntity.id) {
+          const key = normalizeFilterKey(b.name);
+          if (!branchMap.has(key)) branchMap.set(key, b.name.trim());
+        }
+      } else {
+        const key = normalizeFilterKey(b.name);
+        if (!branchMap.has(key)) branchMap.set(key, b.name.trim());
+      }
+    });
+
+    employees.forEach((e) => {
+      if (!e.branch || !e.branch.trim()) return;
+      if (selectedOrg) {
+        if (normalizeOrgKey(e.organization) === normalizeOrgKey(selectedOrg)) {
+          const key = normalizeFilterKey(e.branch);
+          if (!branchMap.has(key)) branchMap.set(key, e.branch.trim());
+        }
+      } else {
+        const key = normalizeFilterKey(e.branch);
+        if (!branchMap.has(key)) branchMap.set(key, e.branch.trim());
+      }
+    });
+
+    return Array.from(branchMap.values()).sort((a, b) => a.localeCompare(b));
+  }, [masterBranches, employees, selectedOrg, selectedOrgEntity]);
+
+  // 4. Available Designations (Deduplicated, sorted)
+  const availableDesignations = useMemo(() => {
+    const desigMap = new Map<string, string>();
+
+    masterDesignations.forEach((d) => {
+      if (d.name && !d.isArchived) {
+        const key = normalizeFilterKey(d.name);
+        if (!desigMap.has(key)) desigMap.set(key, d.name.trim());
+      }
+    });
+
+    employees.forEach((e) => {
+      if (!e.designation || !e.designation.trim()) return;
+      if (selectedOrg) {
+        if (normalizeOrgKey(e.organization) === normalizeOrgKey(selectedOrg)) {
+          const key = normalizeFilterKey(e.designation);
+          if (!desigMap.has(key)) desigMap.set(key, e.designation.trim());
+        }
+      } else {
+        const key = normalizeFilterKey(e.designation);
+        if (!desigMap.has(key)) desigMap.set(key, e.designation.trim());
+      }
+    });
+
+    return Array.from(desigMap.values()).sort((a, b) => a.localeCompare(b));
+  }, [masterDesignations, employees, selectedOrg]);
 
   // Persist employees state to localStorage
   const persistEmployees = (updatedList: FullEmployeeProfile[]) => {
@@ -264,7 +491,7 @@ export default function PnCEmployeesPage() {
     }
   };
 
-  // Filter & Sort employees
+  // Filter & Sort employees (Normalization & alias aware)
   const filtered = useMemo(() => {
     const list = employees.filter((emp) => {
       const isArchived = emp.status === 'Archived' || Boolean(emp.isArchived);
@@ -292,10 +519,29 @@ export default function PnCEmployeesPage() {
         if (!matchName && !matchCode && !matchEmail && !matchDesig && !matchDept) return false;
       }
 
-      if (selectedDept && emp.department !== selectedDept) return false;
-      if (selectedOrg && emp.organization !== selectedOrg) return false;
-      if (selectedBranch && emp.branch !== selectedBranch) return false;
-      if (selectedDesignation && emp.designation !== selectedDesignation) return false;
+      if (selectedOrg) {
+        if (normalizeOrgKey(emp.organization) !== normalizeOrgKey(selectedOrg)) {
+          return false;
+        }
+      }
+
+      if (selectedDept) {
+        if (normalizeFilterKey(emp.department) !== normalizeFilterKey(selectedDept)) {
+          return false;
+        }
+      }
+
+      if (selectedBranch) {
+        if (normalizeFilterKey(emp.branch) !== normalizeFilterKey(selectedBranch)) {
+          return false;
+        }
+      }
+
+      if (selectedDesignation) {
+        if (normalizeFilterKey(emp.designation) !== normalizeFilterKey(selectedDesignation)) {
+          return false;
+        }
+      }
 
       return true;
     });
@@ -546,31 +792,61 @@ export default function PnCEmployeesPage() {
     reader.readAsText(file);
   };
 
-  // Process Batch Import & Upsert to Supabase + Local State
+  // Process Batch Import & Upsert to Supabase + Auto-Define Master Entities + Local State
   const handleProcessImport = async () => {
     if (!importParsedResult || importParsedResult.employees.length === 0) return;
     setIsProcessingImport(true);
     try {
       const newOrUpdated = importParsedResult.employees;
-      
-      // Merge into state and storage
+
+      // 1. High-Performance Bulk Sync directly to Supabase PostgREST
+      const importRes = await bulkImportEmployeesToSupabase(newOrUpdated);
+      if (!importRes.success && importRes.error) {
+        throw new Error(importRes.error);
+      }
+
+      // 2. Merge into state and local storage
       const existingMap = new Map(employees.map((e) => [e.code.toLowerCase(), e]));
       newOrUpdated.forEach((emp) => {
         existingMap.set(emp.code.toLowerCase(), emp);
       });
       const mergedList = Array.from(existingMap.values());
-      
+
       setEmployees(mergedList);
       persistEmployees(mergedList);
 
-      // Save all to Supabase in parallel
-      await Promise.all(newOrUpdated.map((emp) => saveEmployeeToSupabase(emp)));
+      // 3. Re-fetch Master Organization Data to instantly reflect newly auto-defined entities
+      const [freshOrgs, freshBranches, freshDepts, freshDesigs] = await Promise.all([
+        fetchOrganizationsFromSupabase(),
+        fetchBranchesFromSupabase(),
+        fetchDepartmentsFromSupabase(),
+        fetchDesignationsFromSupabase(),
+      ]);
+      if (freshOrgs) setMasterOrganizations(freshOrgs);
+      if (freshBranches) setMasterBranches(freshBranches);
+      if (freshDepts) setMasterDepartments(freshDepts);
+      if (freshDesigs) setMasterDesignations(freshDesigs);
+
+      // 4. Reset active filters so user sees all imported records immediately
+      setSelectedOrg('');
+      setSelectedDept('');
+      setSelectedBranch('');
+      setSelectedDesignation('');
+      setSearchQuery('');
 
       setShowImportModal(false);
       setImportFile(null);
       setImportParsedResult(null);
-      setToastMessage(`✓ Successfully imported & synchronized ${newOrUpdated.length} employee records across all 7 tabs!`);
-      setTimeout(() => setToastMessage(null), 5000);
+
+      const totalCount = importRes.totalUpserted || newOrUpdated.length;
+      const deptCount = importRes.autoDefined?.departments || 0;
+      const desigCount = importRes.autoDefined?.designations || 0;
+      const branchCount = importRes.autoDefined?.branches || 0;
+
+      setToastMessage(
+        `✓ Successfully imported & synchronized ${totalCount} employee records! Auto-defined ${deptCount} departments, ${desigCount} designations, and ${branchCount} branches.`
+      );
+      setTimeout(() => setToastMessage(null), 6000);
     } catch (err: any) {
       alert(err.message || 'Import processing error');
     } finally {
@@ -786,29 +1062,33 @@ export default function PnCEmployeesPage() {
           <select
             value={selectedDept}
             onChange={(e) => setSelectedDept(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm cursor-pointer"
           >
             <option value="">Department (All)</option>
-            <option value="Program Implementation">Program Implementation</option>
-            <option value="Digital School Program">Digital School Program</option>
-            <option value="Communications">Communications</option>
-            <option value="Executive Office">Executive Office</option>
-            <option value="Finance & Accounts">Finance &amp; Accounts</option>
-            <option value="People and Culture">People and Culture</option>
-            <option value="EMK Center">EMK Center</option>
+            {availableDepartments.map((dept) => (
+              <option key={dept} value={dept}>
+                {dept}
+              </option>
+            ))}
           </select>
         </div>
 
         <div>
           <select
             value={selectedOrg}
-            onChange={(e) => setSelectedOrg(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
+            onChange={(e) => {
+              setSelectedOrg(e.target.value);
+              setSelectedDept('');
+              setSelectedBranch('');
+            }}
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm cursor-pointer"
           >
             <option value="">Organization (All)</option>
-            <option value="JAAGO Foundation">JAAGO Foundation</option>
-            <option value="JAAGO Foundation Trust">JAAGO Foundation Trust</option>
-            <option value="EMK Center">EMK Center</option>
+            {availableOrganizations.map((org) => (
+              <option key={org} value={org}>
+                {org}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -816,14 +1096,14 @@ export default function PnCEmployeesPage() {
           <select
             value={selectedBranch}
             onChange={(e) => setSelectedBranch(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm cursor-pointer"
           >
             <option value="">Branch (All)</option>
-            <option value="Head Office (Banani)">Head Office (Banani)</option>
-            <option value="Rayer Bazar Free School">Rayer Bazar Free School</option>
-            <option value="Chittagong Campus">Chittagong Campus</option>
-            <option value="Cox's Bazar Branch">Cox&apos;s Bazar Branch</option>
-            <option value="Rajshahi Campus">Rajshahi Campus</option>
+            {availableBranches.map((branch) => (
+              <option key={branch} value={branch}>
+                {branch}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -831,15 +1111,14 @@ export default function PnCEmployeesPage() {
           <select
             value={selectedDesignation}
             onChange={(e) => setSelectedDesignation(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm cursor-pointer"
           >
             <option value="">Designation (All)</option>
-            <option value="Manager">Manager</option>
-            <option value="Assistant Manager">Assistant Manager</option>
-            <option value="Program Officer">Program Officer</option>
-            <option value="Security Guard">Security Guard</option>
-            <option value="Digital Instructor">Digital Instructor</option>
-            <option value="Coordinator">Coordinator</option>
+            {availableDesignations.map((desig) => (
+              <option key={desig} value={desig}>
+                {desig}
+              </option>
+            ))}
           </select>
           <button
             onClick={() => {
@@ -1221,7 +1500,7 @@ export default function PnCEmployeesPage() {
 
             <div className="space-y-3 overflow-y-auto pr-1 flex-1">
               {/* File Dropzone / Selector */}
-              <label className="p-6 rounded-2xl border-2 border-dashed border-border hover:border-amber-500/60 text-center space-y-2 cursor-pointer bg-surface/50 hover:bg-surface/80 transition flex flex-col items-center justify-center block">
+              <label className="p-6 rounded-2xl border-2 border-dashed border-border hover:border-amber-500/60 text-center space-y-2 cursor-pointer bg-surface/50 hover:bg-surface/80 transition flex flex-col items-center justify-center">
                 <input
                   type="file"
                   accept=".csv,text/csv"

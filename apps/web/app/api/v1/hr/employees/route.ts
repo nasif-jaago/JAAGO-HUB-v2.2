@@ -30,6 +30,7 @@ export async function GET() {
     const { data, error } = await supabaseAdmin
       .from('employees')
       .select('*')
+      .range(0, 5000)
       .order('created_at', { ascending: false });
 
     if (error) {

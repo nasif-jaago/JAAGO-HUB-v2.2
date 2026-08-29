@@ -197,7 +197,7 @@ export default function TeamsPage() {
       isArchived: editingItem ? editingItem.isArchived : false,
     };
 
-    await saveTeamToSupabase(payload);
+    await saveTeamToSupabase(payload, editingItem?.name);
 
     setTeams((prev) => {
       const idx = prev.findIndex((t) => t.id === payload.id);

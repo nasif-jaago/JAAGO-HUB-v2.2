@@ -101,7 +101,7 @@ export default function DesignationsPage() {
       isArchived: editingItem ? editingItem.isArchived : false,
     };
 
-    await saveDesignationToSupabase(payload);
+    await saveDesignationToSupabase(payload, editingItem?.name);
 
     setDesignations((prev) => {
       const idx = prev.findIndex((d) => d.id === payload.id);

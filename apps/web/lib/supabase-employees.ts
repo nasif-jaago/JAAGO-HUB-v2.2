@@ -285,6 +285,44 @@ export async function saveEmployeeToSupabase(
   }
 }
 
+export async function bulkImportEmployeesToSupabase(
+  employees: FullEmployeeProfile[]
+): Promise<{
+  success: boolean;
+  totalUpserted?: number;
+  autoDefined?: {
+    organizations: number;
+    departments: number;
+    designations: number;
+    branches: number;
+    projects: number;
+    teams: number;
+  };
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/v1/hr/employees/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employees }),
+    });
+
+    const json = await res.json();
+    if (res.ok && json.success) {
+      return {
+        success: true,
+        totalUpserted: json.totalUpserted,
+        autoDefined: json.autoDefined,
+      };
+    }
+
+    return { success: false, error: json.error || 'Failed to bulk import employees' };
+  } catch (err: any) {
+    console.warn('Bulk import employees error:', err);
+    return { success: false, error: err?.message || 'Network error during bulk import' };
+  }
+}
+
 export function getDeletedEmployeeCodes(): Set<string> {
   return new Set();
 }

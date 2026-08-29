@@ -152,7 +152,7 @@ export default function DepartmentsPage() {
       isArchived: editingItem ? editingItem.isArchived : false,
     };
 
-    await saveDepartmentToSupabase(payload);
+    await saveDepartmentToSupabase(payload, editingItem?.name);
 
     setDepartments((prev) => {
       const idx = prev.findIndex((d) => d.id === payload.id);

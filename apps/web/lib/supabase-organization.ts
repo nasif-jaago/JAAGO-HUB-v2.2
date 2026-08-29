@@ -648,6 +648,63 @@ function setLocalCache<T>(key: string, data: T[]) {
   } catch {}
 }
 
+export async function cascadeRenameEntity(
+  entityType: 'organization' | 'department' | 'designation' | 'branch' | 'project' | 'team',
+  oldName: string,
+  newName: string
+) {
+  if (!oldName || !newName || oldName.trim() === newName.trim()) return;
+
+  const trimmedOld = oldName.trim();
+  const trimmedNew = newName.trim();
+
+  // 1. Update local storage employee profiles
+  if (typeof window !== 'undefined') {
+    try {
+      const rawEmps = localStorage.getItem('jaago_pnc_employees_v2');
+      if (rawEmps) {
+        const emps = JSON.parse(rawEmps);
+        if (Array.isArray(emps)) {
+          const updated = emps.map((emp) => {
+            const updatedEmp = { ...emp };
+            if (entityType === 'organization' && emp.organization?.trim().toLowerCase() === trimmedOld.toLowerCase()) {
+              updatedEmp.organization = trimmedNew;
+            }
+            if (entityType === 'department' && emp.department?.trim().toLowerCase() === trimmedOld.toLowerCase()) {
+              updatedEmp.department = trimmedNew;
+            }
+            if (entityType === 'designation' && emp.designation?.trim().toLowerCase() === trimmedOld.toLowerCase()) {
+              updatedEmp.designation = trimmedNew;
+            }
+            if (entityType === 'branch' && emp.branch?.trim().toLowerCase() === trimmedOld.toLowerCase()) {
+              updatedEmp.branch = trimmedNew;
+            }
+            if (entityType === 'project' && emp.project?.trim().toLowerCase() === trimmedOld.toLowerCase()) {
+              updatedEmp.project = trimmedNew;
+            }
+            if (entityType === 'team' && emp.team?.trim().toLowerCase() === trimmedOld.toLowerCase()) {
+              updatedEmp.team = trimmedNew;
+            }
+            return updatedEmp;
+          });
+          localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(updated));
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Call backend cascading rename API for database synchronization
+  try {
+    await fetch('/api/v1/hr/entities/cascade-rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType, oldName: trimmedOld, newName: trimmedNew }),
+    });
+  } catch (err) {
+    console.warn('Cascade rename API error:', err);
+  }
+}
+
 // --- ORGANIZATIONS ---
 const ORGS_CACHE_KEY = 'jaago_pnc_organizations_cache';
 
@@ -692,12 +749,19 @@ export async function fetchOrganizationsFromSupabase(): Promise<OrganizationEnti
   return result;
 }
 
-export async function saveOrganizationToSupabase(org: OrganizationEntity): Promise<boolean> {
+export async function saveOrganizationToSupabase(org: OrganizationEntity, oldName?: string): Promise<boolean> {
   removeDeletedEntityId(org.id);
   const current = await fetchOrganizationsFromSupabase();
+  const existing = current.find((o) => o.id === org.id);
+  const previousName = oldName || (existing && existing.name !== org.name ? existing.name : undefined);
+
   const filtered = current.filter((o) => o.id !== org.id);
   const updated = [org, ...filtered];
   setLocalCache(ORGS_CACHE_KEY, updated);
+
+  if (previousName && previousName !== org.name) {
+    await cascadeRenameEntity('organization', previousName, org.name);
+  }
 
   try {
     const supabase = getSupabase();
@@ -784,10 +848,18 @@ export async function fetchBranchesFromSupabase(organizationId?: string): Promis
   return result;
 }
 
-export async function saveBranchToSupabase(branch: OrganizationBranch): Promise<boolean> {
+export async function saveBranchToSupabase(branch: OrganizationBranch, oldName?: string): Promise<boolean> {
   removeDeletedEntityId(branch.id);
+  const current = await fetchBranchesFromSupabase();
+  const existing = current.find((b) => b.id === branch.id);
+  const previousName = oldName || (existing && existing.name !== branch.name ? existing.name : undefined);
+
   const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES).filter((b) => b.id !== branch.id);
   setLocalCache(BRANCHES_CACHE_KEY, [branch, ...cached]);
+
+  if (previousName && previousName !== branch.name) {
+    await cascadeRenameEntity('branch', previousName, branch.name);
+  }
 
   try {
     const supabase = getSupabase();
@@ -937,10 +1009,18 @@ export async function fetchDesignationsFromSupabase(): Promise<DesignationItem[]
   return result;
 }
 
-export async function saveDesignationToSupabase(des: DesignationItem): Promise<boolean> {
+export async function saveDesignationToSupabase(des: DesignationItem, oldName?: string): Promise<boolean> {
   removeDeletedEntityId(des.id);
+  const current = await fetchDesignationsFromSupabase();
+  const existing = current.find((d) => d.id === des.id);
+  const previousName = oldName || (existing && existing.name !== des.name ? existing.name : undefined);
+
   const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS).filter((d) => d.id !== des.id);
   setLocalCache(DESIGNATIONS_CACHE_KEY, [des, ...cached]);
+
+  if (previousName && previousName !== des.name) {
+    await cascadeRenameEntity('designation', previousName, des.name);
+  }
 
   try {
     const supabase = getSupabase();
@@ -1012,10 +1092,18 @@ export async function fetchDepartmentsFromSupabase(): Promise<DepartmentItem[]> 
   return result;
 }
 
-export async function saveDepartmentToSupabase(dept: DepartmentItem): Promise<boolean> {
+export async function saveDepartmentToSupabase(dept: DepartmentItem, oldName?: string): Promise<boolean> {
   removeDeletedEntityId(dept.id);
+  const current = await fetchDepartmentsFromSupabase();
+  const existing = current.find((d) => d.id === dept.id);
+  const previousName = oldName || (existing && existing.name !== dept.name ? existing.name : undefined);
+
   const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS).filter((d) => d.id !== dept.id);
   setLocalCache(DEPARTMENTS_CACHE_KEY, [dept, ...cached]);
+
+  if (previousName && previousName !== dept.name) {
+    await cascadeRenameEntity('department', previousName, dept.name);
+  }
 
   try {
     const supabase = getSupabase();
@@ -1097,10 +1185,18 @@ export async function fetchProjectsFromSupabase(): Promise<ProjectItem[]> {
   return result;
 }
 
-export async function saveProjectToSupabase(proj: ProjectItem): Promise<boolean> {
+export async function saveProjectToSupabase(proj: ProjectItem, oldName?: string): Promise<boolean> {
   removeDeletedEntityId(proj.id);
+  const current = await fetchProjectsFromSupabase();
+  const existing = current.find((p) => p.id === proj.id);
+  const previousName = oldName || (existing && existing.name !== proj.name ? existing.name : undefined);
+
   const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS).filter((p) => p.id !== proj.id);
   setLocalCache(PROJECTS_CACHE_KEY, [proj, ...cached]);
+
+  if (previousName && previousName !== proj.name) {
+    await cascadeRenameEntity('project', previousName, proj.name);
+  }
 
   try {
     const supabase = getSupabase();
@@ -1193,10 +1289,18 @@ export async function fetchTeamsFromSupabase(): Promise<TeamItem[]> {
   return result;
 }
 
-export async function saveTeamToSupabase(team: TeamItem): Promise<boolean> {
+export async function saveTeamToSupabase(team: TeamItem, oldName?: string): Promise<boolean> {
   removeDeletedEntityId(team.id);
+  const current = await fetchTeamsFromSupabase();
+  const existing = current.find((t) => t.id === team.id);
+  const previousName = oldName || (existing && existing.name !== team.name ? existing.name : undefined);
+
   const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS).filter((t) => t.id !== team.id);
   setLocalCache(TEAMS_CACHE_KEY, [team, ...cached]);
+
+  if (previousName && previousName !== team.name) {
+    await cascadeRenameEntity('team', previousName, team.name);
+  }
 
   try {
     const supabase = getSupabase();
