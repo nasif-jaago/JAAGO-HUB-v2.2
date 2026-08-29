@@ -519,8 +519,8 @@ export async function fetchMonthlyAttendanceSummary(employeeId: string, month?: 
 }
 
 export function calculateWorkingHoursString(checkInTime?: string, checkOutTime?: string): string {
-  if (!checkInTime) return '0h 0m';
-  if (!checkOutTime || checkOutTime === '--:--' || checkOutTime === 'N/A') return 'In Progress';
+  if (!checkInTime) return '0h 00m';
+  if (!checkOutTime || checkOutTime === '--:--' || checkOutTime === 'N/A' || checkOutTime.includes('Active')) return 'In Progress';
 
   try {
     const parseTime = (t: string): number | null => {
@@ -544,11 +544,11 @@ export function calculateWorkingHoursString(checkInTime?: string, checkOutTime?:
       if (diff < 0) diff += 24 * 60; // handles shift crossing midnight
       const h = Math.floor(diff / 60);
       const m = diff % 60;
-      return `${h}h ${m}m`;
+      return `${h}h ${String(m).padStart(2, '0')}m`;
     }
   } catch {}
 
-  return '8h 00m';
+  return '0h 00m';
 }
 
 /**

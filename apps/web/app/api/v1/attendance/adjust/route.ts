@@ -50,8 +50,6 @@ export async function PATCH(request: Request) {
       } else if (checkInTime.includes('T')) {
         newCheckInAt = new Date(checkInTime).toISOString();
       } else {
-        // e.g. "09:45"
-        // Convert to ISO with Dhaka time (+06:00)
         newCheckInAt = new Date(`${bDate}T${checkInTime}:00+06:00`).toISOString();
       }
       checkInChanged = true;
@@ -82,13 +80,19 @@ export async function PATCH(request: Request) {
     };
 
     // 4. Recompute derived state (Invariant I2)
+    const firstCheckInAt = checkInChanged ? newCheckInAt : (record.first_check_in_at || newCheckInAt);
+    const lastCheckOutAt = checkOutChanged ? newCheckOutAt : (record.last_check_out_at || newCheckOutAt);
+
     const facts = {
       employeeId: record.employee_id,
       businessDate: record.business_date,
+      firstCheckInAt,
+      lastCheckOutAt,
       checkInAt: newCheckInAt,
       checkOutAt: newCheckOutAt,
       checkInSource: checkInChanged ? ('admin' as const) : record.check_in_source,
       checkOutSource: checkOutChanged ? ('admin' as const) : record.check_out_source,
+      calcMethod: record.calc_method || 'span',
     };
 
     const derived = await recomputeAttendanceRecordPure(facts, shiftSnapshot);
@@ -124,6 +128,8 @@ export async function PATCH(request: Request) {
 
     // 6. Update canonical attendance_records
     const updatePayload = {
+      first_check_in_at: firstCheckInAt,
+      last_check_out_at: lastCheckOutAt,
       check_in_at: newCheckInAt,
       check_out_at: newCheckOutAt,
       check_in_source: checkInChanged ? 'admin' : record.check_in_source,
@@ -132,7 +138,10 @@ export async function PATCH(request: Request) {
       is_late: derived.isLate,
       late_by_minutes: derived.lateByMinutes,
       is_auto_checkout: derived.isAutoCheckout,
+      needs_review: derived.needsReview,
       worked_minutes: derived.workedMinutes,
+      worked_seconds: derived.workedSeconds,
+      worked_display: derived.workedDisplay,
       updated_at: nowUtc,
     };
 

@@ -1,6 +1,7 @@
 import { getSupabaseAdminClient } from '@jaago/auth';
 import type { ShiftSnapshot } from '@jaago/core-domain';
-import { INITIAL_GPS_LOCATIONS } from '@/lib/supabase-gps';
+import { getAttendanceDate } from '@jaago/core-domain';
+import { INITIAL_GPS_LOCATIONS } from './supabase-gps';
 
 export interface GPSPayload {
   latitude: number;
@@ -9,6 +10,7 @@ export interface GPSPayload {
   capturedAt?: string | number | undefined;
   idempotencyKey?: string | undefined;
   deviceInfo?: string | undefined;
+  isMockLocation?: boolean | undefined;
 }
 
 export interface GeofenceMatchResult {
@@ -59,15 +61,16 @@ export async function verifyGeofenceServerSide(
   }
 ): Promise<GeofenceMatchResult> {
   const supabase = getSupabaseAdminClient();
-  const accuracyThreshold = settings?.accuracyThresholdM ?? 150;
+  const accuracyThreshold = settings?.accuracyThresholdM ?? 350;
   const freshnessSec = settings?.freshnessSeconds ?? 180;
 
-  // 1. Accuracy Gate
+  // 1. Accuracy Gate (Rejects GPS readings that are completely wild/coarse > 350m)
   if (payload.accuracy > accuracyThreshold) {
     return {
       accepted: false,
       rejectionReason: 'poor_accuracy',
       distanceMeters: undefined,
+      allowedRadiusMeters: accuracyThreshold,
     };
   }
 
@@ -231,7 +234,7 @@ export async function resolveEmployeeShiftSnapshot(
     };
   }
 
-  // 2. Default to standard JAAGO shift
+  // 2. Default to standard JAAGO shift (Sunday to Thursday working, Fri/Sat weekend)
   const dayOfWeek = new Date(businessDate).getUTCDay(); // 0=Sun, 4=Thu (working in BD)
   const isWorking = dayOfWeek !== 5 && dayOfWeek !== 6; // Fri(5), Sat(6) = Weekend
 
@@ -249,16 +252,13 @@ export async function resolveEmployeeShiftSnapshot(
 }
 
 /**
- * Gets the current business date string (YYYY-MM-DD) in the specified timezone.
+ * Gets the current business date string (YYYY-MM-DD) based on §3.1 cutoff rules (default 23:30 Asia/Dhaka).
  */
-export function getCurrentBusinessDate(timeZone: string = 'Asia/Dhaka'): string {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return formatter.format(new Date()); // Outputs YYYY-MM-DD
+export function getCurrentBusinessDate(
+  timeZone: string = 'Asia/Dhaka',
+  cutoffLocal: string = '23:30'
+): string {
+  return getAttendanceDate(new Date(), cutoffLocal, timeZone);
 }
 
 /**
@@ -306,4 +306,3 @@ export async function resolveCanonicalEmployeeId(rawIdOrCode: string): Promise<s
 
   return defaultEmp?.id || '71a38594-d803-4e6d-b6e9-79767a16c4c6';
 }
-

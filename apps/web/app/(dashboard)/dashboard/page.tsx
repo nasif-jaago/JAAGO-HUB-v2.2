@@ -7,8 +7,6 @@ import {
   Calendar,
   Radio,
   Zap,
-  ArrowRight,
-  LogOut,
   CheckCircle2,
   Building2,
   MapPin,
@@ -47,6 +45,8 @@ export default function DashboardPage() {
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
   const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [firstCheckInTimestamp, setFirstCheckInTimestamp] = useState<number | null>(null);
+  const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
   const [publicHolidays, setPublicHolidays] = useState<PublicHolidayItem[]>([]);
   const [gpsLocations, setGpsLocations] = useState<GPSLocationItem[]>([]);
   const [user, setUser] = useState({
@@ -187,8 +187,12 @@ export default function DashboardPage() {
           } else {
             // Normal resume: user is checked in
             setIsCheckedIn(true);
-            const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
-            setElapsedSeconds(savedWorkedSec + diffSeconds);
+            const inTs = parseInt(savedTime, 10);
+            if (inTs > 0) {
+              setFirstCheckInTimestamp(inTs);
+              const diffSeconds = Math.max(0, Math.floor((Date.now() - inTs) / 1000));
+              setElapsedSeconds(savedWorkedSec + diffSeconds);
+            }
           }
         } else {
           // User is checked out — just restore accumulated worked seconds
@@ -253,7 +257,12 @@ export default function DashboardPage() {
   // Live timer tick when checked in & 11:30 PM Auto-checkout watchdog
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    if (isCheckedIn) {
+    if (isCheckedIn && firstCheckInTimestamp) {
+      // Immediate initial tick on state change
+      const currentServerNow = Date.now() + serverTimeOffset;
+      const initialDiff = Math.max(0, Math.floor((currentServerNow - firstCheckInTimestamp) / 1000));
+      setElapsedSeconds(initialDiff);
+
       interval = setInterval(() => {
         const now = new Date();
         const curHours = now.getHours();
@@ -268,22 +277,25 @@ export default function DashboardPage() {
           return;
         }
 
-        const sessionStart = parseInt(localStorage.getItem('jaago_checkin_timestamp') || '0', 10);
-        const accumulated = parseInt(localStorage.getItem('jaago_worked_seconds') || '0', 10);
-        const diff = sessionStart > 0 ? Math.max(0, Math.floor((Date.now() - sessionStart) / 1000)) : 0;
-        setElapsedSeconds(accumulated + diff);
+        const nowServer = Date.now() + serverTimeOffset;
+        const diff = Math.max(0, Math.floor((nowServer - firstCheckInTimestamp) / 1000));
+        setElapsedSeconds(diff);
       }, 1000);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isCheckedIn]);
+  }, [isCheckedIn, firstCheckInTimestamp, serverTimeOffset]);
 
-  // Format seconds to HH:MM:SS
-  const formatTime = (totalSec: number) => {
+
+  // Format seconds to HH:MM:SS (Hour, Minutes, Seconds together as 00:00:00)
+  const formatTime = (totalSec: number | null | undefined): string => {
+    if (totalSec === null || totalSec === undefined || isNaN(totalSec) || totalSec <= 0) {
+      return '00:00:00';
+    }
     const hours = Math.floor(totalSec / 3600);
     const minutes = Math.floor((totalSec % 3600) / 60);
-    const seconds = totalSec % 60;
+    const seconds = Math.floor(totalSec % 60);
     return [
       hours.toString().padStart(2, '0'),
       minutes.toString().padStart(2, '0'),
@@ -484,51 +496,97 @@ export default function DashboardPage() {
       const personalLogs = getEmployeeAttendanceLogs(empId || user.employeeCode || user.id);
       setMyAttendanceLogs(personalLogs);
 
-      // 2. Query today session from API
+      // 2. Query today session from server API
       const todayRes = await fetch(`/api/v1/attendance/me/today?employeeId=${encodeURIComponent(empId)}`);
       const todayJson = await todayRes.json();
       if (todayJson.success && todayJson.data) {
-        const { sessionState, record } = todayJson.data;
-        if (sessionState === 'CHECKED_IN' && record?.check_in_at) {
-          setIsCheckedIn(true);
-          const inTime = new Date(record.check_in_at).toLocaleTimeString('en-US', {
+        const { state, first_check_in_at, last_check_out_at, worked_seconds, server_now } = todayJson.data;
+        const isNowCheckedIn = state === 'CHECKED_IN';
+        setIsCheckedIn(isNowCheckedIn);
+
+        let offset = serverTimeOffset;
+        if (server_now) {
+          offset = new Date(server_now).getTime() - Date.now();
+          setServerTimeOffset(offset);
+        }
+
+        if (first_check_in_at) {
+          const inTs = new Date(first_check_in_at).getTime();
+          setFirstCheckInTimestamp(inTs);
+          const inTime = new Date(first_check_in_at).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
           });
           setCheckInTime(inTime);
-          const diffSec = Math.max(0, Math.floor((Date.now() - new Date(record.check_in_at).getTime()) / 1000));
-          setElapsedSeconds(diffSec);
-          if (record?.check_out_at) {
-            setCheckOutTime(
-              new Date(record.check_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-            );
+
+          if (isNowCheckedIn) {
+            const currentServerNow = Date.now() + offset;
+            const liveDiff = Math.max(0, Math.floor((currentServerNow - inTs) / 1000));
+            setElapsedSeconds(liveDiff);
+          } else {
+            setElapsedSeconds(worked_seconds || 0);
           }
-        } else if (sessionState === 'CHECKED_OUT' || sessionState === 'AUTO_CHECKED_OUT' || record?.check_out_at) {
-          setIsCheckedIn(false);
-          if (record?.check_in_at) {
-            const inTime = new Date(record.check_in_at).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            });
-            setCheckInTime(inTime);
-          }
-          if (record?.check_out_at) {
-            const outTime = new Date(record.check_out_at).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            });
-            setCheckOutTime(outTime);
-          }
-          if (record?.check_in_at && record?.check_out_at) {
-            const workedSec = Math.max(
-              0,
-              Math.floor((new Date(record.check_out_at).getTime() - new Date(record.check_in_at).getTime()) / 1000)
-            );
-            setElapsedSeconds(workedSec);
-          }
+        } else {
+          setFirstCheckInTimestamp(null);
+          setCheckInTime('--:--');
+          setElapsedSeconds(worked_seconds || 0);
+        }
+
+        if (last_check_out_at) {
+          const outTime = new Date(last_check_out_at).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+          setCheckOutTime(outTime);
+        } else {
+          setCheckOutTime('--:--');
+        }
+
+        // Merge today session into myAttendanceLogs
+        if (first_check_in_at) {
+          const todayDateStr = todayJson.data.businessDate || new Date().toISOString().slice(0, 10);
+          const inTime = new Date(first_check_in_at).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+          const outTime = last_check_out_at
+            ? new Date(last_check_out_at).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+              })
+            : undefined;
+
+          setMyAttendanceLogs((prev) => {
+            const exists = prev.some((l) => l.date === todayDateStr);
+            const todayItem: AttendanceLogItem = {
+              id: `att-today-${todayDateStr}`,
+              employeeId: empId,
+              employeeCode: user.employeeCode || 'FO032507061190',
+              employeeName: user.fullName || 'Nasif Kamal',
+              designation: user.jobTitle,
+              department: user.department,
+              branch: gpsTracker.locationName || 'Nasif Home (Workstation)',
+              date: todayDateStr,
+              checkInTime: inTime,
+              checkOutTime: outTime,
+              status: (todayJson.data.status === 'late' ? 'Late' : 'Present') as any,
+              device: 'Web Portal',
+              timestamp: new Date(first_check_in_at).toLocaleString(),
+              createdBy: user.fullName || 'Nasif Kamal',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              notes: 'GPS Geofence Verified',
+            };
+
+            if (exists) {
+              return prev.map((l) => (l.date === todayDateStr ? { ...l, ...todayItem } : l));
+            }
+            return [todayItem, ...prev];
+          });
         }
       }
 
@@ -584,91 +642,9 @@ export default function DashboardPage() {
 
     try {
       const coords = await getCoordinates();
-      const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
-      const match = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
 
-      // ── GPS Geofence Verification Gate ──
-      if (!match.isInside) {
-        const closestName = match.closestLocation?.name || 'Designated Office';
-        setGpsTracker({
-          status: 'outside',
-          locationName: closestName,
-          distanceMeters: match.distanceMeters,
-          allowedRadiusMeters: match.allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          errorMsg: `Outside designated GPS perimeter (${match.distanceMeters}m away)`,
-        });
-
-        setGeofenceAlert({
-          isOpen: true,
-          action: 'CHECK_IN',
-          locationName: closestName,
-          distanceMeters: match.distanceMeters,
-          allowedRadiusMeters: match.allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        });
-
-        showToast(
-          `Check-In Blocked: You are ${match.distanceMeters}m away from "${closestName}". Max allowed radius is ${match.allowedRadiusMeters}m.`,
-          'error'
-        );
-        return;
-      }
-
-      // ── Location Accepted: Process Check-In ──
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const todayDate = now.toISOString().slice(0, 10);
-      const locName = match.matchedLocation?.name || 'Authorized Office';
-
-      // Preserve FIRST Check-In of the day
-      const existingFirstCheckIn = localStorage.getItem('jaago_first_checkin_time');
-      const finalFirstCheckIn = existingFirstCheckIn || timeStr;
-
-      setIsCheckedIn(true);
-      setCheckInTime(finalFirstCheckIn);
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('jaago_is_checked_in', 'true');
-        localStorage.setItem('jaago_checkin_timestamp', now.getTime().toString());
-        if (!existingFirstCheckIn) {
-          localStorage.setItem('jaago_first_checkin_time', timeStr);
-        }
-        localStorage.setItem('jaago_today_date', todayDate);
-      }
-
-      setGpsTracker({
-        status: 'inside',
-        locationName: locName,
-        distanceMeters: match.distanceMeters,
-        allowedRadiusMeters: match.allowedRadiusMeters,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy,
-        errorMsg: null,
-      });
-
-      // Save to unified attendance log store
-      recordLocalAttendanceLog({
-        employeeId: user.id,
-        employeeCode: user.employeeCode || 'FO032507061190',
-        employeeName: user.fullName || 'Nasif Kamal',
-        designation: user.jobTitle,
-        department: user.department,
-        branch: locName,
-        date: todayDate,
-        checkInTime: finalFirstCheckIn,
-        ...(checkOutTime ? { checkOutTime } : {}),
-        status: 'Present',
-        device: 'Web Portal',
-        notes: `GPS verified check-in at ${locName}`,
-      });
-
-      // Send to server API in background
-      fetch('/api/v1/attendance/check-in', {
+      // Send to server-authoritative API
+      const checkInRes = await fetch('/api/v1/attendance/check-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -676,16 +652,78 @@ export default function DashboardPage() {
           latitude: coords.latitude,
           longitude: coords.longitude,
           accuracy: coords.accuracy,
-          deviceInfo: `Web Portal (${locName})`,
-          allowOverride: true,
-          forceNew: true,
+          deviceInfo: 'Web Portal',
         }),
-      }).catch(() => {});
+      });
+      const checkInJson = await checkInRes.json();
 
-      showToast(`Checked in at ${locName} (${timeStr})! Working hours timer running.`, 'success');
-      refreshCanonicalAttendance(user.id);
+      if (!checkInRes.ok || !checkInJson.success) {
+        const errorMsg = checkInJson.error || 'Attendance check-in blocked.';
+        const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
+        const localMatch = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
+
+        const distanceMeters = checkInJson.distance_m ?? localMatch.distanceMeters;
+        const allowedRadiusMeters = checkInJson.allowed_radius_m ?? localMatch.allowedRadiusMeters;
+        const targetSite = checkInJson.nearest_site || localMatch.matchedLocation?.name || localMatch.closestLocation?.name || 'Designated Office';
+
+        setGpsTracker({
+          status: 'outside',
+          locationName: targetSite,
+          distanceMeters,
+          allowedRadiusMeters,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+          errorMsg,
+        });
+
+        setGeofenceAlert({
+          isOpen: true,
+          action: 'CHECK_IN',
+          locationName: targetSite,
+          distanceMeters,
+          allowedRadiusMeters,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          errorMsg,
+        });
+
+        showToast(errorMsg, 'error');
+        return;
+      }
+
+      // Server Accepted
+      const now = new Date();
+      const record = checkInJson.data;
+      const matchedSite = checkInJson.message?.includes('at ')
+        ? checkInJson.message.split('at ')[1]?.split(' (')[0] || 'Store'
+        : 'Designated Office';
+
+      const firstIn = record?.first_check_in_at || record?.check_in_at || now.toISOString();
+      const inTs = new Date(firstIn).getTime();
+      setFirstCheckInTimestamp(inTs);
+      setIsCheckedIn(true);
+      setCheckInTime(new Date(firstIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
+
+      const currentServerNow = Date.now() + serverTimeOffset;
+      const initialDiff = Math.max(0, Math.floor((currentServerNow - inTs) / 1000));
+      setElapsedSeconds(initialDiff);
+
+      setGpsTracker({
+        status: 'inside',
+        locationName: matchedSite,
+        distanceMeters: 0,
+        allowedRadiusMeters: 100,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        errorMsg: null,
+      });
+
+      showToast(checkInJson.message || `Checked in successfully at ${matchedSite}!`, 'success');
+      await refreshCanonicalAttendance(user.employeeCode || user.id);
     } catch {
-      showToast('Check-in failed. Please ensure GPS/Location is enabled.', 'error');
+      showToast('Check-in failed. Please ensure GPS/Location permission is granted.', 'error');
     } finally {
       setIsPunching(false);
     }
@@ -698,93 +736,9 @@ export default function DashboardPage() {
 
     try {
       const coords = await getCoordinates();
-      const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
-      const match = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
 
-      // ── GPS Geofence Verification Gate ──
-      if (!match.isInside) {
-        const closestName = match.closestLocation?.name || 'Designated Office';
-        setGpsTracker({
-          status: 'outside',
-          locationName: closestName,
-          distanceMeters: match.distanceMeters,
-          allowedRadiusMeters: match.allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          errorMsg: `Outside designated GPS perimeter (${match.distanceMeters}m away)`,
-        });
-
-        setGeofenceAlert({
-          isOpen: true,
-          action: 'CHECK_OUT',
-          locationName: closestName,
-          distanceMeters: match.distanceMeters,
-          allowedRadiusMeters: match.allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        });
-
-        showToast(
-          `Check-Out Blocked: You are ${match.distanceMeters}m away from "${closestName}". You must be at an authorized office to check out.`,
-          'error'
-        );
-        return;
-      }
-
-      // ── Location Accepted: Process Check-Out & Pause Working Hours ──
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-      const todayDate = now.toISOString().slice(0, 10);
-      const locName = match.matchedLocation?.name || 'Authorized Office';
-
-      const sessionStart = parseInt(localStorage.getItem('jaago_checkin_timestamp') || '0', 10);
-      const accumulated = parseInt(localStorage.getItem('jaago_worked_seconds') || '0', 10);
-      const sessionDuration = sessionStart > 0 ? Math.max(0, Math.floor((now.getTime() - sessionStart) / 1000)) : 0;
-      const newTotalWorkedSec = accumulated + sessionDuration;
-
-      setIsCheckedIn(false);
-      setCheckOutTime(timeStr);
-      setElapsedSeconds(newTotalWorkedSec);
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('jaago_is_checked_in', 'false');
-        localStorage.removeItem('jaago_checkin_timestamp');
-        localStorage.setItem('jaago_last_checkout_time', timeStr);
-        localStorage.setItem('jaago_worked_seconds', newTotalWorkedSec.toString());
-      }
-
-      setGpsTracker({
-        status: 'inside',
-        locationName: locName,
-        distanceMeters: match.distanceMeters,
-        allowedRadiusMeters: match.allowedRadiusMeters,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy,
-        errorMsg: null,
-      });
-
-      const effectiveInTime = checkInTime || localStorage.getItem('jaago_first_checkin_time') || '09:00 AM';
-
-      // Save to unified attendance log store
-      recordLocalAttendanceLog({
-        employeeId: user.id,
-        employeeCode: user.employeeCode || 'FO032507061190',
-        employeeName: user.fullName || 'Nasif Kamal',
-        designation: user.jobTitle,
-        department: user.department,
-        branch: locName,
-        date: todayDate,
-        checkInTime: effectiveInTime,
-        checkOutTime: timeStr,
-        status: 'Present',
-        device: 'Web Portal',
-        notes: `GPS verified check-out at ${locName}`,
-      });
-
-      // Send to server API in background
-      fetch('/api/v1/attendance/check-out', {
+      // Send to server-authoritative API
+      const checkOutRes = await fetch('/api/v1/attendance/check-out', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -792,14 +746,75 @@ export default function DashboardPage() {
           latitude: coords.latitude,
           longitude: coords.longitude,
           accuracy: coords.accuracy,
-          deviceInfo: `Web Portal (${locName})`,
-          allowOverride: true,
+          deviceInfo: 'Web Portal',
         }),
-      }).catch(() => {});
+      });
+      const checkOutJson = await checkOutRes.json();
 
-      const hoursText = (newTotalWorkedSec / 3600).toFixed(1);
-      showToast(`Checked out at ${timeStr}! Working hours paused (${hoursText}h recorded today).`, 'success');
-      refreshCanonicalAttendance(user.id);
+      if (!checkOutRes.ok || !checkOutJson.success) {
+        const errorMsg = checkOutJson.error || 'Attendance check-out blocked.';
+        const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
+        const localMatch = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
+
+        const distanceMeters = checkOutJson.distance_m ?? localMatch.distanceMeters;
+        const allowedRadiusMeters = checkOutJson.allowed_radius_m ?? localMatch.allowedRadiusMeters;
+        const targetSite = checkOutJson.nearest_site || localMatch.matchedLocation?.name || localMatch.closestLocation?.name || 'Designated Office';
+
+        setGpsTracker({
+          status: 'outside',
+          locationName: targetSite,
+          distanceMeters,
+          allowedRadiusMeters,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+          errorMsg,
+        });
+
+        setGeofenceAlert({
+          isOpen: true,
+          action: 'CHECK_OUT',
+          locationName: targetSite,
+          distanceMeters,
+          allowedRadiusMeters,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          errorMsg,
+        });
+
+        showToast(errorMsg, 'error');
+        return;
+      }
+
+      // Server Accepted
+      const now = new Date();
+      const record = checkOutJson.data;
+
+      setIsCheckedIn(false);
+      setFirstCheckInTimestamp(null);
+      if (record?.last_check_out_at) {
+        setCheckOutTime(new Date(record.last_check_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
+      } else {
+        setCheckOutTime(now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
+      }
+
+      if (record?.worked_seconds !== undefined) {
+        setElapsedSeconds(record.worked_seconds);
+      }
+
+      setGpsTracker({
+        status: 'inside',
+        locationName: 'Authorized Office',
+        distanceMeters: 0,
+        allowedRadiusMeters: 100,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        accuracy: coords.accuracy,
+        errorMsg: null,
+      });
+
+      showToast(checkOutJson.message || `Checked out successfully! Total working time: ${checkOutJson.derived?.workedDisplay || '0h 00m'}.`, 'success');
+      await refreshCanonicalAttendance(user.employeeCode || user.id);
     } catch {
       showToast('Check-out failed. Please try again.', 'error');
     } finally {
@@ -881,8 +896,11 @@ export default function DashboardPage() {
             <span>LIVE STATUS</span>
           </div>
 
-          {/* Large Digital Clock Display */}
-          <div className="text-5xl font-black tracking-tight text-foreground font-mono py-1">
+          {/* Large Digital Working Hours Display (00:00:00 format) */}
+          <div
+            className="text-4xl sm:text-5xl font-black tracking-tight text-foreground font-mono py-1"
+            aria-live="polite"
+          >
             {formatTime(elapsedSeconds)}
           </div>
 
@@ -923,38 +941,46 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── CARD 2: BIG INSTANT ONE-TAP CHECK-IN / CHECK-OUT BUTTON ── */}
-        <div className="space-y-2">
+        {/* ── CARD 2: SERVER-DRIVEN TWO-BUTTON CHECK-IN / CHECK-OUT STATE MACHINE ── */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Mobile Check-In Button */}
           <button
-            onClick={isCheckedIn ? handleCheckOutAction : handleCheckInAction}
-            disabled={isPunching}
-            className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2.5 transition-all duration-200 active:scale-[0.98] cursor-pointer select-none ${
-              !isCheckedIn
-                ? 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white shadow-emerald-500/25'
-                : 'bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white shadow-rose-500/25'
+            onClick={handleCheckInAction}
+            disabled={isPunching || isCheckedIn}
+            aria-disabled={isPunching || isCheckedIn}
+            className={`py-3.5 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all duration-200 active:scale-[0.98] ${
+              isCheckedIn
+                ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border border-border text-muted-foreground'
+                : 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white shadow-md shadow-emerald-500/25 cursor-pointer'
             }`}
           >
-            {!isCheckedIn ? (
-              <>
-                <ArrowRight className="h-5 w-5 stroke-[2.5]" />
-                <span>CHECK IN NOW</span>
-              </>
-            ) : (
-              <>
-                <LogOut className="h-5 w-5 stroke-[2.5]" />
-                <span>CHECK OUT NOW</span>
-              </>
-            )}
+            <Clock className="h-4 w-4 stroke-[2.5]" />
+            <span>CHECK IN</span>
           </button>
 
-          {/* Live Check-In Context Pill */}
-          {isCheckedIn && (
-            <div className="flex items-center justify-center space-x-2 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 py-2 px-3 rounded-xl animate-in fade-in">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Checked in at {checkInTime || '09:05 AM'} &bull; Banani Head Office</span>
-            </div>
-          )}
+          {/* Mobile Check-Out Button */}
+          <button
+            onClick={handleCheckOutAction}
+            disabled={isPunching || !isCheckedIn}
+            aria-disabled={isPunching || !isCheckedIn}
+            className={`py-3.5 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all duration-200 active:scale-[0.98] ${
+              !isCheckedIn
+                ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border border-border text-muted-foreground'
+                : 'bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white shadow-md shadow-rose-500/25 cursor-pointer'
+            }`}
+          >
+            <Flag className="h-4 w-4 stroke-[2.5]" />
+            <span>CHECK OUT</span>
+          </button>
         </div>
+
+        {/* Live Check-In Context Pill */}
+        {isCheckedIn && (
+          <div className="flex items-center justify-center space-x-2 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 py-2 px-3 rounded-xl animate-in fade-in">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Checked in at {checkInTime || '09:05 AM'}</span>
+          </div>
+        )}
 
         {/* ── CARD 3: MONTHLY ATTENDANCE SUMMARY ── */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-5">
@@ -1214,52 +1240,70 @@ export default function DashboardPage() {
                 <Radio className={`h-5 w-5 ${isPunching ? 'animate-spin text-amber-500' : 'animate-pulse'}`} />
               </div>
 
-              {/* Check In Box - Matt Green with Auto Theme & Text Adjustment */}
+              {/* Check In Box - Active when NOT_CHECKED_IN, Disabled/Greyed when CHECKED_IN */}
               <button
                 onClick={handleCheckInAction}
-                disabled={isPunching}
-                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs cursor-pointer ${
+                disabled={isPunching || isCheckedIn}
+                aria-disabled={isPunching || isCheckedIn}
+                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
                   isCheckedIn
-                    ? 'bg-emerald-500/25 dark:bg-emerald-500/30 border-emerald-600/50 dark:border-emerald-400/50 text-emerald-950 dark:text-emerald-50 shadow-sm'
-                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60'
+                    ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
+                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60 cursor-pointer shadow-sm'
                 }`}
               >
-                <div className="h-8 w-8 rounded-xl bg-emerald-500/20 dark:bg-emerald-500/25 flex items-center justify-center text-emerald-700 dark:text-emerald-300 flex-shrink-0">
+                <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  isCheckedIn
+                    ? 'bg-muted text-muted-foreground'
+                    : 'bg-emerald-500/20 dark:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                }`}>
                   <Clock className="h-4 w-4 stroke-[2.2]" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700/90 dark:text-emerald-300/90">
+                  <div className={`text-[10px] font-extrabold uppercase tracking-wider ${
+                    isCheckedIn ? 'text-muted-foreground' : 'text-emerald-700/90 dark:text-emerald-300/90'
+                  }`}>
                     CHECK IN
                   </div>
-                  <div className="text-xs font-black font-mono text-emerald-950 dark:text-emerald-100">
+                  <div className={`text-xs font-black font-mono ${
+                    isCheckedIn ? 'text-muted-foreground' : 'text-emerald-950 dark:text-emerald-100'
+                  }`}>
                     {checkInTime || '--:--'}
                   </div>
                 </div>
-                <span className="text-emerald-600/50 dark:text-emerald-400/40 text-xs font-bold">-</span>
+                <span className="text-muted-foreground/40 text-xs font-bold">-</span>
               </button>
 
-              {/* Check Out Box - Matt Red with Auto Theme & Text Adjustment */}
+              {/* Check Out Box - Active when CHECKED_IN, Disabled/Greyed when NOT_CHECKED_IN */}
               <button
                 onClick={handleCheckOutAction}
-                disabled={isPunching}
-                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs cursor-pointer ${
-                  !isCheckedIn && checkOutTime
-                    ? 'bg-rose-500/25 dark:bg-rose-500/30 border-rose-600/50 dark:border-rose-400/50 text-rose-950 dark:text-rose-50 shadow-sm'
-                    : 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60'
+                disabled={isPunching || !isCheckedIn}
+                aria-disabled={isPunching || !isCheckedIn}
+                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
+                  !isCheckedIn
+                    ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
+                    : 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60 cursor-pointer shadow-sm'
                 }`}
               >
-                <div className="h-8 w-8 rounded-xl bg-rose-500/20 dark:bg-rose-500/25 flex items-center justify-center text-rose-700 dark:text-rose-300 flex-shrink-0">
+                <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  !isCheckedIn
+                    ? 'bg-muted text-muted-foreground'
+                    : 'bg-rose-500/20 dark:bg-rose-500/25 text-rose-700 dark:text-rose-300'
+                }`}>
                   <Flag className="h-4 w-4 stroke-[2.2]" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700/90 dark:text-rose-300/90">
+                  <div className={`text-[10px] font-extrabold uppercase tracking-wider ${
+                    !isCheckedIn ? 'text-muted-foreground' : 'text-rose-700/90 dark:text-rose-300/90'
+                  }`}>
                     CHECK OUT
                   </div>
-                  <div className="text-xs font-black font-mono text-rose-950 dark:text-rose-100">
+                  <div className={`text-xs font-black font-mono ${
+                    !isCheckedIn ? 'text-muted-foreground' : 'text-rose-950 dark:text-rose-100'
+                  }`}>
                     {checkOutTime || '--:--'}
                   </div>
                 </div>
-                <span className="text-rose-600/50 dark:text-rose-400/40 text-xs font-bold">-</span>
+                <span className="text-muted-foreground/40 text-xs font-bold">-</span>
               </button>
             </div>
 
@@ -1318,10 +1362,21 @@ export default function DashboardPage() {
               </span>
             </div>
             <div>
-              <div className="text-xs font-semibold text-muted-foreground">
-                Working Hours Today
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">
+                  Working Hours Today
+                </span>
+                {isCheckedIn && (
+                  <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span>Live</span>
+                  </span>
+                )}
               </div>
-              <div className="text-3xl sm:text-4xl font-extrabold font-mono tracking-tight text-foreground pt-1">
+              <div
+                className="text-3xl sm:text-4xl lg:text-[38px] font-black font-mono tracking-tight text-foreground pt-1.5"
+                aria-live="polite"
+              >
                 {formatTime(elapsedSeconds)}
               </div>
             </div>
@@ -1783,7 +1838,7 @@ export default function DashboardPage() {
                 <span>Today's Check Out</span>
               </div>
               <div className="text-base font-black font-mono text-rose-500">
-                {checkOutTime || (!isCheckedIn && checkInTime ? '06:48 PM' : isCheckedIn ? 'Active Now' : '--:--')}
+                {checkOutTime && checkOutTime !== '--:--' ? checkOutTime : (isCheckedIn ? '--:-- (Active)' : '--:--')}
               </div>
               <div className="text-[10px] text-muted-foreground">Web Portal GPS</div>
             </div>
@@ -1807,7 +1862,7 @@ export default function DashboardPage() {
                 <span>Office Verification</span>
               </div>
               <div className="text-xs font-black text-foreground truncate">
-                Head Office (Banani)
+                {gpsTracker.locationName || 'Nasif Home (Workstation)'}
               </div>
               <div className="text-[10px] font-bold text-emerald-500">
                 ● Geofence Verified
@@ -1843,8 +1898,15 @@ export default function DashboardPage() {
                   <tbody className="divide-y divide-border/40 font-medium">
                     {myAttendanceLogs.length > 0 ? (
                       myAttendanceLogs.slice(0, 6).map((log) => {
-                        const duration = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
-                        const isToday = log.date === '2026-08-27';
+                        const todayStr = new Date().toISOString().slice(0, 10);
+                        const isToday = log.date === todayStr;
+                        const duration = isToday && isCheckedIn
+                          ? formatTime(elapsedSeconds)
+                          : calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
+                        const checkOutDisplay = isToday && isCheckedIn && (!log.checkOutTime || log.checkOutTime === '--:--')
+                          ? '--:-- (Active)'
+                          : (log.checkOutTime || '--:--');
+
                         return (
                           <tr key={log.id} className={`hover:bg-surface/60 transition ${isToday ? 'bg-primary/5' : ''}`}>
                             <td className="py-3 px-4 font-mono text-[11px] text-foreground font-bold flex items-center space-x-1.5">
@@ -1859,7 +1921,7 @@ export default function DashboardPage() {
                               {log.checkInTime || '--:--'}
                             </td>
                             <td className="py-3 px-3 font-semibold text-rose-500 font-mono">
-                              {log.checkOutTime || '--:--'}
+                              {checkOutDisplay}
                             </td>
                             <td className="py-3 px-3 font-mono text-[11px] text-foreground font-bold">
                               {duration}
@@ -1868,7 +1930,7 @@ export default function DashboardPage() {
                               {log.device || 'Web Portal'}
                             </td>
                             <td className="py-3 px-3 text-muted-foreground text-[11px]">
-                              {log.branch || 'Head Office (Banani)'}
+                              {log.branch || 'Nasif Home (Workstation)'}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <span

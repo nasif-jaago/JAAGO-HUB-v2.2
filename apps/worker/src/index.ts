@@ -1,5 +1,7 @@
 import { logger } from '@jaago/logger';
 import { EmailJobPayload, ReportJobPayload, NotificationJobPayload } from '@jaago/queue';
+import { runAutoCheckoutJob, AutoCheckoutJobResult } from './jobs/auto-checkout';
+import { runAbsenceEvaluationJob, AbsenceEvaluationResult } from './jobs/absence-evaluation';
 
 export class BackgroundWorkerService {
   private isRunning = false;
@@ -13,7 +15,7 @@ export class BackgroundWorkerService {
     logger.info('SYSTEM', 'worker.engine.started', {
       service: 'worker',
       metadata: {
-        queues: ['email', 'reports', 'notifications', 'webhooks', 'ai-tasks'],
+        queues: ['email', 'reports', 'notifications', 'webhooks', 'ai-tasks', 'attendance-auto-checkout', 'attendance-absence'],
         concurrency: 5,
       },
     });
@@ -22,6 +24,24 @@ export class BackgroundWorkerService {
     this.heartbeatTimer = setInterval(() => {
       // Background worker active
     }, 5000);
+  }
+
+  public async processAutoCheckout(targetDate?: string): Promise<AutoCheckoutJobResult> {
+    this.activeJobsCount++;
+    try {
+      return await runAutoCheckoutJob(targetDate);
+    } finally {
+      this.activeJobsCount--;
+    }
+  }
+
+  public async processAbsenceEvaluation(targetDate?: string): Promise<AbsenceEvaluationResult> {
+    this.activeJobsCount++;
+    try {
+      return await runAbsenceEvaluationJob(targetDate);
+    } finally {
+      this.activeJobsCount--;
+    }
   }
 
   public async processEmailJob(jobId: string, payload: EmailJobPayload): Promise<void> {

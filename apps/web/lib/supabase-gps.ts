@@ -306,25 +306,25 @@ export const INITIAL_GPS_LOCATIONS: GPSLocationItem[] = [
     branchOffice: 'Banani, Dhaka - Current Administrative Office',
     latitude: 23.789555,
     longitude: 90.408706,
-    radiusMeters: 100,
+    radiusMeters: 150,
     status: 'Active',
   },
   {
     id: 'gps-1787822156051',
     name: 'Nasif Home (Uttara)',
     branchOffice: 'Uttara, Dhaka',
-    latitude: 23.856484,
-    longitude: 90.384588,
-    radiusMeters: 100,
+    latitude: 23.856426,
+    longitude: 90.384569,
+    radiusMeters: 200,
     status: 'Active',
   },
   {
     id: 'gps-nasif-desktop-gateway',
     name: 'Nasif Home (Workstation)',
     branchOffice: 'Uttara, Dhaka',
-    latitude: 23.772900,
-    longitude: 90.365700,
-    radiusMeters: 100,
+    latitude: 23.856426,
+    longitude: 90.384569,
+    radiusMeters: 200,
     status: 'Active',
   },
 ];
@@ -333,7 +333,7 @@ export const INITIAL_GPS_LOCATIONS: GPSLocationItem[] = [
 // 3. STORAGE AND SYNC HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const GPS_STORAGE_KEY = 'jaago_admin_gps_locations_v2';
+const GPS_STORAGE_KEY = 'jaago_admin_gps_locations_v3';
 
 export function getLocalGPSLocations(): GPSLocationItem[] {
   if (typeof window === 'undefined') return INITIAL_GPS_LOCATIONS;
