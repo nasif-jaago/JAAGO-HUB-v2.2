@@ -16,8 +16,7 @@
   "scripts": {
     "start": "node index.js",
     "start:server": "node index.js",
-    "build": "turbo run build && node tooling/scripts/prepare-deploy.mjs",
-    "deploy:prepare": "node tooling/scripts/prepare-deploy.mjs",
+    "build": "turbo run build",
     "dev": "turbo run dev --parallel",
     "dev:web": "npm run dev --workspace=@jaago/web",
     "dev:worker": "npm run dev --workspace=@jaago/worker",

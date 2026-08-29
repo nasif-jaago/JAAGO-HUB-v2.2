@@ -101,7 +101,9 @@ export async function runAutoCheckoutJob(targetDate?: string): Promise<AutoCheck
           check_out_at: lastOut,
           check_out_source: 'auto',
           is_auto_checkout: true,
+          worked_seconds: workedSeconds,
           worked_minutes: workedMinutes,
+          worked_display: workedDisplay,
           status: 'present',
           updated_at: new Date().toISOString(),
         })
