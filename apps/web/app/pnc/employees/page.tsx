@@ -163,6 +163,7 @@ export default function PnCEmployeesPage() {
       securityNote?: string;
       fullEmailText?: string;
       sentAt: string;
+      autoSent?: boolean;
     };
   } | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
@@ -436,12 +437,40 @@ export default function PnCEmployeesPage() {
       }
     };
 
+    const handleUserRevoked = (event: any) => {
+      const { userId, email } = event.detail || {};
+      if (!userId && !email) return;
+
+      const cleanEmail = email ? String(email).toLowerCase().trim() : null;
+
+      // Immediately reset is_user on the matching employee in memory & storage
+      setEmployees((prev) => {
+        const next = prev.map((emp) => {
+          const isMatch =
+            (userId && (emp.userId === userId || emp.id === userId)) ||
+            (cleanEmail &&
+              ((emp.workEmail && emp.workEmail.toLowerCase().trim() === cleanEmail) ||
+                (emp.personalEmail && emp.personalEmail.toLowerCase().trim() === cleanEmail)));
+
+          return isMatch ? { ...emp, isUser: false, userId: '' } : emp;
+        });
+
+        try {
+          localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(next));
+        } catch {}
+
+        return next;
+      });
+    };
+
     window.addEventListener('jaago_entity_renamed', handleEntityRenamed);
     window.addEventListener('jaago_entity_updated', handleEntityUpdated);
+    window.addEventListener('jaago_user_revoked', handleUserRevoked);
     window.addEventListener('storage', handleStorageChange);
     return () => {
       window.removeEventListener('jaago_entity_renamed', handleEntityRenamed);
       window.removeEventListener('jaago_entity_updated', handleEntityUpdated);
+      window.removeEventListener('jaago_user_revoked', handleUserRevoked);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
@@ -2439,7 +2468,11 @@ function toCanonicalOrgName(raw: string): string {
                   <h2 className="text-base font-black text-foreground">Welcome &amp; Invite Email Dispatched</h2>
                   <p className="text-[11px] font-bold text-emerald-500 flex items-center space-x-1">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Supabase Auth &amp; JAAGO HUB User Created</span>
+                    <span>
+                      {showInviteSuccessModal.emailPayload.autoSent
+                        ? 'User Created & Email Auto-Sent via Supabase!'
+                        : 'Supabase Auth & JAAGO HUB User Created'}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -2478,11 +2511,12 @@ function toCanonicalOrgName(raw: string): string {
               <div className="flex items-center justify-between pt-1 border-t border-border/60">
                 <span className="text-muted-foreground font-sans font-bold">Portal Access Link:</span>
                 <a
-                  href="/login"
+                  href={showInviteSuccessModal.emailPayload.loginUrl || 'https://hub.jaago.com.bd/login'}
                   target="_blank"
+                  rel="noopener noreferrer"
                   className="text-primary hover:underline flex items-center space-x-1 font-sans text-[11px] font-bold"
                 >
-                  <span>{showInviteSuccessModal.emailPayload.loginUrl || '/login'}</span>
+                  <span>{showInviteSuccessModal.emailPayload.loginUrl || 'https://hub.jaago.com.bd/login'}</span>
                   <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
@@ -2542,7 +2576,13 @@ function toCanonicalOrgName(raw: string): string {
                   <Send className="h-4 w-4" />
                 )}
                 <span>
-                  {isSendingEmail ? 'Sending Email...' : emailSentSuccess ? 'Email Dispatched!' : 'Send Email'}
+                  {isSendingEmail
+                    ? 'Sending Email...'
+                    : emailSentSuccess
+                    ? 'Email Dispatched!'
+                    : showInviteSuccessModal?.emailPayload?.autoSent
+                    ? 'Resend Email'
+                    : 'Send Email'}
                 </span>
               </button>
               <button

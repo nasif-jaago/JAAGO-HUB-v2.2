@@ -476,9 +476,13 @@ export function DashboardSidebar({
                 </Link>
                 <Link
                   href="/admin/rbac"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    pathname === '/admin/rbac'
+                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                  } transition`}
                 >
-                  <Shield className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <Shield className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
                   <span>RBAC Matrix</span>
                 </Link>
                 <Link

@@ -5,6 +5,7 @@ import { DashboardHeader } from '@/components/dashboard-header';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
 import { getSupabase } from '@/lib/supabase-auth';
+import { AbilityProvider } from '@/lib/casl-ability';
 
 export default function DashboardLayout({
   children,
@@ -62,11 +63,14 @@ export default function DashboardLayout({
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT') {
-        if (isMounted) {
-          window.location.href = '/login';
-        }
+    } = supabase.auth.onAuthStateChange(async (_event, authSession) => {
+      if (authSession?.user && isMounted) {
+        const userMeta = authSession.user.user_metadata || {};
+        setCurrentUser({
+          fullName: userMeta.full_name || authSession.user.email?.split('@')[0] || 'User',
+          jobTitle: userMeta.job_title || 'Staff Member',
+          avatarUrl: userMeta.avatar_url || authSession.user.user_metadata?.picture || '',
+        });
       }
     });
 
@@ -76,99 +80,59 @@ export default function DashboardLayout({
     };
   }, []);
 
-  // Auto-hide sidebar timer & real-time profile event listener
-  useEffect(() => {
-    startAutoHideTimer();
-
-    const handleUserUpdated = (e: any) => {
-      if (e.detail?.user) {
-        setCurrentUser({
-          fullName: e.detail.user.fullName || 'Nasif Kamal',
-          jobTitle: e.detail.user.jobTitle || 'Coordinator',
-          avatarUrl: e.detail.user.avatarUrl || '',
-        });
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('jaago_user_updated', handleUserUpdated);
-    }
-
-    return () => {
-      clearAutoHideTimer();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('jaago_user_updated', handleUserUpdated);
-      }
-    };
-  }, []);
-
-  const startAutoHideTimer = () => {
-    clearAutoHideTimer();
-    hideTimerRef.current = setTimeout(() => {
-      setSidebarCollapsed(true);
-    }, 3000);
-  };
-
-  const clearAutoHideTimer = () => {
+  // ── Auto-Expand on Hover Handlers ──
+  const handleMouseEnter = () => {
     if (hideTimerRef.current) {
       clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
-  };
-
-  const handleMouseEnter = () => {
-    clearAutoHideTimer();
     setSidebarCollapsed(false);
   };
 
   const handleMouseLeave = () => {
-    startAutoHideTimer();
+    hideTimerRef.current = setTimeout(() => {
+      setSidebarCollapsed(true);
+    }, 400);
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex relative overflow-x-hidden">
-      {/* ── Left Side Hit Sensor Panel (Hovering here immediately opens the sidebar) ── */}
-      <div
-        onMouseEnter={handleMouseEnter}
-        className="fixed top-0 bottom-0 left-0 w-4 lg:w-5 z-50 pointer-events-auto cursor-pointer"
-        title="Hover left edge to open sidebar"
-      />
-
-      {/* ── Sidebar Navigation with Auto-Hide and Hover detection ── */}
-      <DashboardSidebar
-        collapsed={sidebarCollapsed}
-        onToggle={() => {
-          if (sidebarCollapsed) {
-            handleMouseEnter();
-          } else {
-            setSidebarCollapsed(true);
-          }
-        }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      />
-
-      {/* ── Main App Content Area (Smoothly expands when sidebar is collapsed) ── */}
-      <div
-        className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
-          !sidebarCollapsed ? 'lg:pl-72' : 'pl-0'
-        }`}
-      >
-        <DashboardHeader
-          user={currentUser}
-          onToggleSidebar={() => {
+    <AbilityProvider>
+      <div className="min-h-screen bg-background text-foreground flex">
+        {/* ── Collapsible Floating Hover Trigger & Sidebar ── */}
+        <DashboardSidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => {
             if (sidebarCollapsed) {
               handleMouseEnter();
             } else {
               setSidebarCollapsed(true);
             }
           }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
         />
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-          {children}
-        </main>
+
+        {/* ── Main App Content Area (Smoothly expands when sidebar is collapsed) ── */}
+        <div
+          className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+            !sidebarCollapsed ? 'lg:pl-72' : 'pl-0'
+          }`}
+        >
+          <DashboardHeader
+            user={currentUser}
+            onToggleSidebar={() => {
+              if (sidebarCollapsed) {
+                handleMouseEnter();
+              } else {
+                setSidebarCollapsed(true);
+              }
+            }}
+          />
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </AbilityProvider>
   );
 }
-

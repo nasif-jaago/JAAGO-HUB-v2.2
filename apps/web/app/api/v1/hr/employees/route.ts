@@ -27,17 +27,96 @@ export interface EmployeeDirectoryItem {
 export async function GET() {
   try {
     const supabaseAdmin = getSupabaseAdminClient();
-    const { data, error } = await supabaseAdmin
-      .from('employees')
-      .select('*')
-      .range(0, 5000)
-      .order('created_at', { ascending: false });
+    
+    // Fetch both employees and live Supabase Auth users in parallel
+    const [{ data: empData, error: empError }, { data: authData, error: authError }] = await Promise.all([
+      supabaseAdmin
+        .from('employees')
+        .select('*')
+        .range(0, 5000)
+        .order('created_at', { ascending: false }),
+      supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
+    ]);
 
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    if (empError) {
+      return NextResponse.json({ success: false, error: empError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, data: data || [] });
+    const employees = empData || [];
+    const authUsers = (!authError && authData?.users) ? authData.users : [];
+
+    // Map active Auth users by ID and by Email for instantaneous lookups
+    const authUserIds = new Set<string>(authUsers.map((u) => u.id));
+    const emailToAuthUser = new Map<string, any>();
+    authUsers.forEach((u) => {
+      if (u.email) {
+        emailToAuthUser.set(u.email.toLowerCase().trim(), u);
+      }
+    });
+
+    const staleEmpIdsToDeactivate: string[] = [];
+    const staleEmpUpdatesToActivate: { id: string; user_id: string }[] = [];
+
+    const reconciledEmployees = employees.map((emp: any) => {
+      const workEmail = emp.work_email?.toLowerCase().trim();
+      const personalEmail = emp.personal_email?.toLowerCase().trim();
+
+      // Check if user exists by user_id OR by email
+      let matchedAuthUser = null;
+      if (emp.user_id && authUserIds.has(emp.user_id)) {
+        matchedAuthUser = authUsers.find((u) => u.id === emp.user_id);
+      } else if (workEmail && emailToAuthUser.has(workEmail)) {
+        matchedAuthUser = emailToAuthUser.get(workEmail);
+      } else if (personalEmail && emailToAuthUser.has(personalEmail)) {
+        matchedAuthUser = emailToAuthUser.get(personalEmail);
+      }
+
+      const hasActiveUser = Boolean(matchedAuthUser);
+      const activeUserId = matchedAuthUser ? matchedAuthUser.id : null;
+
+      // Track discrepancies to heal in database in background
+      if (emp.is_user && !hasActiveUser) {
+        staleEmpIdsToDeactivate.push(emp.id);
+      } else if (!emp.is_user && hasActiveUser && activeUserId) {
+        staleEmpUpdatesToActivate.push({ id: emp.id, user_id: activeUserId });
+      }
+
+      return {
+        ...emp,
+        is_user: hasActiveUser,
+        user_id: activeUserId,
+      };
+    });
+
+    // Background self-healing of Supabase database table
+    if (staleEmpIdsToDeactivate.length > 0) {
+      supabaseAdmin
+        .from('employees')
+        .update({ is_user: false, user_id: null, updated_at: new Date().toISOString() })
+        .in('id', staleEmpIdsToDeactivate)
+        .then(() => {
+          logger.info('SYSTEM', 'employees.healed_deactivated_users', {
+            metadata: { count: staleEmpIdsToDeactivate.length },
+          });
+        });
+    }
+
+    if (staleEmpUpdatesToActivate.length > 0) {
+      Promise.all(
+        staleEmpUpdatesToActivate.map((u) =>
+          supabaseAdmin
+            .from('employees')
+            .update({ is_user: true, user_id: u.user_id, updated_at: new Date().toISOString() })
+            .eq('id', u.id)
+        )
+      ).then(() => {
+        logger.info('SYSTEM', 'employees.healed_activated_users', {
+          metadata: { count: staleEmpUpdatesToActivate.length },
+        });
+      });
+    }
+
+    return NextResponse.json({ success: true, data: reconciledEmployees });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || 'Failed to fetch employees' }, { status: 500 });
   }

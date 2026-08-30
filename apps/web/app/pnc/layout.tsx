@@ -165,8 +165,9 @@ export default function PnCLayout({
     if (pathname.includes('/time-off/requests')) return { label: 'Leave Requests', href: '/pnc/time-off/requests' };
     if (pathname.includes('/time-off/allocations')) return { label: 'Leave Allocations', href: '/pnc/time-off/allocations' };
     if (pathname.includes('/time-off/holidays')) return { label: 'Public Holidays', href: '/pnc/time-off/holidays' };
-    if (pathname.includes('/time-off/config')) return { label: 'Leave Configuration', href: '/pnc/time-off/config' };
-    if (pathname.includes('/time-off') || pathname.includes('/leave')) return { label: 'Leave Calendar', href: '/pnc/time-off/calendar' };
+    if (pathname.includes('/attendance/biotime-logs')) return { label: 'BioTime Logs', href: '/pnc/attendance/biotime-logs' };
+    if (pathname.includes('/settings/biotime')) return { label: 'BioTime Control Center', href: '/pnc/settings/biotime' };
+    if (pathname.includes('/admin/rbac')) return { label: 'RBAC Matrix', href: '/admin/rbac' };
     return { label: 'Dashboard', href: '/pnc' };
   };
   const currentCrumb = getBreadcrumb();
@@ -523,6 +524,16 @@ export default function PnCLayout({
                 >
                   &bull; Working Hours &amp; Schedules
                 </Link>
+                <Link
+                  href="/pnc/attendance/biotime-logs"
+                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                    pathname.startsWith('/pnc/attendance/biotime-logs')
+                      ? 'text-primary font-black bg-primary/15'
+                      : 'hover:text-primary hover:bg-surface/60'
+                  }`}
+                >
+                  &bull; BioTime Log
+                </Link>
               </div>
             )}
           </div>
@@ -582,27 +593,56 @@ export default function PnCLayout({
           </div>
 
           {/* U.ROLE */}
-          <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
+          <Link
+            href="/admin/rbac"
+            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+              pathname.startsWith('/admin/rbac')
+                ? 'bg-primary/10 text-primary font-black'
+                : 'text-sidebar-foreground hover:bg-surface'
+            }`}
+          >
             <ShieldAlert className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             <span className="uppercase tracking-wider text-[11px]">U.ROLE</span>
-          </div>
+          </Link>
 
           {/* SETTINGS */}
           <div className="space-y-0.5">
             <button
               onClick={() => toggleSection('settings')}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer"
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')
+                  ? 'bg-primary/10 text-primary font-black'
+                  : 'text-sidebar-foreground hover:bg-surface'
+              }`}
             >
               <div className="flex items-center space-x-2.5">
                 <Settings className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">SETTINGS</span>
               </div>
-              {openSections['settings'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              {openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" />
+              )}
             </button>
-            {openSections['settings'] && (
+            {(openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')) && (
               <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; Configuration</div>
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; Biotime Control Center</div>
+                <Link
+                  href="/pnc/organization"
+                  className={`block py-1 uppercase text-[10px] font-bold transition hover:text-primary ${
+                    pathname === '/pnc/organization' ? 'text-primary font-black' : ''
+                  }`}
+                >
+                  &bull; Configuration
+                </Link>
+                <Link
+                  href="/pnc/settings/biotime"
+                  className={`block py-1 uppercase text-[10px] font-bold transition hover:text-primary ${
+                    pathname.includes('/biotime') ? 'text-primary font-black' : ''
+                  }`}
+                >
+                  &bull; Biotime Control Center
+                </Link>
               </div>
             )}
           </div>

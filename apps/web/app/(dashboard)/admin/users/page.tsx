@@ -355,6 +355,10 @@ export default function UserManagementPage() {
         setUsers((prev) =>
           prev.map((u) => (u.id === user.id ? { ...u, status: 'suspended' } : u))
         );
+        // Notify Employee List to show "Create User" button again
+        window.dispatchEvent(
+          new CustomEvent('jaago_user_revoked', { detail: { userId: user.id, email: user.email } })
+        );
         showToast(`Access revoked for ${user.fullName}.`);
       } else {
         alert(data.error || 'Revoke failed');
@@ -373,6 +377,12 @@ export default function UserManagementPage() {
       if (res.ok && data.success) {
         setUsers((prev) => prev.filter((u) => u.id !== showDeleteModal.id));
         setSelectedUserIds((prev) => prev.filter((id) => id !== showDeleteModal.id));
+        // Notify Employee List to show "Create User" button again
+        window.dispatchEvent(
+          new CustomEvent('jaago_user_revoked', {
+            detail: { userId: showDeleteModal.id, email: showDeleteModal.email },
+          })
+        );
         showToast(`User ${showDeleteModal.fullName} permanently hard deleted.`);
         setShowDeleteModal(null);
       } else {
@@ -387,6 +397,7 @@ export default function UserManagementPage() {
   const handleBulkHardDelete = async () => {
     if (selectedUserIds.length === 0) return;
     try {
+      const deletedUsers = users.filter((u) => selectedUserIds.includes(u.id));
       const res = await fetch('/api/v1/users', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -398,6 +409,12 @@ export default function UserManagementPage() {
         setUsers((prev) => prev.filter((u) => !selectedUserIds.includes(u.id)));
         setSelectedUserIds([]);
         setShowBulkDeleteModal(false);
+        // Notify Employee List for each deleted user
+        deletedUsers.forEach((u) =>
+          window.dispatchEvent(
+            new CustomEvent('jaago_user_revoked', { detail: { userId: u.id, email: u.email } })
+          )
+        );
         showToast(`Permanently hard deleted ${count} user account(s) from database.`);
       } else {
         alert(data.error || 'Bulk hard delete failed');

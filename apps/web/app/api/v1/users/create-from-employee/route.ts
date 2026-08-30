@@ -23,10 +23,10 @@ export async function POST(request: Request) {
     const tempPassword = `Jaago@2026!${randPart}${randNum}`;
 
     let supabaseUserId = '';
+    const supabaseAdmin = getSupabaseAdminClient();
 
     // Synchronize user account with Supabase Auth
     try {
-      const supabaseAdmin = getSupabaseAdminClient();
       const { data: supaUser, error: supaErr } = await supabaseAdmin.auth.admin.createUser({
         email: cleanEmail,
         password: tempPassword,
@@ -77,8 +77,7 @@ export async function POST(request: Request) {
       user.id = supabaseUserId;
     }
 
-    const origin = request.headers.get('origin') || 'http://localhost:3000';
-    const loginUrl = `${origin}/login`;
+    const loginUrl = 'https://hub.jaago.com.bd/login';
     const emailSubject = 'Welcome to JAAGO HUB — Your Login Access & Credentials';
     const shortSecurityNote = 'Please update your password as soon as possible after your initial login.';
 
@@ -113,7 +112,33 @@ JAAGO Foundation Trust`;
       },
     });
 
-    // Invite email dispatch payload
+    // ── Auto-dispatch welcome/password-setup email via Supabase Auth & SMTP ────────
+    let autoEmailSent = false;
+    try {
+      if (supabaseAdmin && cleanEmail) {
+        // Triggers Supabase Auth to dispatch the reset/welcome email via Brevo SMTP
+        const { error: resetErr } = await supabaseAdmin.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: loginUrl,
+        });
+
+        if (!resetErr) {
+          autoEmailSent = true;
+          logger.info('SYSTEM', 'notification.auto_welcome_email_sent', {
+            metadata: { to: cleanEmail, method: 'supabase_reset_password_email' },
+          });
+        } else {
+          logger.warn('SYSTEM', 'notification.auto_email_error', {
+            metadata: { email: cleanEmail, error: resetErr.message },
+          });
+        }
+      }
+    } catch (emailErr: any) {
+      logger.warn('SYSTEM', 'notification.auto_email_failed', {
+        metadata: { email: cleanEmail, error: emailErr?.message },
+      });
+    }
+
+    // Invite email dispatch payload (shown in the UI modal)
     const emailPayload = {
       to: cleanEmail,
       recipientName: name,
@@ -124,6 +149,7 @@ JAAGO Foundation Trust`;
       securityNote: shortSecurityNote,
       fullEmailText: emailBodyText,
       sentAt: new Date().toISOString(),
+      autoSent: autoEmailSent,
     };
 
     return NextResponse.json({
@@ -132,7 +158,9 @@ JAAGO Foundation Trust`;
         user,
         emailPayload,
       },
-      message: `User account created for ${name}. Invitation email dispatched!`,
+      message: autoEmailSent
+        ? `User account created & welcome email sent to ${cleanEmail}!`
+        : `User account created for ${name}. Click "Send Email" to dispatch credentials.`,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Failed to create user from employee' }, { status: 500 });

@@ -7,19 +7,18 @@ export const roles = pgTable(
   'roles',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade' }),
-    key: varchar('key', { length: 50 }).notNull(),
+    orgId: uuid('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
+    slug: varchar('slug', { length: 50 }).notNull().unique(),
     name: varchar('name', { length: 255 }).notNull(),
     description: text('description'),
+    color: varchar('color', { length: 20 }).default('#10B981'),
     isSystem: boolean('is_system').default(false).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('idx_roles_org_id').on(table.organizationId),
-    index('idx_roles_key').on(table.key),
+    index('idx_roles_slug').on(table.slug),
+    index('idx_roles_org_id').on(table.orgId),
   ],
 );
 
@@ -28,16 +27,16 @@ export const permissions = pgTable(
   'permissions',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    key: varchar('key', { length: 100 }).notNull().unique(), // e.g. "hr.employees.view"
-    name: varchar('name', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 100 }).notNull().unique(), // e.g. "hr.employees.view_all"
+    name: varchar('name', { length: 255 }),
     description: text('description'),
-    moduleKey: varchar('module_key', { length: 50 }).default('core').notNull(),
-    category: varchar('category', { length: 50 }).default('general').notNull(),
+    module: varchar('module', { length: 50 }).default('core').notNull(),
+    action: varchar('action', { length: 50 }).default('view').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index('idx_permissions_key').on(table.key),
-    index('idx_permissions_module').on(table.moduleKey),
+    index('idx_permissions_slug').on(table.slug),
+    index('idx_permissions_module').on(table.module),
   ],
 );
 
@@ -51,7 +50,6 @@ export const rolePermissions = pgTable(
     permissionId: uuid('permission_id')
       .notNull()
       .references(() => permissions.id, { onDelete: 'cascade' }),
-    scope: varchar('scope', { length: 50 }).default('organization').notNull(), // organization, department, branch, own
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
@@ -70,15 +68,11 @@ export const userRoles = pgTable(
     roleId: uuid('role_id')
       .notNull()
       .references(() => roles.id, { onDelete: 'cascade' }),
-    organizationId: uuid('organization_id')
-      .notNull()
-      .references(() => organizations.id, { onDelete: 'cascade' }),
     assignedAt: timestamp('assigned_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.userId, table.roleId] }),
     index('idx_user_roles_user_id').on(table.userId),
-    index('idx_user_roles_org_id').on(table.organizationId),
   ],
 );
 

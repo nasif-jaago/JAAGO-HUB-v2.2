@@ -13,16 +13,38 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
 
     try {
       const supabaseAdmin = getSupabaseAdminClient();
+      let deletedUserId = id;
+      let targetEmail: string | null = null;
+
       if (id.includes('@')) {
-        // If passed as email
+        targetEmail = id.toLowerCase().trim();
         const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-        const match = userList?.users?.find((u) => u.email?.toLowerCase() === id.toLowerCase());
+        const match = userList?.users?.find((u) => u.email?.toLowerCase() === targetEmail);
         if (match) {
+          deletedUserId = match.id;
           await supabaseAdmin.auth.admin.deleteUser(match.id);
         }
       } else {
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(id);
+        if (userData?.user?.email) {
+          targetEmail = userData.user.email.toLowerCase().trim();
+        }
         await supabaseAdmin.auth.admin.deleteUser(id);
       }
+
+      // Clear is_user flag on the linked employee record so "Create User" reappears
+      await supabaseAdmin
+        .from('employees')
+        .update({ is_user: false, user_id: null, updated_at: new Date().toISOString() })
+        .eq('user_id', deletedUserId);
+
+      if (targetEmail) {
+        await supabaseAdmin
+          .from('employees')
+          .update({ is_user: false, user_id: null, updated_at: new Date().toISOString() })
+          .or(`work_email.ilike.${targetEmail},personal_email.ilike.${targetEmail}`);
+      }
+
     } catch (err: any) {
       logger.warn('SYSTEM', 'user.delete_supabase_notice', { metadata: { userId: id, error: err?.message } });
     }

@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@casl/react": "^7.0.1",
     "@jaago/auth": "*",
     "@jaago/authz": "*",
     "@jaago/config": "*",

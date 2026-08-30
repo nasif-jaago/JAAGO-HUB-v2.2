@@ -245,6 +245,13 @@ export async function DELETE(request: Request) {
       for (const id of ids) {
         await supabaseAdmin.auth.admin.deleteUser(id);
       }
+
+      // Clear is_user flag on all linked employee records
+      await supabaseAdmin
+        .from('employees')
+        .update({ is_user: false, user_id: null, updated_at: new Date().toISOString() })
+        .in('user_id', ids);
+
     } catch (err: any) {
       logger.warn('SYSTEM', 'users.delete_supabase_error', { metadata: { error: err?.message } });
     }
