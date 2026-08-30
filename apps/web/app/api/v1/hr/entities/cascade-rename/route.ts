@@ -66,13 +66,19 @@ export async function POST(request: Request) {
           .select('id');
         affectedEmployees = empData?.length || 0;
 
-        // 2. Update Projects (parent_department_name)
+        // 2. Update child Departments (parent_department_name)
+        await supabaseAdmin
+          .from('departments')
+          .update({ parent_department_name: trimmedNew, updated_at: new Date().toISOString() })
+          .ilike('parent_department_name', trimmedOld);
+
+        // 3. Update Projects (parent_department_name)
         await supabaseAdmin
           .from('projects')
           .update({ parent_department_name: trimmedNew, updated_at: new Date().toISOString() })
           .ilike('parent_department_name', trimmedOld);
 
-        // 3. Update Teams (department_or_project)
+        // 4. Update Teams (department_or_project)
         await supabaseAdmin
           .from('teams')
           .update({ department_or_project: trimmedNew, updated_at: new Date().toISOString() })

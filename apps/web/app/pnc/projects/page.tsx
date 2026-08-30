@@ -160,6 +160,16 @@ export default function ProjectsPage() {
 
     await saveProjectToSupabase(payload, editingItem?.name);
 
+    if (editingItem?.name && editingItem.name.trim() !== payload.name.trim()) {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.project?.trim().toLowerCase() === editingItem.name.trim().toLowerCase()
+            ? { ...e, project: payload.name.trim() }
+            : e
+        )
+      );
+    }
+
     setProjects((prev) => {
       const idx = prev.findIndex((p) => p.id === payload.id);
       if (idx >= 0) {
@@ -171,7 +181,7 @@ export default function ProjectsPage() {
     });
 
     setShowModal(false);
-    showToast(editingItem ? 'Project updated successfully!' : 'Project created successfully!');
+    showToast(editingItem ? 'Project updated & employee list synced successfully!' : 'Project created successfully!');
   };
 
   const handleDelete = async (id: string) => {

@@ -16,6 +16,7 @@ import {
   Archive,
   RotateCw,
   Check,
+  Users,
 } from 'lucide-react';
 import {
   DepartmentItem,
@@ -73,14 +74,36 @@ export default function DepartmentsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    fetchDepartmentsFromSupabase().then((depts) => {
-      if (depts) setDepartments(depts);
-    });
-    fetchOrganizationsFromSupabase().then((orgs) => {
+    Promise.all([
+      fetchDepartmentsFromSupabase(),
+      fetchOrganizationsFromSupabase(),
+      fetchEmployeesFromSupabase(),
+    ]).then(([depts, orgs, emps]) => {
       if (orgs) setOrganizations(orgs);
-    });
-    fetchEmployeesFromSupabase().then((emps) => {
       if (emps) setEmployees(emps);
+      if (depts) {
+        const deptMap = new Map<string, DepartmentItem>();
+        depts.forEach((d) => deptMap.set(d.name.trim().toLowerCase(), d));
+
+        if (emps && emps.length > 0) {
+          emps.forEach((e) => {
+            if (e.department && e.department.trim()) {
+              const key = e.department.trim().toLowerCase();
+              if (!deptMap.has(key)) {
+                deptMap.set(key, {
+                  id: `dept-${e.department.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                  name: e.department.trim(),
+                  code: e.department.trim().slice(0, 4).toUpperCase(),
+                  organizationName: e.organization || 'JAAGO Foundation',
+                  organizationId: orgs?.find((o) => o.name === e.organization)?.id || 'org-1',
+                  isArchived: false,
+                });
+              }
+            }
+          });
+        }
+        setDepartments(Array.from(deptMap.values()));
+      }
     });
   }, []);
 
@@ -154,18 +177,32 @@ export default function DepartmentsPage() {
 
     await saveDepartmentToSupabase(payload, editingItem?.name);
 
+    if (editingItem?.name && editingItem.name.trim() !== payload.name.trim()) {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.department?.trim().toLowerCase() === editingItem.name.trim().toLowerCase()
+            ? { ...e, department: payload.name.trim() }
+            : e
+        )
+      );
+    }
+
     setDepartments((prev) => {
-      const idx = prev.findIndex((d) => d.id === payload.id);
+      // Try to find by id first; fallback to old name (handles synthetic IDs from employee data)
+      const oldNameLower = editingItem?.name?.trim().toLowerCase();
+      const idx = prev.findIndex(
+        (d) => d.id === payload.id || (oldNameLower && d.name.trim().toLowerCase() === oldNameLower)
+      );
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = payload;
+        next[idx] = { ...payload, id: prev[idx]?.id || payload.id }; // preserve real id
         return next;
       }
       return [payload, ...prev];
     });
 
     setShowModal(false);
-    showToast(editingItem ? 'Department updated successfully!' : 'Department created successfully!');
+    showToast(editingItem ? 'Department updated & employee list synced successfully!' : 'Department created successfully!');
   };
 
   const handleDelete = async (id: string) => {
@@ -417,6 +454,7 @@ export default function DepartmentsPage() {
                 <th className="py-3.5 px-4">Department Name</th>
                 <th className="py-3.5 px-4">Code / Short Name</th>
                 <th className="py-3.5 px-4">Organization</th>
+                <th className="py-3.5 px-4 text-center">Employees</th>
                 <th className="py-3.5 px-4">Parent Department</th>
                 <th className="py-3.5 px-4">Department Head</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
@@ -425,6 +463,13 @@ export default function DepartmentsPage() {
             <tbody className="divide-y divide-border/40 font-medium">
               {filtered.map((dept) => {
                 const isSelected = selectedIds.includes(dept.id);
+                const staffCount = employees.filter(
+                  (e) =>
+                    e.department &&
+                    e.department.trim().toLowerCase() === dept.name.trim().toLowerCase() &&
+                    e.status !== 'Archived' &&
+                    !e.isArchived
+                ).length;
 
                 return (
                   <tr
@@ -464,6 +509,16 @@ export default function DepartmentsPage() {
                     </td>
                     <td className="py-3.5 px-4 text-foreground font-semibold">
                       {dept.organizationName || 'JAAGO Foundation'}
+                    </td>
+                    <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <Link
+                        href={`/pnc/employees?dept=${encodeURIComponent(dept.name)}`}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-black hover:bg-amber-500/25 transition cursor-pointer"
+                        title={`View ${staffCount} employees in ${dept.name}`}
+                      >
+                        <Users className="h-3 w-3" />
+                        <span>{staffCount} Staff</span>
+                      </Link>
                     </td>
                     <td className="py-3.5 px-4">
                       {dept.parentDepartmentName ? (

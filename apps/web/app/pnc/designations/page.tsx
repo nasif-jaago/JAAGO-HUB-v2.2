@@ -14,6 +14,7 @@ import {
   Archive,
   RotateCw,
   Check,
+  Users,
 } from 'lucide-react';
 import {
   DesignationItem,
@@ -21,6 +22,8 @@ import {
   saveDesignationToSupabase,
   deleteDesignationFromSupabase,
 } from '@/lib/supabase-organization';
+import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
+import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
 
 const COMMON_GRADES = [
   'Executive',
@@ -40,6 +43,7 @@ const COMMON_GRADES = [
 
 export default function DesignationsPage() {
   const [designations, setDesignations] = useState<DesignationItem[]>([]);
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGradeFilter, setSelectedGradeFilter] = useState('');
@@ -59,8 +63,34 @@ export default function DesignationsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    fetchDesignationsFromSupabase().then((data) => {
-      if (data) setDesignations(data);
+    Promise.all([
+      fetchDesignationsFromSupabase(),
+      fetchEmployeesFromSupabase(),
+    ]).then(([desigs, emps]) => {
+      if (emps) setEmployees(emps);
+      if (desigs) {
+        const desigMap = new Map<string, DesignationItem>();
+        desigs.forEach((d) => desigMap.set(d.name.trim().toLowerCase(), d));
+
+        if (emps && emps.length > 0) {
+          emps.forEach((e) => {
+            if (e.designation && e.designation.trim()) {
+              const key = e.designation.trim().toLowerCase();
+              if (!desigMap.has(key)) {
+                desigMap.set(key, {
+                  id: `des-${e.designation.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                  name: e.designation.trim(),
+                  code: e.designation.trim().slice(0, 4).toUpperCase(),
+                  grade: 'Staff',
+                  description: '',
+                  isArchived: false,
+                });
+              }
+            }
+          });
+        }
+        setDesignations(Array.from(desigMap.values()));
+      }
     });
   }, []);
 
@@ -103,6 +133,16 @@ export default function DesignationsPage() {
 
     await saveDesignationToSupabase(payload, editingItem?.name);
 
+    if (editingItem?.name && editingItem.name.trim() !== payload.name.trim()) {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.designation?.trim().toLowerCase() === editingItem.name.trim().toLowerCase()
+            ? { ...e, designation: payload.name.trim() }
+            : e
+        )
+      );
+    }
+
     setDesignations((prev) => {
       const idx = prev.findIndex((d) => d.id === payload.id);
       if (idx >= 0) {
@@ -114,7 +154,7 @@ export default function DesignationsPage() {
     });
 
     setShowModal(false);
-    showToast(editingItem ? 'Designation updated successfully!' : 'Designation created successfully!');
+    showToast(editingItem ? 'Designation updated & employee list synced successfully!' : 'Designation created successfully!');
   };
 
   const handleDelete = async (id: string) => {
@@ -366,6 +406,7 @@ export default function DesignationsPage() {
                 <th className="py-3.5 px-4">Designation Name</th>
                 <th className="py-3.5 px-4">Code</th>
                 <th className="py-3.5 px-4">Grade</th>
+                <th className="py-3.5 px-4 text-center">Employees</th>
                 <th className="py-3.5 px-4">Description</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
@@ -373,6 +414,13 @@ export default function DesignationsPage() {
             <tbody className="divide-y divide-border/40 font-medium">
               {filtered.map((des) => {
                 const isSelected = selectedIds.includes(des.id);
+                const staffCount = employees.filter(
+                  (e) =>
+                    e.designation &&
+                    e.designation.trim().toLowerCase() === des.name.trim().toLowerCase() &&
+                    e.status !== 'Archived' &&
+                    !e.isArchived
+                ).length;
 
                 return (
                   <tr
@@ -414,6 +462,16 @@ export default function DesignationsPage() {
                       <span className="px-2.5 py-1 rounded-lg bg-surface border border-border text-[11px] font-bold text-foreground">
                         {des.grade || 'Staff'}
                       </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                      <Link
+                        href={`/pnc/employees?desig=${encodeURIComponent(des.name)}`}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-black hover:bg-amber-500/25 transition cursor-pointer"
+                        title={`View ${staffCount} employees with designation ${des.name}`}
+                      >
+                        <Users className="h-3 w-3" />
+                        <span>{staffCount} Staff</span>
+                      </Link>
                     </td>
                     <td className="py-3.5 px-4 text-muted-foreground max-w-xs truncate">
                       {des.description || 'Standard institutional role responsibilities.'}

@@ -199,6 +199,16 @@ export default function TeamsPage() {
 
     await saveTeamToSupabase(payload, editingItem?.name);
 
+    if (editingItem?.name && editingItem.name.trim() !== payload.name.trim()) {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.team?.trim().toLowerCase() === editingItem.name.trim().toLowerCase()
+            ? { ...e, team: payload.name.trim() }
+            : e
+        )
+      );
+    }
+
     setTeams((prev) => {
       const idx = prev.findIndex((t) => t.id === payload.id);
       if (idx >= 0) {
@@ -210,7 +220,7 @@ export default function TeamsPage() {
     });
 
     setShowModal(false);
-    showToast(editingItem ? 'Team updated successfully!' : 'Team created successfully!');
+    showToast(editingItem ? 'Team updated & employee list synced successfully!' : 'Team created successfully!');
   };
 
   const handleDelete = async (id: string) => {

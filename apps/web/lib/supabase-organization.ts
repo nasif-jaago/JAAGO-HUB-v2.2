@@ -648,6 +648,16 @@ function setLocalCache<T>(key: string, data: T[]) {
   } catch {}
 }
 
+export function notifyEntityUpdated(entityType: 'organization' | 'department' | 'designation' | 'branch' | 'project' | 'team', item: any) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('jaago_entity_updated', {
+        detail: { entityType, item },
+      })
+    );
+  }
+}
+
 export async function cascadeRenameEntity(
   entityType: 'organization' | 'department' | 'designation' | 'branch' | 'project' | 'team',
   oldName: string,
@@ -691,6 +701,13 @@ export async function cascadeRenameEntity(
         }
       }
     } catch {}
+
+    // Dispatch global real-time event
+    window.dispatchEvent(
+      new CustomEvent('jaago_entity_renamed', {
+        detail: { entityType, oldName: trimmedOld, newName: trimmedNew },
+      })
+    );
   }
 
   // 2. Call backend cascading rename API for database synchronization
@@ -1109,7 +1126,6 @@ export async function saveDepartmentToSupabase(dept: DepartmentItem, oldName?: s
     const supabase = getSupabase();
     if (!supabase) return true;
     const payload = {
-      id: dept.id || `dept-${Date.now()}`,
       name: dept.name,
       code: dept.code || '',
       organization_id: dept.organizationId || '',
@@ -1121,7 +1137,42 @@ export async function saveDepartmentToSupabase(dept: DepartmentItem, oldName?: s
       description: dept.description || '',
       updated_at: new Date().toISOString(),
     };
-    const { error } = await supabase.from('departments').upsert(payload, { onConflict: 'id' });
+
+    // For existing departments: try to UPDATE by id first.
+    // If the id is a local-generated synthetic id (not a UUID), fall back to matching by old name.
+    const isRealUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dept.id || '');
+
+    if (dept.id && isRealUUID) {
+      // Proper UUID — do a clean UPDATE by id
+      const { error } = await supabase
+        .from('departments')
+        .update(payload)
+        .eq('id', dept.id);
+      if (!error) return true;
+    }
+
+    // Synthetic / no id — try UPDATE by old name (case-insensitive) if we have it
+    if (previousName) {
+      const { data: matched, error: fetchErr } = await supabase
+        .from('departments')
+        .select('id')
+        .ilike('name', previousName)
+        .limit(1);
+      if (!fetchErr && matched && matched.length > 0) {
+        const realId = matched[0]?.id;
+        if (!realId) return false;
+        const { error } = await supabase
+          .from('departments')
+          .update(payload)
+          .eq('id', realId);
+        return !error;
+      }
+    }
+
+    // Truly new department — INSERT with a fresh UUID
+    const { error } = await supabase
+      .from('departments')
+      .insert({ ...payload, id: dept.id && isRealUUID ? dept.id : undefined });
     return !error;
   } catch {
     return true;

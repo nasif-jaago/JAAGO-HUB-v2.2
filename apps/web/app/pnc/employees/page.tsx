@@ -86,9 +86,10 @@ export default function PnCEmployeesPage() {
   const [selectedProfile, setSelectedProfile] = useState<FullEmployeeProfile | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDept, setSelectedDept] = useState('');
   const [selectedOrg, setSelectedOrg] = useState('');
+  const [selectedDept, setSelectedDept] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
+  const [selectedProject, setSelectedProject] = useState('');
   const [selectedDesignation, setSelectedDesignation] = useState('');
 
   // Master Organization Data for Filters & Cascades
@@ -371,19 +372,83 @@ export default function PnCEmployeesPage() {
     }
   }, []);
 
+  // Live real-time synchronization when any entity is renamed, updated, or added in Organization/Department/Project/Team modules
+  useEffect(() => {
+    const handleEntityRenamed = (event: any) => {
+      const { entityType, oldName, newName } = event.detail || {};
+      if (!entityType || !oldName || !newName) return;
+
+      const trimmedOld = oldName.trim().toLowerCase();
+      const trimmedNew = newName.trim();
+
+      // 1. Immediately update all in-memory employee records
+      setEmployees((prev) =>
+        prev.map((emp) => {
+          const updated = { ...emp };
+          if (entityType === 'organization' && emp.organization?.trim().toLowerCase() === trimmedOld) {
+            updated.organization = trimmedNew;
+          }
+          if (entityType === 'department' && emp.department?.trim().toLowerCase() === trimmedOld) {
+            updated.department = trimmedNew;
+          }
+          if (entityType === 'designation' && emp.designation?.trim().toLowerCase() === trimmedOld) {
+            updated.designation = trimmedNew;
+          }
+          if (entityType === 'branch' && emp.branch?.trim().toLowerCase() === trimmedOld) {
+            updated.branch = trimmedNew;
+          }
+          if (entityType === 'project' && emp.project?.trim().toLowerCase() === trimmedOld) {
+            updated.project = trimmedNew;
+          }
+          if (entityType === 'team' && emp.team?.trim().toLowerCase() === trimmedOld) {
+            updated.team = trimmedNew;
+          }
+          return updated;
+        })
+      );
+
+      // 2. Refresh master entity lists
+      fetchOrganizationsFromSupabase().then(setMasterOrganizations);
+      fetchDepartmentsFromSupabase().then(setMasterDepartments);
+      fetchBranchesFromSupabase().then(setMasterBranches);
+      fetchDesignationsFromSupabase().then(setMasterDesignations);
+      fetchProjectsFromSupabase().then(setMasterProjects);
+      fetchTeamsFromSupabase().then(setMasterTeams);
+    };
+
+    const handleEntityUpdated = () => {
+      fetchOrganizationsFromSupabase().then(setMasterOrganizations);
+      fetchDepartmentsFromSupabase().then(setMasterDepartments);
+      fetchBranchesFromSupabase().then(setMasterBranches);
+      fetchDesignationsFromSupabase().then(setMasterDesignations);
+      fetchProjectsFromSupabase().then(setMasterProjects);
+      fetchTeamsFromSupabase().then(setMasterTeams);
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'jaago_pnc_employees_v2' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setEmployees(parsed);
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener('jaago_entity_renamed', handleEntityRenamed);
+    window.addEventListener('jaago_entity_updated', handleEntityUpdated);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('jaago_entity_renamed', handleEntityRenamed);
+      window.removeEventListener('jaago_entity_updated', handleEntityUpdated);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
 // ═══════════════════════════════════════════════════════════════════════════
 // FILTER NORMALIZATION & CANONICAL DEDUPLICATION UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
-
-function normalizeFilterKey(str: string | null | undefined): string {
-  if (!str) return '';
-  return str
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/\s*\([^)]*\)\s*/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
 
 function normalizeOrgKey(str: string | null | undefined): string {
   if (!str) return '';
@@ -410,151 +475,167 @@ function toCanonicalOrgName(raw: string): string {
     .join(' ');
 }
 
-function toCleanDeptName(raw: string): string {
-  let clean = raw.replace(/\s*\((JFT|JF|JFI|Trust|Foundation)\)\s*/gi, '').trim();
-  clean = clean.replace(/&/g, '&');
-  return clean;
-}
-
-  // ── DYNAMIC FILTERS DATA (BOUND TO ORGANIZATION MASTER DATA) ──
-  // 1. Available Organizations (Deduplicated, canonical display, sorted)
+  // ── DYNAMIC HIERARCHICAL FILTERS DATA (CONNECTED TO ORGANIZATION MASTER DATA) ──
+  // 1. Available Organizations (Deduplicated, with live employee counts)
   const availableOrganizations = useMemo(() => {
-    const orgMap = new Map<string, string>();
+    const orgMap = new Map<string, { label: string; count: number }>();
 
     masterOrganizations.forEach((o) => {
       if (o.name && !o.isArchived) {
-        const key = normalizeOrgKey(o.name);
+        const canonical = toCanonicalOrgName(o.name);
+        const key = canonical.toLowerCase();
         if (!orgMap.has(key)) {
-          orgMap.set(key, toCanonicalOrgName(o.name));
+          orgMap.set(key, { label: canonical, count: 0 });
         }
       }
     });
 
     employees.forEach((e) => {
-      if (e.organization && e.organization.trim()) {
-        const key = normalizeOrgKey(e.organization);
-        if (!orgMap.has(key)) {
-          orgMap.set(key, toCanonicalOrgName(e.organization));
-        }
+      if (!e.organization || !e.organization.trim()) return;
+      const canonical = toCanonicalOrgName(e.organization);
+      const key = canonical.toLowerCase();
+      const existing = orgMap.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        orgMap.set(key, { label: canonical, count: 1 });
       }
     });
 
-    return Array.from(orgMap.values()).sort((a, b) => a.localeCompare(b));
+    return Array.from(orgMap.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [masterOrganizations, employees]);
 
-  // Selected Organization Entity (matched by name)
-  const selectedOrgEntity = useMemo(() => {
-    if (!selectedOrg) return null;
-    return (
-      masterOrganizations.find(
-        (o) => normalizeOrgKey(o.name) === normalizeOrgKey(selectedOrg)
-      ) || null
-    );
-  }, [selectedOrg, masterOrganizations]);
-
-  // 2. Available Departments (Deduplicated, cascaded based on selected organization)
+  // 2. Available Departments (Connected to selected Organization, with live counts)
   const availableDepartments = useMemo(() => {
-    const deptMap = new Map<string, string>();
+    const deptMap = new Map<string, { label: string; count: number }>();
 
     masterDepartments.forEach((d) => {
       if (!d.name || d.isArchived) return;
-      if (selectedOrg) {
-        const matchOrgName =
-          normalizeOrgKey(d.organizationName) === normalizeOrgKey(selectedOrg);
-        const matchOrgId = selectedOrgEntity && d.organizationId === selectedOrgEntity.id;
-        if (matchOrgName || matchOrgId || !d.organizationId) {
-          const key = normalizeFilterKey(d.name);
-          if (!deptMap.has(key)) {
-            deptMap.set(key, toCleanDeptName(d.name));
-          }
-        }
-      } else {
-        const key = normalizeFilterKey(d.name);
-        if (!deptMap.has(key)) {
-          deptMap.set(key, toCleanDeptName(d.name));
-        }
+      const key = d.name.trim().toLowerCase();
+      if (!deptMap.has(key)) {
+        deptMap.set(key, { label: d.name.trim(), count: 0 });
       }
     });
 
     employees.forEach((e) => {
       if (!e.department || !e.department.trim()) return;
       if (selectedOrg) {
-        if (normalizeOrgKey(e.organization) === normalizeOrgKey(selectedOrg)) {
-          const key = normalizeFilterKey(e.department);
-          if (!deptMap.has(key)) {
-            deptMap.set(key, toCleanDeptName(e.department));
-          }
-        }
+        if (normalizeOrgKey(e.organization) !== normalizeOrgKey(selectedOrg)) return;
+      }
+      const key = e.department.trim().toLowerCase();
+      const existing = deptMap.get(key);
+      if (existing) {
+        existing.count += 1;
       } else {
-        const key = normalizeFilterKey(e.department);
-        if (!deptMap.has(key)) {
-          deptMap.set(key, toCleanDeptName(e.department));
-        }
+        deptMap.set(key, { label: e.department.trim(), count: 1 });
       }
     });
 
-    return Array.from(deptMap.values()).sort((a, b) => a.localeCompare(b));
-  }, [masterDepartments, employees, selectedOrg, selectedOrgEntity]);
+    return Array.from(deptMap.values())
+      .filter((d) => d.count > 0 || !selectedOrg)
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [masterDepartments, employees, selectedOrg]);
 
-  // 3. Available Branches (Deduplicated, cascaded based on selected organization)
+  // 3. Available Branches (Connected to selected Organization, with live counts)
   const availableBranches = useMemo(() => {
-    const branchMap = new Map<string, string>();
+    const branchMap = new Map<string, { label: string; count: number }>();
 
     masterBranches.forEach((b) => {
       if (!b.name) return;
-      if (selectedOrg) {
-        if (selectedOrgEntity && b.organizationId === selectedOrgEntity.id) {
-          const key = normalizeFilterKey(b.name);
-          if (!branchMap.has(key)) branchMap.set(key, b.name.trim());
-        }
-      } else {
-        const key = normalizeFilterKey(b.name);
-        if (!branchMap.has(key)) branchMap.set(key, b.name.trim());
+      const key = b.name.trim().toLowerCase();
+      if (!branchMap.has(key)) {
+        branchMap.set(key, { label: b.name.trim(), count: 0 });
       }
     });
 
     employees.forEach((e) => {
       if (!e.branch || !e.branch.trim()) return;
       if (selectedOrg) {
-        if (normalizeOrgKey(e.organization) === normalizeOrgKey(selectedOrg)) {
-          const key = normalizeFilterKey(e.branch);
-          if (!branchMap.has(key)) branchMap.set(key, e.branch.trim());
-        }
+        if (normalizeOrgKey(e.organization) !== normalizeOrgKey(selectedOrg)) return;
+      }
+      const key = e.branch.trim().toLowerCase();
+      const existing = branchMap.get(key);
+      if (existing) {
+        existing.count += 1;
       } else {
-        const key = normalizeFilterKey(e.branch);
-        if (!branchMap.has(key)) branchMap.set(key, e.branch.trim());
+        branchMap.set(key, { label: e.branch.trim(), count: 1 });
       }
     });
 
-    return Array.from(branchMap.values()).sort((a, b) => a.localeCompare(b));
-  }, [masterBranches, employees, selectedOrg, selectedOrgEntity]);
+    return Array.from(branchMap.values())
+      .filter((b) => b.count > 0 || !selectedOrg)
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [masterBranches, employees, selectedOrg]);
 
-  // 4. Available Designations (Deduplicated, sorted)
+  // 4. Available Projects (Connected to selected Organization & Department, with live counts)
+  const availableProjects = useMemo(() => {
+    const prjMap = new Map<string, { label: string; count: number }>();
+
+    masterProjects.forEach((p) => {
+      if (p.name && !p.isArchived) {
+        const key = p.name.trim().toLowerCase();
+        if (!prjMap.has(key)) {
+          prjMap.set(key, { label: p.name.trim(), count: 0 });
+        }
+      }
+    });
+
+    employees.forEach((e) => {
+      if (!e.project || !e.project.trim() || e.project === 'General Operations') return;
+      if (selectedOrg) {
+        if (normalizeOrgKey(e.organization) !== normalizeOrgKey(selectedOrg)) return;
+      }
+      if (selectedDept) {
+        if (e.department.trim().toLowerCase() !== selectedDept.trim().toLowerCase()) return;
+      }
+      const key = e.project.trim().toLowerCase();
+      const existing = prjMap.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        prjMap.set(key, { label: e.project.trim(), count: 1 });
+      }
+    });
+
+    return Array.from(prjMap.values())
+      .filter((p) => p.count > 0 || (!selectedOrg && !selectedDept))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [masterProjects, employees, selectedOrg, selectedDept]);
+
+  // 5. Available Designations (Connected to selected Organization & Department, with live counts)
   const availableDesignations = useMemo(() => {
-    const desigMap = new Map<string, string>();
+    const desigMap = new Map<string, { label: string; count: number }>();
 
     masterDesignations.forEach((d) => {
       if (d.name && !d.isArchived) {
-        const key = normalizeFilterKey(d.name);
-        if (!desigMap.has(key)) desigMap.set(key, d.name.trim());
+        const key = d.name.trim().toLowerCase();
+        if (!desigMap.has(key)) {
+          desigMap.set(key, { label: d.name.trim(), count: 0 });
+        }
       }
     });
 
     employees.forEach((e) => {
       if (!e.designation || !e.designation.trim()) return;
       if (selectedOrg) {
-        if (normalizeOrgKey(e.organization) === normalizeOrgKey(selectedOrg)) {
-          const key = normalizeFilterKey(e.designation);
-          if (!desigMap.has(key)) desigMap.set(key, e.designation.trim());
-        }
+        if (normalizeOrgKey(e.organization) !== normalizeOrgKey(selectedOrg)) return;
+      }
+      if (selectedDept) {
+        if (e.department.trim().toLowerCase() !== selectedDept.trim().toLowerCase()) return;
+      }
+      const key = e.designation.trim().toLowerCase();
+      const existing = desigMap.get(key);
+      if (existing) {
+        existing.count += 1;
       } else {
-        const key = normalizeFilterKey(e.designation);
-        if (!desigMap.has(key)) desigMap.set(key, e.designation.trim());
+        desigMap.set(key, { label: e.designation.trim(), count: 1 });
       }
     });
 
-    return Array.from(desigMap.values()).sort((a, b) => a.localeCompare(b));
-  }, [masterDesignations, employees, selectedOrg]);
+    return Array.from(desigMap.values())
+      .filter((d) => d.count > 0 || (!selectedOrg && !selectedDept))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [masterDesignations, employees, selectedOrg, selectedDept]);
 
   // Persist employees state to localStorage
   const persistEmployees = (updatedList: FullEmployeeProfile[]) => {
@@ -566,7 +647,7 @@ function toCleanDeptName(raw: string): string {
     }
   };
 
-  // Filter & Sort employees (Normalization & alias aware)
+  // Filter & Sort employees (Hierarchical connection across all entities)
   const filtered = useMemo(() => {
     const list = employees.filter((emp) => {
       const isArchived = emp.status === 'Archived' || Boolean(emp.isArchived);
@@ -591,7 +672,23 @@ function toCleanDeptName(raw: string): string {
         const matchEmail = (emp.workEmail || '').toLowerCase().includes(q);
         const matchDesig = (emp.designation || '').toLowerCase().includes(q);
         const matchDept = (emp.department || '').toLowerCase().includes(q);
-        if (!matchName && !matchCode && !matchEmail && !matchDesig && !matchDept) return false;
+        const matchOrg = (emp.organization || '').toLowerCase().includes(q);
+        const matchBranch = (emp.branch || '').toLowerCase().includes(q);
+        const matchProj = (emp.project || '').toLowerCase().includes(q);
+        const matchTeam = (emp.team || '').toLowerCase().includes(q);
+        if (
+          !matchName &&
+          !matchCode &&
+          !matchEmail &&
+          !matchDesig &&
+          !matchDept &&
+          !matchOrg &&
+          !matchBranch &&
+          !matchProj &&
+          !matchTeam
+        ) {
+          return false;
+        }
       }
 
       if (selectedOrg) {
@@ -601,19 +698,25 @@ function toCleanDeptName(raw: string): string {
       }
 
       if (selectedDept) {
-        if (normalizeFilterKey(emp.department) !== normalizeFilterKey(selectedDept)) {
+        if (emp.department.trim().toLowerCase() !== selectedDept.trim().toLowerCase()) {
           return false;
         }
       }
 
       if (selectedBranch) {
-        if (normalizeFilterKey(emp.branch) !== normalizeFilterKey(selectedBranch)) {
+        if (emp.branch.trim().toLowerCase() !== selectedBranch.trim().toLowerCase()) {
+          return false;
+        }
+      }
+
+      if (selectedProject) {
+        if ((emp.project || '').trim().toLowerCase() !== selectedProject.trim().toLowerCase()) {
           return false;
         }
       }
 
       if (selectedDesignation) {
-        if (normalizeFilterKey(emp.designation) !== normalizeFilterKey(selectedDesignation)) {
+        if (emp.designation.trim().toLowerCase() !== selectedDesignation.trim().toLowerCase()) {
           return false;
         }
       }
@@ -643,7 +746,18 @@ function toCleanDeptName(raw: string): string {
     }
 
     return list;
-  }, [employees, activeTab, searchQuery, selectedDept, selectedOrg, selectedBranch, selectedDesignation, sortKey, sortDirection]);
+  }, [
+    employees,
+    activeTab,
+    searchQuery,
+    selectedOrg,
+    selectedDept,
+    selectedBranch,
+    selectedProject,
+    selectedDesignation,
+    sortKey,
+    sortDirection,
+  ]);
 
   // Dynamic Cell Content Renderer
   const renderCellContent = (emp: FullEmployeeProfile, colKey: keyof FullEmployeeProfile) => {
@@ -1438,19 +1552,39 @@ function toCleanDeptName(raw: string): string {
         ))}
       </div>
 
-      {/* ── 3. SEARCH & FILTERS BAR ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+      {/* ── 3. SEARCH & HIERARCHICAL FILTERS BAR ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5">
+        {/* Search */}
         <div className="relative lg:col-span-2">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, ID, email, or department..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+            placeholder="Search by name, ID, email, keywords..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
           />
         </div>
 
+        {/* 1. Organization Filter */}
+        <div>
+          <select
+            value={selectedOrg}
+            onChange={(e) => {
+              setSelectedOrg(e.target.value);
+            }}
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm cursor-pointer"
+          >
+            <option value="">Organization (All)</option>
+            {availableOrganizations.map((org) => (
+              <option key={org.label} value={org.label}>
+                {org.label} {org.count > 0 ? `(${org.count})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 2. Department Filter */}
         <div>
           <select
             value={selectedDept}
@@ -1459,32 +1593,14 @@ function toCleanDeptName(raw: string): string {
           >
             <option value="">Department (All)</option>
             {availableDepartments.map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
+              <option key={dept.label} value={dept.label}>
+                {dept.label} {dept.count > 0 ? `(${dept.count})` : ''}
               </option>
             ))}
           </select>
         </div>
 
-        <div>
-          <select
-            value={selectedOrg}
-            onChange={(e) => {
-              setSelectedOrg(e.target.value);
-              setSelectedDept('');
-              setSelectedBranch('');
-            }}
-            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm cursor-pointer"
-          >
-            <option value="">Organization (All)</option>
-            {availableOrganizations.map((org) => (
-              <option key={org} value={org}>
-                {org}
-              </option>
-            ))}
-          </select>
-        </div>
-
+        {/* 3. Branch Filter */}
         <div>
           <select
             value={selectedBranch}
@@ -1493,13 +1609,30 @@ function toCleanDeptName(raw: string): string {
           >
             <option value="">Branch (All)</option>
             {availableBranches.map((branch) => (
-              <option key={branch} value={branch}>
-                {branch}
+              <option key={branch.label} value={branch.label}>
+                {branch.label} {branch.count > 0 ? `(${branch.count})` : ''}
               </option>
             ))}
           </select>
         </div>
 
+        {/* 4. Project Filter */}
+        <div>
+          <select
+            value={selectedProject}
+            onChange={(e) => setSelectedProject(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm cursor-pointer"
+          >
+            <option value="">Project (All)</option>
+            {availableProjects.map((prj) => (
+              <option key={prj.label} value={prj.label}>
+                {prj.label} {prj.count > 0 ? `(${prj.count})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 5. Designation Filter + Reset Button */}
         <div className="flex items-center space-x-2">
           <select
             value={selectedDesignation}
@@ -1508,21 +1641,23 @@ function toCleanDeptName(raw: string): string {
           >
             <option value="">Designation (All)</option>
             {availableDesignations.map((desig) => (
-              <option key={desig} value={desig}>
-                {desig}
+              <option key={desig.label} value={desig.label}>
+                {desig.label} {desig.count > 0 ? `(${desig.count})` : ''}
               </option>
             ))}
           </select>
           <button
+            type="button"
             onClick={() => {
               setSearchQuery('');
-              setSelectedDept('');
               setSelectedOrg('');
+              setSelectedDept('');
               setSelectedBranch('');
+              setSelectedProject('');
               setSelectedDesignation('');
             }}
-            className="p-2.5 rounded-2xl bg-card border border-border text-muted-foreground hover:text-foreground transition cursor-pointer flex-shrink-0"
-            title="Reset Filters"
+            className="p-2.5 rounded-2xl bg-card border border-border text-muted-foreground hover:text-foreground transition cursor-pointer flex-shrink-0 hover:border-amber-500/50 hover:text-amber-500"
+            title="Reset All Filters"
           >
             <RotateCw className="h-4 w-4" />
           </button>
