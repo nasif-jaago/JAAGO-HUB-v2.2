@@ -38,7 +38,7 @@ interface ReportRow {
   checkOutTime: string;
   lateBy: string;
   earlyOutBy: string;
-  status: 'Present' | 'Absent' | 'Late' | 'Early Out' | 'Checked In' | 'Checked Out' | 'Half Day' | 'On Duty' | 'Leave' | 'Holiday' | 'Weekend' | 'N/A';
+  status: 'Present' | 'Absent' | 'Late' | 'Early Out' | 'Checked In' | 'Checked Out' | 'Auto Check Out' | 'Half Day' | 'On Duty' | 'Leave' | 'Holiday' | 'Weekend' | 'N/A';
 }
 
 const FALLBACK_EMPLOYEES: Partial<FullEmployeeProfile>[] = [

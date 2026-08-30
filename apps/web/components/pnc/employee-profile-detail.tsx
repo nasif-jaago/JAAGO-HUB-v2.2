@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -208,7 +208,19 @@ export interface FullEmployeeProfile {
 
 interface EmployeeProfileDetailProps {
   initialData?: FullEmployeeProfile | null | undefined;
-  allEmployees: { id: string; name: string; code: string; designation: string; department: string; avatarUrl?: string | undefined }[];
+  allEmployees: {
+    id: string;
+    name: string;
+    code: string;
+    designation: string;
+    department: string;
+    avatarUrl?: string | undefined;
+    organization?: string | undefined;
+    branch?: string | undefined;
+    project?: string | undefined;
+    team?: string | undefined;
+    workingSchedule?: string | undefined;
+  }[];
   currentUser?: { fullName: string; jobTitle: string } | undefined;
   onSave: (updatedProfile: FullEmployeeProfile) => void;
   onBack: () => void;
@@ -426,6 +438,151 @@ export function EmployeeProfileDetail({
 
   // Track original for diff logging
   const originalStateRef = useRef<FullEmployeeProfile>(formData);
+
+  // Dynamically compute all unique departments (Supabase master + all employee departments + current profile)
+  const dynamicDepartments = useMemo(() => {
+    const map = new Map<string, string>();
+    departments.forEach((d) => {
+      if (d.name && d.name.trim()) map.set(d.name.trim().toLowerCase(), d.name.trim());
+    });
+    if (Array.isArray(allEmployees)) {
+      allEmployees.forEach((emp) => {
+        if (emp.department && emp.department.trim()) {
+          const key = emp.department.trim().toLowerCase();
+          if (!map.has(key)) map.set(key, emp.department.trim());
+        }
+      });
+    }
+    if (formData.department && formData.department.trim()) {
+      const key = formData.department.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, formData.department.trim());
+    }
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [departments, allEmployees, formData.department]);
+
+  // Dynamically compute all unique designations (Supabase master + all employee designations + current profile)
+  const dynamicDesignations = useMemo(() => {
+    const map = new Map<string, string>();
+    designations.forEach((d) => {
+      if (d.name && d.name.trim()) map.set(d.name.trim().toLowerCase(), d.name.trim());
+    });
+    if (Array.isArray(allEmployees)) {
+      allEmployees.forEach((emp) => {
+        if (emp.designation && emp.designation.trim()) {
+          const key = emp.designation.trim().toLowerCase();
+          if (!map.has(key)) map.set(key, emp.designation.trim());
+        }
+      });
+    }
+    if (formData.designation && formData.designation.trim()) {
+      const key = formData.designation.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, formData.designation.trim());
+    }
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [designations, allEmployees, formData.designation]);
+
+  // Dynamically compute all unique organizations
+  const dynamicOrganizations = useMemo(() => {
+    const map = new Map<string, string>();
+    organizations.forEach((o) => {
+      if (o.name && o.name.trim()) map.set(o.name.trim().toLowerCase(), o.name.trim());
+    });
+    if (Array.isArray(allEmployees)) {
+      allEmployees.forEach((emp) => {
+        if (emp.organization && emp.organization.trim()) {
+          const key = emp.organization.trim().toLowerCase();
+          if (!map.has(key)) map.set(key, emp.organization.trim());
+        }
+      });
+    }
+    if (formData.organization && formData.organization.trim()) {
+      const key = formData.organization.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, formData.organization.trim());
+    }
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [organizations, allEmployees, formData.organization]);
+
+  // Dynamically compute all unique branches
+  const dynamicBranches = useMemo(() => {
+    const map = new Map<string, string>();
+    branches.forEach((b) => {
+      if (b.name && b.name.trim()) map.set(b.name.trim().toLowerCase(), b.name.trim());
+    });
+    if (Array.isArray(allEmployees)) {
+      allEmployees.forEach((emp) => {
+        if (emp.branch && emp.branch.trim()) {
+          const key = emp.branch.trim().toLowerCase();
+          if (!map.has(key)) map.set(key, emp.branch.trim());
+        }
+      });
+    }
+    if (formData.branch && formData.branch.trim()) {
+      const key = formData.branch.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, formData.branch.trim());
+    }
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [branches, allEmployees, formData.branch]);
+
+  // Dynamically compute all unique projects
+  const dynamicProjects = useMemo(() => {
+    const map = new Map<string, string>();
+    projects.forEach((p) => {
+      if (p.name && p.name.trim()) map.set(p.name.trim().toLowerCase(), p.name.trim());
+    });
+    if (Array.isArray(allEmployees)) {
+      allEmployees.forEach((emp) => {
+        if (emp.project && emp.project.trim()) {
+          const key = emp.project.trim().toLowerCase();
+          if (!map.has(key)) map.set(key, emp.project.trim());
+        }
+      });
+    }
+    if (formData.project && formData.project.trim()) {
+      const key = formData.project.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, formData.project.trim());
+    }
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [projects, allEmployees, formData.project]);
+
+  // Dynamically compute all unique teams
+  const dynamicTeams = useMemo(() => {
+    const map = new Map<string, string>();
+    teams.forEach((t) => {
+      if (t.name && t.name.trim()) map.set(t.name.trim().toLowerCase(), t.name.trim());
+    });
+    if (Array.isArray(allEmployees)) {
+      allEmployees.forEach((emp) => {
+        if (emp.team && emp.team.trim()) {
+          const key = emp.team.trim().toLowerCase();
+          if (!map.has(key)) map.set(key, emp.team.trim());
+        }
+      });
+    }
+    if (formData.team && formData.team.trim()) {
+      const key = formData.team.trim().toLowerCase();
+      if (!map.has(key)) map.set(key, formData.team.trim());
+    }
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [teams, allEmployees, formData.team]);
+
+  // Dynamically compute all unique working schedules
+  const dynamicWorkingSchedules = useMemo(() => {
+    const set = new Set<string>();
+    shifts.forEach((s) => {
+      set.add(`${s.name} (${s.officeStart} - ${s.officeEnd})`);
+    });
+    if (Array.isArray(allEmployees)) {
+      allEmployees.forEach((emp) => {
+        if (emp.workingSchedule && emp.workingSchedule.trim()) {
+          set.add(emp.workingSchedule.trim());
+        }
+      });
+    }
+    if (formData.workingSchedule && formData.workingSchedule.trim()) {
+      set.add(formData.workingSchedule.trim());
+    }
+    return Array.from(set);
+  }, [shifts, allEmployees, formData.workingSchedule]);
 
   // Sync state whenever initialData updates asynchronously from Supabase
   useEffect(() => {
@@ -1066,23 +1223,11 @@ export function EmployeeProfileDetail({
                   onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
                   className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                 >
-                  {designations.length > 0 ? (
-                    designations.map((d) => (
-                      <option key={d.id} value={d.name}>
-                        {d.name}
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="Coordinator, Tech 4 Development">Coordinator, Tech 4 Development</option>
-                      <option value="Senior Program Officer">Senior Program Officer</option>
-                      <option value="Program Officer">Program Officer</option>
-                      <option value="Finance & Accounts Officer">Finance & Accounts Officer</option>
-                      <option value="HR Executive">HR Executive</option>
-                      <option value="Teacher / Educator">Teacher / Educator</option>
-                      <option value="Security Guard">Security Guard</option>
-                    </>
-                  )}
+                  {dynamicDesignations.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1157,25 +1302,11 @@ export function EmployeeProfileDetail({
                   onChange={(e) => setFormData({ ...formData, workingSchedule: e.target.value })}
                   className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                 >
-                  {shifts.length > 0 ? (
-                    shifts.map((s) => {
-                      const val = `${s.name} (${s.officeStart} - ${s.officeEnd})`;
-                      return (
-                        <option key={s.id} value={val}>
-                          {s.name} ({s.officeStart} - {s.officeEnd})
-                        </option>
-                      );
-                    })
-                  ) : (
-                    <>
-                      <option value="General Schedule (10:00 AM - 6:00 PM)">General Schedule (10:00 AM - 6:00 PM)</option>
-                      <option value="JAAGO HQ (10:00 AM - 06:00 PM)">JAAGO HQ (10:00 AM - 06:00 PM)</option>
-                      <option value="Full Time Shift 1 (09:00 AM - 05:00 PM)">Full Time Shift 1 (09:00 AM - 05:00 PM)</option>
-                      <option value="Full Time Shift 2 (10:00 AM - 06:00 PM)">Full Time Shift 2 (10:00 AM - 06:00 PM)</option>
-                      <option value="Full Time Shift 3 (07:30 AM - 04:30 PM)">Full Time Shift 3 (07:30 AM - 04:30 PM)</option>
-                      <option value="Full Time Shift 4 (08:00 AM - 05:00 PM)">Full Time Shift 4 (08:00 AM - 05:00 PM)</option>
-                    </>
-                  )}
+                  {dynamicWorkingSchedules.map((ws) => (
+                    <option key={ws} value={ws}>
+                      {ws}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -1248,21 +1379,11 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
-                    {organizations.length > 0 ? (
-                      organizations.map((org) => (
-                        <option key={org.id} value={org.name}>
-                          {org.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="JAAGO Foundation">JAAGO Foundation</option>
-                        <option value="JAAGO Foundation Trust">JAAGO Foundation Trust</option>
-                        <option value="JAAGO Foundation INC">JAAGO Foundation INC</option>
-                        <option value="JAAGO Foundation UK">JAAGO Foundation UK</option>
-                        <option value="EMK Center">EMK Center</option>
-                      </>
-                    )}
+                    {dynamicOrganizations.map((org) => (
+                      <option key={org} value={org}>
+                        {org}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1276,21 +1397,11 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
-                    {branches.length > 0 ? (
-                      branches.map((br) => (
-                        <option key={br.id} value={br.name}>
-                          {br.name} {br.code ? `(${br.code})` : ''}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="Head Office (Banani)">Head Office (Banani)</option>
-                        <option value="Rayer Bazar Free School">Rayer Bazar Free School</option>
-                        <option value="Chittagong Campus">Chittagong Campus</option>
-                        <option value="Cox's Bazar Branch">Cox&apos;s Bazar Branch</option>
-                        <option value="Rajshahi Campus">Rajshahi Campus</option>
-                      </>
-                    )}
+                    {dynamicBranches.map((br) => (
+                      <option key={br} value={br}>
+                        {br}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1304,23 +1415,11 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
-                    {departments.length > 0 ? (
-                      departments.map((dept) => (
-                        <option key={dept.id} value={dept.name}>
-                          {dept.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="Program Implementation">Program Implementation</option>
-                        <option value="Digital School Program">Digital School Program</option>
-                        <option value="Communications">Communications</option>
-                        <option value="Executive Office">Executive Office</option>
-                        <option value="Finance & Accounts">Finance &amp; Accounts</option>
-                        <option value="People and Culture">People and Culture</option>
-                        <option value="EMK Center">EMK Center</option>
-                      </>
-                    )}
+                    {dynamicDepartments.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1335,20 +1434,11 @@ export function EmployeeProfileDetail({
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
                     <option value="">Select Project</option>
-                    {projects.length > 0 ? (
-                      projects.map((p) => (
-                        <option key={p.id} value={p.name}>
-                          {p.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="Tech 4 Development">Tech 4 Development</option>
-                        <option value="Telco Digital School">Telco Digital School</option>
-                        <option value="Free School Education for Underprivileged">Free School Education for Underprivileged</option>
-                        <option value="Universal Youth Development & Volunteer Voice">Universal Youth Development & Volunteer Voice</option>
-                      </>
-                    )}
+                    {dynamicProjects.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1363,20 +1453,11 @@ export function EmployeeProfileDetail({
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
                     <option value="">Select Team</option>
-                    {teams.length > 0 ? (
-                      teams.map((t) => (
-                        <option key={t.id} value={t.name}>
-                          {t.name}
-                        </option>
-                      ))
-                    ) : (
-                      <>
-                        <option value="Core Development Team">Core Development Team</option>
-                        <option value="Tech 4 Development Engineering Core">Tech 4 Development Engineering Core</option>
-                        <option value="Curriculum & Pedagogy Team">Curriculum & Pedagogy Team</option>
-                        <option value="Banani Campus Security Squad">Banani Campus Security Squad</option>
-                      </>
-                    )}
+                    {dynamicTeams.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

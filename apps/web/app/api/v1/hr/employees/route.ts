@@ -43,11 +43,48 @@ export async function GET() {
   }
 }
 
+function sanitizeDate(val: any): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  if (!trimmed || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined' || trimmed === '-' || trimmed === '0000-00-00' || trimmed.toLowerCase() === 'none') {
+    return null;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const dmyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmyMatch && dmyMatch[1] && dmyMatch[2] && dmyMatch[3]) {
+    const d = dmyMatch[1];
+    const m = dmyMatch[2];
+    const y = dmyMatch[3];
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return null;
+}
+
+function sanitizeUuid(val: any): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === 'N/A') return null;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(trimmed) ? trimmed : null;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { logs, ...employeePayload } = body;
     const supabaseAdmin = getSupabaseAdminClient();
+
+    // Sanitize dates and UUID
+    if ('birthday' in employeePayload) employeePayload.birthday = sanitizeDate(employeePayload.birthday);
+    if ('joining_date' in employeePayload) employeePayload.joining_date = sanitizeDate(employeePayload.joining_date);
+    if ('contract_end_date' in employeePayload) employeePayload.contract_end_date = sanitizeDate(employeePayload.contract_end_date);
+    if ('adjustment_start_date' in employeePayload) employeePayload.adjustment_start_date = sanitizeDate(employeePayload.adjustment_start_date);
+    if ('adjustment_end_date' in employeePayload) employeePayload.adjustment_end_date = sanitizeDate(employeePayload.adjustment_end_date);
+    if ('custom_office_days_from' in employeePayload) employeePayload.custom_office_days_from = sanitizeDate(employeePayload.custom_office_days_from);
+    if ('custom_office_days_to' in employeePayload) employeePayload.custom_office_days_to = sanitizeDate(employeePayload.custom_office_days_to);
+    if ('user_id' in employeePayload) employeePayload.user_id = sanitizeUuid(employeePayload.user_id);
 
     let { data, error } = await supabaseAdmin
       .from('employees')

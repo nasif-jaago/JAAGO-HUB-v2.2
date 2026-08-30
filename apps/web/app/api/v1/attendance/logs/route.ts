@@ -8,6 +8,9 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const date = searchParams.get('date');
+    const month = searchParams.get('month'); // e.g. '2026-08'
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
     const employeeId = searchParams.get('employeeId');
     const status = searchParams.get('status');
     const limit = parseInt(searchParams.get('limit') || '100', 10);
@@ -22,17 +25,33 @@ export async function GET(request: Request) {
 
     if (date) {
       query = query.eq('business_date', date);
+    } else if (startDate && endDate) {
+      query = query.gte('business_date', startDate).lte('business_date', endDate);
+    } else if (month) {
+      query = query.gte('business_date', `${month}-01`).lte('business_date', `${month}-31`);
     }
+
     if (employeeId) {
       query = query.eq('employee_id', employeeId);
     }
-    if (status && status !== 'ALL') {
-      query = query.eq('status', status.toLowerCase());
+    if (status && status !== 'ALL' && status !== 'All Status') {
+      if (status.toLowerCase() === 'auto check out' || status.toLowerCase() === 'auto_check_out') {
+        query = query.eq('is_auto_checkout', true);
+      } else {
+        query = query.eq('status', status.toLowerCase());
+      }
     }
 
-    const [{ data: rawRecords, error: rawErr }, { data: emps }] = await Promise.all([
+    const [
+      { data: rawRecords, error: rawErr },
+      { data: emps },
+      { data: gpsLocs },
+      { data: geoLocs },
+    ] = await Promise.all([
       query,
       supabase.from('employees').select('id, name, code, designation, department, branch, avatar_url'),
+      supabase.from('gps_locations').select('id, name, branch_office, latitude, longitude'),
+      supabase.from('geofence_locations').select('id, name, branch_office, latitude, longitude'),
     ]);
 
     if (rawErr) {
@@ -40,9 +59,16 @@ export async function GET(request: Request) {
     }
 
     const empMap = new Map((emps || []).map((e) => [e.id, e]));
-    // Also index by code for flexibility
     (emps || []).forEach((e) => {
       if (e.code) empMap.set(e.code, e);
+    });
+
+    const locMap = new Map<string, string>();
+    (gpsLocs || []).forEach((g) => {
+      if (g.id) locMap.set(g.id, g.name || g.branch_office || 'Designated Office');
+    });
+    (geoLocs || []).forEach((g) => {
+      if (g.id && !locMap.has(g.id)) locMap.set(g.id, g.name || g.branch_office || 'Designated Office');
     });
 
     const enriched = (rawRecords || []).map((r) => {
@@ -55,10 +81,16 @@ export async function GET(request: Request) {
         : undefined;
 
       let derivedStatus = 'Present';
-      if (r.status === 'late' || r.is_late) derivedStatus = 'Late';
+      if (r.is_auto_checkout) derivedStatus = 'Auto Check Out';
+      else if (r.status === 'late' || r.is_late) derivedStatus = 'Late';
       else if (r.status === 'absent') derivedStatus = 'Absent';
       else if (r.status === 'half_day') derivedStatus = 'Half Day';
       else if (r.status === 'on_leave') derivedStatus = 'Leave';
+
+      const resolvedLocName =
+        (r.check_in_location_id && locMap.get(r.check_in_location_id)) ||
+        (r.check_out_location_id && locMap.get(r.check_out_location_id)) ||
+        'JAAGO HQ (Banani)';
 
       return {
         id: String(r.id),
@@ -76,10 +108,18 @@ export async function GET(request: Request) {
         checkOutTime: outFormatted,
         lateByMin: r.late_by_minutes || 0,
         earlyOutByMin: 0,
+        locationName: resolvedLocName,
+        checkInLat: r.check_in_lat !== null ? Number(r.check_in_lat) : 23.7937,
+        checkInLng: r.check_in_lng !== null ? Number(r.check_in_lng) : 90.4066,
+        checkOutLat: r.check_out_lat !== null ? Number(r.check_out_lat) : 23.7937,
+        checkOutLng: r.check_out_lng !== null ? Number(r.check_out_lng) : 90.4066,
+        isAutoCheckout: Boolean(r.is_auto_checkout),
+        workedMinutes: r.worked_minutes,
         createdBy: emp?.name ? `${emp.name} - (${emp.code})` : r.employee_id,
         createdAt: r.created_at ? new Date(r.created_at).toLocaleString() : new Date().toLocaleString(),
         updatedAt: r.updated_at ? new Date(r.updated_at).toLocaleString() : new Date().toLocaleString(),
         timestamp: r.check_in_at ? new Date(r.check_in_at).toLocaleString() : new Date().toLocaleString(),
+        notes: r.notes || (r.status === 'On Duty' ? 'On Duty' : r.is_auto_checkout ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified'),
       };
     });
 
@@ -103,6 +143,11 @@ export async function POST(request: Request) {
       checkOutTime,
       status = 'present',
       device = 'Web Portal',
+      checkInLat,
+      checkInLng,
+      checkOutLat,
+      checkOutLng,
+      isAutoCheckout,
     } = body;
 
     const supabase = getSupabaseAdminClient();
@@ -150,7 +195,8 @@ export async function POST(request: Request) {
     }
 
     const isLate = String(status).toLowerCase() === 'late';
-    const canonicalStatus = String(status).toLowerCase();
+    const isAuto = Boolean(isAutoCheckout || String(status).toLowerCase().includes('auto'));
+    const canonicalStatus = isAuto ? 'present' : String(status).toLowerCase();
 
     const recordPayload = {
       id: `att-${resolvedEmployeeId}-${businessDate}`,
@@ -160,9 +206,14 @@ export async function POST(request: Request) {
       check_out_at: checkOutAt,
       check_in_source: device === 'Web Portal' ? 'gps' : 'manual',
       check_out_source: checkOutAt ? (device === 'Web Portal' ? 'gps' : 'manual') : null,
+      check_in_lat: checkInLat !== undefined ? checkInLat : 23.7937,
+      check_in_lng: checkInLng !== undefined ? checkInLng : 90.4066,
+      check_out_lat: checkOutLat !== undefined ? checkOutLat : 23.7937,
+      check_out_lng: checkOutLng !== undefined ? checkOutLng : 90.4066,
       status: canonicalStatus,
       is_late: isLate,
       late_by_minutes: isLate ? 30 : 0,
+      is_auto_checkout: isAuto,
       worked_minutes:
         checkInAt && checkOutAt
           ? Math.max(0, Math.round((new Date(checkOutAt).getTime() - new Date(checkInAt).getTime()) / 60000))

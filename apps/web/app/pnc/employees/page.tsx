@@ -26,6 +26,18 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUpDown,
+  Sparkles,
+  ChevronDown,
+  Building2,
+  Briefcase,
+  MapPin,
+  Layers,
+  Users,
+  Clock,
+  User,
+  Shield,
+  CalendarDays,
+  DollarSign,
 } from 'lucide-react';
 import {
   EmployeeProfileDetail,
@@ -56,11 +68,16 @@ import {
   OrganizationBranch,
   DepartmentItem,
   DesignationItem,
+  ProjectItem,
+  TeamItem,
   fetchOrganizationsFromSupabase,
   fetchBranchesFromSupabase,
   fetchDepartmentsFromSupabase,
   fetchDesignationsFromSupabase,
+  fetchProjectsFromSupabase,
+  fetchTeamsFromSupabase,
 } from '@/lib/supabase-organization';
+import { getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
 
 export default function PnCEmployeesPage() {
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
@@ -79,6 +96,42 @@ export default function PnCEmployeesPage() {
   const [masterBranches, setMasterBranches] = useState<OrganizationBranch[]>([]);
   const [masterDepartments, setMasterDepartments] = useState<DepartmentItem[]>([]);
   const [masterDesignations, setMasterDesignations] = useState<DesignationItem[]>([]);
+  const [masterProjects, setMasterProjects] = useState<ProjectItem[]>([]);
+  const [masterTeams, setMasterTeams] = useState<TeamItem[]>([]);
+  const [masterShifts, setMasterShifts] = useState<ShiftItem[]>([]);
+
+  // ── MASS UPDATE MODAL STATE ──
+  const [showMassUpdateModal, setShowMassUpdateModal] = useState(false);
+  const [massUpdateField, setMassUpdateField] = useState<keyof FullEmployeeProfile>('department');
+  const [massUpdateValue, setMassUpdateValue] = useState<string>('');
+  const [massUpdateSearch, setMassUpdateSearch] = useState<string>('');
+  const [isApplyingMassUpdate, setIsApplyingMassUpdate] = useState(false);
+
+  // ── ODOO-STYLE INLINE CELL QUICK POPOVER STATE ──
+  const [activeInlineEditor, setActiveInlineEditor] = useState<{
+    empCode: string;
+    field: keyof FullEmployeeProfile;
+    anchorRect: { top: number; left: number; width: number; height: number; bottom: number };
+    currentValue: string;
+  } | null>(null);
+  const [inlineSearchQuery, setInlineSearchQuery] = useState('');
+  const inlineEditorRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close Inline Cell Editor Popover
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (inlineEditorRef.current && !inlineEditorRef.current.contains(event.target as Node)) {
+        setActiveInlineEditor(null);
+        setInlineSearchQuery('');
+      }
+    }
+    if (activeInlineEditor) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [activeInlineEditor]);
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -257,6 +310,22 @@ export default function PnCEmployeesPage() {
       fetchEmployeesFromSupabase()
         .then((remoteData) => {
           if (remoteData !== null && remoteData.length > 0) {
+            // Check if local cache has more employees (e.g. from an import) to avoid wiping them out
+            try {
+              const cached = localStorage.getItem('jaago_pnc_employees_v2');
+              if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > remoteData.length) {
+                  const map = new Map(parsed.map((e: FullEmployeeProfile) => [e.code.toLowerCase(), e]));
+                  remoteData.forEach((e) => map.set(e.code.toLowerCase(), e));
+                  const merged = Array.from(map.values());
+                  setEmployees(merged);
+                  bulkImportEmployeesToSupabase(merged);
+                  return;
+                }
+              }
+            } catch {}
+
             setEmployees(remoteData);
             try {
               localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(remoteData));
@@ -281,17 +350,23 @@ export default function PnCEmployeesPage() {
           }
         });
 
-      // Fetch Organization Master Data for dynamic filters
+      // Fetch Organization Master Data for dynamic filters & mass updates
       Promise.all([
         fetchOrganizationsFromSupabase(),
         fetchBranchesFromSupabase(),
         fetchDepartmentsFromSupabase(),
         fetchDesignationsFromSupabase(),
-      ]).then(([orgs, branches, depts, desigs]) => {
+        fetchProjectsFromSupabase(),
+        fetchTeamsFromSupabase(),
+      ]).then(([orgs, branches, depts, desigs, projs, tms]) => {
         if (orgs) setMasterOrganizations(orgs);
         if (branches) setMasterBranches(branches);
         if (depts) setMasterDepartments(depts);
         if (desigs) setMasterDesignations(desigs);
+        if (projs) setMasterProjects(projs);
+        if (tms) setMasterTeams(tms);
+        const shifts = getLocalShifts();
+        if (shifts) setMasterShifts(shifts);
       });
     }
   }, []);
@@ -896,6 +971,319 @@ function toCleanDeptName(raw: string): string {
     }
   };
 
+  // ── MASS EDITABLE FIELDS DEFINITION ──
+  const MASS_EDITABLE_FIELDS: { key: keyof FullEmployeeProfile; label: string; icon: any; category: string }[] = [
+    { key: 'department', label: 'Department', icon: Building2, category: 'Work Hierarchy' },
+    { key: 'designation', label: 'Designation / Job Position', icon: Briefcase, category: 'Work Hierarchy' },
+    { key: 'organization', label: 'Company / Organization', icon: Building2, category: 'Work Hierarchy' },
+    { key: 'branch', label: 'Branch / Campus', icon: MapPin, category: 'Work Hierarchy' },
+    { key: 'project', label: 'Project', icon: Layers, category: 'Work Hierarchy' },
+    { key: 'team', label: 'Team / Squad', icon: Users, category: 'Work Hierarchy' },
+    { key: 'workingSchedule', label: 'Working Schedule / Shift', icon: Clock, category: 'Operations' },
+    { key: 'supervisor', label: 'Direct Supervisor', icon: User, category: 'Work Hierarchy' },
+    { key: 'secondarySupervisor', label: 'Secondary Supervisor', icon: User, category: 'Work Hierarchy' },
+    { key: 'status', label: 'Employment Status', icon: Shield, category: 'Employment' },
+    { key: 'employeeType', label: 'Employee Type', icon: Briefcase, category: 'Employment' },
+    { key: 'contractType', label: 'Contract Type', icon: FileText, category: 'Employment' },
+    { key: 'leaveGroup', label: 'Leave Group', icon: CalendarDays, category: 'Leave & Attendance' },
+    { key: 'leavePolicy', label: 'Leave Policy', icon: CalendarDays, category: 'Leave & Attendance' },
+    { key: 'officeDays', label: 'Office Days', icon: CalendarDays, category: 'Operations' },
+    { key: 'officeHours', label: 'Office Hours', icon: Clock, category: 'Operations' },
+    { key: 'weekendDays', label: 'Weekly Off / Weekend Days', icon: CalendarDays, category: 'Operations' },
+    { key: 'overtimeEligible', label: 'Overtime Eligibility', icon: Sparkles, category: 'Payroll' },
+    { key: 'wageType', label: 'Wage Type', icon: DollarSign, category: 'Payroll' },
+    { key: 'bonusEligibility', label: 'Bonus Eligibility', icon: DollarSign, category: 'Payroll' },
+    { key: 'pfApplies', label: 'Provident Fund (PF)', icon: DollarSign, category: 'Payroll' },
+    { key: 'insuranceStatus', label: 'Insurance Status', icon: Shield, category: 'Insurance' },
+    { key: 'workLocation', label: 'Work Location', icon: MapPin, category: 'Operations' },
+  ];
+
+  // Helper to extract options for any editable field
+  const getFieldOptions = (field: keyof FullEmployeeProfile): { label: string; value: string }[] => {
+    switch (field) {
+      case 'department': {
+        const map = new Map<string, string>();
+        masterDepartments.forEach((d) => {
+          if (d.name && d.name.trim()) map.set(d.name.trim().toLowerCase(), d.name.trim());
+        });
+        employees.forEach((e) => {
+          if (e.department && e.department.trim()) map.set(e.department.trim().toLowerCase(), e.department.trim());
+        });
+        return Array.from(map.values()).sort((a, b) => a.localeCompare(b)).map((v) => ({ label: v, value: v }));
+      }
+      case 'designation': {
+        const map = new Map<string, string>();
+        masterDesignations.forEach((d) => {
+          if (d.name && d.name.trim()) map.set(d.name.trim().toLowerCase(), d.name.trim());
+        });
+        employees.forEach((e) => {
+          if (e.designation && e.designation.trim()) map.set(e.designation.trim().toLowerCase(), e.designation.trim());
+        });
+        return Array.from(map.values()).sort((a, b) => a.localeCompare(b)).map((v) => ({ label: v, value: v }));
+      }
+      case 'organization': {
+        const map = new Map<string, string>();
+        masterOrganizations.forEach((o) => {
+          if (o.name && o.name.trim()) map.set(o.name.trim().toLowerCase(), o.name.trim());
+        });
+        employees.forEach((e) => {
+          if (e.organization && e.organization.trim()) map.set(e.organization.trim().toLowerCase(), e.organization.trim());
+        });
+        return Array.from(map.values()).sort((a, b) => a.localeCompare(b)).map((v) => ({ label: v, value: v }));
+      }
+      case 'branch': {
+        const map = new Map<string, string>();
+        masterBranches.forEach((b) => {
+          if (b.name && b.name.trim()) map.set(b.name.trim().toLowerCase(), b.name.trim());
+        });
+        employees.forEach((e) => {
+          if (e.branch && e.branch.trim()) map.set(e.branch.trim().toLowerCase(), e.branch.trim());
+        });
+        return Array.from(map.values()).sort((a, b) => a.localeCompare(b)).map((v) => ({ label: v, value: v }));
+      }
+      case 'project': {
+        const map = new Map<string, string>();
+        masterProjects.forEach((p) => {
+          if (p.name && p.name.trim()) map.set(p.name.trim().toLowerCase(), p.name.trim());
+        });
+        employees.forEach((e) => {
+          if (e.project && e.project.trim()) map.set(e.project.trim().toLowerCase(), e.project.trim());
+        });
+        return Array.from(map.values()).sort((a, b) => a.localeCompare(b)).map((v) => ({ label: v, value: v }));
+      }
+      case 'team': {
+        const map = new Map<string, string>();
+        masterTeams.forEach((t) => {
+          if (t.name && t.name.trim()) map.set(t.name.trim().toLowerCase(), t.name.trim());
+        });
+        employees.forEach((e) => {
+          if (e.team && e.team.trim()) map.set(e.team.trim().toLowerCase(), e.team.trim());
+        });
+        return Array.from(map.values()).sort((a, b) => a.localeCompare(b)).map((v) => ({ label: v, value: v }));
+      }
+      case 'workingSchedule': {
+        const set = new Set<string>();
+        masterShifts.forEach((s) => set.add(`${s.name} (${s.officeStart} - ${s.officeEnd})`));
+        employees.forEach((e) => {
+          if (e.workingSchedule && e.workingSchedule.trim()) set.add(e.workingSchedule.trim());
+        });
+        return Array.from(set).map((v) => ({ label: v, value: v }));
+      }
+      case 'supervisor':
+      case 'secondarySupervisor': {
+        return employees
+          .filter((e) => e.status !== 'Archived' && !e.isArchived)
+          .map((e) => ({
+            label: `${e.name} (${e.code}) • ${e.designation}`,
+            value: e.name,
+          }));
+      }
+      case 'status': {
+        return [
+          { label: 'Active', value: 'Active' },
+          { label: 'Terminated', value: 'Terminated' },
+          { label: 'Resigned', value: 'Resigned' },
+          { label: 'Incomplete', value: 'Incomplete' },
+          { label: 'Archived', value: 'Archived' },
+        ];
+      }
+      case 'employeeType': {
+        return [
+          { label: 'Permanent', value: 'Permanent' },
+          { label: 'Contractual', value: 'Contractual' },
+          { label: 'Volunteer', value: 'Volunteer' },
+          { label: 'Intern', value: 'Intern' },
+          { label: 'Consultant', value: 'Consultant' },
+        ];
+      }
+      case 'contractType': {
+        return [
+          { label: 'Full Time', value: 'Full Time' },
+          { label: 'Part Time', value: 'Part Time' },
+          { label: 'Shift', value: 'Shift' },
+          { label: 'Hourly', value: 'Hourly' },
+          { label: 'Commission', value: 'Commission' },
+        ];
+      }
+      case 'leaveGroup': {
+        return [
+          { label: 'Standard Full-time', value: 'Standard Full-time' },
+          { label: 'DSP Faculty Group', value: 'DSP Faculty Group' },
+          { label: 'Project Staff', value: 'Project Staff' },
+          { label: 'Casual/Intern Pool', value: 'Casual/Intern Pool' },
+        ];
+      }
+      case 'leavePolicy': {
+        return [
+          { label: 'Standard Full-time Employee Policy (14 CL + 10 SL + 15 EL)', value: 'Standard Full-time Employee Policy' },
+          { label: 'Executive & Management Policy (16 CL + 14 SL + 18 EL)', value: 'Executive & Management Policy' },
+          { label: 'DSP School Faculty Policy (Academic Calendar Based)', value: 'DSP School Faculty Policy' },
+          { label: 'Contractual & Project Staff Policy (Pro-rated)', value: 'Contractual & Project Staff Policy' },
+          { label: 'Probationary Staff Policy (Emergency Only)', value: 'Probationary Staff Policy' },
+        ];
+      }
+      case 'officeDays': {
+        return [
+          { label: 'Sunday to Thursday', value: 'Sunday to Thursday' },
+          { label: 'Sunday to Thursday (Full Week)', value: 'Sunday to Thursday (Full Week)' },
+          { label: 'Monday to Friday', value: 'Monday to Friday' },
+          { label: 'Saturday to Wednesday', value: 'Saturday to Wednesday' },
+        ];
+      }
+      case 'officeHours': {
+        return [
+          { label: '10:00 AM - 06:00 PM', value: '10:00 AM - 06:00 PM' },
+          { label: '09:00 AM - 05:00 PM', value: '09:00 AM - 05:00 PM' },
+          { label: '08:00 AM - 04:00 PM', value: '08:00 AM - 04:00 PM' },
+          { label: '08:30 AM - 04:30 PM', value: '08:30 AM - 04:30 PM' },
+          { label: '07:30 AM - 03:30 PM', value: '07:30 AM - 03:30 PM' },
+        ];
+      }
+      case 'weekendDays': {
+        return [
+          { label: 'Friday & Saturday (Standard 5-Day Week)', value: 'Friday & Saturday' },
+          { label: 'Friday Only (6-Day Field/School Week)', value: 'Friday Only' },
+          { label: 'Sunday to Thursday (Rotational 5-Day)', value: 'Sunday to Thursday' },
+          { label: 'Saturday Only (Rotational Single Off)', value: 'Saturday Only' },
+        ];
+      }
+      case 'overtimeEligible': {
+        return [
+          { label: 'No / Not Applicable (Salaried Staff)', value: 'No' },
+          { label: 'Yes (Standard 1.5x Hourly Rate)', value: 'Yes' },
+          { label: 'Fixed (Fixed Overtime Allowance)', value: 'Fixed' },
+        ];
+      }
+      case 'wageType': {
+        return [
+          { label: 'Fixed', value: 'Fixed' },
+          { label: 'Hourly', value: 'Hourly' },
+          { label: 'Monthly', value: 'Monthly' },
+          { label: 'Stipend', value: 'Stipend' },
+        ];
+      }
+      case 'bonusEligibility': {
+        return [
+          { label: 'Yes', value: 'Yes' },
+          { label: 'No', value: 'No' },
+        ];
+      }
+      case 'pfApplies': {
+        return [
+          { label: 'Yes', value: 'Yes' },
+          { label: 'No', value: 'No' },
+        ];
+      }
+      case 'insuranceStatus': {
+        return [
+          { label: 'Active', value: 'Active' },
+          { label: 'Inactive', value: 'Inactive' },
+        ];
+      }
+      case 'workLocation': {
+        return [
+          { label: 'Banani, Dhaka', value: 'Banani, Dhaka' },
+          { label: 'Rayer Bazar Free School', value: 'Rayer Bazar Free School' },
+          { label: 'Chittagong Campus', value: 'Chittagong Campus' },
+          { label: 'Cox\'s Bazar Branch', value: 'Cox\'s Bazar Branch' },
+          { label: 'Rajshahi Campus', value: 'Rajshahi Campus' },
+        ];
+      }
+      default:
+        return [];
+    }
+  };
+
+  // Execute Mass / Single Update and Sync directly to Supabase
+  const handleExecuteMassUpdate = async (targetCodes: string[], field: keyof FullEmployeeProfile, value: any) => {
+    if (targetCodes.length === 0) return;
+    setIsApplyingMassUpdate(true);
+    try {
+      const fieldConfig = ALL_EMPLOYEE_COLUMNS.find((c) => c.key === field);
+      const fieldLabel = fieldConfig ? fieldConfig.label : String(field);
+
+      const targetSet = new Set(targetCodes);
+      const updatedList = employees.map((emp) => {
+        if (targetSet.has(emp.code)) {
+          return {
+            ...emp,
+            [field]: value,
+          };
+        }
+        return emp;
+      });
+
+      // 1. Update local state & cache immediately
+      setEmployees(updatedList);
+      persistEmployees(updatedList);
+
+      // 2. Filter only updated records to send to Supabase bulk endpoint
+      const modifiedRecords = updatedList.filter((emp) => targetSet.has(emp.code));
+      const res = await bulkImportEmployeesToSupabase(modifiedRecords);
+
+      if (!res.success && res.error) {
+        throw new Error(res.error);
+      }
+
+      setToastMessage(
+        `✓ Successfully updated ${fieldLabel} to "${value}" for ${targetCodes.length} employee${targetCodes.length > 1 ? 's' : ''}!`
+      );
+      setTimeout(() => setToastMessage(null), 6000);
+
+      // Close modal / popover
+      setShowMassUpdateModal(false);
+      setActiveInlineEditor(null);
+      setInlineSearchQuery('');
+    } catch (err: any) {
+      alert(`Mass update error: ${err?.message || 'Failed to update employees in database'}`);
+    } finally {
+      setIsApplyingMassUpdate(false);
+    }
+  };
+
+  // Memoized options for Inline Quick Cell Popover
+  const inlineFilteredOptions = useMemo(() => {
+    if (!activeInlineEditor) return [];
+    const allOpts = getFieldOptions(activeInlineEditor.field);
+    if (!inlineSearchQuery.trim()) return allOpts;
+    const q = inlineSearchQuery.toLowerCase();
+    return allOpts.filter(
+      (opt) => opt.label.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q)
+    );
+  }, [
+    activeInlineEditor,
+    inlineSearchQuery,
+    masterDepartments,
+    masterDesignations,
+    masterOrganizations,
+    masterBranches,
+    masterProjects,
+    masterTeams,
+    masterShifts,
+    employees,
+  ]);
+
+  // Memoized options for Mass Update Modal
+  const modalFilteredOptions = useMemo(() => {
+    const allOpts = getFieldOptions(massUpdateField);
+    if (!massUpdateSearch.trim()) return allOpts;
+    const q = massUpdateSearch.toLowerCase();
+    return allOpts.filter(
+      (opt) => opt.label.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q)
+    );
+  }, [
+    massUpdateField,
+    massUpdateSearch,
+    masterDepartments,
+    masterDesignations,
+    masterOrganizations,
+    masterBranches,
+    masterProjects,
+    masterTeams,
+    masterShifts,
+    employees,
+  ]);
+
   // Bulk Actions Handlers
   const handleArchiveSelected = async () => {
     if (selectedCodes.length === 0) return;
@@ -947,6 +1335,11 @@ function toCleanDeptName(raw: string): string {
             designation: e.designation,
             department: e.department,
             avatarUrl: e.avatarUrl,
+            organization: e.organization,
+            branch: e.branch,
+            project: e.project,
+            team: e.team,
+            workingSchedule: e.workingSchedule,
           }))}
           currentUser={currentUser}
           onSave={handleSaveProfile}
@@ -1145,6 +1538,23 @@ function toCleanDeptName(raw: string): string {
           </div>
 
           <div className="flex items-center space-x-2">
+            {/* Odoo-Style Mass Update Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setMassUpdateField('department');
+                const defaultOpts = getFieldOptions('department');
+                setMassUpdateValue(defaultOpts[0]?.value || '');
+                setMassUpdateSearch('');
+                setShowMassUpdateModal(true);
+              }}
+              className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:scale-95"
+              title="Mass Update Department, Designation, Schedule, Team, etc. for all selected employees"
+            >
+              <Sparkles className="h-3.5 w-3.5 fill-current" />
+              <span>Mass Update ({selectedCodes.length})</span>
+            </button>
+
             {activeTab === 'ARCHIVED' ? (
               <button
                 type="button"
@@ -1152,16 +1562,16 @@ function toCleanDeptName(raw: string): string {
                 className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
               >
                 <RotateCw className="h-3.5 w-3.5" />
-                <span>Restore / Unarchive</span>
+                <span>Restore</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleArchiveSelected}
-                className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+                className="px-3.5 py-1.5 rounded-xl bg-surface border border-border text-foreground hover:border-amber-500/50 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
               >
-                <Archive className="h-3.5 w-3.5" />
-                <span>Archive Selected</span>
+                <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Archive</span>
               </button>
             )}
 
@@ -1171,7 +1581,7 @@ function toCleanDeptName(raw: string): string {
               className="px-3.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span>Delete Selected</span>
+              <span>Delete</span>
             </button>
 
             <button
@@ -1406,21 +1816,61 @@ function toCleanDeptName(raw: string): string {
                       />
                     </td>
 
-                    {/* Dynamic Visible Data Cells */}
-                    {visibleColumnConfigs.map((col) => (
-                      <td
-                        key={col.key}
-                        className={`py-3.5 px-4 ${
-                          col.align === 'center'
-                            ? 'text-center'
-                            : col.align === 'right'
-                            ? 'text-right'
-                            : 'text-left'
-                        }`}
-                      >
-                        {renderCellContent(emp, col.key)}
-                      </td>
-                    ))}
+                    {/* Dynamic Visible Data Cells with Interactive Inline Edit / Mass Edit */}
+                    {visibleColumnConfigs.map((col) => {
+                      const isEditable = MASS_EDITABLE_FIELDS.some((f) => f.key === col.key);
+                      return (
+                        <td
+                          key={col.key}
+                          onClick={(e) => {
+                            if (isEditable) {
+                              e.stopPropagation();
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setActiveInlineEditor({
+                                empCode: emp.code,
+                                field: col.key,
+                                anchorRect: {
+                                  top: rect.top,
+                                  left: rect.left,
+                                  width: rect.width,
+                                  height: rect.height,
+                                  bottom: rect.bottom,
+                                },
+                                currentValue: String(emp[col.key] || ''),
+                              });
+                              setInlineSearchQuery('');
+                            }
+                          }}
+                          className={`py-3 px-3.5 transition ${
+                            col.align === 'center'
+                              ? 'text-center'
+                              : col.align === 'right'
+                              ? 'text-right'
+                              : 'text-left'
+                          } ${
+                            isEditable
+                              ? 'hover:bg-amber-500/10 cursor-pointer relative group/cell rounded-lg'
+                              : ''
+                          }`}
+                          title={
+                            isEditable
+                              ? isSelected && selectedCodes.length > 1
+                                ? `Click to Mass Update ${col.label} for ${selectedCodes.length} selected employees`
+                                : `Click to quick edit ${col.label}`
+                              : undefined
+                          }
+                        >
+                          <div className="flex items-center justify-between space-x-1.5 min-h-[26px]">
+                            <div className="min-w-0 flex-1">
+                              {renderCellContent(emp, col.key)}
+                            </div>
+                            {isEditable && (
+                              <ChevronDown className="h-3 w-3 text-muted-foreground/30 group-hover/cell:text-amber-500 transition opacity-0 group-hover/cell:opacity-100 flex-shrink-0" />
+                            )}
+                          </div>
+                        </td>
+                      );
+                    })}
 
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end space-x-2">
@@ -1468,6 +1918,241 @@ function toCleanDeptName(raw: string): string {
           </table>
         </div>
       </div>
+
+      {/* ── 4.5 ODOO-STYLE INLINE CELL QUICK POPOVER EDITOR ── */}
+      {activeInlineEditor && (
+        <div
+          ref={inlineEditorRef}
+          style={{
+            position: 'fixed',
+            top: Math.min(activeInlineEditor.anchorRect.bottom + 6, window.innerHeight - 380),
+            left: Math.min(Math.max(16, activeInlineEditor.anchorRect.left), window.innerWidth - 330),
+            zIndex: 100,
+          }}
+          className="w-72 sm:w-80 bg-card/95 backdrop-blur-xl border border-amber-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95"
+        >
+          {/* Popover Header */}
+          <div className="p-3 px-3.5 bg-amber-500/10 border-b border-border flex items-center justify-between">
+            <div className="text-[11px] font-black uppercase tracking-wider text-amber-500 flex items-center space-x-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>
+                {selectedCodes.includes(activeInlineEditor.empCode) && selectedCodes.length > 1
+                  ? `Mass Update ${MASS_EDITABLE_FIELDS.find((f) => f.key === activeInlineEditor.field)?.label || activeInlineEditor.field} (${selectedCodes.length} selected)`
+                  : `Update ${MASS_EDITABLE_FIELDS.find((f) => f.key === activeInlineEditor.field)?.label || activeInlineEditor.field}`}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveInlineEditor(null)}
+              className="p-1 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {/* Search Input */}
+          <div className="p-2 border-b border-border/60 bg-surface/40">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                autoFocus
+                value={inlineSearchQuery}
+                onChange={(e) => setInlineSearchQuery(e.target.value)}
+                placeholder={`Search ${MASS_EDITABLE_FIELDS.find((f) => f.key === activeInlineEditor.field)?.label || 'options'}...`}
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
+              />
+            </div>
+          </div>
+
+          {/* Options List */}
+          <div className="max-h-64 overflow-y-auto p-1.5 space-y-0.5 text-xs">
+            {inlineFilteredOptions.length === 0 ? (
+              <div className="p-3 text-center text-xs text-muted-foreground">
+                No matching options found.
+              </div>
+            ) : (
+              inlineFilteredOptions.map((opt) => {
+                const isCurrent = opt.value === activeInlineEditor.currentValue;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      const targetCodes = selectedCodes.includes(activeInlineEditor.empCode)
+                        ? selectedCodes
+                        : [activeInlineEditor.empCode];
+                      handleExecuteMassUpdate(targetCodes, activeInlineEditor.field, opt.value);
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded-xl transition flex items-center justify-between cursor-pointer ${
+                      isCurrent
+                        ? 'bg-amber-500/15 text-amber-500 font-bold'
+                        : 'hover:bg-surface text-foreground font-medium'
+                    }`}
+                  >
+                    <span className="truncate mr-2">{opt.label}</span>
+                    {isCurrent && <Check className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 4.6 ODOO-STYLE MASS UPDATE MODAL ── */}
+      {showMassUpdateModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-amber-500/40 rounded-3xl p-6 sm:p-7 max-w-xl w-full shadow-2xl space-y-5 animate-in fade-in zoom-in-95 max-h-[92vh] flex flex-col justify-between">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-border pb-3.5">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 flex-shrink-0 shadow-inner">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-foreground flex items-center space-x-2">
+                    <span>Mass Update Employee Records</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 text-[11px] font-black">
+                      {selectedCodes.length} Selected
+                    </span>
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Batch update departments, designations, schedules, or teams across selected profiles
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowMassUpdateModal(false)}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-xl transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+              {/* Field Selection */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground block">
+                  Target Field to Update <span className="text-amber-500">*</span>
+                </label>
+                <select
+                  value={massUpdateField}
+                  onChange={(e) => {
+                    const f = e.target.value as keyof FullEmployeeProfile;
+                    setMassUpdateField(f);
+                    const opts = getFieldOptions(f);
+                    setMassUpdateValue(opts[0]?.value || '');
+                    setMassUpdateSearch('');
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-2xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm cursor-pointer"
+                >
+                  {MASS_EDITABLE_FIELDS.map((f) => (
+                    <option key={f.key} value={f.key}>
+                      {f.label} ({f.category})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* New Value Selection */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground block">
+                  New Value for {MASS_EDITABLE_FIELDS.find((f) => f.key === massUpdateField)?.label} <span className="text-amber-500">*</span>
+                </label>
+
+                {/* Search & Option Picker */}
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={massUpdateSearch}
+                      onChange={(e) => setMassUpdateSearch(e.target.value)}
+                      placeholder={`Search ${MASS_EDITABLE_FIELDS.find((f) => f.key === massUpdateField)?.label || 'options'} or enter custom value...`}
+                      className="w-full pl-9 pr-4 py-2 rounded-xl bg-surface border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
+                    />
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto rounded-2xl border border-border bg-surface/50 p-1.5 space-y-1">
+                    {modalFilteredOptions.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-muted-foreground">
+                        No matching predefined options. You can apply custom value:
+                        <div className="font-bold text-foreground mt-1">&quot;{massUpdateSearch}&quot;</div>
+                        <button
+                          type="button"
+                          onClick={() => setMassUpdateValue(massUpdateSearch)}
+                          className="mt-2 px-3 py-1 rounded-xl bg-amber-500 text-white font-bold text-xs cursor-pointer"
+                        >
+                          Use &quot;{massUpdateSearch}&quot;
+                        </button>
+                      </div>
+                    ) : (
+                      modalFilteredOptions.map((opt) => {
+                        const isSelected = massUpdateValue === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setMassUpdateValue(opt.value)}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-500 text-white font-bold shadow-sm'
+                                : 'hover:bg-card text-foreground'
+                            }`}
+                          >
+                            <span className="truncate">{opt.label}</span>
+                            {isSelected && <Check className="h-4 w-4 stroke-[3]" />}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Impact Preview Note */}
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 font-medium flex items-center space-x-2.5">
+                <Sparkles className="h-4 w-4 flex-shrink-0 text-amber-500" />
+                <span>
+                  Will update <strong>{MASS_EDITABLE_FIELDS.find((f) => f.key === massUpdateField)?.label}</strong> to{' '}
+                  <strong className="text-foreground">&quot;{massUpdateValue || 'Not Selected'}&quot;</strong> for all{' '}
+                  <strong>{selectedCodes.length}</strong> selected employees in Supabase PostgreSQL.
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end space-x-2.5 pt-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setShowMassUpdateModal(false)}
+                className="px-4 py-2 rounded-xl bg-surface border border-border text-muted-foreground hover:text-foreground text-xs font-bold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!massUpdateValue || isApplyingMassUpdate}
+                onClick={() => handleExecuteMassUpdate(selectedCodes, massUpdateField, massUpdateValue)}
+                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50 text-white font-black text-xs transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95"
+              >
+                {isApplyingMassUpdate ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Syncing with Supabase...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4 stroke-[3]" />
+                    <span>Apply to {selectedCodes.length} Employees</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 5. IMPORT CSV MODAL (Full 88-Field Comprehensive Engine) ── */}
       {showImportModal && (

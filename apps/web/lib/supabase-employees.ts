@@ -119,6 +119,53 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
   };
 }
 
+function sanitizeDate(val: any): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  if (
+    !trimmed ||
+    trimmed === 'N/A' ||
+    trimmed === 'null' ||
+    trimmed === 'undefined' ||
+    trimmed === '-' ||
+    trimmed === '0000-00-00' ||
+    trimmed.toLowerCase() === 'none'
+  ) {
+    return null;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  const dmyMatch = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmyMatch && dmyMatch[1] && dmyMatch[2] && dmyMatch[3]) {
+    const d = dmyMatch[1];
+    const m = dmyMatch[2];
+    const y = dmyMatch[3];
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return null;
+}
+
+function sanitizeUuid(val: any): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === 'N/A') return null;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(trimmed) ? trimmed : null;
+}
+
+function sanitizeNumber(val: any, fallback: number = 0): number {
+  if (typeof val === 'number') return isNaN(val) ? fallback : val;
+  if (!val) return fallback;
+  const cleaned = String(val).replace(/[^0-9.-]/g, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? fallback : num;
+}
+
 /**
  * Maps frontend FullEmployeeProfile to database snake_case payload
  */
@@ -153,7 +200,7 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     nick_name: profile.nickName || null,
     nid: profile.nid || null,
     blood_group: profile.bloodGroup || null,
-    birthday: profile.birthday || null,
+    birthday: sanitizeDate(profile.birthday),
     gender: profile.gender || null,
     religion: profile.religion || 'Islam',
     marital_status: profile.maritalStatus || 'Single',
@@ -162,15 +209,15 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     nationality: profile.nationality || 'Bangladeshi',
     passport_no: profile.passportNo || null,
     home_address: profile.homeAddress || null,
-    dependent_children: profile.dependentChildren || 0,
+    dependent_children: sanitizeNumber(profile.dependentChildren, 0),
 
     // Tab 3: Payroll
-    joining_date: profile.joiningDate || null,
-    contract_end_date: profile.contractEndDate || null,
+    joining_date: sanitizeDate(profile.joiningDate),
+    contract_end_date: sanitizeDate(profile.contractEndDate),
     wage_type: profile.wageType,
-    wage: profile.wage || 0,
-    salary_jul_dec: profile.salaryJulDec || 0,
-    salary_jan_jun: profile.salaryJanJun || 0,
+    wage: sanitizeNumber(profile.wage, 0),
+    salary_jul_dec: sanitizeNumber(profile.salaryJulDec, 0),
+    salary_jan_jun: sanitizeNumber(profile.salaryJanJun, 0),
     monthly_total_allowance: profile.monthlyTotalAllowance,
     six_months_completion_status: profile.sixMonthsCompletionStatus,
     probationary_status: profile.probationaryStatus,
@@ -178,23 +225,23 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     no_tax_deduction: profile.noTaxDeduction || false,
     bonus_eligibility: profile.bonusEligibility,
     pf_applies: profile.pfApplies,
-    pf_rate: profile.pfRate || 10,
-    regular_salary: profile.regularSalary || 0,
-    extra_hours: profile.extraHours || 0,
-    extra_payment: profile.extraPayment || 0,
+    pf_rate: sanitizeNumber(profile.pfRate, 10),
+    regular_salary: sanitizeNumber(profile.regularSalary, 0),
+    extra_hours: sanitizeNumber(profile.extraHours, 0),
+    extra_payment: sanitizeNumber(profile.extraPayment, 0),
     calculation_value: profile.calculationValue || '1.0x',
-    temporary_salary: profile.temporarySalary || 0,
-    total_current_salary: profile.totalCurrentSalary || 0,
+    temporary_salary: sanitizeNumber(profile.temporarySalary, 0),
+    total_current_salary: sanitizeNumber(profile.totalCurrentSalary, 0),
     currency: profile.currency,
-    adjustment_start_date: profile.adjustmentStartDate || null,
-    adjustment_end_date: profile.adjustmentEndDate || null,
+    adjustment_start_date: sanitizeDate(profile.adjustmentStartDate),
+    adjustment_end_date: sanitizeDate(profile.adjustmentEndDate),
     assigned_teacher_staff: profile.assignedTeacherStaff || null,
     payroll_remark: profile.payrollRemark || null,
 
     // Tab 4: Insurance
     insurance_status: profile.insuranceStatus || 'Active',
     insurance_coverage_category: profile.insuranceCoverageCategory || null,
-    insurance_monthly_premium: profile.insuranceMonthlyPremium ?? 1500,
+    insurance_monthly_premium: sanitizeNumber(profile.insuranceMonthlyPremium, 1500),
     employee_health_insurance_id: profile.employeeHealthInsuranceId || null,
     spouse_health_insurance_id: profile.spouseHealthInsuranceId || null,
     spouse_name: profile.spouseName || null,
@@ -207,29 +254,29 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
 
     // Tab 5: DSP
     office_days: profile.officeDays,
-    custom_office_days_from: profile.customOfficeDaysFrom || null,
-    custom_office_days_to: profile.customOfficeDaysTo || null,
+    custom_office_days_from: sanitizeDate(profile.customOfficeDaysFrom),
+    custom_office_days_to: sanitizeDate(profile.customOfficeDaysTo),
     office_hours: profile.officeHours,
     rfid: profile.rfid || null,
     leave_group: profile.leaveGroup,
     employee_type: profile.employeeType,
 
     // Tab 6: Leave & Attendance
-    leave_policy: profile.leavePolicy || null,
-    casual_leave_allocated: profile.casualLeaveAllocated ?? 14,
-    casual_leave_used: profile.casualLeaveUsed ?? 3,
-    sick_leave_allocated: profile.sickLeaveAllocated ?? 10,
-    sick_leave_used: profile.sickLeaveUsed ?? 1,
-    earned_leave_allocated: profile.earnedLeaveAllocated ?? 15,
-    earned_leave_used: profile.earnedLeaveUsed ?? 0,
-    special_leave_allocated: profile.specialLeaveAllocated ?? 5,
-    special_leave_used: profile.specialLeaveUsed ?? 0,
+    leave_policy: profile.leavePolicy || 'Standard Full-time Employee Policy',
+    casual_leave_allocated: sanitizeNumber(profile.casualLeaveAllocated, 14),
+    casual_leave_used: sanitizeNumber(profile.casualLeaveUsed, 3),
+    sick_leave_allocated: sanitizeNumber(profile.sickLeaveAllocated, 10),
+    sick_leave_used: sanitizeNumber(profile.sickLeaveUsed, 1),
+    earned_leave_allocated: sanitizeNumber(profile.earnedLeaveAllocated, 15),
+    earned_leave_used: sanitizeNumber(profile.earnedLeaveUsed, 0),
+    special_leave_allocated: sanitizeNumber(profile.specialLeaveAllocated, 5),
+    special_leave_used: sanitizeNumber(profile.specialLeaveUsed, 0),
     weekend_days: profile.weekendDays || 'Friday & Saturday',
     overtime_eligible: profile.overtimeEligible || 'No',
-    attendance_grace_period_min: profile.attendanceGracePeriodMin ?? 15,
+    attendance_grace_period_min: sanitizeNumber(profile.attendanceGracePeriodMin, 15),
 
     is_user: Boolean(profile.isUser),
-    user_id: profile.userId || null,
+    user_id: sanitizeUuid(profile.userId),
     updated_at: new Date().toISOString(),
   };
 }
