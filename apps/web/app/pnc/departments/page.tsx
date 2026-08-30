@@ -74,37 +74,57 @@ export default function DepartmentsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetchDepartmentsFromSupabase(),
-      fetchOrganizationsFromSupabase(),
-      fetchEmployeesFromSupabase(),
-    ]).then(([depts, orgs, emps]) => {
-      if (orgs) setOrganizations(orgs);
-      if (emps) setEmployees(emps);
-      if (depts) {
-        const deptMap = new Map<string, DepartmentItem>();
-        depts.forEach((d) => deptMap.set(d.name.trim().toLowerCase(), d));
+    // Step 1: Auto-sync all entity data from employees → Supabase master tables
+    fetch('/api/v1/hr/entities/sync', { method: 'POST' })
+      .then(() => {
+        // Step 2: After sync, reload departments (now complete from Supabase)
+        return Promise.all([
+          fetchDepartmentsFromSupabase(),
+          fetchOrganizationsFromSupabase(),
+          fetchEmployeesFromSupabase(),
+        ]);
+      })
+      .then(([depts, orgs, emps]) => {
+        if (orgs) setOrganizations(orgs);
+        if (emps) setEmployees(emps);
+        if (depts) {
+          // Departments are now fully in Supabase — just use them directly.
+          // Only add employee-derived items that are still not in Supabase as a safety net.
+          const deptMap = new Map<string, DepartmentItem>();
+          depts.forEach((d) => deptMap.set(d.name.trim().toLowerCase(), d));
 
-        if (emps && emps.length > 0) {
-          emps.forEach((e) => {
-            if (e.department && e.department.trim()) {
-              const key = e.department.trim().toLowerCase();
-              if (!deptMap.has(key)) {
-                deptMap.set(key, {
-                  id: `dept-${e.department.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-                  name: e.department.trim(),
-                  code: e.department.trim().slice(0, 4).toUpperCase(),
-                  organizationName: e.organization || 'JAAGO Foundation',
-                  organizationId: orgs?.find((o) => o.name === e.organization)?.id || 'org-1',
-                  isArchived: false,
-                });
+          if (emps && emps.length > 0) {
+            emps.forEach((e) => {
+              if (e.department && e.department.trim()) {
+                const key = e.department.trim().toLowerCase();
+                if (!deptMap.has(key)) {
+                  deptMap.set(key, {
+                    id: `dept-${e.department.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                    name: e.department.trim(),
+                    code: e.department.trim().slice(0, 4).toUpperCase(),
+                    organizationName: e.organization || 'JAAGO Foundation',
+                    organizationId: orgs?.find((o) => o.name === e.organization)?.id || 'org-1',
+                    isArchived: false,
+                  });
+                }
               }
-            }
-          });
+            });
+          }
+          setDepartments(Array.from(deptMap.values()));
         }
-        setDepartments(Array.from(deptMap.values()));
-      }
-    });
+      })
+      .catch(() => {
+        // Fallback: if sync fails, just load normally
+        Promise.all([
+          fetchDepartmentsFromSupabase(),
+          fetchOrganizationsFromSupabase(),
+          fetchEmployeesFromSupabase(),
+        ]).then(([depts, orgs, emps]) => {
+          if (orgs) setOrganizations(orgs);
+          if (emps) setEmployees(emps);
+          if (depts) setDepartments(depts);
+        });
+      });
   }, []);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {

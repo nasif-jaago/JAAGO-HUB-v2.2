@@ -76,17 +76,12 @@ export default function ProjectsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    fetchProjectsFromSupabase().then((prjs) => {
-      if (prjs) setProjects(prjs);
-    });
-    fetchDepartmentsFromSupabase().then((depts) => {
-      if (depts) setDepartments(depts);
-    });
-    fetchOrganizationsFromSupabase().then((orgs) => {
-      if (orgs) setOrganizations(orgs);
-    });
-    fetchEmployeesFromSupabase().then((emps) => {
-      if (emps) setEmployees(emps);
+    // Auto-sync first, then load all master data
+    fetch('/api/v1/hr/entities/sync', { method: 'POST' }).finally(() => {
+      fetchProjectsFromSupabase().then((prjs) => { if (prjs) setProjects(prjs); });
+      fetchDepartmentsFromSupabase().then((depts) => { if (depts) setDepartments(depts); });
+      fetchOrganizationsFromSupabase().then((orgs) => { if (orgs) setOrganizations(orgs); });
+      fetchEmployeesFromSupabase().then((emps) => { if (emps) setEmployees(emps); });
     });
   }, []);
 

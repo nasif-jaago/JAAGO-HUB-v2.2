@@ -63,35 +63,40 @@ export default function DesignationsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetchDesignationsFromSupabase(),
-      fetchEmployeesFromSupabase(),
-    ]).then(([desigs, emps]) => {
-      if (emps) setEmployees(emps);
-      if (desigs) {
-        const desigMap = new Map<string, DesignationItem>();
-        desigs.forEach((d) => desigMap.set(d.name.trim().toLowerCase(), d));
+    fetch('/api/v1/hr/entities/sync', { method: 'POST' })
+      .then(() => Promise.all([fetchDesignationsFromSupabase(), fetchEmployeesFromSupabase()]))
+      .then(([desigs, emps]) => {
+        if (emps) setEmployees(emps);
+        if (desigs) {
+          const desigMap = new Map<string, DesignationItem>();
+          desigs.forEach((d) => desigMap.set(d.name.trim().toLowerCase(), d));
 
-        if (emps && emps.length > 0) {
-          emps.forEach((e) => {
-            if (e.designation && e.designation.trim()) {
-              const key = e.designation.trim().toLowerCase();
-              if (!desigMap.has(key)) {
-                desigMap.set(key, {
-                  id: `des-${e.designation.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-                  name: e.designation.trim(),
-                  code: e.designation.trim().slice(0, 4).toUpperCase(),
-                  grade: 'Staff',
-                  description: '',
-                  isArchived: false,
-                });
+          if (emps && emps.length > 0) {
+            emps.forEach((e) => {
+              if (e.designation && e.designation.trim()) {
+                const key = e.designation.trim().toLowerCase();
+                if (!desigMap.has(key)) {
+                  desigMap.set(key, {
+                    id: `des-${e.designation.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                    name: e.designation.trim(),
+                    code: e.designation.trim().slice(0, 4).toUpperCase(),
+                    grade: 'Staff',
+                    description: '',
+                    isArchived: false,
+                  });
+                }
               }
-            }
-          });
+            });
+          }
+          setDesignations(Array.from(desigMap.values()));
         }
-        setDesignations(Array.from(desigMap.values()));
-      }
-    });
+      })
+      .catch(() => {
+        Promise.all([fetchDesignationsFromSupabase(), fetchEmployeesFromSupabase()]).then(([desigs, emps]) => {
+          if (emps) setEmployees(emps);
+          if (desigs) setDesignations(desigs);
+        });
+      });
   }, []);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
