@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { emailStore, EmailServerItem } from '@/lib/email-service';
+import { emailStore, EmailServerItem, decryptCredential } from '@/lib/email-service';
 import { logger } from '@jaago/logger';
 
 export const runtime = 'nodejs';
@@ -14,13 +14,33 @@ function maskServer(server: EmailServerItem) {
 }
 
 // GET /api/v1/admin/email/servers/[id]
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const url = new URL(request.url);
+  const shouldReveal = url.searchParams.get('reveal') === 'true';
+
   const server = await emailStore.getServerById(id);
   if (!server) {
     return NextResponse.json({ success: false, error: 'Server not found' }, { status: 404 });
   }
-  return NextResponse.json({ success: true, data: maskServer(server) });
+
+  const masked = maskServer(server);
+
+  if (shouldReveal && server.passwordCiphertext && server.passwordIv && server.passwordTag) {
+    try {
+      const decrypted = decryptCredential({
+        ciphertext: server.passwordCiphertext,
+        iv: server.passwordIv,
+        tag: server.passwordTag,
+        keyId: server.passwordKeyId,
+      });
+      return NextResponse.json({ success: true, data: { ...masked, passwordPlain: decrypted } });
+    } catch {
+      return NextResponse.json({ success: true, data: masked });
+    }
+  }
+
+  return NextResponse.json({ success: true, data: masked });
 }
 
 // PATCH /api/v1/admin/email/servers/[id] — Update server (empty password keeps existing)

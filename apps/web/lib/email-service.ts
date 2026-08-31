@@ -4,6 +4,8 @@ import { logger } from '@jaago/logger';
 import { getSupabaseAdminClient } from '@jaago/auth';
 import { encryptCredential, decryptCredential } from './crypto';
 
+export { encryptCredential, decryptCredential };
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & INTERFACES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -438,13 +440,67 @@ class EmailSubsystemStore {
     };
   }
 
+  public mapSupabaseRowToServer(r: any): EmailServerItem {
+    return {
+      id: r.id,
+      name: r.name,
+      isEnabled: r.is_enabled ?? true,
+      priority: r.priority ?? 1,
+      senderEmail: r.sender_email,
+      senderName: r.sender_name,
+      host: r.host,
+      port: r.port,
+      encryption: r.encryption || 'starttls',
+      username: r.username,
+      hasPassword: Boolean(r.password_ciphertext),
+      passwordCiphertext: r.password_ciphertext || undefined,
+      passwordIv: r.password_iv || undefined,
+      passwordTag: r.password_tag || undefined,
+      passwordKeyId: r.password_key_id || 'v1',
+      minIntervalSeconds: r.min_interval_seconds ?? 0,
+      maxPerHour: r.max_per_hour ?? 0,
+      maxPerDay: r.max_per_day ?? 0,
+      replyTo: r.reply_to || undefined,
+      healthState: r.health_state || 'healthy',
+      consecutiveFailures: r.consecutive_failures ?? 0,
+      lastVerifiedAt: r.last_verified_at || undefined,
+      lastUsedAt: r.last_used_at || undefined,
+      lastErrorMessage: r.last_error_message || undefined,
+      createdAt: r.created_at || new Date().toISOString(),
+      updatedAt: r.updated_at || new Date().toISOString(),
+    };
+  }
+
   // ── Server CRUD ──
   public async getServers(): Promise<EmailServerItem[]> {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data: srvRows } = await supabase.from('email_servers').select('*').order('priority', { ascending: true });
+        if (srvRows && srvRows.length > 0) {
+          this.servers = srvRows.map((r: any) => this.mapSupabaseRowToServer(r));
+          return [...this.servers];
+        }
+      }
+    } catch {}
     await this.ensureInitialized();
     return [...this.servers].sort((a, b) => a.priority - b.priority);
   }
 
   public async getServerById(id: string): Promise<EmailServerItem | undefined> {
+    try {
+      const supabase = getSupabaseAdminClient();
+      if (supabase) {
+        const { data: r } = await supabase.from('email_servers').select('*').eq('id', id).maybeSingle();
+        if (r) {
+          const mapped = this.mapSupabaseRowToServer(r);
+          const idx = this.servers.findIndex((s) => s.id === id);
+          if (idx >= 0) this.servers[idx] = mapped;
+          else this.servers.push(mapped);
+          return mapped;
+        }
+      }
+    } catch {}
     await this.ensureInitialized();
     return this.servers.find((s) => s.id === id);
   }
@@ -536,13 +592,11 @@ class EmailSubsystemStore {
   }
 
   public async updateServer(id: string, data: Partial<EmailServerItem> & { passwordPlain?: string }): Promise<EmailServerItem> {
-    await this.ensureInitialized();
-    const idx = this.servers.findIndex((s) => s.id === id);
-    if (idx === -1) {
+    const existing = await this.getServerById(id);
+    if (!existing) {
       throw new Error(`Server with id ${id} not found`);
     }
 
-    const existing = this.servers[idx]!;
     let encUpdates: any = {};
 
     if (data.passwordPlain && data.passwordPlain.trim() !== '') {
@@ -563,7 +617,8 @@ class EmailSubsystemStore {
       updatedAt: new Date().toISOString(),
     };
 
-    this.servers[idx] = updated;
+    const idx = this.servers.findIndex((s) => s.id === id);
+    if (idx >= 0) this.servers[idx] = updated;
 
     // Persist to Supabase
     try {
@@ -571,34 +626,36 @@ class EmailSubsystemStore {
       if (supabase) {
         const updatePayload: any = {
           name: updated.name,
-          is_enabled: updated.isEnabled,
-          priority: updated.priority,
+          is_enabled: updated.isEnabled ?? true,
+          priority: updated.priority ?? 1,
           sender_email: updated.senderEmail,
           sender_name: updated.senderName,
           host: updated.host,
           port: updated.port,
           encryption: updated.encryption,
           username: updated.username,
-          min_interval_seconds: updated.minIntervalSeconds,
-          max_per_hour: updated.maxPerHour,
-          max_per_day: updated.maxPerDay,
-          reply_to: updated.replyTo,
-          health_state: updated.healthState,
-          consecutive_failures: updated.consecutiveFailures,
-          last_verified_at: updated.lastVerifiedAt,
-          last_used_at: updated.lastUsedAt,
-          last_error_message: updated.lastErrorMessage,
+          min_interval_seconds: updated.minIntervalSeconds ?? 0,
+          max_per_hour: updated.maxPerHour ?? 0,
+          max_per_day: updated.maxPerDay ?? 0,
+          reply_to: updated.replyTo || null,
+          health_state: updated.healthState || 'healthy',
+          consecutive_failures: updated.consecutiveFailures ?? 0,
+          last_verified_at: updated.lastVerifiedAt || null,
+          last_used_at: updated.lastUsedAt || null,
+          last_error_message: updated.lastErrorMessage || null,
           updated_at: updated.updatedAt,
         };
-        if (updated.passwordCiphertext) {
-          updatePayload.password_ciphertext = updated.passwordCiphertext;
-          updatePayload.password_iv = updated.passwordIv;
-          updatePayload.password_tag = updated.passwordTag;
-          updatePayload.password_key_id = updated.passwordKeyId;
+        if (encUpdates.passwordCiphertext) {
+          updatePayload.password_ciphertext = encUpdates.passwordCiphertext;
+          updatePayload.password_iv = encUpdates.passwordIv;
+          updatePayload.password_tag = encUpdates.passwordTag;
+          updatePayload.password_key_id = encUpdates.passwordKeyId;
         }
         await supabase.from('email_servers').update(updatePayload).eq('id', id);
       }
-    } catch {}
+    } catch (err: any) {
+      logger.error('SYSTEM', 'email.update_server_error', { metadata: { error: err?.message } });
+    }
 
     return updated;
   }

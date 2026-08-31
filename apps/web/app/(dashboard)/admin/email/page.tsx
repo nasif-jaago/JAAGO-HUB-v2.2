@@ -91,6 +91,7 @@ export default function AdminEmailSettingsPage() {
   const [editingServer, setEditingServer] = useState<Partial<EmailServer> | null>(null);
   const [serverPassword, setServerPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loadingPassword, setLoadingPassword] = useState(false);
   const [serverModalOpen, setServerModalOpen] = useState(false);
   const [verifyingServerId, setVerifyingServerId] = useState<string | null>(null);
   const [testSendModalServer, setTestSendModalServer] = useState<EmailServer | null>(null);
@@ -157,6 +158,27 @@ export default function AdminEmailSettingsPage() {
   }, [logStatusFilter, logModuleFilter, logSearchQuery]);
 
   // ── Server Handlers ──
+  const handleToggleRevealPassword = async () => {
+    if (!showPassword) {
+      if (!serverPassword && editingServer?.id && editingServer?.hasPassword) {
+        setLoadingPassword(true);
+        try {
+          const res = await fetch(`/api/v1/admin/email/servers/${editingServer.id}?reveal=true`);
+          const data = await res.json();
+          if (data.success && data.data?.passwordPlain) {
+            setServerPassword(data.data.passwordPlain);
+          }
+        } catch {
+        } finally {
+          setLoadingPassword(false);
+        }
+      }
+      setShowPassword(true);
+    } else {
+      setShowPassword(false);
+    }
+  };
+
   const handleSaveServer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingServer?.name || !editingServer?.host || !editingServer?.username) {
@@ -1040,18 +1062,32 @@ export default function AdminEmailSettingsPage() {
                   />
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-foreground">
-                      SMTP Password {editingServer.id && editingServer.hasPassword ? '(Leave blank to keep existing)' : '*'}
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-foreground">
+                        SMTP Password {editingServer.id && editingServer.hasPassword ? '(Leave blank to keep existing)' : '*'}
+                      </label>
+                      {editingServer.id && editingServer.hasPassword && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          ● Stored in Supabase
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+                      onClick={handleToggleRevealPassword}
+                      disabled={loadingPassword}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1.5 cursor-pointer transition"
                     >
-                      {showPassword ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                      {showPassword ? 'Hide' : 'Reveal'}
+                      {loadingPassword ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                      ) : showPassword ? (
+                        <EyeOff className="w-3 h-3" />
+                      ) : (
+                        <Eye className="w-3 h-3" />
+                      )}
+                      <span>{loadingPassword ? 'Decrypting...' : showPassword ? 'Hide' : 'Reveal Saved Password'}</span>
                     </button>
                   </div>
                   <input
@@ -1059,12 +1095,18 @@ export default function AdminEmailSettingsPage() {
                     required={!editingServer.id || !editingServer.hasPassword}
                     value={serverPassword}
                     onChange={(e) => setServerPassword(e.target.value)}
-                    placeholder={editingServer.id && editingServer.hasPassword ? '••••••••••••' : 'Enter SMTP password'}
+                    placeholder={editingServer.id && editingServer.hasPassword ? (showPassword ? 'Enter new password or keep existing' : '••••••••••••••••••••') : 'Enter SMTP password'}
                     className="w-full px-3 py-2 rounded-xl bg-background border border-border text-xs text-foreground focus:outline-none focus:border-amber-500 font-mono"
                   />
-                  <p className="text-[10px] text-muted-foreground">
-                    Password is encrypted using AES-256-GCM at rest and write-only across API boundaries.
-                  </p>
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-300 space-y-1">
+                    <p className="font-extrabold flex items-center gap-1">
+                      <span>💡 Brevo SMTP Credentials Guide:</span>
+                    </p>
+                    <p className="text-amber-200/90 leading-relaxed">
+                      • <strong>SMTP Username:</strong> Your registered Brevo account email.<br />
+                      • <strong>SMTP Password:</strong> Your <strong>Brevo SMTP Master Key</strong> (found in your <em>Brevo Dashboard &gt; SMTP &amp; API &gt; SMTP Keys</em>, usually starting with <code className="bg-slate-900/60 px-1 rounded text-[10px]">xsmtpsib-...</code>).
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
