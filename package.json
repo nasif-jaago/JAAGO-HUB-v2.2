@@ -28,7 +28,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\"",
     "jaago": "tsx tooling/scripts/jaago-cli.ts",
-    "smoke-test": "tsx tooling/scripts/smoke-test.ts"
+    "smoke-test": "tsx tooling/scripts/smoke-test.ts",
+    "package:deploy": "node tooling/scripts/create-deploy-zip.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
