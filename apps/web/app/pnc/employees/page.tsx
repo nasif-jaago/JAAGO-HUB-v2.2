@@ -38,6 +38,11 @@ import {
   Shield,
   CalendarDays,
   DollarSign,
+  Copy,
+  Key,
+  Eye,
+  EyeOff,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   EmployeeProfileDetail,
@@ -150,22 +155,34 @@ export default function PnCEmployeesPage() {
     jobTitle: 'Coordinator',
   });
 
-  // Invite Success Modal State
+  // Invite Success Modal State & Controls
   const [showInviteSuccessModal, setShowInviteSuccessModal] = useState<{
     employee: FullEmployeeProfile;
     emailPayload: {
       to: string;
+      personalEmail?: string;
       recipientName?: string;
+      employeeCode?: string;
+      designation?: string;
+      department?: string;
+      branch?: string;
       subject?: string;
       userId: string;
       tempPassword: string;
       loginUrl: string;
       securityNote?: string;
+      htmlEmail?: string;
       fullEmailText?: string;
       sentAt: string;
       autoSent?: boolean;
     };
   } | null>(null);
+  const [modalTab, setModalTab] = useState<'preview' | 'credentials' | 'text'>('preview');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [showPasswordInModal, setShowPasswordInModal] = useState(false);
+  const [customToEmail, setCustomToEmail] = useState('');
+  const [customCCEmail, setCustomCCEmail] = useState('');
+  const [customSubject, setCustomSubject] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -192,9 +209,9 @@ export default function PnCEmployeesPage() {
   const [columnSearchQuery, setColumnSearchQuery] = useState('');
   const columnsMenuRef = useRef<HTMLDivElement>(null);
 
-  // ── SORTING STATE ──
-  const [sortKey, setSortKey] = useState<keyof FullEmployeeProfile | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+  // ── SORTING STATE (Default: A to Z by Employee Name) ──
+  const [sortKey, setSortKey] = useState<keyof FullEmployeeProfile | null>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>('asc');
 
   // Categorized Columns for Dropdown Popover
   const categorizedColumns = useMemo(() => getCategorizedColumns(), []);
@@ -263,8 +280,12 @@ export default function PnCEmployeesPage() {
       if (sortDirection === 'asc') {
         setSortDirection('desc');
       } else if (sortDirection === 'desc') {
-        setSortKey(null);
-        setSortDirection(null);
+        if (key === 'name') {
+          setSortDirection('asc');
+        } else {
+          setSortKey('name');
+          setSortDirection('asc');
+        }
       } else {
         setSortDirection('asc');
       }
@@ -753,26 +774,27 @@ function toCanonicalOrgName(raw: string): string {
       return true;
     });
 
-    if (sortKey && sortDirection) {
-      list.sort((a, b) => {
-        const valA = a[sortKey];
-        const valB = b[sortKey];
+    const effectiveKey: keyof FullEmployeeProfile = sortKey || 'name';
+    const effectiveDirection: 'asc' | 'desc' = sortDirection || 'asc';
 
-        if (valA === undefined || valA === null || valA === '') return 1;
-        if (valB === undefined || valB === null || valB === '') return -1;
+    list.sort((a, b) => {
+      const valA = a[effectiveKey];
+      const valB = b[effectiveKey];
 
-        let cmp = 0;
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          cmp = valA - valB;
-        } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
-          cmp = valA === valB ? 0 : valA ? -1 : 1;
-        } else {
-          cmp = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
-        }
+      if (valA === undefined || valA === null || valA === '') return 1;
+      if (valB === undefined || valB === null || valB === '') return -1;
 
-        return sortDirection === 'asc' ? cmp : -cmp;
-      });
-    }
+      let cmp = 0;
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        cmp = valA - valB;
+      } else if (typeof valA === 'boolean' && typeof valB === 'boolean') {
+        cmp = valA === valB ? 0 : valA ? -1 : 1;
+      } else {
+        cmp = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+      }
+
+      return effectiveDirection === 'asc' ? cmp : -cmp;
+    });
 
     return list;
   }, [
@@ -925,16 +947,27 @@ function toCanonicalOrgName(raw: string): string {
   // Create User Account from Employee and send Invite Email
   const handleCreateUserForEmployee = async (emp: FullEmployeeProfile) => {
     try {
-      const emailToUse = emp.workEmail || `${emp.name.toLowerCase().replace(/\s+/g, '.')}@jaago.com.bd`;
+      let emailToUse = (emp.workEmail || '').trim().toLowerCase();
+      if (!emailToUse || !emailToUse.includes('@')) {
+        const cleanName = (emp.name || 'employee')
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, '.')
+          .replace(/\.+/g, '.')
+          .replace(/^\.|\.$/g, '');
+        emailToUse = `${cleanName || 'employee'}@jaago.com.bd`;
+      }
+
       const res = await fetch('/api/v1/users/create-from-employee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: emp.name,
           email: emailToUse,
+          personalEmail: emp.personalEmail,
           department: emp.department,
           designation: emp.designation,
           employeeCode: emp.code,
+          branch: emp.branch,
         }),
       });
       const data = await res.json();
@@ -955,10 +988,17 @@ function toCanonicalOrgName(raw: string): string {
           setSelectedProfile(updatedEmp);
         }
 
+        const payload = data.data.emailPayload;
         setShowInviteSuccessModal({
           employee: updatedEmp,
-          emailPayload: data.data.emailPayload,
+          emailPayload: payload,
         });
+        setModalTab('preview');
+        setCustomToEmail(payload.to || emailToUse);
+        setCustomCCEmail(payload.personalEmail || emp.personalEmail || '');
+        setCustomSubject(payload.subject || `Welcome to JAAGO HUB — Official Account Credentials for ${emp.name}`);
+        setToastMessage(`✓ User account created for ${emp.name}`);
+        setTimeout(() => setToastMessage(null), 3500);
       } else {
         alert(data.error || 'Failed to create user account');
       }
@@ -2455,143 +2495,503 @@ function toCanonicalOrgName(raw: string): string {
         </div>
       )}
 
-      {/* ── 6. INVITE EMAIL DISPATCHED MODAL ── */}
+      {/* ── 6. REDESIGNED STANDARD FORMAL INVITATION & CREDENTIALS MODAL ── */}
       {showInviteSuccessModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-amber-500/40 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center space-x-3">
-                <div className="h-10 w-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 flex-shrink-0">
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-card border border-amber-500/40 rounded-3xl p-5 sm:p-7 max-w-2xl w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-auto max-h-[92vh] flex flex-col">
+            {/* Modal Top Header */}
+            <div className="flex items-center justify-between border-b border-border/80 pb-3 flex-shrink-0">
+              <div className="flex items-center space-x-3.5">
+                <div className="h-11 w-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shadow-sm flex-shrink-0">
                   <Mail className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-base font-black text-foreground">Welcome &amp; Invite Email Dispatched</h2>
-                  <p className="text-[11px] font-bold text-emerald-500 flex items-center space-x-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>
-                      {showInviteSuccessModal.emailPayload.autoSent
-                        ? 'User Created & Email Auto-Sent via Supabase!'
-                        : 'Supabase Auth & JAAGO HUB User Created'}
+                  <h2 className="text-base sm:text-lg font-black text-foreground tracking-tight">
+                    Employee Account Created &amp; Formal Invitation
+                  </h2>
+                  <div className="flex items-center space-x-2 pt-0.5">
+                    <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span>
+                        {showInviteSuccessModal.emailPayload.autoSent
+                          ? 'Supabase Auth & Auto-Mailer Dispatched'
+                          : 'Supabase Auth Synchronized & Active'}
+                      </span>
                     </span>
-                  </p>
+                    <span className="text-[11px] text-muted-foreground font-medium hidden sm:inline">
+                      &bull; JAAGO HUB Credentials Ready
+                    </span>
+                  </div>
                 </div>
               </div>
               <button
                 onClick={() => setShowInviteSuccessModal(null)}
-                className="p-1 text-muted-foreground hover:text-foreground rounded-lg transition"
+                className="p-2 text-muted-foreground hover:text-foreground hover:bg-surface rounded-xl transition cursor-pointer"
+                title="Close"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Email Subject Line Header */}
-            <div className="p-3 rounded-xl bg-surface border border-border/80 text-xs space-y-1">
-              <div className="text-[10px] uppercase font-black text-muted-foreground tracking-wider">Email Subject:</div>
-              <div className="font-bold text-foreground">
-                {showInviteSuccessModal.emailPayload.subject || 'Welcome to JAAGO HUB — Your Login Access & Credentials'}
+            {/* Recipient & Delivery Details Toolbar */}
+            <div className="p-3 rounded-2xl bg-surface border border-border/80 text-xs space-y-2 flex-shrink-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] uppercase font-black text-muted-foreground tracking-wider block mb-1">
+                    Primary Recipient (Work Email):
+                  </label>
+                  <input
+                    type="email"
+                    value={customToEmail}
+                    onChange={(e) => setCustomToEmail(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-card border border-border text-foreground font-bold text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    placeholder="name@jaago.com.bd"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-black text-muted-foreground tracking-wider block mb-1">
+                    CC / Backup Email (Optional):
+                  </label>
+                  <input
+                    type="email"
+                    value={customCCEmail}
+                    onChange={(e) => setCustomCCEmail(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-card border border-border text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    placeholder="personal.email@gmail.com"
+                  />
+                </div>
               </div>
-              <div className="text-[11px] text-muted-foreground pt-1 flex items-center space-x-1">
-                <span>Recipient:</span>
-                <span className="font-extrabold text-foreground">{showInviteSuccessModal.emailPayload.to}</span>
+
+              <div>
+                <label className="text-[10px] uppercase font-black text-muted-foreground tracking-wider block mb-1">
+                  Email Subject Line:
+                </label>
+                <input
+                  type="text"
+                  value={customSubject}
+                  onChange={(e) => setCustomSubject(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl bg-card border border-border text-foreground font-medium text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  placeholder="Welcome to JAAGO HUB — Your Official Login Credentials"
+                />
               </div>
             </div>
 
-            {/* Credential Details Card */}
-            <div className="p-4 rounded-2xl bg-surface/90 border border-border space-y-2.5 text-xs font-mono">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground font-sans font-bold">User ID (Work Email):</span>
-                <span className="font-bold text-foreground select-all">{showInviteSuccessModal.emailPayload.userId}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground font-sans font-bold">Auto Password:</span>
-                <span className="font-black text-amber-500 tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20 select-all">
-                  {showInviteSuccessModal.emailPayload.tempPassword}
-                </span>
-              </div>
-              <div className="flex items-center justify-between pt-1 border-t border-border/60">
-                <span className="text-muted-foreground font-sans font-bold">Portal Access Link:</span>
+            {/* View Switcher Tabs */}
+            <div className="flex items-center space-x-1 border-b border-border/80 pb-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setModalTab('preview')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+                  modalTab === 'preview'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-surface hover:bg-surface/80 text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Mail className="h-3.5 w-3.5" />
+                <span>Formal Email Preview</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setModalTab('credentials')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+                  modalTab === 'credentials'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-surface hover:bg-surface/80 text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Key className="h-3.5 w-3.5" />
+                <span>Quick Credentials</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setModalTab('text')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 ${
+                  modalTab === 'text'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-surface hover:bg-surface/80 text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                <span>Plain Text &amp; ASCII</span>
+              </button>
+            </div>
+
+            {/* Scrollable Tab Content Body */}
+            <div className="overflow-y-auto pr-1 flex-1 space-y-3 min-h-[220px]">
+              {/* TAB 1: FORMAL EMAIL PREVIEW */}
+              {modalTab === 'preview' && (
+                <div className="rounded-2xl border border-border bg-white text-slate-900 shadow-inner overflow-hidden font-sans">
+                  {/* Formal Email Header Banner */}
+                  <div className="bg-slate-900 px-5 py-4 text-white border-b-2 border-amber-500 text-center">
+                    <span className="inline-block bg-amber-500 text-slate-950 font-black text-[10px] tracking-wider uppercase px-2.5 py-0.5 rounded-full mb-1">
+                      JAAGO Foundation Trust
+                    </span>
+                    <h3 className="text-base font-extrabold tracking-tight text-white">
+                      JAAGO HUB &bull; Official Account Provisioned
+                    </h3>
+                    <p className="text-[11px] text-slate-300 font-medium">
+                      Enterprise Resource Planning &amp; Institutional Portal
+                    </p>
+                  </div>
+
+                  {/* Formal Email Letter Content */}
+                  <div className="p-5 sm:p-6 space-y-4 text-xs text-slate-700 leading-relaxed">
+                    <div className="text-sm font-bold text-slate-900">
+                      Dear {showInviteSuccessModal.employee.name},
+                    </div>
+
+                    <div className="p-3 bg-slate-50 border-l-4 border-sky-600 rounded-r-xl text-slate-800 text-xs">
+                      We are pleased to welcome you to <strong>JAAGO Foundation Trust</strong>. Your official institutional user account on <strong>JAAGO HUB</strong> has been successfully configured and activated for immediate access.
+                    </div>
+
+                    {/* Metadata Table */}
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5">
+                        Official Employee &amp; Account Details
+                      </div>
+                      <table className="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+                        <tbody>
+                          <tr className="border-b border-slate-200 bg-slate-50">
+                            <td className="px-3 py-2 font-semibold text-slate-500 w-1/3">Employee Name</td>
+                            <td className="px-3 py-2 font-bold text-slate-900">{showInviteSuccessModal.employee.name}</td>
+                          </tr>
+                          <tr className="border-b border-slate-200">
+                            <td className="px-3 py-2 font-semibold text-slate-500">Employee ID</td>
+                            <td className="px-3 py-2 font-bold text-slate-900">{showInviteSuccessModal.employee.code || '—'}</td>
+                          </tr>
+                          <tr className="border-b border-slate-200 bg-slate-50">
+                            <td className="px-3 py-2 font-semibold text-slate-500">Designation</td>
+                            <td className="px-3 py-2 font-bold text-slate-900">{showInviteSuccessModal.employee.designation || 'Staff Member'}</td>
+                          </tr>
+                          <tr className="border-b border-slate-200">
+                            <td className="px-3 py-2 font-semibold text-slate-500">Department</td>
+                            <td className="px-3 py-2 font-bold text-slate-900">{showInviteSuccessModal.employee.department || 'General'}</td>
+                          </tr>
+                          <tr className="bg-slate-50">
+                            <td className="px-3 py-2 font-semibold text-slate-500">User ID (Work Email)</td>
+                            <td className="px-3 py-2 font-black text-sky-700 font-mono select-all">
+                              {customToEmail || showInviteSuccessModal.emailPayload.to}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Credentials Highlight Card */}
+                    <div className="p-4 rounded-xl bg-amber-50 border-2 border-dashed border-amber-400 text-center space-y-2">
+                      <div className="text-[11px] font-extrabold uppercase tracking-wider text-amber-800">
+                        Temporary Initial Password
+                      </div>
+                      <div className="inline-flex items-center space-x-2 bg-white px-4 py-2 rounded-xl border border-amber-300 shadow-sm">
+                        <span className="font-mono font-black text-base text-amber-900 select-all tracking-wider">
+                          {showInviteSuccessModal.emailPayload.tempPassword}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(showInviteSuccessModal.emailPayload.tempPassword);
+                            setCopiedKey('tempPasswordPreview');
+                            setTimeout(() => setCopiedKey(null), 2500);
+                          }}
+                          className="p-1 text-amber-700 hover:text-amber-900 hover:bg-amber-100 rounded-lg transition"
+                          title="Copy Password"
+                        >
+                          {copiedKey === 'tempPasswordPreview' ? (
+                            <Check className="h-4 w-4 text-emerald-600" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-amber-800 font-medium">
+                        * Please update your temporary password immediately upon your first sign-in under Profile &gt; Security.
+                      </p>
+                    </div>
+
+                    {/* Login CTA Button */}
+                    <div className="text-center pt-1">
+                      <a
+                        href={showInviteSuccessModal.emailPayload.loginUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs uppercase tracking-wider shadow-md transition"
+                      >
+                        <span>Access JAAGO HUB Portal</span>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                      <div className="text-[11px] text-slate-500 pt-1.5">
+                        Portal URL:{' '}
+                        <a
+                          href={showInviteSuccessModal.emailPayload.loginUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sky-600 underline font-mono text-[11px]"
+                        >
+                          {showInviteSuccessModal.emailPayload.loginUrl}
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Step-by-Step Instructions */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                      <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">
+                        Getting Started &bull; Login Instructions:
+                      </div>
+                      <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[11px]">
+                        <li>Open the portal link in any modern web browser.</li>
+                        <li>Enter your official Work Email and Temporary Password.</li>
+                        <li>(Alternative) Click <strong>"Sign in with Google"</strong> if using official Google Workspace.</li>
+                        <li>Update your password upon initial sign-in under <strong>My Profile &gt; Security</strong>.</li>
+                      </ol>
+                    </div>
+
+                    {/* Security Notice */}
+                    <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] leading-relaxed flex items-start space-x-2">
+                      <ShieldCheck className="h-4 w-4 flex-shrink-0 mt-0.5 text-rose-600" />
+                      <div>
+                        <strong>Security Advisory:</strong> Keep these credentials confidential. Do not share your temporary password with anyone. JAAGO HR and IT Administrators will never ask for your password.
+                      </div>
+                    </div>
+
+                    {/* Formal Sign-off */}
+                    <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-600 space-y-0.5">
+                      <p>Warm regards,</p>
+                      <p className="font-bold text-slate-900">People &amp; Culture Department</p>
+                      <p className="font-semibold text-slate-800">JAAGO Foundation Trust</p>
+                      <p className="text-slate-500">Head Office: Banani, Dhaka, Bangladesh &bull; pnc@jaago.com.bd</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: QUICK CREDENTIALS & ONE-CLICK COPY */}
+              {modalTab === 'credentials' && (
+                <div className="space-y-3">
+                  <div className="p-4 rounded-2xl bg-surface border border-border space-y-3 text-xs">
+                    {/* User ID */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-card border border-border/80">
+                      <div>
+                        <div className="text-[10px] font-black uppercase text-muted-foreground">User ID / Work Email</div>
+                        <div className="font-mono font-bold text-foreground text-sm select-all">
+                          {customToEmail || showInviteSuccessModal.emailPayload.to}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(customToEmail || showInviteSuccessModal.emailPayload.to);
+                          setCopiedKey('userId');
+                          setTimeout(() => setCopiedKey(null), 2500);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-surface border border-border hover:bg-card text-foreground text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
+                      >
+                        {copiedKey === 'userId' ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        <span>{copiedKey === 'userId' ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+
+                    {/* Password */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                      <div>
+                        <div className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400">Temporary Password</div>
+                        <div className="font-mono font-black text-amber-600 dark:text-amber-400 text-base select-all tracking-wider">
+                          {showPasswordInModal ? showInviteSuccessModal.emailPayload.tempPassword : '••••••••••••••••'}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswordInModal(!showPasswordInModal)}
+                          className="p-2 rounded-xl bg-surface border border-border hover:bg-card text-muted-foreground hover:text-foreground text-xs transition cursor-pointer"
+                          title={showPasswordInModal ? 'Hide Password' : 'Show Password'}
+                        >
+                          {showPasswordInModal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(showInviteSuccessModal.emailPayload.tempPassword);
+                            setCopiedKey('tempPassword');
+                            setTimeout(() => setCopiedKey(null), 2500);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition flex items-center space-x-1 cursor-pointer shadow-sm"
+                        >
+                          {copiedKey === 'tempPassword' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                          <span>{copiedKey === 'tempPassword' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Login URL */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-card border border-border/80">
+                      <div className="min-w-0 flex-1 mr-2">
+                        <div className="text-[10px] font-black uppercase text-muted-foreground">Portal Login URL</div>
+                        <a
+                          href={showInviteSuccessModal.emailPayload.loginUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-primary hover:underline text-xs truncate block select-all font-bold"
+                        >
+                          {showInviteSuccessModal.emailPayload.loginUrl}
+                        </a>
+                      </div>
+                      <div className="flex items-center space-x-1.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(showInviteSuccessModal.emailPayload.loginUrl);
+                            setCopiedKey('loginUrl');
+                            setTimeout(() => setCopiedKey(null), 2500);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-surface border border-border hover:bg-card text-foreground text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
+                        >
+                          {copiedKey === 'loginUrl' ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                          <span>{copiedKey === 'loginUrl' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                        <a
+                          href={showInviteSuccessModal.emailPayload.loginUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-xl bg-surface border border-border hover:bg-card text-foreground transition cursor-pointer"
+                          title="Open Login Portal"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: PLAIN TEXT & ASCII COPY */}
+              {modalTab === 'text' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-muted-foreground">
+                      Formatted ASCII Email Text (Ready to copy for Slack / SMS / WhatsApp):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(showInviteSuccessModal.emailPayload.fullEmailText || '');
+                        setCopiedKey('fullText');
+                        setTimeout(() => setCopiedKey(null), 2500);
+                      }}
+                      className="px-3 py-1 rounded-xl bg-surface border border-border hover:bg-card text-xs font-bold transition flex items-center space-x-1 cursor-pointer text-foreground"
+                    >
+                      {copiedKey === 'fullText' ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                      <span>{copiedKey === 'fullText' ? 'Copied to Clipboard' : 'Copy Plain Text'}</span>
+                    </button>
+                  </div>
+                  <pre className="p-4 rounded-2xl bg-surface/90 border border-border text-[11px] font-mono text-foreground whitespace-pre-wrap leading-relaxed max-h-[260px] overflow-y-auto select-all">
+                    {showInviteSuccessModal.emailPayload.fullEmailText}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="border-t border-border/80 pt-3 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const textToCopy = showInviteSuccessModal.emailPayload.fullEmailText || '';
+                    navigator.clipboard.writeText(textToCopy);
+                    setCopiedKey('all');
+                    setToastMessage('✓ Complete invitation details copied to clipboard!');
+                    setTimeout(() => setCopiedKey(null), 2500);
+                    setTimeout(() => setToastMessage(null), 3500);
+                  }}
+                  className="px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground hover:bg-card font-bold text-xs uppercase tracking-wider transition flex items-center space-x-1.5 cursor-pointer"
+                  title="Copy complete invite credentials"
+                >
+                  {copiedKey === 'all' ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  <span>{copiedKey === 'all' ? 'Copied All!' : 'Copy Invitation'}</span>
+                </button>
+
                 <a
-                  href={showInviteSuccessModal.emailPayload.loginUrl || 'https://hub.jaago.com.bd/login'}
+                  href={showInviteSuccessModal.emailPayload.loginUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline flex items-center space-x-1 font-sans text-[11px] font-bold"
+                  className="px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground hover:border-primary/50 font-bold text-xs uppercase tracking-wider transition flex items-center space-x-1.5 cursor-pointer"
                 >
-                  <span>{showInviteSuccessModal.emailPayload.loginUrl || 'https://hub.jaago.com.bd/login'}</span>
-                  <ExternalLink className="h-3 w-3" />
+                  <ExternalLink className="h-4 w-4" />
+                  <span className="hidden sm:inline">Open Portal</span>
                 </a>
               </div>
-            </div>
 
-            {/* Security Note Alert */}
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold flex items-start space-x-2">
-              <span className="text-sm leading-none">⚠️</span>
-              <div>
-                <strong>Security Note:</strong>{' '}
-                {showInviteSuccessModal.emailPayload.securityNote ||
-                  'Please update your password as soon as possible after your initial login.'}
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-2 flex items-center space-x-2">
-              <button
-                type="button"
-                disabled={isSendingEmail}
-                onClick={async () => {
-                  if (!showInviteSuccessModal) return;
-                  setIsSendingEmail(true);
-                  try {
-                    const payload = showInviteSuccessModal.emailPayload;
-                    const res = await fetch('/api/v1/notifications/send-email', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        to: payload.to,
-                        subject: payload.subject || 'Welcome to JAAGO HUB — Your Login Access & Credentials',
-                        bodyText: payload.fullEmailText,
-                      }),
-                    });
-                    const data = await res.json();
-                    if (res.ok && data.success) {
-                      setEmailSentSuccess(true);
-                      setToastMessage(`✓ Welcome email successfully sent to ${payload.to}`);
-                      setTimeout(() => setToastMessage(null), 4000);
-                      setTimeout(() => setEmailSentSuccess(false), 3000);
-                    } else {
-                      alert(data.error || 'Failed to dispatch email');
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  disabled={isSendingEmail}
+                  onClick={async () => {
+                    if (!showInviteSuccessModal) return;
+                    setIsSendingEmail(true);
+                    try {
+                      const payload = showInviteSuccessModal.emailPayload;
+                      const res = await fetch('/api/v1/notifications/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          to: customToEmail || payload.to,
+                          cc: customCCEmail || payload.personalEmail,
+                          subject: customSubject || payload.subject,
+                          recipientName: showInviteSuccessModal.employee.name,
+                          loginUrl: payload.loginUrl,
+                          html: payload.htmlEmail,
+                          bodyText: payload.fullEmailText,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (res.ok && data.success) {
+                        setEmailSentSuccess(true);
+                        setToastMessage(`✓ Formal invitation successfully dispatched to ${customToEmail || payload.to}`);
+                        setTimeout(() => setToastMessage(null), 4500);
+                        setTimeout(() => setEmailSentSuccess(false), 3000);
+                      } else {
+                        alert(data.error || 'Failed to dispatch email');
+                      }
+                    } catch (err: any) {
+                      alert(err.message || 'Email dispatch network error');
+                    } finally {
+                      setIsSendingEmail(false);
                     }
-                  } catch (err: any) {
-                    alert(err.message || 'Email dispatch network error');
-                  } finally {
-                    setIsSendingEmail(false);
-                  }
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
-              >
-                {isSendingEmail ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : emailSentSuccess ? (
-                  <CheckCircle2 className="h-4 w-4 text-white" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-                <span>
-                  {isSendingEmail
-                    ? 'Sending Email...'
-                    : emailSentSuccess
-                    ? 'Email Dispatched!'
-                    : showInviteSuccessModal?.emailPayload?.autoSent
-                    ? 'Resend Email'
-                    : 'Send Email'}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowInviteSuccessModal(null)}
-                className="px-6 py-2.5 rounded-xl bg-surface border border-border text-foreground hover:border-primary/50 font-bold text-xs uppercase tracking-wider transition cursor-pointer"
-              >
-                Done
-              </button>
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2 cursor-pointer active:scale-95"
+                >
+                  {isSendingEmail ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : emailSentSuccess ? (
+                    <CheckCircle2 className="h-4 w-4 text-white" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  <span>
+                    {isSendingEmail
+                      ? 'Dispatching Email...'
+                      : emailSentSuccess
+                      ? 'Invitation Sent!'
+                      : showInviteSuccessModal?.emailPayload?.autoSent
+                      ? 'Resend Formal Email'
+                      : 'Send Formal Email'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowInviteSuccessModal(null)}
+                  className="px-5 py-2.5 rounded-xl bg-surface border border-border text-foreground hover:border-primary/50 font-bold text-xs uppercase tracking-wider transition cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>

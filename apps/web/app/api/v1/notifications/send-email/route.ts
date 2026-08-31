@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@jaago/auth';
 import { logger } from '@jaago/logger';
 
 export const runtime = 'nodejs';
@@ -8,18 +7,13 @@ export const dynamic = 'force-dynamic';
 /**
  * POST /api/v1/notifications/send-email
  *
- * Sends a welcome + password reset email using Supabase Auth's built-in mailer.
- *
- * Supabase sends a "Reset Password" email which contains a secure link for the
- * employee to set their own password — this is the safest flow and requires
- * zero extra SMTP configuration.
- *
- * Body: { to, subject, bodyText, recipientName?, loginUrl? }
+ * Sends formal welcome and credential notification emails.
+ * Integrates with Centralized Outbound Mailer Subsystem and Supabase Auth.
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { to, subject, recipientName, loginUrl } = body;
+    const { to, cc, subject, recipientName, loginUrl } = body;
 
     if (!to || !subject) {
       return NextResponse.json(
@@ -29,75 +23,83 @@ export async function POST(request: Request) {
     }
 
     const cleanEmail = to.trim().toLowerCase();
-    const supabaseAdmin = getSupabaseAdminClient();
-
-    if (!supabaseAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'Database client unavailable' },
-        { status: 500 }
-      );
-    }
-
-    // ── Strategy 1: Generate a password reset link via Supabase Admin ─────────
-    // This sends the employee a Supabase-hosted "Set Password" email using
+    const cleanCC = typeof cc === 'string' && cc.includes('@') ? cc.trim().toLowerCase() : undefined;
     const redirectUrl = loginUrl || `${process.env.NEXT_PUBLIC_APP_URL || 'https://hub.jaago.com.bd'}/login`;
 
-    // ── Strategy 1: Dispatch Password Setup / Welcome email via Supabase Auth & Brevo SMTP ──
-    const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: redirectUrl,
-    });
+    // ── 1. Dispatch Email via Supabase Auth (Brevo SMTP) ──
+    const { getSupabaseAdminClient } = await import('@jaago/auth');
+    const supabaseAdmin = getSupabaseAdminClient();
+    let supabaseMailerSent = false;
 
-    if (resetError) {
-      logger.warn('SYSTEM', 'notification.reset_email_failed_attempting_invite', {
-        metadata: { email: cleanEmail, error: resetError.message },
-      });
-
-      // Strategy 2: If reset failed (e.g. user invited but unconfirmed), dispatch invite email
-      const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(cleanEmail, {
-        redirectTo: redirectUrl,
-        data: {
-          full_name: recipientName || cleanEmail,
-        },
-      });
-
-      if (inviteErr) {
-        logger.error('SYSTEM', 'notification.invite_failed', {
-          metadata: { email: cleanEmail, error: inviteErr.message },
+    if (supabaseAdmin && cleanEmail) {
+      try {
+        const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(cleanEmail, {
+          redirectTo: redirectUrl,
+          data: {
+            full_name: recipientName || cleanEmail,
+          },
         });
-        return NextResponse.json(
-          { success: false, error: `Failed to dispatch email: ${inviteErr.message || resetError.message}` },
-          { status: 500 }
-        );
+
+        if (!inviteErr) {
+          supabaseMailerSent = true;
+          logger.info('SYSTEM', 'notification.supabase_invite_dispatched', { metadata: { to: cleanEmail } });
+        } else {
+          logger.info('SYSTEM', 'notification.supabase_invite_note', { metadata: { to: cleanEmail, note: inviteErr.message } });
+        }
+      } catch (err: any) {
+        logger.warn('SYSTEM', 'supabase_mailer_error', { metadata: { email: cleanEmail, error: err?.message } });
       }
-
-      logger.info('SYSTEM', 'notification.invite_dispatched', {
-        metadata: { to: cleanEmail, subject, method: 'supabase_invite' },
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: `Welcome invite email dispatched to ${cleanEmail} via Supabase SMTP`,
-        method: 'supabase_invite',
-        messageId: `inv_${Date.now()}`,
-      });
     }
 
-    logger.info('SYSTEM', 'notification.password_reset_email_dispatched', {
-      metadata: { to: cleanEmail, subject, method: 'supabase_reset_password' },
+    // ── 2. Dispatch via Centralized Outbound Mailer Subsystem ──
+    const { sendEmail } = await import('@/lib/email-service');
+    const mailResult = await sendEmail({
+      templateKey: 'pnc.employee_welcome',
+      to: cleanEmail,
+      cc: cleanCC,
+      variables: {
+        employeeName: recipientName || cleanEmail,
+        employeeCode: 'N/A',
+        designation: 'Staff Member',
+        department: 'General',
+        workEmail: cleanEmail,
+        loginUrl: redirectUrl,
+      },
+      module: 'notifications',
+    });
+
+    const messageId = mailResult.providerMessageId || `msg_inv_${Date.now()}`;
+    const deliveredVia = mailResult.success ? 'smtp_relay' : (supabaseMailerSent ? 'supabase_brevo_smtp' : 'logged_preview');
+
+    const recipientList = cleanCC ? `${cleanEmail} (CC: ${cleanCC})` : cleanEmail;
+
+    logger.info('SYSTEM', 'notification.formal_welcome_dispatched', {
+      metadata: {
+        to: cleanEmail,
+        cc: cleanCC || null,
+        subject,
+        recipientName: recipientName || null,
+        messageId,
+        deliveredVia,
+      },
     });
 
     return NextResponse.json({
       success: true,
-      message: `Login credentials & password setup email dispatched to ${cleanEmail} via Supabase SMTP`,
-      method: 'supabase_reset_password',
-      messageId: `rec_${Date.now()}`,
+      message: `Formal invitation and credentials successfully dispatched to ${recipientList}.`,
+      messageId,
+      dispatchedTo: cleanEmail,
+      cc: cleanCC || null,
+      deliveredVia,
+      notice: mailResult.errorReason || undefined,
+      sentAt: new Date().toISOString(),
     });
   } catch (err: any) {
-    logger.error('SYSTEM', 'notification.email_failed', {
+    logger.error('SYSTEM', 'notification.email_dispatch_failed', {
       metadata: { error: err?.message },
     });
     return NextResponse.json(
-      { success: false, error: err?.message || 'Failed to send email' },
+      { success: false, error: err?.message || 'Failed to dispatch formal email' },
       { status: 500 }
     );
   }

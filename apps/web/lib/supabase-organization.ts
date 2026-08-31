@@ -487,7 +487,7 @@ export const INITIAL_DEPARTMENTS: DepartmentItem[] = [
     organizationName: 'JAAGO Foundation',
     parentDepartmentId: 'dept-1',
     parentDepartmentName: 'Executive Office',
-    managerName: 'Tanvir Ahmed',
+    managerName: 'Habibur Rahman',
     description: 'Public relations, child sponsorship campaigns, and media communications.',
   },
 ];

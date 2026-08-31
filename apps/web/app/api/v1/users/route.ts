@@ -66,24 +66,16 @@ export async function GET(request: Request) {
       });
 
       const seenEmails = new Set<string>();
-      const merged: UserItem[] = [];
+      const deduplicated: UserItem[] = [];
 
       for (const su of supabaseUserItems) {
         if (!seenEmails.has(su.email.toLowerCase())) {
           seenEmails.add(su.email.toLowerCase());
-          merged.push(su);
+          deduplicated.push(su);
         }
       }
 
-      // Add any non-duplicate active memory users
-      for (const u of usersDatabase) {
-        if (!seenEmails.has(u.email.toLowerCase())) {
-          seenEmails.add(u.email.toLowerCase());
-          merged.push(u);
-        }
-      }
-
-      allUsers = merged;
+      allUsers = deduplicated;
     } else {
       allUsers = [...usersDatabase];
     }

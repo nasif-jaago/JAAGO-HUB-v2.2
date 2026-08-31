@@ -21,6 +21,7 @@ import {
   Send,
   RefreshCw,
 } from 'lucide-react';
+import { EmployeeToUserModal } from '@/components/admin/employee-to-user-modal';
 
 interface UserRecord {
   id: string;
@@ -50,6 +51,7 @@ export default function UserManagementPage() {
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
 
   // Modals state
+  const [showEmployeeToUserModal, setShowEmployeeToUserModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showBulkInviteModal, setShowBulkInviteModal] = useState(false);
@@ -463,37 +465,29 @@ export default function UserManagementPage() {
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground flex items-center space-x-3 pt-1">
             <Users className="h-7 w-7 text-primary" />
-            <span>User Management &amp; Directory</span>
+            <span>User Management</span>
           </h1>
-          <p className="text-xs text-muted-foreground pt-1">
-            Provision system accounts, batch invite employees, manage RBAC privileges, and link users to HR payroll profiles.
-          </p>
         </div>
 
         {/* Top Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* EMPLOYEE > USER Button */}
+          <button
+            type="button"
+            onClick={() => setShowEmployeeToUserModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-95 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center space-x-2 shadow-lg shadow-amber-500/25 border border-amber-400/40 transition cursor-pointer"
+            title="Convert Non-User Employees from People & Culture to System Users"
+          >
+            <UserCheck className="h-4 w-4 stroke-[2.5]" />
+            <span>EMPLOYEE &gt; USER</span>
+          </button>
+
           <button
             onClick={() => setShowAddModal(true)}
             className="px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-brand-strong font-black text-xs uppercase tracking-wider flex items-center space-x-2 shadow-lg transition active:scale-95 cursor-pointer"
           >
             <UserPlus className="h-4 w-4" />
             <span>Add User</span>
-          </button>
-
-          <button
-            onClick={() => setShowInviteModal(true)}
-            className="px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground hover:border-primary/50 font-bold text-xs flex items-center space-x-1.5 shadow-sm transition active:scale-95 cursor-pointer"
-          >
-            <Mail className="h-4 w-4 text-primary" />
-            <span>Invite</span>
-          </button>
-
-          <button
-            onClick={() => setShowBulkInviteModal(true)}
-            className="px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground hover:border-primary/50 font-bold text-xs flex items-center space-x-1.5 shadow-sm transition active:scale-95 cursor-pointer"
-          >
-            <Send className="h-4 w-4 text-amber-500" />
-            <span>Bulk Invite</span>
           </button>
 
           <button
@@ -1655,6 +1649,16 @@ export default function UserManagementPage() {
           </div>
         </div>
       )}
+
+      {/* ── EMPLOYEE > USER DARK GLASS MODAL ── */}
+      <EmployeeToUserModal
+        isOpen={showEmployeeToUserModal}
+        onClose={() => setShowEmployeeToUserModal(false)}
+        onUserCreated={() => {
+          fetchUsers();
+          setNotificationMsg('New user(s) provisioned and directory synchronized!');
+        }}
+      />
     </div>
   );
 }

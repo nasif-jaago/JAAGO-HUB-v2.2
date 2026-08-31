@@ -486,6 +486,17 @@ export function DashboardSidebar({
                   <span>RBAC Matrix</span>
                 </Link>
                 <Link
+                  href="/admin/email"
+                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                    pathname?.startsWith('/admin/email')
+                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                  } transition`}
+                >
+                  <Mail className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+                  <span>Email / SMTP Settings</span>
+                </Link>
+                <Link
                   href="/admin/about"
                   className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                     pathname === '/admin/about'

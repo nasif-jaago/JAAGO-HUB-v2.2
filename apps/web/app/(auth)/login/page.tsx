@@ -47,8 +47,15 @@ export default function LoginPage() {
     const rejectedEmail = params.get('rejectedEmail');
     const resetStatus = params.get('reset');
 
+    const emailParam = params.get('email');
+    if (emailParam) {
+      setEmail(decodeURIComponent(emailParam));
+    }
+
     if (resetStatus === 'success') {
       setSuccessMessage('Your password has been reset successfully! Please sign in with your new password.');
+    } else if (params.get('welcome') === '1' || params.get('invite') === '1') {
+      setSuccessMessage('Welcome to JAAGO HUB! Please sign in using your work email and temporary password.');
     }
 
     if (urlError === 'domain_restricted') {

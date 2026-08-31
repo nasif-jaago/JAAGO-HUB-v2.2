@@ -34,7 +34,7 @@ export async function GET() {
         .from('employees')
         .select('*')
         .range(0, 5000)
-        .order('created_at', { ascending: false }),
+        .order('name', { ascending: true }),
       supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
     ]);
 

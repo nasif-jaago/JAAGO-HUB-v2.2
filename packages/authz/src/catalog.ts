@@ -69,6 +69,36 @@ export const PERMISSION_CATALOG: Record<string, PermissionDefinition> = {
     category: 'security',
   },
 
+  // ── EMAIL / SMTP SUBSYSTEM ──
+  'system.email.settings_manage': {
+    key: 'system.email.settings_manage',
+    name: 'Manage Email / SMTP Settings',
+    description: 'Configure outbound SMTP servers, credentials, and failover priority',
+    moduleKey: 'core',
+    category: 'email',
+  },
+  'system.email.templates_manage': {
+    key: 'system.email.templates_manage',
+    name: 'Manage Email Templates',
+    description: 'Create, modify, and preview system email templates',
+    moduleKey: 'core',
+    category: 'email',
+  },
+  'system.email.logs_view': {
+    key: 'system.email.logs_view',
+    name: 'View Email Transmission Logs',
+    description: 'Access delivery audit records and error diagnostics',
+    moduleKey: 'core',
+    category: 'email',
+  },
+  'system.email.logs_retry': {
+    key: 'system.email.logs_retry',
+    name: 'Retry Email Transmissions',
+    description: 'Manually re-queue failed email delivery attempts',
+    moduleKey: 'core',
+    category: 'email',
+  },
+
   // ── HR MODULE ──
   'hr.employees.view': {
     key: 'hr.employees.view',
