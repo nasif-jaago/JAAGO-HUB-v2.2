@@ -47,11 +47,14 @@ export async function GET(request: Request) {
         const linkedCode = matchingEmp?.code || meta['employee_code'] || meta['employee_id'] || null;
         const isLinked = Boolean(linkedCode || matchingEmp);
 
+        const rawRole = meta['role'] || 'USER';
+        const mappedRole = rawRole.toUpperCase() === 'OFFICER' || rawRole === 'Officer' ? 'USER' : rawRole;
+
         return {
           id: su.id,
           fullName: matchingEmp?.name || meta['full_name'] || meta['name'] || su.email?.split('@')[0] || 'User',
           email: su.email || '',
-          role: meta['role'] || 'Staff',
+          role: mappedRole,
           department: matchingEmp?.department || meta['department'] || 'General',
           branch: matchingEmp?.branch || meta['branch'] || 'Head Office (Banani)',
           jobTitle: matchingEmp?.designation || meta['job_title'] || 'Team Member',
@@ -97,7 +100,14 @@ export async function GET(request: Request) {
   }
 
   if (role !== 'all') {
-    filtered = filtered.filter((u) => u.role.toLowerCase() === role.toLowerCase());
+    const roleLower = role.toLowerCase();
+    filtered = filtered.filter((u) => {
+      const uRoleLower = (u.role || '').toLowerCase();
+      if (roleLower === 'user') {
+        return uRoleLower === 'user' || uRoleLower === 'officer';
+      }
+      return uRoleLower === roleLower;
+    });
   }
 
   if (status !== 'all') {

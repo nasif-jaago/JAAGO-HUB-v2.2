@@ -362,7 +362,7 @@ export function DashboardSidebar({
               </a>
               {[
                 { label: 'Admin & Procurement', icon: Building2 },
-                { label: 'Child Welfare', icon: Star },
+                { label: 'Child Welfare', icon: Star, href: 'https://jaagohub.jaago.com.bd/?view=child-welfare-v1' },
                 { label: 'Digital & Creative (DKL)', icon: TrendingUp },
                 { label: "Founder's Office (FC)", icon: FileText },
                 { label: 'Fundraising & Grants', icon: DollarSign },
@@ -372,15 +372,35 @@ export function DashboardSidebar({
                 { label: 'Private Sector (PSE)', icon: Building2 },
                 { label: 'Youth Development (YDF)', icon: HeartHandshake },
                 { label: 'MEAL (Monitoring & Eval)', icon: BarChart2 },
-              ].map((dept, idx) => (
-                <button
-                  key={idx}
-                  className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer"
-                >
-                  <dept.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span className="truncate">{dept.label}</span>
-                </button>
-              ))}
+              ].map((dept, idx) => {
+                if (dept.href) {
+                  return (
+                    <a
+                      key={idx}
+                      href={dept.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-between px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer group"
+                      title={`Open ${dept.label} in New Tab`}
+                    >
+                      <div className="flex items-center space-x-2.5 truncate">
+                        <dept.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition flex-shrink-0" />
+                        <span className="truncate">{dept.label}</span>
+                      </div>
+                      <ExternalLink className="h-3 w-3 text-muted-foreground/60 group-hover:text-primary transition flex-shrink-0" />
+                    </a>
+                  );
+                }
+                return (
+                  <button
+                    key={idx}
+                    className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer"
+                  >
+                    <dept.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate">{dept.label}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
 

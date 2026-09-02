@@ -10,6 +10,7 @@ import {
   Search,
   MoreVertical,
   Key,
+  Shield,
   ShieldAlert,
   Trash2,
   UserCheck,
@@ -20,6 +21,8 @@ import {
   Sparkles,
   Send,
   RefreshCw,
+  Edit3,
+  Check,
 } from 'lucide-react';
 import { EmployeeToUserModal } from '@/components/admin/employee-to-user-modal';
 
@@ -60,6 +63,9 @@ export default function UserManagementPage() {
   const [showResetPasswordModal, setShowResetPasswordModal] = useState<{ user: UserRecord; tempPass: string } | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState<UserRecord | null>(null);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [showEditRoleModal, setShowEditRoleModal] = useState<UserRecord | null>(null);
+  const [selectedNewRole, setSelectedNewRole] = useState('USER');
+  const [isSavingRole, setIsSavingRole] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
 
   // Form states
@@ -370,7 +376,36 @@ export default function UserManagementPage() {
     }
   };
 
-  // ── 9. SINGLE HARD DELETE USER ──
+  // ── 9. UPDATE USER ROLE ──
+  const handleUpdateRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showEditRoleModal) return;
+    setIsSavingRole(true);
+    try {
+      const res = await fetch(`/api/v1/users/${showEditRoleModal.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: selectedNewRole }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setUsers((prev) =>
+          prev.map((u) => (u.id === showEditRoleModal.id ? { ...u, role: selectedNewRole } : u))
+        );
+        showToast(`Role for ${showEditRoleModal.fullName} updated to "${selectedNewRole}" successfully!`);
+        setShowEditRoleModal(null);
+        fetchUsers();
+      } else {
+        alert(data.error || 'Failed to update role');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Network error');
+    } finally {
+      setIsSavingRole(false);
+    }
+  };
+
+  // ── 10. SINGLE HARD DELETE USER ──
   const handleDeleteUser = async () => {
     if (!showDeleteModal) return;
     try {
@@ -566,7 +601,7 @@ export default function UserManagementPage() {
             <option value="Super Admin">Super Admin</option>
             <option value="Manager">Manager</option>
             <option value="Coordinator">Coordinator</option>
-            <option value="Officer">Officer</option>
+            <option value="USER">User</option>
             <option value="Staff">Staff</option>
             <option value="Intern">Intern</option>
             <option value="Volunteer">Volunteer</option>
@@ -705,21 +740,38 @@ export default function UserManagementPage() {
 
                       {/* Role */}
                       <td className="p-4">
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                            user.role === 'Super Admin'
-                              ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
-                              : user.role === 'Manager'
-                              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                              : user.role === 'Coordinator'
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                              : user.role === 'Officer'
-                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                              : 'bg-surface text-muted-foreground border border-border'
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowEditRoleModal(user);
+                            setSelectedNewRole(
+                              user.role?.toUpperCase() === 'OFFICER' || user.role === 'Officer'
+                                ? 'USER'
+                                : user.role || 'USER'
+                            );
+                          }}
+                          title="Click to edit role"
+                          className={`group px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer hover:scale-105 active:scale-95 ${
+                            user.role?.toUpperCase().includes('SUPER') || user.role === 'Super Admin'
+                              ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 hover:bg-purple-500/25 hover:border-purple-500/50'
+                              : user.role?.toUpperCase().includes('DIRECTOR') || user.role === 'Executive Director'
+                              ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/25'
+                              : user.role?.toUpperCase().includes('PNC_LEAD') || user.role === 'PNC Lead'
+                              ? 'bg-pink-500/15 text-pink-400 border border-pink-500/30 hover:bg-pink-500/25'
+                              : user.role?.toUpperCase().includes('PNC') || user.role === 'PNC Officer'
+                              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25'
+                              : user.role?.toUpperCase().includes('MANAGER') || user.role === 'Manager'
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 hover:border-emerald-500/50'
+                              : user.role?.toUpperCase().includes('COORDINATOR') || user.role === 'Coordinator'
+                              ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30 hover:bg-teal-500/25 hover:border-teal-500/50'
+                              : user.role?.toUpperCase() === 'USER' || user.role?.toUpperCase() === 'OFFICER' || user.role === 'User' || user.role === 'Officer'
+                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 hover:border-amber-500/50'
+                              : 'bg-surface text-muted-foreground border border-border hover:bg-surface/80'
                           }`}
                         >
-                          {user.role}
-                        </span>
+                          <span>{user.role?.toUpperCase() === 'OFFICER' || user.role === 'Officer' ? 'USER' : user.role}</span>
+                          <Edit3 className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100 group-hover:text-primary transition" />
+                        </button>
                       </td>
 
                       {/* Department & Branch */}
@@ -804,6 +856,22 @@ export default function UserManagementPage() {
                       {/* Actions Column */}
                       <td className="p-4 text-right relative">
                         <div className="inline-flex items-center space-x-1">
+                          {/* Quick Edit Role */}
+                          <button
+                            onClick={() => {
+                              setShowEditRoleModal(user);
+                              setSelectedNewRole(
+                                user.role?.toUpperCase() === 'OFFICER' || user.role === 'Officer'
+                                  ? 'USER'
+                                  : user.role || 'USER'
+                              );
+                            }}
+                            className="p-1.5 rounded-lg bg-surface border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition cursor-pointer"
+                            title="Edit Role"
+                          >
+                            <Shield className="h-3.5 w-3.5" />
+                          </button>
+
                           {/* Quick Create Employee if not linked */}
                           {!user.isEmployeeLinked && (
                             <button
@@ -817,7 +885,7 @@ export default function UserManagementPage() {
                                   dateOfJoining: '2026-08-01',
                                 });
                               }}
-                              className="p-1.5 rounded-lg bg-surface border border-border text-muted-foreground hover:text-primary transition"
+                              className="p-1.5 rounded-lg bg-surface border border-border text-muted-foreground hover:text-primary transition cursor-pointer"
                               title="Create Employee Profile"
                             >
                               <UserCheck className="h-3.5 w-3.5" />
@@ -827,7 +895,7 @@ export default function UserManagementPage() {
                           {/* Quick Reset Password */}
                           <button
                             onClick={() => handleResetPassword(user)}
-                            className="p-1.5 rounded-lg bg-surface border border-border text-muted-foreground hover:text-amber-500 transition"
+                            className="p-1.5 rounded-lg bg-surface border border-border text-muted-foreground hover:text-amber-500 transition cursor-pointer"
                             title="Reset Password"
                           >
                             <Key className="h-3.5 w-3.5" />
@@ -852,6 +920,22 @@ export default function UserManagementPage() {
                             />
 
                             <div className="absolute right-4 top-full mt-1.5 w-56 rounded-2xl bg-card border border-border shadow-[0_12px_40px_rgba(0,0,0,0.25)] p-2 z-40 animate-in fade-in zoom-in-95 text-left space-y-1">
+                              <button
+                                onClick={() => {
+                                  setActiveActionMenuId(null);
+                                  setShowEditRoleModal(user);
+                                  setSelectedNewRole(
+                                    user.role?.toUpperCase() === 'OFFICER' || user.role === 'Officer'
+                                      ? 'USER'
+                                      : user.role || 'USER'
+                                  );
+                                }}
+                                className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition cursor-pointer"
+                              >
+                                <Shield className="h-3.5 w-3.5 text-primary" />
+                                <span>Edit Role</span>
+                              </button>
+
                               {!user.isEmployeeLinked && (
                                 <button
                                   onClick={() => {
@@ -978,7 +1062,7 @@ export default function UserManagementPage() {
                     <option value="Super Admin">Super Admin</option>
                     <option value="Manager">Manager</option>
                     <option value="Coordinator">Coordinator</option>
-                    <option value="Officer">Officer</option>
+                    <option value="USER">User</option>
                     <option value="Staff">Staff</option>
                     <option value="Intern">Intern</option>
                     <option value="Volunteer">Volunteer</option>
@@ -1117,9 +1201,9 @@ export default function UserManagementPage() {
                     onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground focus:ring-1 focus:ring-primary"
                   >
+                    <option value="USER">User</option>
                     <option value="Staff">Staff</option>
                     <option value="Coordinator">Coordinator</option>
-                    <option value="Officer">Officer</option>
                     <option value="Manager">Manager</option>
                     <option value="Intern">Intern</option>
                     <option value="Volunteer">Volunteer</option>
@@ -1202,8 +1286,8 @@ export default function UserManagementPage() {
                     onChange={(e) => setBulkInviteRole(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground focus:ring-1 focus:ring-primary"
                   >
+                    <option value="USER">User</option>
                     <option value="Staff">Staff</option>
-                    <option value="Officer">Officer</option>
                     <option value="Coordinator">Coordinator</option>
                     <option value="Intern">Intern</option>
                     <option value="Volunteer">Volunteer</option>
@@ -1646,6 +1730,211 @@ export default function UserManagementPage() {
                 <span>Hard Delete ({selectedUserIds.length}) Records</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: EDIT USER ROLE ── */}
+      {showEditRoleModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 text-foreground max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-border flex-shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-9 w-9 rounded-xl bg-primary/20 text-primary flex items-center justify-center border border-primary/30">
+                  <Shield className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-foreground">Edit User Role</h3>
+                  <p className="text-[11px] text-muted-foreground">Assign security role and system permissions</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEditRoleModal(null)}
+                className="p-1.5 rounded-lg bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* User Target Card */}
+            <div className="flex items-center space-x-3.5 p-3.5 rounded-2xl bg-surface border border-border flex-shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-primary/20 border border-primary/30 text-primary font-black text-sm flex items-center justify-center flex-shrink-0">
+                {showEditRoleModal.avatarUrl ? (
+                  <img
+                    src={showEditRoleModal.avatarUrl}
+                    alt={showEditRoleModal.fullName}
+                    className="h-full w-full object-cover rounded-xl"
+                  />
+                ) : (
+                  showEditRoleModal.fullName
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-extrabold text-foreground text-sm truncate">
+                  {showEditRoleModal.fullName}
+                </div>
+                <div className="text-[11px] text-muted-foreground font-mono truncate">
+                  {showEditRoleModal.email}
+                </div>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <div className="text-[10px] uppercase font-bold text-muted-foreground mb-0.5">Current Role</div>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-surface border border-border text-foreground">
+                  {showEditRoleModal.role?.toUpperCase() === 'OFFICER' || showEditRoleModal.role === 'Officer'
+                    ? 'USER'
+                    : showEditRoleModal.role}
+                </span>
+              </div>
+            </div>
+
+            {/* Role Options Selection */}
+            <form onSubmit={handleUpdateRole} className="space-y-4 overflow-y-auto pr-1 no-scrollbar flex-1">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground mb-2">
+                  Select New Role Assignment:
+                </label>
+                <div className="space-y-2">
+                  {[
+                    {
+                      key: 'Super Admin',
+                      label: 'Super Admin',
+                      badgeClass: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+                      description: 'Full master access to all system modules, configurations, databases, and RBAC matrix.',
+                    },
+                    {
+                      key: 'Executive Director',
+                      label: 'Executive Director',
+                      badgeClass: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
+                      description: 'Strategic organizational visibility, executive dashboards, audit access, and top-level approvals.',
+                    },
+                    {
+                      key: 'PNC Lead',
+                      label: 'People & Culture (HR) Lead',
+                      badgeClass: 'bg-pink-500/15 text-pink-400 border-pink-500/30',
+                      description: 'Full control over HR operations, employee management, attendance, leaves, and salary structures.',
+                    },
+                    {
+                      key: 'PNC Officer',
+                      label: 'People & Culture Officer',
+                      badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+                      description: 'HR staff handling employee records, shift scheduling, daily attendance logs, and leave review.',
+                    },
+                    {
+                      key: 'Manager',
+                      label: 'Department Manager',
+                      badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+                      description: 'Line manager overseeing department staff, shift rosters, leave approvals, and on-duty sign-off.',
+                    },
+                    {
+                      key: 'Coordinator',
+                      label: 'Coordinator',
+                      badgeClass: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
+                      description: 'Field & project coordinator managing project tasks, reports, and team movement workflows.',
+                    },
+                    {
+                      key: 'USER',
+                      label: 'User',
+                      badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+                      description: 'Standard user account with module operations and personal self-service portal requests.',
+                    },
+                    {
+                      key: 'Staff',
+                      label: 'Staff Member',
+                      badgeClass: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
+                      description: 'Standard employee account for attendance logging, leave applications, and announcements.',
+                    },
+                    {
+                      key: 'Intern',
+                      label: 'Intern',
+                      badgeClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
+                      description: 'Limited internship access with department viewing and self-service attendance.',
+                    },
+                    {
+                      key: 'Volunteer',
+                      label: 'Volunteer (VBD)',
+                      badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+                      description: 'Volunteer contributor account for events, activity tracking, and community logging.',
+                    },
+                  ].map((roleItem) => {
+                    const isSelected =
+                      selectedNewRole === roleItem.key ||
+                      selectedNewRole.toUpperCase() === roleItem.key.toUpperCase().replace(/ /g, '_') ||
+                      (roleItem.key === 'USER' &&
+                        (selectedNewRole?.toUpperCase() === 'USER' ||
+                          selectedNewRole?.toUpperCase() === 'OFFICER' ||
+                          selectedNewRole === 'User' ||
+                          selectedNewRole === 'Officer'));
+
+                    return (
+                      <div
+                        key={roleItem.key}
+                        onClick={() => setSelectedNewRole(roleItem.key)}
+                        className={`p-3 rounded-2xl border transition cursor-pointer flex items-start space-x-3 select-none ${
+                          isSelected
+                            ? 'bg-primary/10 border-primary/60 ring-1 ring-primary/40 shadow-sm'
+                            : 'bg-surface/60 border-border hover:bg-surface hover:border-border/80'
+                        }`}
+                      >
+                        <div className="pt-0.5">
+                          <div
+                            className={`h-4 w-4 rounded-full border flex items-center justify-center transition ${
+                              isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
+                            }`}
+                          >
+                            {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-extrabold text-xs text-foreground">{roleItem.label}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${roleItem.badgeClass}`}>
+                              {roleItem.key}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                            {roleItem.description}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-border flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowEditRoleModal(null)}
+                  className="px-4 py-2 rounded-xl bg-surface border border-border text-foreground font-bold text-xs hover:bg-surface/80 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingRole}
+                  className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider hover:bg-brand-strong transition shadow-lg flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingRole ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Saving Role...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="h-3.5 w-3.5" />
+                      <span>Save Role Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

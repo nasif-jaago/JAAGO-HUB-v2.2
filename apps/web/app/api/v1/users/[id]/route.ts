@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@jaago/logger';
 import { getSupabaseAdminClient } from '@jaago/auth';
-import { deleteUsersByIds } from '@/lib/users-db';
+import { deleteUsersByIds, updateUserInDb } from '@/lib/users-db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -69,12 +69,55 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     try {
       const supabaseAdmin = getSupabaseAdminClient();
-      await supabaseAdmin.auth.admin.updateUserById(id, {
-        user_metadata: updates,
+      let targetUserId = id;
+
+      if (id.includes('@')) {
+        const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
+        const match = userList?.users?.find((u) => u.email?.toLowerCase() === id.toLowerCase().trim());
+        if (match) targetUserId = match.id;
+      }
+
+      // Fetch existing user to preserve existing user_metadata
+      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(targetUserId);
+      const existingMeta = userData?.user?.user_metadata || {};
+
+      const roleName = updates.role !== undefined ? updates.role : existingMeta.role || 'Staff';
+      const roleSlug = roleName.toLowerCase().replace(/[\s&/]+/g, '_');
+
+      const newMeta = {
+        ...existingMeta,
+        ...updates,
+        role: roleName,
+        roles: Array.from(new Set([...(existingMeta.roles || []), roleSlug])),
+      };
+
+      await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
+        user_metadata: newMeta,
       });
+
+      // Synchronize role in public.roles and public.user_roles if available
+      if (updates.role) {
+        try {
+          const { data: roleRow } = await supabaseAdmin
+            .from('roles')
+            .select('id')
+            .or(`slug.eq.${roleSlug},name.ilike.${roleName}`)
+            .maybeSingle();
+
+          if (roleRow?.id) {
+            await supabaseAdmin
+              .from('user_roles')
+              .upsert({ user_id: targetUserId, role_id: roleRow.id }, { onConflict: 'user_id,role_id' });
+          }
+        } catch {
+          // Ignore if user_roles table is not present
+        }
+      }
     } catch (err: any) {
       logger.warn('SYSTEM', 'user.update_supabase_notice', { metadata: { userId: id, error: err?.message } });
     }
+
+    updateUserInDb(id, updates);
 
     logger.info('AUDIT', 'user.updated', {
       metadata: { userId: id, fields: Object.keys(updates) },

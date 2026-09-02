@@ -48,7 +48,7 @@ export function addUserFromEmployee(data: {
     id: `u-${Date.now()}`,
     fullName: data.fullName,
     email: data.email.toLowerCase().trim(),
-    role: 'Officer',
+    role: 'USER',
     department: data.department || 'General',
     branch: data.branch || 'Head Office (Banani)',
     jobTitle: data.jobTitle || 'Staff Member',
