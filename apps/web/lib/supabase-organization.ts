@@ -722,18 +722,53 @@ export async function cascadeRenameEntity(
   }
 }
 
+export function deduplicateEntitiesByName<T extends { id: string; name: string }>(
+  primaryList: T[],
+  fallbackList: T[] = []
+): T[] {
+  const seenNames = new Set<string>();
+  const seenIds = new Set<string>();
+  const result: T[] = [];
+
+  // Add all primary items (e.g. from Supabase DB) first
+  for (const item of primaryList) {
+    if (!item || !item.name) continue;
+    const normName = item.name.trim().toLowerCase();
+    const normId = item.id.trim();
+    if (!seenNames.has(normName) && !seenIds.has(normId)) {
+      seenNames.add(normName);
+      seenIds.add(normId);
+      result.push(item);
+    }
+  }
+
+  // Only if primary list didn't have this entity, take from fallback
+  for (const item of fallbackList) {
+    if (!item || !item.name) continue;
+    const normName = item.name.trim().toLowerCase();
+    const normId = item.id.trim();
+    if (!seenNames.has(normName) && !seenIds.has(normId)) {
+      seenNames.add(normName);
+      seenIds.add(normId);
+      result.push(item);
+    }
+  }
+
+  return result;
+}
+
 // --- ORGANIZATIONS ---
 const ORGS_CACHE_KEY = 'jaago_pnc_organizations_cache';
 
 export async function fetchOrganizationsFromSupabase(): Promise<OrganizationEntity[]> {
   const deletedIds = getDeletedEntityIds();
-  let baseList: OrganizationEntity[] = INITIAL_ORGANIZATIONS;
+  let baseList: OrganizationEntity[] = [];
   try {
     const supabase = getSupabase();
     if (supabase) {
       const { data, error } = await supabase.from('organizations').select('*').order('name', { ascending: true });
       if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems = data.map((row: any) => ({
+        const dbItems: OrganizationEntity[] = data.map((row: any) => ({
           id: row.id,
           name: row.name,
           logoUrl: row.logo_url || '',
@@ -755,13 +790,17 @@ export async function fetchOrganizationsFromSupabase(): Promise<OrganizationEnti
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         }));
-        const dbIdSet = new Set(dbItems.map((d) => d.id));
-        baseList = [...dbItems, ...INITIAL_ORGANIZATIONS.filter((i) => !dbIdSet.has(i.id))];
+        baseList = deduplicateEntitiesByName(dbItems, INITIAL_ORGANIZATIONS);
       }
     }
   } catch {}
-  const cached = getLocalCache(ORGS_CACHE_KEY, baseList);
-  const result = cached.filter((o) => !deletedIds.has(o.id));
+
+  if (baseList.length === 0) {
+    const cached = getLocalCache(ORGS_CACHE_KEY, INITIAL_ORGANIZATIONS);
+    baseList = deduplicateEntitiesByName(cached, INITIAL_ORGANIZATIONS);
+  }
+
+  const result = deduplicateEntitiesByName(baseList, []).filter((o) => !deletedIds.has(o.id));
   setLocalCache(ORGS_CACHE_KEY, result);
   return result;
 }
@@ -772,8 +811,8 @@ export async function saveOrganizationToSupabase(org: OrganizationEntity, oldNam
   const existing = current.find((o) => o.id === org.id);
   const previousName = oldName || (existing && existing.name !== org.name ? existing.name : undefined);
 
-  const filtered = current.filter((o) => o.id !== org.id);
-  const updated = [org, ...filtered];
+  const filtered = current.filter((o) => o.id !== org.id && o.name.trim().toLowerCase() !== org.name.trim().toLowerCase());
+  const updated = deduplicateEntitiesByName([org, ...filtered], []);
   setLocalCache(ORGS_CACHE_KEY, updated);
 
   if (previousName && previousName !== org.name) {
@@ -805,21 +844,35 @@ export async function saveOrganizationToSupabase(org: OrganizationEntity, oldNam
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('organizations').upsert(payload, { onConflict: 'id' });
+    if (!error) {
+      notifyEntityUpdated('organization', org);
+    }
     return !error;
   } catch {
     return true;
   }
 }
 
-export async function deleteOrganizationFromSupabase(id: string): Promise<boolean> {
+export async function deleteOrganizationFromSupabase(id: string, name?: string): Promise<boolean> {
   addDeletedEntityId(id);
-  const cached = getLocalCache(ORGS_CACHE_KEY, INITIAL_ORGANIZATIONS).filter((o) => o.id !== id);
+  const cached = getLocalCache(ORGS_CACHE_KEY, INITIAL_ORGANIZATIONS).filter(
+    (o) => o.id !== id && (!name || o.name.trim().toLowerCase() !== name.trim().toLowerCase())
+  );
   setLocalCache(ORGS_CACHE_KEY, cached);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('jaago_org_changed', { detail: 'ALL' }));
+    notifyEntityUpdated('organization', { id, name, deleted: true });
+  }
 
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
-    await supabase.from('organizations').delete().eq('id', id);
+    if (name) {
+      await supabase.from('organizations').delete().or(`id.eq.${id},name.ilike.${name}`);
+    } else {
+      await supabase.from('organizations').delete().eq('id', id);
+    }
     return true;
   } catch {
     return true;
@@ -831,7 +884,7 @@ const BRANCHES_CACHE_KEY = 'jaago_pnc_branches_cache';
 
 export async function fetchBranchesFromSupabase(organizationId?: string): Promise<OrganizationBranch[]> {
   const deletedIds = getDeletedEntityIds();
-  let baseList: OrganizationBranch[] = INITIAL_BRANCHES;
+  let baseList: OrganizationBranch[] = [];
   try {
     const supabase = getSupabase();
     if (supabase) {
@@ -841,7 +894,7 @@ export async function fetchBranchesFromSupabase(organizationId?: string): Promis
       }
       const { data, error } = await query.order('name', { ascending: true });
       if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems = data.map((row: any) => ({
+        const dbItems: OrganizationBranch[] = data.map((row: any) => ({
           id: row.id,
           organizationId: row.organization_id,
           name: row.name,
@@ -853,14 +906,18 @@ export async function fetchBranchesFromSupabase(organizationId?: string): Promis
           country: row.country || 'Bangladesh',
           createdAt: row.created_at,
         }));
-        const dbIdSet = new Set(dbItems.map((d) => d.id));
-        baseList = [...dbItems, ...INITIAL_BRANCHES.filter((i) => !dbIdSet.has(i.id))];
+        baseList = deduplicateEntitiesByName(dbItems, []);
       }
     }
   } catch {}
-  const cached = getLocalCache(BRANCHES_CACHE_KEY, baseList);
-  const filteredByOrg = organizationId ? cached.filter((b) => b.organizationId === organizationId) : cached;
-  const result = filteredByOrg.filter((b) => !deletedIds.has(b.id));
+
+  if (baseList.length === 0) {
+    const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES);
+    baseList = deduplicateEntitiesByName(cached, INITIAL_BRANCHES);
+  }
+
+  const filteredByOrg = organizationId ? baseList.filter((b) => b.organizationId === organizationId) : baseList;
+  const result = deduplicateEntitiesByName(filteredByOrg, []).filter((b) => !deletedIds.has(b.id));
   setLocalCache(BRANCHES_CACHE_KEY, result);
   return result;
 }
@@ -872,7 +929,8 @@ export async function saveBranchToSupabase(branch: OrganizationBranch, oldName?:
   const previousName = oldName || (existing && existing.name !== branch.name ? existing.name : undefined);
 
   const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES).filter((b) => b.id !== branch.id);
-  setLocalCache(BRANCHES_CACHE_KEY, [branch, ...cached]);
+  const updated = deduplicateEntitiesByName([branch, ...cached], []);
+  setLocalCache(BRANCHES_CACHE_KEY, updated);
 
   if (previousName && previousName !== branch.name) {
     await cascadeRenameEntity('branch', previousName, branch.name);
@@ -893,21 +951,34 @@ export async function saveBranchToSupabase(branch: OrganizationBranch, oldName?:
       country: branch.country || 'Bangladesh',
     };
     const { error } = await supabase.from('organization_branches').upsert(payload, { onConflict: 'id' });
+    if (!error) {
+      notifyEntityUpdated('branch', branch);
+    }
     return !error;
   } catch {
     return true;
   }
 }
 
-export async function deleteBranchFromSupabase(id: string): Promise<boolean> {
+export async function deleteBranchFromSupabase(id: string, name?: string): Promise<boolean> {
   addDeletedEntityId(id);
-  const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES).filter((b) => b.id !== id);
+  const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES).filter(
+    (b) => b.id !== id && (!name || b.name.trim().toLowerCase() !== name.trim().toLowerCase())
+  );
   setLocalCache(BRANCHES_CACHE_KEY, cached);
+
+  if (typeof window !== 'undefined') {
+    notifyEntityUpdated('branch', { id, name, deleted: true });
+  }
 
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
-    await supabase.from('organization_branches').delete().eq('id', id);
+    if (name) {
+      await supabase.from('organization_branches').delete().or(`id.eq.${id},name.ilike.${name}`);
+    } else {
+      await supabase.from('organization_branches').delete().eq('id', id);
+    }
     return true;
   } catch {
     return true;
@@ -919,7 +990,7 @@ const POLICIES_CACHE_KEY = 'jaago_pnc_policies_cache';
 
 export async function fetchPoliciesFromSupabase(organizationId?: string): Promise<OrganizationPolicy[]> {
   const deletedIds = getDeletedEntityIds();
-  let baseList: OrganizationPolicy[] = INITIAL_POLICIES;
+  let baseList: OrganizationPolicy[] = [];
   try {
     const supabase = getSupabase();
     if (supabase) {
@@ -941,13 +1012,16 @@ export async function fetchPoliciesFromSupabase(organizationId?: string): Promis
           uploadedAt: row.uploaded_at,
           createdAt: row.created_at,
         }));
-        const dbIdSet = new Set(dbItems.map((d) => d.id));
-        baseList = [...dbItems, ...INITIAL_POLICIES.filter((i) => !dbIdSet.has(i.id))];
+        baseList = dbItems;
       }
     }
   } catch {}
-  const cached = getLocalCache(POLICIES_CACHE_KEY, baseList);
-  const filteredByOrg = organizationId ? cached.filter((p) => p.organizationId === organizationId) : cached;
+
+  if (baseList.length === 0) {
+    baseList = getLocalCache(POLICIES_CACHE_KEY, INITIAL_POLICIES);
+  }
+
+  const filteredByOrg = organizationId ? baseList.filter((p) => p.organizationId === organizationId) : baseList;
   const result = filteredByOrg.filter((p) => !deletedIds.has(p.id));
   setLocalCache(POLICIES_CACHE_KEY, result);
   return result;
@@ -999,13 +1073,13 @@ const DESIGNATIONS_CACHE_KEY = 'jaago_pnc_designations_cache';
 
 export async function fetchDesignationsFromSupabase(): Promise<DesignationItem[]> {
   const deletedIds = getDeletedEntityIds();
-  let baseList: DesignationItem[] = INITIAL_DESIGNATIONS;
+  let baseList: DesignationItem[] = [];
   try {
     const supabase = getSupabase();
     if (supabase) {
       const { data, error } = await supabase.from('designations').select('*').order('name', { ascending: true });
       if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems = data.map((row: any) => ({
+        const dbItems: DesignationItem[] = data.map((row: any) => ({
           id: row.id,
           name: row.name,
           code: row.code || '',
@@ -1015,13 +1089,17 @@ export async function fetchDesignationsFromSupabase(): Promise<DesignationItem[]
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         }));
-        const dbIdSet = new Set(dbItems.map((d) => d.id));
-        baseList = [...dbItems, ...INITIAL_DESIGNATIONS.filter((i) => !dbIdSet.has(i.id))];
+        baseList = deduplicateEntitiesByName(dbItems, []);
       }
     }
   } catch {}
-  const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, baseList);
-  const result = cached.filter((d) => !deletedIds.has(d.id));
+
+  if (baseList.length === 0) {
+    const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS);
+    baseList = deduplicateEntitiesByName(cached, INITIAL_DESIGNATIONS);
+  }
+
+  const result = deduplicateEntitiesByName(baseList, []).filter((d) => !deletedIds.has(d.id));
   setLocalCache(DESIGNATIONS_CACHE_KEY, result);
   return result;
 }
@@ -1033,7 +1111,8 @@ export async function saveDesignationToSupabase(des: DesignationItem, oldName?: 
   const previousName = oldName || (existing && existing.name !== des.name ? existing.name : undefined);
 
   const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS).filter((d) => d.id !== des.id);
-  setLocalCache(DESIGNATIONS_CACHE_KEY, [des, ...cached]);
+  const updated = deduplicateEntitiesByName([des, ...cached], []);
+  setLocalCache(DESIGNATIONS_CACHE_KEY, updated);
 
   if (previousName && previousName !== des.name) {
     await cascadeRenameEntity('designation', previousName, des.name);
@@ -1052,21 +1131,34 @@ export async function saveDesignationToSupabase(des: DesignationItem, oldName?: 
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('designations').upsert(payload, { onConflict: 'id' });
+    if (!error) {
+      notifyEntityUpdated('designation', des);
+    }
     return !error;
   } catch {
     return true;
   }
 }
 
-export async function deleteDesignationFromSupabase(id: string): Promise<boolean> {
+export async function deleteDesignationFromSupabase(id: string, name?: string): Promise<boolean> {
   addDeletedEntityId(id);
-  const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS).filter((d) => d.id !== id);
+  const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS).filter(
+    (d) => d.id !== id && (!name || d.name.trim().toLowerCase() !== name.trim().toLowerCase())
+  );
   setLocalCache(DESIGNATIONS_CACHE_KEY, cached);
+
+  if (typeof window !== 'undefined') {
+    notifyEntityUpdated('designation', { id, name, deleted: true });
+  }
 
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
-    await supabase.from('designations').delete().eq('id', id);
+    if (name) {
+      await supabase.from('designations').delete().or(`id.eq.${id},name.ilike.${name}`);
+    } else {
+      await supabase.from('designations').delete().eq('id', id);
+    }
     return true;
   } catch {
     return true;
@@ -1078,13 +1170,13 @@ const DEPARTMENTS_CACHE_KEY = 'jaago_pnc_departments_cache';
 
 export async function fetchDepartmentsFromSupabase(): Promise<DepartmentItem[]> {
   const deletedIds = getDeletedEntityIds();
-  let baseList: DepartmentItem[] = INITIAL_DEPARTMENTS;
+  let baseList: DepartmentItem[] = [];
   try {
     const supabase = getSupabase();
     if (supabase) {
       const { data, error } = await supabase.from('departments').select('*').order('name', { ascending: true });
       if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems = data.map((row: any) => ({
+        const dbItems: DepartmentItem[] = data.map((row: any) => ({
           id: row.id,
           name: row.name,
           code: row.code || '',
@@ -1098,13 +1190,17 @@ export async function fetchDepartmentsFromSupabase(): Promise<DepartmentItem[]> 
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         }));
-        const dbIdSet = new Set(dbItems.map((d) => d.id));
-        baseList = [...dbItems, ...INITIAL_DEPARTMENTS.filter((i) => !dbIdSet.has(i.id))];
+        baseList = deduplicateEntitiesByName(dbItems, []);
       }
     }
   } catch {}
-  const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, baseList);
-  const result = cached.filter((d) => !deletedIds.has(d.id));
+
+  if (baseList.length === 0) {
+    const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS);
+    baseList = deduplicateEntitiesByName(cached, INITIAL_DEPARTMENTS);
+  }
+
+  const result = deduplicateEntitiesByName(baseList, []).filter((d) => !deletedIds.has(d.id));
   setLocalCache(DEPARTMENTS_CACHE_KEY, result);
   return result;
 }
@@ -1116,7 +1212,8 @@ export async function saveDepartmentToSupabase(dept: DepartmentItem, oldName?: s
   const previousName = oldName || (existing && existing.name !== dept.name ? existing.name : undefined);
 
   const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS).filter((d) => d.id !== dept.id);
-  setLocalCache(DEPARTMENTS_CACHE_KEY, [dept, ...cached]);
+  const updated = deduplicateEntitiesByName([dept, ...cached], []);
+  setLocalCache(DEPARTMENTS_CACHE_KEY, updated);
 
   if (previousName && previousName !== dept.name) {
     await cascadeRenameEntity('department', previousName, dept.name);
@@ -1138,20 +1235,20 @@ export async function saveDepartmentToSupabase(dept: DepartmentItem, oldName?: s
       updated_at: new Date().toISOString(),
     };
 
-    // For existing departments: try to UPDATE by id first.
-    // If the id is a local-generated synthetic id (not a UUID), fall back to matching by old name.
     const isRealUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dept.id || '');
 
     if (dept.id && isRealUUID) {
-      // Proper UUID — do a clean UPDATE by id
       const { error } = await supabase
         .from('departments')
         .update(payload)
         .eq('id', dept.id);
-      if (!error) return true;
+      if (!error) {
+        notifyEntityUpdated('department', dept);
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('jaago_departments_updated'));
+        return true;
+      }
     }
 
-    // Synthetic / no id — try UPDATE by old name (case-insensitive) if we have it
     if (previousName) {
       const { data: matched, error: fetchErr } = await supabase
         .from('departments')
@@ -1165,29 +1262,47 @@ export async function saveDepartmentToSupabase(dept: DepartmentItem, oldName?: s
           .from('departments')
           .update(payload)
           .eq('id', realId);
+        if (!error) {
+          notifyEntityUpdated('department', dept);
+          if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('jaago_departments_updated'));
+        }
         return !error;
       }
     }
 
-    // Truly new department — INSERT with a fresh UUID
     const { error } = await supabase
       .from('departments')
       .insert({ ...payload, id: dept.id && isRealUUID ? dept.id : undefined });
+    if (!error) {
+      notifyEntityUpdated('department', dept);
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('jaago_departments_updated'));
+    }
     return !error;
   } catch {
     return true;
   }
 }
 
-export async function deleteDepartmentFromSupabase(id: string): Promise<boolean> {
+export async function deleteDepartmentFromSupabase(id: string, name?: string): Promise<boolean> {
   addDeletedEntityId(id);
-  const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS).filter((d) => d.id !== id);
+  const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS).filter(
+    (d) => d.id !== id && (!name || d.name.trim().toLowerCase() !== name.trim().toLowerCase())
+  );
   setLocalCache(DEPARTMENTS_CACHE_KEY, cached);
+
+  if (typeof window !== 'undefined') {
+    notifyEntityUpdated('department', { id, name, deleted: true });
+    window.dispatchEvent(new CustomEvent('jaago_departments_updated'));
+  }
 
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
-    await supabase.from('departments').delete().eq('id', id);
+    if (name) {
+      await supabase.from('departments').delete().or(`id.eq.${id},name.ilike.${name}`);
+    } else {
+      await supabase.from('departments').delete().eq('id', id);
+    }
     return true;
   } catch {
     return true;
@@ -1199,13 +1314,13 @@ const PROJECTS_CACHE_KEY = 'jaago_pnc_projects_cache';
 
 export async function fetchProjectsFromSupabase(): Promise<ProjectItem[]> {
   const deletedIds = getDeletedEntityIds();
-  let baseList: ProjectItem[] = INITIAL_PROJECTS;
+  let baseList: ProjectItem[] = [];
   try {
     const supabase = getSupabase();
     if (supabase) {
       const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true });
       if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems = data.map((row: any) => ({
+        const dbItems: ProjectItem[] = data.map((row: any) => ({
           id: row.id,
           name: row.name,
           code: row.code || '',
@@ -1225,13 +1340,17 @@ export async function fetchProjectsFromSupabase(): Promise<ProjectItem[]> {
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         }));
-        const dbIdSet = new Set(dbItems.map((d) => d.id));
-        baseList = [...dbItems, ...INITIAL_PROJECTS.filter((i) => !dbIdSet.has(i.id))];
+        baseList = deduplicateEntitiesByName(dbItems, []);
       }
     }
   } catch {}
-  const cached = getLocalCache(PROJECTS_CACHE_KEY, baseList);
-  const result = cached.filter((p) => !deletedIds.has(p.id));
+
+  if (baseList.length === 0) {
+    const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS);
+    baseList = deduplicateEntitiesByName(cached, INITIAL_PROJECTS);
+  }
+
+  const result = deduplicateEntitiesByName(baseList, []).filter((p) => !deletedIds.has(p.id));
   setLocalCache(PROJECTS_CACHE_KEY, result);
   return result;
 }
@@ -1243,7 +1362,8 @@ export async function saveProjectToSupabase(proj: ProjectItem, oldName?: string)
   const previousName = oldName || (existing && existing.name !== proj.name ? existing.name : undefined);
 
   const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS).filter((p) => p.id !== proj.id);
-  setLocalCache(PROJECTS_CACHE_KEY, [proj, ...cached]);
+  const updated = deduplicateEntitiesByName([proj, ...cached], []);
+  setLocalCache(PROJECTS_CACHE_KEY, updated);
 
   if (previousName && previousName !== proj.name) {
     await cascadeRenameEntity('project', previousName, proj.name);
@@ -1270,21 +1390,34 @@ export async function saveProjectToSupabase(proj: ProjectItem, oldName?: string)
       updated_at: new Date().toISOString(),
     };
     const { error } = await supabase.from('projects').upsert(payload, { onConflict: 'id' });
+    if (!error) {
+      notifyEntityUpdated('project', proj);
+    }
     return !error;
   } catch {
     return true;
   }
 }
 
-export async function deleteProjectFromSupabase(id: string): Promise<boolean> {
+export async function deleteProjectFromSupabase(id: string, name?: string): Promise<boolean> {
   addDeletedEntityId(id);
-  const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS).filter((p) => p.id !== id);
+  const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS).filter(
+    (p) => p.id !== id && (!name || p.name.trim().toLowerCase() !== name.trim().toLowerCase())
+  );
   setLocalCache(PROJECTS_CACHE_KEY, cached);
+
+  if (typeof window !== 'undefined') {
+    notifyEntityUpdated('project', { id, name, deleted: true });
+  }
 
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
-    await supabase.from('projects').delete().eq('id', id);
+    if (name) {
+      await supabase.from('projects').delete().or(`id.eq.${id},name.ilike.${name}`);
+    } else {
+      await supabase.from('projects').delete().eq('id', id);
+    }
     return true;
   } catch {
     return true;
@@ -1296,7 +1429,7 @@ const TEAMS_CACHE_KEY = 'jaago_pnc_teams_cache';
 
 export async function fetchTeamsFromSupabase(): Promise<TeamItem[]> {
   const deletedIds = getDeletedEntityIds();
-  let baseList: TeamItem[] = INITIAL_TEAMS;
+  let baseList: TeamItem[] = [];
   try {
     const supabase = getSupabase();
     if (supabase) {
@@ -1329,13 +1462,17 @@ export async function fetchTeamsFromSupabase(): Promise<TeamItem[]> {
             updatedAt: t.updated_at,
           };
         });
-        const dbIdSet = new Set(dbItems.map((d) => d.id));
-        baseList = [...dbItems, ...INITIAL_TEAMS.filter((i) => !dbIdSet.has(i.id))];
+        baseList = deduplicateEntitiesByName(dbItems, []);
       }
     }
   } catch {}
-  const cached = getLocalCache(TEAMS_CACHE_KEY, baseList);
-  const result = cached.filter((t) => !deletedIds.has(t.id));
+
+  if (baseList.length === 0) {
+    const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS);
+    baseList = deduplicateEntitiesByName(cached, INITIAL_TEAMS);
+  }
+
+  const result = deduplicateEntitiesByName(baseList, []).filter((t) => !deletedIds.has(t.id));
   setLocalCache(TEAMS_CACHE_KEY, result);
   return result;
 }
@@ -1347,7 +1484,8 @@ export async function saveTeamToSupabase(team: TeamItem, oldName?: string): Prom
   const previousName = oldName || (existing && existing.name !== team.name ? existing.name : undefined);
 
   const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS).filter((t) => t.id !== team.id);
-  setLocalCache(TEAMS_CACHE_KEY, [team, ...cached]);
+  const updated = deduplicateEntitiesByName([team, ...cached], []);
+  setLocalCache(TEAMS_CACHE_KEY, updated);
 
   if (previousName && previousName !== team.name) {
     await cascadeRenameEntity('team', previousName, team.name);
@@ -1383,22 +1521,33 @@ export async function saveTeamToSupabase(team: TeamItem, oldName?: string): Prom
       }));
       await supabase.from('team_members').insert(memberPayloads);
     }
+    notifyEntityUpdated('team', team);
     return true;
   } catch {
     return true;
   }
 }
 
-export async function deleteTeamFromSupabase(id: string): Promise<boolean> {
+export async function deleteTeamFromSupabase(id: string, name?: string): Promise<boolean> {
   addDeletedEntityId(id);
-  const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS).filter((t) => t.id !== id);
+  const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS).filter(
+    (t) => t.id !== id && (!name || t.name.trim().toLowerCase() !== name.trim().toLowerCase())
+  );
   setLocalCache(TEAMS_CACHE_KEY, cached);
+
+  if (typeof window !== 'undefined') {
+    notifyEntityUpdated('team', { id, name, deleted: true });
+  }
 
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
     await supabase.from('team_members').delete().eq('team_id', id);
-    await supabase.from('teams').delete().eq('id', id);
+    if (name) {
+      await supabase.from('teams').delete().or(`id.eq.${id},name.ilike.${name}`);
+    } else {
+      await supabase.from('teams').delete().eq('id', id);
+    }
     return true;
   } catch {
     return true;
@@ -1410,13 +1559,13 @@ const INSURANCE_CACHE_KEY = 'jaago_pnc_insurance_categories_cache';
 
 export async function fetchInsuranceCategoriesFromSupabase(): Promise<InsuranceCategoryItem[]> {
   const deletedIds = getDeletedEntityIds();
-  let baseList: InsuranceCategoryItem[] = INITIAL_INSURANCE_CATEGORIES;
+  let baseList: InsuranceCategoryItem[] = [];
   try {
     const supabase = getSupabase();
     if (supabase) {
       const { data, error } = await supabase.from('insurance_categories').select('*').order('monthly_premium', { ascending: false });
       if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems = data.map((row: any) => ({
+        const dbItems: InsuranceCategoryItem[] = data.map((row: any) => ({
           id: row.id,
           name: row.name,
           monthlyPremium: Number(row.monthly_premium || 0),
@@ -1426,13 +1575,17 @@ export async function fetchInsuranceCategoriesFromSupabase(): Promise<InsuranceC
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         }));
-        const dbIdSet = new Set(dbItems.map((d) => d.id));
-        baseList = [...dbItems, ...INITIAL_INSURANCE_CATEGORIES.filter((i) => !dbIdSet.has(i.id))];
+        baseList = deduplicateEntitiesByName(dbItems, []);
       }
     }
   } catch {}
-  const cached = getLocalCache(INSURANCE_CACHE_KEY, baseList);
-  const result = cached.filter((c) => !deletedIds.has(c.id));
+
+  if (baseList.length === 0) {
+    const cached = getLocalCache(INSURANCE_CACHE_KEY, INITIAL_INSURANCE_CATEGORIES);
+    baseList = deduplicateEntitiesByName(cached, INITIAL_INSURANCE_CATEGORIES);
+  }
+
+  const result = deduplicateEntitiesByName(baseList, []).filter((c) => !deletedIds.has(c.id));
   setLocalCache(INSURANCE_CACHE_KEY, result);
   return result;
 }
@@ -1440,7 +1593,8 @@ export async function fetchInsuranceCategoriesFromSupabase(): Promise<InsuranceC
 export async function saveInsuranceCategoryToSupabase(cat: InsuranceCategoryItem): Promise<boolean> {
   removeDeletedEntityId(cat.id);
   const cached = getLocalCache(INSURANCE_CACHE_KEY, INITIAL_INSURANCE_CATEGORIES).filter((c) => c.id !== cat.id);
-  setLocalCache(INSURANCE_CACHE_KEY, [cat, ...cached]);
+  const updated = deduplicateEntitiesByName([cat, ...cached], []);
+  setLocalCache(INSURANCE_CACHE_KEY, updated);
 
   try {
     const supabase = getSupabase();
@@ -1461,15 +1615,21 @@ export async function saveInsuranceCategoryToSupabase(cat: InsuranceCategoryItem
   }
 }
 
-export async function deleteInsuranceCategoryFromSupabase(id: string): Promise<boolean> {
+export async function deleteInsuranceCategoryFromSupabase(id: string, name?: string): Promise<boolean> {
   addDeletedEntityId(id);
-  const cached = getLocalCache(INSURANCE_CACHE_KEY, INITIAL_INSURANCE_CATEGORIES).filter((c) => c.id !== id);
+  const cached = getLocalCache(INSURANCE_CACHE_KEY, INITIAL_INSURANCE_CATEGORIES).filter(
+    (c) => c.id !== id && (!name || c.name.trim().toLowerCase() !== name.trim().toLowerCase())
+  );
   setLocalCache(INSURANCE_CACHE_KEY, cached);
 
   try {
     const supabase = getSupabase();
     if (!supabase) return true;
-    await supabase.from('insurance_categories').delete().eq('id', id);
+    if (name) {
+      await supabase.from('insurance_categories').delete().or(`id.eq.${id},name.ilike.${name}`);
+    } else {
+      await supabase.from('insurance_categories').delete().eq('id', id);
+    }
     return true;
   } catch {
     return true;

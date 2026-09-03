@@ -227,6 +227,8 @@ export default function PnCDashboardPage() {
     window.addEventListener('jaago_leave_allocation_updated', handleLeaveUpdate);
     window.addEventListener('jaago_public_holidays_updated', handleLeaveUpdate);
     window.addEventListener('jaago_user_updated', handleEmpUpdate);
+    window.addEventListener('jaago_entity_updated', handleEmpUpdate);
+    window.addEventListener('jaago_departments_updated', handleEmpUpdate);
     window.addEventListener('jaago_org_changed', handleOrgSync);
 
     return () => {
@@ -235,6 +237,8 @@ export default function PnCDashboardPage() {
       window.removeEventListener('jaago_leave_allocation_updated', handleLeaveUpdate);
       window.removeEventListener('jaago_public_holidays_updated', handleLeaveUpdate);
       window.removeEventListener('jaago_user_updated', handleEmpUpdate);
+      window.removeEventListener('jaago_entity_updated', handleEmpUpdate);
+      window.removeEventListener('jaago_departments_updated', handleEmpUpdate);
       window.removeEventListener('jaago_org_changed', handleOrgSync);
     };
   }, []);

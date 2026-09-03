@@ -10,15 +10,6 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 async function checkRows() {
   const { data: orgs } = await supabase.from('organizations').select('*');
   console.log('Organizations rows:', orgs);
-
-  const { data: depts } = await supabase.from('departments').select('*');
-  console.log('Departments rows:', depts);
-
-  const { data: projs } = await supabase.from('projects').select('*');
-  console.log('Projects rows:', projs);
-
-  const { data: desigs } = await supabase.from('designations').select('*');
-  console.log('Designations rows:', desigs);
 }
 
 checkRows();

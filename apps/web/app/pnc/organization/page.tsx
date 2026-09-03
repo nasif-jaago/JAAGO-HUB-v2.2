@@ -263,12 +263,13 @@ export default function OrganizationPage() {
   };
 
   const handleDeleteOrganization = async (id: string) => {
+    const org = organizations.find((o) => o.id === id);
     setOrganizations((prev) => prev.filter((o) => o.id !== id));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
     if (selectedOrg?.id === id) {
       setSelectedOrg(null);
     }
-    await deleteOrganizationFromSupabase(id);
+    await deleteOrganizationFromSupabase(id, org?.name);
     showToast('Organization entity deleted');
   };
 
@@ -305,9 +306,10 @@ export default function OrganizationPage() {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
     const idsToDelete = [...selectedIds];
+    const orgsToDelete = organizations.filter((o) => idsToDelete.includes(o.id));
     setOrganizations((prev) => prev.filter((o) => !idsToDelete.includes(o.id)));
     setSelectedIds([]);
-    await Promise.all(idsToDelete.map((id) => deleteOrganizationFromSupabase(id)));
+    await Promise.all(orgsToDelete.map((org) => deleteOrganizationFromSupabase(org.id, org.name)));
     showToast(`${count} organization(s) deleted`);
   };
 

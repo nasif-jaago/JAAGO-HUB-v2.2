@@ -59,17 +59,34 @@ export default function PnCLayout({
       if (saved) setSelectedOrg(saved);
     } catch {}
 
-    fetchOrganizationsFromSupabase().then((orgs) => {
-      if (orgs) setOrganizations(orgs);
-    });
+    const loadOrgs = () => {
+      fetchOrganizationsFromSupabase().then((orgs) => {
+        if (orgs) setOrganizations(orgs);
+      });
+    };
+
+    loadOrgs();
 
     const handleOrgSync = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail) setSelectedOrg(detail);
     };
 
+    const handleEntityUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.entityType === 'organization') {
+        loadOrgs();
+      }
+    };
+
     window.addEventListener('jaago_org_changed', handleOrgSync);
-    return () => window.removeEventListener('jaago_org_changed', handleOrgSync);
+    window.addEventListener('jaago_entity_updated', handleEntityUpdate);
+    window.addEventListener('storage', loadOrgs);
+    return () => {
+      window.removeEventListener('jaago_org_changed', handleOrgSync);
+      window.removeEventListener('jaago_entity_updated', handleEntityUpdate);
+      window.removeEventListener('storage', loadOrgs);
+    };
   }, []);
 
   const handleOrgChange = (newOrg: string) => {
