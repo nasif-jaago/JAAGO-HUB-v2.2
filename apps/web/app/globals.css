@@ -14,54 +14,54 @@
 
 @layer base {
   :root {
-    /* ── Surfaces — LIGHT (cream) ── */
-    --background: 43 33% 93%;          /* #F4EFE4 page */
-    --surface: 44 45% 97%;             /* #FBF8F1 card base */
-    --card: 44 45% 97%;
-    --card-foreground: 40 24% 9%;
+    /* ── Surfaces — LIGHT / NEWSPAPER WARM LIGHT BROWN ── */
+    --background: 38 32% 93%;          /* #F5EFE6 newspaper warm light brown / parchment page */
+    --surface: 40 35% 97%;             /* #FAF6EE clean light paper card base */
+    --card: 40 35% 97%;
+    --card-foreground: 30 35% 12%;     /* #291D13 rich dark coffee/charcoal text */
     --popover: 0 0% 100%;
-    --popover-foreground: 40 24% 9%;
+    --popover-foreground: 30 35% 12%;
     --elevated: 0 0% 100%;             /* #FFFFFF raised */
 
     /* ── Text ── */
-    --foreground: 40 24% 9%;           /* #1E1A12 */
-    --muted: 42 25% 90%;
-    --muted-foreground: 37 16% 38%;    /* #6F6552 */
+    --foreground: 30 35% 12%;          /* #291D13 deep high-contrast text on newspaper background */
+    --muted: 38 25% 88%;               /* #EAE1D3 */
+    --muted-foreground: 32 18% 40%;    /* #786958 warm taupe readable secondary text */
 
     /* ── Brand — JAAGO gold ── */
-    --primary: 45 92% 52%;             /* #F5C518 */
-    --primary-foreground: 40 35% 10%;  /* dark text on gold */
-    --brand: 45 92% 52%;
-    --brand-strong: 42 96% 45%;        /* deeper gold hover on light */
+    --primary: 45 94% 50%;             /* #F5C518 */
+    --primary-foreground: 30 40% 10%;  /* #23160B dark text on gold */
+    --brand: 45 94% 50%;
+    --brand-strong: 42 96% 45%;
 
     /* ── Accents / states ── */
-    --secondary: 42 30% 88%;
-    --secondary-foreground: 40 24% 12%;
+    --secondary: 38 25% 88%;
+    --secondary-foreground: 30 35% 14%;
     --accent: 45 80% 90%;
-    --accent-foreground: 40 30% 12%;
-    --success: 145 55% 38%;
-    --warning: 38 92% 48%;
-    --destructive: 4 74% 50%;
+    --accent-foreground: 30 35% 14%;
+    --success: 152 65% 36%;
+    --warning: 38 95% 48%;
+    --destructive: 350 78% 55%;
     --destructive-foreground: 0 0% 100%;
-    --info: 210 80% 46%;
+    --info: 210 85% 50%;
 
     /* ── Lines / rings ── */
-    --border: 42 33% 85%;              /* #E7DFCD */
-    --input: 42 33% 85%;
-    --ring: 45 92% 52%;
+    --border: 38 22% 84%;              /* #E3D9CA crisp subtle warm paper border */
+    --input: 38 22% 84%;
+    --ring: 45 94% 50%;
 
     /* ── Header ── */
-    --header: 44 40% 95%;
-    --header-foreground: 40 22% 16%;
-    --header-border: 42 30% 87%;
+    --header: 38 32% 95%;              /* #F7F2E9 newspaper clean light header */
+    --header-foreground: 30 35% 14%;
+    --header-border: 38 22% 85%;
 
     /* ── Sidebar (user + admin) ── */
-    --sidebar: 44 40% 95%;
-    --sidebar-foreground: 40 22% 16%;
-    --sidebar-muted: 37 16% 42%;
-    --sidebar-active: 45 92% 52%;
-    --sidebar-active-foreground: 40 40% 10%;
-    --sidebar-border: 42 30% 87%;
+    --sidebar: 38 28% 91%;             /* #EFE7DB warm parchment sidebar */
+    --sidebar-foreground: 30 35% 14%;
+    --sidebar-muted: 32 18% 44%;
+    --sidebar-active: 45 94% 50%;
+    --sidebar-active-foreground: 30 40% 10%;
+    --sidebar-border: 38 22% 83%;
 
     /* ── Charts (attendance donut + trend) ── */
     --chart-1: 45 92% 52%;   /* gold */

@@ -29,7 +29,8 @@ import {
   GripVertical,
   RotateCcw,
   Move,
-  LayoutGrid,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import {
   fetchEmployeesFromSupabase,
@@ -270,22 +271,29 @@ export default function PnCDashboardPage() {
     }
   };
 
-  // ── 7. DRAG AND DROP HANDLERS ──
+  // ── 7. DRAG AND DROP & POSITION HANDLERS ──
   const handleDragStart = (e: React.DragEvent, id: DashboardWidgetId) => {
     setDraggedWidgetId(id);
     e.dataTransfer.setData('text/plain', id);
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragOver = (e: React.DragEvent, id: DashboardWidgetId) => {
+  const handleDragEnter = (e: React.DragEvent, id: DashboardWidgetId) => {
     e.preventDefault();
     if (draggedWidgetId && draggedWidgetId !== id) {
       setDragOverWidgetId(id);
-      e.dataTransfer.dropEffect = 'move';
     }
   };
 
-  const handleDragLeave = (e: React.DragEvent, id: DashboardWidgetId) => {
+  const handleDragOver = (e: React.DragEvent, id: DashboardWidgetId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverWidgetId !== id && draggedWidgetId !== id) {
+      setDragOverWidgetId(id);
+    }
+  };
+
+  const handleDragLeave = (_e: React.DragEvent, id: DashboardWidgetId) => {
     if (dragOverWidgetId === id) {
       setDragOverWidgetId(null);
     }
@@ -315,6 +323,32 @@ export default function PnCDashboardPage() {
 
     setDraggedWidgetId(null);
     setDragOverWidgetId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedWidgetId(null);
+    setDragOverWidgetId(null);
+  };
+
+  const handleMoveWidget = (id: DashboardWidgetId, direction: 'up' | 'down') => {
+    const currentList = [...widgetOrder];
+    const index = currentList.indexOf(id);
+    if (index === -1) return;
+
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= currentList.length) return;
+
+    const itemA = currentList[index];
+    const itemB = currentList[targetIndex];
+    if (itemA && itemB) {
+      currentList[index] = itemB;
+      currentList[targetIndex] = itemA;
+      setWidgetOrder(currentList);
+      try {
+        localStorage.setItem('jaago_pnc_widget_order_v3', JSON.stringify(currentList));
+      } catch {}
+      showToast('Widget position adjusted!', 'success');
+    }
   };
 
   const handleResetWidgetOrder = () => {
@@ -1914,26 +1948,67 @@ export default function PnCDashboardPage() {
       {/* ── 3. REORDERABLE MODULAR DASHBOARD GRID (ZERO GAPS) ────── */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        {widgetOrder.map((widgetId) => {
+        {widgetOrder.map((widgetId, index) => {
           const isDragging = draggedWidgetId === widgetId;
           const isOver = dragOverWidgetId === widgetId;
 
           return (
             <div
               key={widgetId}
-              draggable={isCustomizeMode}
+              draggable
               onDragStart={(e) => handleDragStart(e, widgetId)}
+              onDragEnter={(e) => handleDragEnter(e, widgetId)}
               onDragOver={(e) => handleDragOver(e, widgetId)}
-              onDragLeave={(e) => handleDragLeave(e, widgetId)}
+              onDragLeave={(_e) => handleDragLeave(_e, widgetId)}
               onDrop={(e) => handleDrop(e, widgetId)}
-              className={`transition-all duration-200 flex flex-col ${
-                isDragging ? 'opacity-40 scale-95' : 'opacity-100'
+              onDragEnd={handleDragEnd}
+              className={`transition-all duration-300 flex flex-col relative group select-none ${
+                isDragging ? 'opacity-30 scale-95 ring-2 ring-amber-400/50 rounded-[28px]' : 'opacity-100'
               } ${
-                isOver ? 'ring-2 ring-amber-400 rounded-[28px] scale-[1.01]' : ''
+                isOver ? 'ring-2 ring-amber-400 bg-amber-400/5 rounded-[28px] scale-[1.01] shadow-2xl' : ''
               } ${
-                isCustomizeMode ? 'cursor-grab active:cursor-grabbing hover:ring-1 hover:ring-amber-400/40 rounded-[28px]' : ''
+                isCustomizeMode ? 'ring-1 ring-white/20 hover:ring-amber-400/60 rounded-[28px]' : ''
               }`}
             >
+              {/* Quick Reorder Floating Controls in Customize Mode */}
+              {isCustomizeMode && (
+                <div className="absolute top-4 right-4 z-30 flex items-center space-x-1.5 p-1 rounded-xl bg-slate-950/90 border border-amber-400/50 text-xs backdrop-blur-md shadow-2xl">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMoveWidget(widgetId, 'up');
+                    }}
+                    disabled={index === 0}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-amber-400 hover:text-slate-950 text-white disabled:opacity-20 transition cursor-pointer"
+                    title="Move Up"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleMoveWidget(widgetId, 'down');
+                    }}
+                    disabled={index === widgetOrder.length - 1}
+                    className="p-1.5 rounded-lg bg-white/10 hover:bg-amber-400 hover:text-slate-950 text-white disabled:opacity-20 transition cursor-pointer"
+                    title="Move Down"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+
+                  <div
+                    className="px-2 py-1 rounded-lg bg-amber-400 text-slate-950 font-black text-[10px] uppercase cursor-grab active:cursor-grabbing flex items-center space-x-1 shadow-sm"
+                    title="Drag and Drop to Reorder"
+                  >
+                    <GripVertical className="h-3.5 w-3.5" />
+                    <span>Drag</span>
+                  </div>
+                </div>
+              )}
+
               {renderWidget(widgetId)}
             </div>
           );

@@ -276,25 +276,26 @@ export default function PnCLayout({
     return { label: 'Dashboard', href: '/pnc' };
   };
   const currentCrumb = getBreadcrumb();
-
-
+  const isDashboard = pathname === '/pnc' || pathname === '/pnc/';
 
   return (
-    <div className="min-h-screen bg-transparent text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden">
-      {/* ── Global Fullscreen Background (JAAGO School Children) ── */}
-      <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden pointer-events-none select-none bg-black">
-        <Image
-          src="/pnc-bg-children.jpg"
-          alt="JAAGO Children Background"
-          fill
-          priority
-          sizes="100vw"
-          quality={95}
-          className="object-cover object-center w-full h-full opacity-85"
-        />
-        {/* Subtle Dark Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
-      </div>
+    <div className={`min-h-screen ${isDashboard ? 'bg-transparent' : 'bg-background'} text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden`}>
+      {/* ── Dashboard ONLY Fullscreen Background (JAAGO School Children) ── */}
+      {isDashboard && (
+        <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden pointer-events-none select-none bg-black">
+          <Image
+            src="/pnc-bg-children.jpg"
+            alt="JAAGO Children Background"
+            fill
+            priority
+            sizes="100vw"
+            quality={95}
+            className="object-cover object-center w-full h-full opacity-85"
+          />
+          {/* Subtle Dark Gradient Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
+        </div>
+      )}
 
       {/* ── Left Edge Hit Sensor Panel (Hovering here opens sidebar) ── */}
       <div
