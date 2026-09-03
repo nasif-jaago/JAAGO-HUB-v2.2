@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { FullEmployeeProfile } from '@/lib/supabase-employees';
 
 export function normalizeOrgKey(str: string | null | undefined): string {
@@ -20,11 +20,33 @@ export function matchesSelectedOrg(itemOrg: string | null | undefined, selectedO
   return normalizeOrgKey(itemOrg) === normalizeOrgKey(selectedOrg);
 }
 
+export function normalizeDeptKey(str: string | null | undefined): string {
+  if (!str) return '';
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+export function matchesSelectedDept(itemDept: string | null | undefined, selectedDept: string): boolean {
+  if (!selectedDept || selectedDept === 'ALL' || selectedDept.trim() === '') return true;
+  if (!itemDept) return false;
+  const d1 = normalizeDeptKey(itemDept);
+  const d2 = normalizeDeptKey(selectedDept);
+  return d1 === d2 || d1.includes(d2) || d2.includes(d1);
+}
+
 export function useOrganizationScope() {
   const [selectedOrg, setSelectedOrg] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       try {
         return localStorage.getItem('jaago_selected_org') || 'ALL';
+      } catch {}
+    }
+    return 'ALL';
+  });
+
+  const [selectedDept, setSelectedDept] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('jaago_selected_dept') || 'ALL';
       } catch {}
     }
     return 'ALL';
@@ -38,35 +60,65 @@ export function useOrganizationScope() {
       }
     };
 
+    const handleDeptChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail) {
+        setSelectedDept(detail);
+      }
+    };
+
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'jaago_selected_org' && e.newValue) {
         setSelectedOrg(e.newValue);
       }
+      if (e.key === 'jaago_selected_dept' && e.newValue) {
+        setSelectedDept(e.newValue);
+      }
     };
 
     window.addEventListener('jaago_org_changed', handleOrgChanged);
+    window.addEventListener('jaago_dept_changed', handleDeptChanged);
     window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('jaago_org_changed', handleOrgChanged);
+      window.removeEventListener('jaago_dept_changed', handleDeptChanged);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
-  const filterEmployeesByOrg = (employees: FullEmployeeProfile[]) => {
+  const filterEmployeesByOrg = useCallback((employees: FullEmployeeProfile[]) => {
     if (!selectedOrg || selectedOrg === 'ALL') return employees;
     return employees.filter((emp) => matchesSelectedOrg(emp.organization, selectedOrg));
-  };
+  }, [selectedOrg]);
 
-  const isMatchingOrg = (orgName: string | null | undefined) => {
+  const filterEmployeesByScope = useCallback((employees: FullEmployeeProfile[]) => {
+    return employees.filter((emp) => {
+      const matchesOrg = matchesSelectedOrg(emp.organization, selectedOrg);
+      const matchesDept = matchesSelectedDept(emp.department, selectedDept);
+      return matchesOrg && matchesDept;
+    });
+  }, [selectedOrg, selectedDept]);
+
+  const isMatchingOrg = useCallback((orgName: string | null | undefined) => {
     return matchesSelectedOrg(orgName, selectedOrg);
-  };
+  }, [selectedOrg]);
+
+  const isMatchingDept = useCallback((deptName: string | null | undefined) => {
+    return matchesSelectedDept(deptName, selectedDept);
+  }, [selectedDept]);
 
   return {
     selectedOrg,
     setSelectedOrg,
+    selectedDept,
+    setSelectedDept,
     isMatchingOrg,
+    isMatchingDept,
     filterEmployeesByOrg,
+    filterEmployeesByScope,
     matchesSelectedOrg,
+    matchesSelectedDept,
     normalizeOrgKey,
+    normalizeDeptKey,
   };
 }

@@ -33,9 +33,12 @@ import {
 
 import {
   fetchOrganizationsFromSupabase,
+  fetchDepartmentsFromSupabase,
   OrganizationEntity,
+  DepartmentItem,
 } from '@/lib/supabase-organization';
 import { hasPermission, hasModuleAccess } from '@/lib/rbac-guard';
+import { matchesSelectedOrg } from '@/lib/use-organization-scope';
 
 export type ThemeMode = 'dark' | 'light' | 'espresso';
 
@@ -49,43 +52,59 @@ export default function PnCLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Global Organization Selector in Header
+  // Global Organization & Department Selectors in Header
   const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<string>('ALL');
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [selectedDept, setSelectedDept] = useState<string>('ALL');
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem('jaago_selected_org');
-      if (saved) setSelectedOrg(saved);
+      const savedOrg = localStorage.getItem('jaago_selected_org');
+      if (savedOrg) setSelectedOrg(savedOrg);
+      const savedDept = localStorage.getItem('jaago_selected_dept');
+      if (savedDept) setSelectedDept(savedDept);
     } catch {}
 
-    const loadOrgs = () => {
+    const loadOrgsAndDepts = () => {
       fetchOrganizationsFromSupabase().then((orgs) => {
         if (orgs) setOrganizations(orgs);
       });
+      fetchDepartmentsFromSupabase().then((depts) => {
+        if (depts) setDepartments(depts);
+      });
     };
 
-    loadOrgs();
+    loadOrgsAndDepts();
 
     const handleOrgSync = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail) setSelectedOrg(detail);
     };
 
+    const handleDeptSync = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail) setSelectedDept(detail);
+    };
+
     const handleEntityUpdate = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.entityType === 'organization') {
-        loadOrgs();
+      if (detail?.entityType === 'organization' || detail?.entityType === 'department') {
+        loadOrgsAndDepts();
       }
     };
 
     window.addEventListener('jaago_org_changed', handleOrgSync);
+    window.addEventListener('jaago_dept_changed', handleDeptSync);
+    window.addEventListener('jaago_departments_updated', loadOrgsAndDepts);
     window.addEventListener('jaago_entity_updated', handleEntityUpdate);
-    window.addEventListener('storage', loadOrgs);
+    window.addEventListener('storage', loadOrgsAndDepts);
     return () => {
       window.removeEventListener('jaago_org_changed', handleOrgSync);
+      window.removeEventListener('jaago_dept_changed', handleDeptSync);
+      window.removeEventListener('jaago_departments_updated', loadOrgsAndDepts);
       window.removeEventListener('jaago_entity_updated', handleEntityUpdate);
-      window.removeEventListener('storage', loadOrgs);
+      window.removeEventListener('storage', loadOrgsAndDepts);
     };
   }, []);
 
@@ -96,6 +115,30 @@ export default function PnCLayout({
     } catch {}
     window.dispatchEvent(new CustomEvent('jaago_org_changed', { detail: newOrg }));
   };
+
+  const handleDeptChange = (newDept: string) => {
+    setSelectedDept(newDept);
+    try {
+      localStorage.setItem('jaago_selected_dept', newDept);
+    } catch {}
+    window.dispatchEvent(new CustomEvent('jaago_dept_changed', { detail: newDept }));
+  };
+
+  const availableDepts = React.useMemo(() => {
+    const deptMap = new Map<string, string>();
+    departments.forEach((d) => {
+      if (!d.name || d.isArchived) return;
+      if (selectedOrg !== 'ALL') {
+        const orgName = d.organizationName || organizations.find((o) => o.id === d.organizationId)?.name;
+        if (orgName && !matchesSelectedOrg(orgName, selectedOrg)) return;
+      }
+      const key = d.name.trim().toLowerCase();
+      if (!deptMap.has(key)) {
+        deptMap.set(key, d.name.trim());
+      }
+    });
+    return Array.from(deptMap.values()).sort((a, b) => a.localeCompare(b));
+  }, [departments, selectedOrg, organizations]);
 
   // Active Authenticated User Session
   const [currentUser, setCurrentUser] = useState<{
@@ -967,7 +1010,8 @@ export default function PnCLayout({
               <select
                 value={selectedOrg}
                 onChange={(e) => handleOrgChange(e.target.value)}
-                className="appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border border-border/80 rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition cursor-pointer shadow-sm max-w-[200px] sm:max-w-[260px] truncate"
+                className="appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border border-border/80 rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition cursor-pointer shadow-sm max-w-[160px] sm:max-w-[210px] truncate"
+                title="Select Active Organization"
               >
                 <option value="ALL" className="bg-popover text-popover-foreground font-bold">
                   All Organizations (Consolidated)
@@ -979,6 +1023,27 @@ export default function PnCLayout({
                 ))}
               </select>
               <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+
+            {/* Department Switcher Dropdown in Top Header */}
+            <div className="relative">
+              <select
+                value={selectedDept}
+                onChange={(e) => handleDeptChange(e.target.value)}
+                className="appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border border-border/80 rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition cursor-pointer shadow-sm max-w-[150px] sm:max-w-[200px] truncate"
+                title="Select Active Department"
+              >
+                <option value="ALL" className="bg-popover text-popover-foreground font-bold">
+                  All Departments
+                </option>
+                {availableDepts.map((deptName) => (
+                  <option key={deptName} value={deptName} className="bg-popover text-popover-foreground">
+                    {deptName}
+                  </option>
+                ))}
+              </select>
+              <Users className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-500 pointer-events-none" />
               <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             </div>
 

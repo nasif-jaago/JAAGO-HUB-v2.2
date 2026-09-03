@@ -20,10 +20,10 @@ import {
   saveLocalOnDutyLogs,
 } from '@/lib/supabase-attendance';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
-import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
+import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
 
 export default function OnDutyLogsPage() {
-  const { selectedOrg } = useOrganizationScope();
+  const { selectedOrg, selectedDept } = useOrganizationScope();
   const [logs, setLogs] = useState<OnDutyLogItem[]>([]);
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');

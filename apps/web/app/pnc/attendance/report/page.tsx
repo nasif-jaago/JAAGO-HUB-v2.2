@@ -22,7 +22,7 @@ import {
   recordLocalAttendanceLog,
   fetchAttendanceLogsFromSupabase,
 } from '@/lib/supabase-attendance';
-import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
+import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
 import { TimePickerInput } from '@/components/ui/time-picker-input';
 
 interface ReportRow {
@@ -110,7 +110,7 @@ const FALLBACK_EMPLOYEES: Partial<FullEmployeeProfile>[] = [
 ];
 
 export default function AttendanceReportPage() {
-  const { selectedOrg } = useOrganizationScope();
+  const { selectedOrg, selectedDept } = useOrganizationScope();
   const [timePeriod, setTimePeriod] = useState<'Today' | 'Yesterday' | 'This Week' | 'Last 7 Days' | 'Last 15 Days' | 'Last 30 Days' | 'This Month' | 'Last Month'>('Today');
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
@@ -142,7 +142,9 @@ export default function AttendanceReportPage() {
 
   const generateReportForDate = useCallback((targetDate: string, empList: FullEmployeeProfile[]) => {
     const rawList = empList && empList.length > 0 ? empList : (FALLBACK_EMPLOYEES as FullEmployeeProfile[]);
-    const listToUse = rawList.filter((emp) => matchesSelectedOrg(emp.organization, selectedOrg));
+    const listToUse = rawList.filter(
+      (emp) => matchesSelectedOrg(emp.organization, selectedOrg) && matchesSelectedDept(emp.department, selectedDept)
+    );
     const allLogs = getLocalAttendanceLogs();
 
     const rows: ReportRow[] = listToUse.map((emp, index) => {
@@ -206,7 +208,7 @@ export default function AttendanceReportPage() {
     });
 
     return rows;
-  }, [selectedOrg]);
+  }, [selectedOrg, selectedDept]);
 
   useEffect(() => {
     let isMounted = true;

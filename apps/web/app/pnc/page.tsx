@@ -58,7 +58,7 @@ import {
   fetchDepartmentsFromSupabase,
   OrganizationEntity,
 } from '@/lib/supabase-organization';
-import { matchesSelectedOrg } from '@/lib/use-organization-scope';
+import { matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
 import { EmployeeProfileDetail } from '@/components/pnc/employee-profile-detail';
 
 type DateRangePreset = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'MTD' | 'YTD' | 'CUSTOM';
@@ -98,6 +98,14 @@ export default function PnCDashboardPage() {
     if (typeof window !== 'undefined') {
       try {
         return localStorage.getItem('jaago_selected_org') || 'ALL';
+      } catch {}
+    }
+    return 'ALL';
+  });
+  const [selectedDept, setSelectedDept] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('jaago_selected_dept') || 'ALL';
       } catch {}
     }
     return 'ALL';
@@ -222,6 +230,10 @@ export default function PnCDashboardPage() {
       const detail = (e as CustomEvent).detail;
       if (detail) setSelectedOrg(detail);
     };
+    const handleDeptSync = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail) setSelectedDept(detail);
+    };
 
     window.addEventListener('jaago_attendance_updated', handleAttUpdate);
     window.addEventListener('jaago_leave_request_updated', handleLeaveUpdate);
@@ -231,6 +243,7 @@ export default function PnCDashboardPage() {
     window.addEventListener('jaago_entity_updated', handleEmpUpdate);
     window.addEventListener('jaago_departments_updated', handleEmpUpdate);
     window.addEventListener('jaago_org_changed', handleOrgSync);
+    window.addEventListener('jaago_dept_changed', handleDeptSync);
 
     return () => {
       window.removeEventListener('jaago_attendance_updated', handleAttUpdate);
@@ -241,6 +254,7 @@ export default function PnCDashboardPage() {
       window.removeEventListener('jaago_entity_updated', handleEmpUpdate);
       window.removeEventListener('jaago_departments_updated', handleEmpUpdate);
       window.removeEventListener('jaago_org_changed', handleOrgSync);
+      window.removeEventListener('jaago_dept_changed', handleDeptSync);
     };
   }, []);
 
@@ -367,11 +381,12 @@ export default function PnCDashboardPage() {
   // ── 8. DATA COMPUTATIONS & HR ANALYTICS ENGINE ──
   const todayDateStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  // Filtered Employees based on Organization
+  // Filtered Employees based on Organization & Department
   const filteredEmployees = useMemo(() => {
-    if (selectedOrg === 'ALL' || !selectedOrg) return employees;
-    return employees.filter((e) => matchesSelectedOrg(e.organization, selectedOrg));
-  }, [employees, selectedOrg]);
+    return employees.filter(
+      (e) => matchesSelectedOrg(e.organization, selectedOrg) && matchesSelectedDept(e.department, selectedDept)
+    );
+  }, [employees, selectedOrg, selectedDept]);
 
   // Total Headcount & Active Status
   const totalEmployeesCount = filteredEmployees.length;

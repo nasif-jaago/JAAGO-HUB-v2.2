@@ -24,7 +24,7 @@ import {
   LeaveAllocationItem,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
-import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
+import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
 
 const LEAVE_TYPES: LeaveType[] = [
   'Casual Leave',
@@ -38,7 +38,7 @@ const LEAVE_TYPES: LeaveType[] = [
 ];
 
 export default function LeaveRequestsPage() {
-  const { selectedOrg } = useOrganizationScope();
+  const { selectedOrg, selectedDept } = useOrganizationScope();
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -237,24 +237,27 @@ export default function LeaveRequestsPage() {
   };
 
   // Filtered Employee List for Search in Modal
-  const empCodeToOrg = useMemo(() => {
-    const map = new Map<string, string>();
+  const empCodeToProfile = useMemo(() => {
+    const map = new Map<string, any>();
     employees.forEach((e) => {
-      if (e.code) map.set(e.code, e.organization || '');
+      if (e.code) map.set(e.code, e);
     });
     return map;
   }, [employees]);
 
   const scopedRequests = useMemo(() => {
-    if (!selectedOrg || selectedOrg === 'ALL') return requests;
     return requests.filter((r) => {
-      const org = empCodeToOrg.get(r.employeeCode);
-      return matchesSelectedOrg(org, selectedOrg);
+      const emp = empCodeToProfile.get(r.employeeCode);
+      const org = emp?.organization || '';
+      const dept = emp?.department || r.department || '';
+      return matchesSelectedOrg(org, selectedOrg) && matchesSelectedDept(dept, selectedDept);
     });
-  }, [requests, empCodeToOrg, selectedOrg]);
+  }, [requests, empCodeToProfile, selectedOrg, selectedDept]);
 
   const modalFilteredEmployees = useMemo(() => {
-    const orgScoped = employees.filter((e) => matchesSelectedOrg(e.organization, selectedOrg));
+    const orgScoped = employees.filter(
+      (e) => matchesSelectedOrg(e.organization, selectedOrg) && matchesSelectedDept(e.department, selectedDept)
+    );
     if (!empSearchInput.trim()) return orgScoped.slice(0, 15);
     const q = empSearchInput.toLowerCase();
     return orgScoped.filter(
@@ -263,7 +266,7 @@ export default function LeaveRequestsPage() {
         e.code?.toLowerCase().includes(q) ||
         e.department?.toLowerCase().includes(q)
     );
-  }, [employees, empSearchInput, selectedOrg]);
+  }, [employees, empSearchInput, selectedOrg, selectedDept]);
 
   // Counts
   const totalCount = scopedRequests.length;
