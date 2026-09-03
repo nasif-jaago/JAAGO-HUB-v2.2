@@ -27,7 +27,6 @@ import {
   ArrowDown,
   ChevronsUpDown,
   Sparkles,
-  ChevronDown,
   Building2,
   Briefcase,
   MapPin,
@@ -36,6 +35,7 @@ import {
   Clock,
   User,
   Shield,
+  ShieldAlert,
   CalendarDays,
   DollarSign,
   Copy,
@@ -84,9 +84,22 @@ import {
   fetchTeamsFromSupabase,
 } from '@/lib/supabase-organization';
 import { getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
+import { hasPermission } from '@/lib/rbac-guard';
 
 export default function PnCEmployeesPage() {
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
+
+  // ── RBAC PERMISSION STATE ──
+  const [rbacLoaded, setRbacLoaded] = useState(false);
+  const [canViewAllEmployees, setCanViewAllEmployees] = useState(false);
+  const [canViewDeptEmployees, setCanViewDeptEmployees] = useState(false);
+  const [canCreateEmployee, setCanCreateEmployee] = useState(false);
+  const [canEditEmployee, setCanEditEmployee] = useState(false);
+  const [canDeleteEmployee, setCanDeleteEmployee] = useState(false);
+  const [canExportEmployee, setCanExportEmployee] = useState(false);
+  const [canImportEmployee, setCanImportEmployee] = useState(false);
+  const [canMassUpdateEmployee, setCanMassUpdateEmployee] = useState(false);
+  const [userDepartment, setUserDepartment] = useState('');
 
   // Current selected employee for the rich tab-wise profile view (null = Table view)
   const [selectedProfile, setSelectedProfile] = useState<FullEmployeeProfile | null>(null);
@@ -306,6 +319,53 @@ export default function PnCEmployeesPage() {
     }
   };
 
+  const checkRbac = () => {
+    try {
+      const userStr = typeof window !== 'undefined' ? localStorage.getItem('jaago_user') : null;
+      if (userStr) {
+        const parsed = JSON.parse(userStr);
+        if (parsed.fullName) {
+          setCurrentUser({
+            fullName: parsed.fullName,
+            jobTitle: parsed.jobTitle || 'Staff Member',
+          });
+        }
+        setUserDepartment(parsed.department || '');
+
+        const rawRole = (parsed.role || (Array.isArray(parsed.roles) ? parsed.roles[0] : '') || 'USER').toString();
+        const rawRoleUpper = rawRole.toUpperCase();
+        const isSuper =
+          parsed.isSuperAdmin === true ||
+          rawRoleUpper === 'SUPER_ADMIN' ||
+          rawRole.toLowerCase() === 'super_admin' ||
+          Boolean(parsed.email && parsed.email.toLowerCase().includes('nasif.kamal'));
+
+        const viewAll = isSuper || hasPermission('hr.employees.view_all', parsed);
+        const viewDept = isSuper || viewAll || hasPermission('hr.employees.view_dept', parsed);
+        const createEmp = isSuper || hasPermission('hr.employees.create', parsed);
+        const editEmp = isSuper || hasPermission('hr.employees.edit', parsed);
+        const deleteEmp = isSuper || hasPermission('hr.employees.delete', parsed);
+        const exportEmp = isSuper || hasPermission('hr.employees.export', parsed);
+        const importEmp = isSuper || hasPermission('hr.employees.import', parsed);
+        const massUpdateEmp = isSuper || hasPermission('hr.employees.mass_update', parsed);
+
+        setCanViewAllEmployees(viewAll);
+        setCanViewDeptEmployees(viewDept);
+        setCanCreateEmployee(createEmp);
+        setCanEditEmployee(editEmp);
+        setCanDeleteEmployee(deleteEmp);
+        setCanExportEmployee(exportEmp);
+        setCanImportEmployee(importEmp);
+        setCanMassUpdateEmployee(massUpdateEmp);
+        setRbacLoaded(true);
+      } else {
+        setRbacLoaded(true);
+      }
+    } catch {
+      setRbacLoaded(true);
+    }
+  };
+
   // Hydrate state on client mount and fetch Supabase Source of Truth
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -319,18 +379,7 @@ export default function PnCEmployeesPage() {
         }
       } catch {}
 
-      try {
-        const userStr = localStorage.getItem('jaago_user');
-        if (userStr) {
-          const parsed = JSON.parse(userStr);
-          if (parsed.fullName) {
-            setCurrentUser({
-              fullName: parsed.fullName,
-              jobTitle: parsed.jobTitle || 'Coordinator',
-            });
-          }
-        }
-      } catch {}
+      checkRbac();
 
       const params = new URLSearchParams(window.location.search);
       const urlId = params.get('id');
@@ -498,11 +547,15 @@ export default function PnCEmployeesPage() {
     window.addEventListener('jaago_entity_renamed', handleEntityRenamed);
     window.addEventListener('jaago_entity_updated', handleEntityUpdated);
     window.addEventListener('jaago_user_revoked', handleUserRevoked);
+    window.addEventListener('jaago_user_updated', checkRbac);
+    window.addEventListener('jaago_rbac_updated', checkRbac);
     window.addEventListener('storage', handleStorageChange);
     return () => {
       window.removeEventListener('jaago_entity_renamed', handleEntityRenamed);
       window.removeEventListener('jaago_entity_updated', handleEntityUpdated);
       window.removeEventListener('jaago_user_revoked', handleUserRevoked);
+      window.removeEventListener('jaago_user_updated', checkRbac);
+      window.removeEventListener('jaago_rbac_updated', checkRbac);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
@@ -782,6 +835,13 @@ function toCanonicalOrgName(raw: string): string {
         }
       }
 
+      // RBAC Scope Check: If user cannot view all employees, scope only to their assigned department
+      if (!canViewAllEmployees && canViewDeptEmployees && userDepartment) {
+        if ((emp.department || '').trim().toLowerCase() !== userDepartment.trim().toLowerCase()) {
+          return false;
+        }
+      }
+
       return true;
     });
 
@@ -819,6 +879,9 @@ function toCanonicalOrgName(raw: string): string {
     selectedDesignation,
     sortKey,
     sortDirection,
+    canViewAllEmployees,
+    canViewDeptEmployees,
+    userDepartment,
   ]);
 
   // Dynamic Cell Content Renderer
@@ -1559,11 +1622,39 @@ function toCanonicalOrgName(raw: string): string {
             workingSchedule: e.workingSchedule,
           }))}
           currentUser={currentUser}
+          readOnly={!canEditEmployee}
           onSave={handleSaveProfile}
           onBack={() => setSelectedProfile(null)}
-          onDelete={handleDeleteEmployee}
-          onCreateUser={handleCreateUserForEmployee}
+          onDelete={canDeleteEmployee ? handleDeleteEmployee : undefined}
+          onCreateUser={canCreateEmployee ? handleCreateUserForEmployee : undefined}
         />
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // RBAC ACCESS RESTRICTION FALLBACK
+  // ═══════════════════════════════════════════════════════════════════════
+  if (rbacLoaded && !canViewDeptEmployees && !canViewAllEmployees) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center max-w-lg mx-auto min-h-[60vh] space-y-5 animate-in fade-in zoom-in-95 select-none">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 shadow-inner">
+          <ShieldAlert className="h-9 w-9 stroke-[2.5]" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-foreground">Access Restricted</h2>
+          <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+            You do not have permission to view employee records. Role-Based Access Control requires <code className="text-amber-500 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded">hr.employees.view_all</code> or <code className="text-amber-500 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded">hr.employees.view_dept</code> permission.
+          </p>
+        </div>
+        <div className="pt-2">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-wider shadow-lg hover:shadow-primary/20 transition transform active:scale-95 cursor-pointer"
+          >
+            <span>Return to My Dashboard</span>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -1606,29 +1697,35 @@ function toCanonicalOrgName(raw: string): string {
         </div>
 
         <div className="flex items-center space-x-2.5">
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="px-4 py-2 rounded-2xl bg-card border border-border text-xs font-bold text-foreground hover:border-primary/50 transition flex items-center space-x-2 shadow-sm cursor-pointer"
-          >
-            <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>IMPORT</span>
-          </button>
+          {canImportEmployee && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="px-4 py-2 rounded-2xl bg-card border border-border text-xs font-bold text-foreground hover:border-primary/50 transition flex items-center space-x-2 shadow-sm cursor-pointer"
+            >
+              <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>IMPORT</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => setSelectedProfile({} as FullEmployeeProfile)}
-            className="px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-black transition flex items-center space-x-2 shadow-md shadow-amber-500/20 cursor-pointer active:scale-95"
-          >
-            <Plus className="h-4 w-4 stroke-[3]" />
-            <span>NEW EMPLOYEE</span>
-          </button>
+          {canCreateEmployee && (
+            <button
+              onClick={() => setSelectedProfile({} as FullEmployeeProfile)}
+              className="px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-black transition flex items-center space-x-2 shadow-md shadow-amber-500/20 cursor-pointer active:scale-95"
+            >
+              <Plus className="h-4 w-4 stroke-[3]" />
+              <span>NEW EMPLOYEE</span>
+            </button>
+          )}
 
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 rounded-2xl bg-card border border-border text-xs font-bold text-foreground hover:border-primary/50 transition flex items-center space-x-2 shadow-sm cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5 text-muted-foreground" />
-            <span>EXPORT</span>
-          </button>
+          {canExportEmployee && (
+            <button
+              onClick={handleExportCSV}
+              className="px-4 py-2 rounded-2xl bg-card border border-border text-xs font-bold text-foreground hover:border-primary/50 transition flex items-center space-x-2 shadow-sm cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>EXPORT</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1767,33 +1864,81 @@ function toCanonicalOrgName(raw: string): string {
         </div>
       </div>
 
-      {/* ── BULK ACTIONS FLOATING/TOP BAR (Appears when 1+ selected) ── */}
+      {/* ── BULK ACTIONS / MASS UPDATE BAR (Appears ONLY when 1+ selected) ── */}
       {selectedCodes.length > 0 && (
         <div className="p-3.5 px-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
+          {/* Left Count */}
           <div className="flex items-center space-x-2 text-xs font-black text-amber-500">
             <Check className="h-4 w-4 stroke-[3]" />
             <span>{selectedCodes.length} employee(s) selected</span>
           </div>
 
-          <div className="flex items-center space-x-2">
-            {/* Odoo-Style Mass Update Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setMassUpdateField('department');
-                const defaultOpts = getFieldOptions('department');
-                setMassUpdateValue(defaultOpts[0]?.value || '');
-                setMassUpdateSearch('');
-                setShowMassUpdateModal(true);
-              }}
-              className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:scale-95"
-              title="Mass Update Department, Designation, Schedule, Team, etc. for all selected employees"
-            >
-              <Sparkles className="h-3.5 w-3.5 fill-current" />
-              <span>Mass Update ({selectedCodes.length})</span>
-            </button>
+          {/* Center Mass Update Field & Value Controls */}
+          {canMassUpdateEmployee && (
+            <div className="flex flex-wrap items-center gap-2">
+              {/* 1. Select Field */}
+              <div className="flex items-center space-x-1.5 bg-card border border-border/80 rounded-xl px-2.5 py-1 text-xs shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase text-muted-foreground">Field:</span>
+                <select
+                  value={massUpdateField}
+                  onChange={(e) => {
+                    const newField = e.target.value as keyof FullEmployeeProfile;
+                    setMassUpdateField(newField);
+                    const opts = getFieldOptions(newField);
+                    setMassUpdateValue(opts[0]?.value || '');
+                  }}
+                  className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer text-xs"
+                >
+                  {MASS_EDITABLE_FIELDS.map((f) => (
+                    <option key={f.key} value={f.key} className="bg-card text-foreground">
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {activeTab === 'ARCHIVED' ? (
+              {/* 2. Select / Input New Value */}
+              <div className="flex items-center space-x-1.5 bg-card border border-border/80 rounded-xl px-2.5 py-1 text-xs shadow-sm max-w-xs">
+                <span className="text-[10px] font-extrabold uppercase text-muted-foreground">Value:</span>
+                {getFieldOptions(massUpdateField).length > 0 ? (
+                  <select
+                    value={massUpdateValue}
+                    onChange={(e) => setMassUpdateValue(e.target.value)}
+                    className="bg-transparent text-foreground font-bold focus:outline-none cursor-pointer text-xs max-w-[180px] truncate"
+                  >
+                    {getFieldOptions(massUpdateField).map((opt) => (
+                      <option key={opt.value} value={opt.value} className="bg-card text-foreground">
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={massUpdateValue}
+                    onChange={(e) => setMassUpdateValue(e.target.value)}
+                    placeholder="Type new value..."
+                    className="bg-transparent text-foreground font-bold focus:outline-none text-xs w-36"
+                  />
+                )}
+              </div>
+
+              {/* 3. Apply Mass Update Button */}
+              <button
+                type="button"
+                onClick={() => requestMassUpdateConfirmation(selectedCodes, massUpdateField, massUpdateValue)}
+                className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-md shadow-amber-500/20 active:scale-95"
+                title={`Apply mass update to ${selectedCodes.length} selected employees`}
+              >
+                <Sparkles className="h-3.5 w-3.5 fill-current" />
+                <span>Apply Mass Update ({selectedCodes.length})</span>
+              </button>
+            </div>
+          )}
+
+          {/* Right Action Buttons */}
+          <div className="flex items-center space-x-2">
+            {canDeleteEmployee && activeTab === 'ARCHIVED' && (
               <button
                 type="button"
                 onClick={handleUnarchiveSelected}
@@ -1802,30 +1947,34 @@ function toCanonicalOrgName(raw: string): string {
                 <RotateCw className="h-3.5 w-3.5" />
                 <span>Restore</span>
               </button>
-            ) : (
+            )}
+
+            {canDeleteEmployee && activeTab !== 'ARCHIVED' && (
               <button
                 type="button"
                 onClick={handleArchiveSelected}
-                className="px-3.5 py-1.5 rounded-xl bg-surface border border-border text-foreground hover:border-amber-500/50 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+                className="px-3.5 py-1.5 rounded-xl bg-card border border-border text-foreground hover:border-amber-500/50 font-bold text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
               >
                 <Archive className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>Archive</span>
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={handleDeleteSelected}
-              className="px-3.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              <span>Delete</span>
-            </button>
+            {canDeleteEmployee && (
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white font-black text-xs transition flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
 
             <button
               type="button"
               onClick={() => setSelectedCodes([])}
-              className="px-3 py-1.5 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-semibold transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-card hover:bg-surface text-muted-foreground hover:text-foreground text-xs font-semibold transition cursor-pointer"
             >
               Deselect All
             </button>
@@ -2054,57 +2203,23 @@ function toCanonicalOrgName(raw: string): string {
                       />
                     </td>
 
-                    {/* Dynamic Visible Data Cells with Interactive Inline Edit / Mass Edit */}
+                    {/* Dynamic Visible Data Cells */}
                     {visibleColumnConfigs.map((col) => {
-                      const isEditable = MASS_EDITABLE_FIELDS.some((f) => f.key === col.key);
                       return (
                         <td
                           key={col.key}
-                          onClick={(e) => {
-                            if (isEditable) {
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setActiveInlineEditor({
-                                empCode: emp.code,
-                                field: col.key,
-                                anchorRect: {
-                                  top: rect.top,
-                                  left: rect.left,
-                                  width: rect.width,
-                                  height: rect.height,
-                                  bottom: rect.bottom,
-                                },
-                                currentValue: String(emp[col.key] || ''),
-                              });
-                              setInlineSearchQuery('');
-                            }
-                          }}
                           className={`py-3 px-3.5 transition ${
                             col.align === 'center'
                               ? 'text-center'
                               : col.align === 'right'
                               ? 'text-right'
                               : 'text-left'
-                          } ${
-                            isEditable
-                              ? 'hover:bg-amber-500/10 cursor-pointer relative group/cell rounded-lg'
-                              : ''
                           }`}
-                          title={
-                            isEditable
-                              ? isSelected && selectedCodes.length > 1
-                                ? `Click to Mass Update ${col.label} for ${selectedCodes.length} selected employees`
-                                : `Click to quick edit ${col.label}`
-                              : undefined
-                          }
                         >
                           <div className="flex items-center justify-between space-x-1.5 min-h-[26px]">
                             <div className="min-w-0 flex-1">
                               {renderCellContent(emp, col.key)}
                             </div>
-                            {isEditable && (
-                              <ChevronDown className="h-3 w-3 text-muted-foreground/30 group-hover/cell:text-amber-500 transition opacity-0 group-hover/cell:opacity-100 flex-shrink-0" />
-                            )}
                           </div>
                         </td>
                       );
@@ -2112,8 +2227,8 @@ function toCanonicalOrgName(raw: string): string {
 
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end space-x-2">
-                        {/* If NOT a user, show Create User button */}
-                        {!emp.isUser ? (
+                        {/* If NOT a user and has permission, show Create User button */}
+                        {canCreateEmployee && !emp.isUser && (
                           <button
                             type="button"
                             onClick={() => handleCreateUserForEmployee(emp)}
@@ -2123,7 +2238,8 @@ function toCanonicalOrgName(raw: string): string {
                             <UserPlus className="h-3 w-3 stroke-[2.5]" />
                             <span>Create User</span>
                           </button>
-                        ) : (
+                        )}
+                        {emp.isUser && (
                           <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[10px] font-bold flex items-center space-x-1">
                             <CheckCircle2 className="h-3 w-3" />
                             <span>User Active</span>
@@ -2134,19 +2250,25 @@ function toCanonicalOrgName(raw: string): string {
                           type="button"
                           onClick={() => setSelectedProfile(emp)}
                           className="p-1.5 rounded-xl bg-surface border border-border text-foreground hover:border-amber-500/50 hover:text-amber-500 transition cursor-pointer"
-                          title="Open Full Tab-Wise Profile"
+                          title={canEditEmployee ? "Open Profile & Edit" : "View Profile (Read-Only)"}
                         >
-                          <Edit3 className="h-3.5 w-3.5" />
+                          {canEditEmployee ? (
+                            <Edit3 className="h-3.5 w-3.5" />
+                          ) : (
+                            <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteEmployee(emp.code)}
-                          className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
-                          title="Delete Employee Profile"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {canDeleteEmployee && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteEmployee(emp.code)}
+                            className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+                            title="Delete Employee Profile"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

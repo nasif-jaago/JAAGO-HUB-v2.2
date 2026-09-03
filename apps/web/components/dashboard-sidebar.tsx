@@ -5,7 +5,12 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOutUser } from '@/lib/supabase-auth';
-
+import { hasModuleAccess, hasDepartmentAccess } from '@/lib/rbac-guard';
+import {
+  STANDARD_DEPARTMENTS_CONFIG,
+  DepartmentConfigItem,
+  normalizeDeptSlug,
+} from '@/lib/rbac-data';
 
 import {
   User,
@@ -78,6 +83,10 @@ export function DashboardSidebar({
 
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+  const [canAccessPnC, setCanAccessPnC] = useState<boolean>(false);
+  const [canAccessAdmin, setCanAccessAdmin] = useState<boolean>(false);
+  const [departmentsList, setDepartmentsList] = useState<DepartmentConfigItem[]>(STANDARD_DEPARTMENTS_CONFIG);
+  const [allowedDeptSlugs, setAllowedDeptSlugs] = useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
     const checkRole = () => {
@@ -91,7 +100,7 @@ export function DashboardSidebar({
             parsed.isSuperAdmin === true ||
             rawRoleUpper === 'SUPER_ADMIN' ||
             rawRole.toLowerCase() === 'super_admin' ||
-            parsed.email?.toLowerCase().includes('nasif.kamal');
+            Boolean(parsed.email && parsed.email.toLowerCase().includes('nasif.kamal'));
 
           const admin =
             superAdmin ||
@@ -100,19 +109,69 @@ export function DashboardSidebar({
             rawRoleUpper === 'HR_ADMIN' ||
             rawRole.toLowerCase() === 'admin' ||
             rawRole.toLowerCase() === 'hr_manager' ||
-            rawRole.toLowerCase() === 'coordinator';
+            rawRole.toLowerCase() === 'coordinator' ||
+            hasModuleAccess('admin', parsed);
 
           setIsSuperAdmin(Boolean(superAdmin));
           setIsAdmin(Boolean(admin));
+          setCanAccessPnC(hasModuleAccess('pnc', parsed));
+          setCanAccessAdmin(Boolean(superAdmin || admin || hasModuleAccess('admin', parsed)));
+
+          // Dynamically load custom + standard departments
+          const deptsRaw = localStorage.getItem('jaago_departments');
+          let customDepts: any[] = [];
+          if (deptsRaw) {
+            try { customDepts = JSON.parse(deptsRaw); } catch {}
+          }
+          const combinedDepts: DepartmentConfigItem[] = [...STANDARD_DEPARTMENTS_CONFIG];
+          if (Array.isArray(customDepts)) {
+            customDepts.forEach((cd) => {
+              if (!cd.name) return;
+              const slug = normalizeDeptSlug(cd.name);
+              if (!combinedDepts.some((d) => (d.slug || normalizeDeptSlug(d.name)) === slug)) {
+                combinedDepts.push({
+                  name: cd.name,
+                  slug,
+                  code: cd.code,
+                  icon: 'Building2',
+                  description: cd.description,
+                  href: '/workflows',
+                });
+              }
+            });
+          }
+          setDepartmentsList(combinedDepts);
+
+          // Calculate allowed departments for current user
+          const allowed: Record<string, boolean> = {};
+          combinedDepts.forEach((d) => {
+            const slug = d.slug || normalizeDeptSlug(d.name);
+            allowed[slug] = Boolean(superAdmin || hasDepartmentAccess(slug, parsed));
+          });
+          setAllowedDeptSlugs(allowed);
+        } else {
+          setCanAccessPnC(false);
+          setIsAdmin(false);
+          setIsSuperAdmin(false);
+          setCanAccessAdmin(false);
+          setAllowedDeptSlugs({});
         }
-      } catch {}
+      } catch {
+        setCanAccessPnC(false);
+        setCanAccessAdmin(false);
+        setAllowedDeptSlugs({});
+      }
     };
 
     checkRole();
     window.addEventListener('jaago_user_updated', checkRole);
+    window.addEventListener('jaago_rbac_updated', checkRole);
+    window.addEventListener('jaago_departments_updated', checkRole);
     window.addEventListener('storage', checkRole);
     return () => {
       window.removeEventListener('jaago_user_updated', checkRole);
+      window.removeEventListener('jaago_rbac_updated', checkRole);
+      window.removeEventListener('jaago_departments_updated', checkRole);
       window.removeEventListener('storage', checkRole);
     };
   }, []);
@@ -382,72 +441,85 @@ export function DashboardSidebar({
                 DEPARTMENTS
               </div>
 
-              {/* People and Culture (Opens dedicated portal in New Tab) */}
-              <a
-                href="/pnc"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-foreground bg-primary/10 hover:bg-primary/20 border border-primary/30 transition text-left cursor-pointer group shadow-sm mb-1"
-                title="Open People and Culture Portal in New Tab"
-              >
-                <div className="flex items-center space-x-2.5">
-                  <div className="h-5 w-5 rounded-md bg-[#26180E] text-primary font-black text-[9px] flex items-center justify-center flex-shrink-0">
-                    P&amp;C
+              {/* People and Culture (Opens dedicated portal in New Tab - Only if user has RBAC access) */}
+              {canAccessPnC && (
+                <a
+                  href="/pnc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-foreground bg-primary/10 hover:bg-primary/20 border border-primary/30 transition text-left cursor-pointer group shadow-sm mb-1"
+                  title="Open People and Culture Portal in New Tab"
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <div className="h-5 w-5 rounded-md bg-[#26180E] text-primary font-black text-[9px] flex items-center justify-center flex-shrink-0">
+                      P&amp;C
+                    </div>
+                    <span className="font-bold text-foreground group-hover:text-primary transition">
+                      People and Culture
+                    </span>
                   </div>
-                  <span className="font-bold text-foreground group-hover:text-primary transition">
-                    People and Culture
-                  </span>
-                </div>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition flex-shrink-0" />
-              </a>
-              {[
-                { label: 'Admin & Procurement', icon: Building2 },
-                { label: 'Child Welfare', icon: Star, href: 'https://jaagohub.jaago.com.bd/?view=child-welfare-v1' },
-                { label: 'Digital & Creative (DKL)', icon: TrendingUp },
-                { label: "Founder's Office (FC)", icon: FileText },
-                { label: 'Fundraising & Grants', icon: DollarSign },
-                { label: 'Impact Investment', icon: Radio },
-                { label: 'Project Implementation', icon: ClipboardList },
-                { label: 'Programmes', icon: Users },
-                { label: 'Private Sector (PSE)', icon: Building2 },
-                { label: 'Youth Development (YDF)', icon: HeartHandshake },
-                { label: 'MEAL (Monitoring & Eval)', icon: BarChart2 },
-              ].map((dept, idx) => {
-                if (dept.href) {
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition flex-shrink-0" />
+                </a>
+              )}
+              {departmentsList
+                .filter((dept) => {
+                  const slug = dept.slug || normalizeDeptSlug(dept.name);
+                  return isSuperAdmin || allowedDeptSlugs[slug];
+                })
+                .map((dept, idx) => {
+                  const getIcon = (iconName?: string) => {
+                    switch (iconName) {
+                      case 'Star': return Star;
+                      case 'TrendingUp': return TrendingUp;
+                      case 'FileText': return FileText;
+                      case 'DollarSign': return DollarSign;
+                      case 'Radio': return Radio;
+                      case 'ClipboardList': return ClipboardList;
+                      case 'Users': return Users;
+                      case 'HeartHandshake': return HeartHandshake;
+                      case 'BarChart2': return BarChart2;
+                      case 'Building2':
+                      default:
+                        return Building2;
+                    }
+                  };
+                  const IconComp = getIcon(dept.icon);
+
+                  if (dept.href) {
+                    return (
+                      <a
+                        key={idx}
+                        href={dept.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-between px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer group"
+                        title={`Open ${dept.name} in New Tab`}
+                      >
+                        <div className="flex items-center space-x-2.5 truncate">
+                          <IconComp className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition flex-shrink-0" />
+                          <span className="truncate">{dept.name}</span>
+                        </div>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground/60 group-hover:text-primary transition flex-shrink-0" />
+                      </a>
+                    );
+                  }
                   return (
-                    <a
+                    <button
                       key={idx}
-                      href={dept.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center justify-between px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer group"
-                      title={`Open ${dept.label} in New Tab`}
+                      className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer"
                     >
-                      <div className="flex items-center space-x-2.5 truncate">
-                        <dept.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition flex-shrink-0" />
-                        <span className="truncate">{dept.label}</span>
-                      </div>
-                      <ExternalLink className="h-3 w-3 text-muted-foreground/60 group-hover:text-primary transition flex-shrink-0" />
-                    </a>
+                      <IconComp className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">{dept.name}</span>
+                    </button>
                   );
-                }
-                return (
-                  <button
-                    key={idx}
-                    className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer"
-                  >
-                    <dept.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate">{dept.label}</span>
-                  </button>
-                );
-              })}
+                })}
             </div>
           )}
 
           {/* ═══════════════════════════════════════════════════════════ */}
           {/* ── 3. SETTINGS ACCORDION (Admin / Super Admin Only) ─────── */}
           {/* ═══════════════════════════════════════════════════════════ */}
-          {(isAdmin || isSuperAdmin) && (
+          {(canAccessAdmin || isAdmin || isSuperAdmin) && (
             <div className="space-y-1 pt-2 border-t border-sidebar-border">
               <button
                 onClick={() => toggleSection('settings')}

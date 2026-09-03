@@ -14,6 +14,7 @@ import {
   Archive,
   RotateCw,
   Check,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   InsuranceCategoryItem,
@@ -21,12 +22,18 @@ import {
   saveInsuranceCategoryToSupabase,
   deleteInsuranceCategoryFromSupabase,
 } from '@/lib/supabase-organization';
+import { hasPermission } from '@/lib/rbac-guard';
 
 export default function InsurancePage() {
   const [categories, setCategories] = useState<InsuranceCategoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // ── RBAC STATE ──
+  const [rbacLoaded, setRbacLoaded] = useState(false);
+  const [canView, setCanView] = useState(false);
+  const [canManage, setCanManage] = useState(false);
 
   // Modal State
   const [showModal, setShowModal] = useState(false);
@@ -40,6 +47,44 @@ export default function InsurancePage() {
   });
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // RBAC Loader
+  useEffect(() => {
+    const checkRbac = () => {
+      try {
+        const userStr = typeof window !== 'undefined' ? localStorage.getItem('jaago_user') : null;
+        if (userStr) {
+          const parsed = JSON.parse(userStr);
+          const rawRole = (parsed.role || (Array.isArray(parsed.roles) ? parsed.roles[0] : '') || 'USER').toString();
+          const rawRoleUpper = rawRole.toUpperCase();
+          const isSuper =
+            parsed.isSuperAdmin === true ||
+            rawRoleUpper === 'SUPER_ADMIN' ||
+            rawRole.toLowerCase() === 'super_admin' ||
+            Boolean(parsed.email && parsed.email.toLowerCase().includes('nasif.kamal'));
+
+          const view = isSuper || hasPermission('hr.insurance.manage', parsed) || hasPermission('hr.employees.view_all', parsed);
+          const manage = isSuper || hasPermission('hr.insurance.manage', parsed);
+
+          setCanView(view);
+          setCanManage(manage);
+          setRbacLoaded(true);
+        } else {
+          setRbacLoaded(true);
+        }
+      } catch {
+        setRbacLoaded(true);
+      }
+    };
+
+    checkRbac();
+    window.addEventListener('jaago_user_updated', checkRbac);
+    window.addEventListener('jaago_rbac_updated', checkRbac);
+    return () => {
+      window.removeEventListener('jaago_user_updated', checkRbac);
+      window.removeEventListener('jaago_rbac_updated', checkRbac);
+    };
+  }, []);
 
   useEffect(() => {
     fetchInsuranceCategoriesFromSupabase().then((data) => {
@@ -175,6 +220,30 @@ export default function InsurancePage() {
     return true;
   });
 
+  if (rbacLoaded && !canView) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center max-w-lg mx-auto min-h-[60vh] space-y-5 animate-in fade-in zoom-in-95 select-none">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 shadow-inner">
+          <ShieldAlert className="h-9 w-9 stroke-[2.5]" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-foreground">Access Restricted</h2>
+          <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+            You do not have permission to view insurance coverage schemes. Role-Based Access Control requires <code className="text-amber-500 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded">hr.insurance.manage</code> or <code className="text-amber-500 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded">hr.employees.view_all</code> permission.
+          </p>
+        </div>
+        <div className="pt-2">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-wider shadow-lg hover:shadow-primary/20 transition transform active:scale-95 cursor-pointer"
+          >
+            <span>Return to My Dashboard</span>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 select-none animate-in fade-in duration-200">
       {/* Toast Notification */}
@@ -206,14 +275,16 @@ export default function InsurancePage() {
           </h1>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenAddModal}
-          className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs uppercase tracking-wider transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95 flex-shrink-0"
-        >
-          <Plus className="h-4 w-4" />
-          <span>NEW CATEGORY</span>
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={handleOpenAddModal}
+            className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs uppercase tracking-wider transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95 flex-shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            <span>NEW CATEGORY</span>
+          </button>
+        )}
       </div>
 
       {/* Active vs Archived Filter Tabs */}

@@ -556,3 +556,210 @@ export function deleteCustomRole(roleKey: string): boolean {
   runtimeRoles = runtimeRoles.filter((r) => r.key !== roleKey && r.id !== roleKey);
   return true;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DYNAMIC DEPARTMENT MODULE GENERATOR FOR RBAC & USER MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface DepartmentConfigItem {
+  id?: string | undefined;
+  name: string;
+  slug?: string | undefined;
+  code?: string | undefined;
+  icon?: string | undefined;
+  description?: string | undefined;
+  href?: string | undefined;
+}
+
+export const STANDARD_DEPARTMENTS_CONFIG: DepartmentConfigItem[] = [
+  {
+    name: 'Admin & Procurement',
+    slug: 'admin_procurement',
+    code: 'ADMIN-PROC',
+    icon: 'Building2',
+    description: 'Procurement requests, inventory logistics, vendor management, and administrative services.',
+    href: '/workflows',
+  },
+  {
+    name: 'Child Welfare',
+    slug: 'child_welfare',
+    code: 'CW',
+    icon: 'Star',
+    description: 'Child sponsorship tracking, student safeguarding, nutrition, and welfare case management.',
+    href: 'https://jaagohub.jaago.com.bd/?view=child-welfare-v1',
+  },
+  {
+    name: 'Digital & Creative (DKL)',
+    slug: 'digital_creative',
+    code: 'DKL',
+    icon: 'TrendingUp',
+    description: 'Digital school development, graphic branding, creative assets, and tech innovation.',
+    href: '/workflows',
+  },
+  {
+    name: "Founder's Office (FC)",
+    slug: 'founders_office',
+    code: 'FC',
+    icon: 'FileText',
+    description: 'Strategic governance, institutional partnerships, high-level directives, and executive briefings.',
+    href: '/workflows',
+  },
+  {
+    name: 'Fundraising & Grants',
+    slug: 'fundraising_grants',
+    code: 'FRG',
+    icon: 'DollarSign',
+    description: 'Donor proposals, grant tracking, fundraising campaigns, and CSR partnership management.',
+    href: '/workflows',
+  },
+  {
+    name: 'Impact Investment',
+    slug: 'impact_investment',
+    code: 'II',
+    icon: 'Radio',
+    description: 'Sustainable social enterprise projects, impact funding, and investment viability analysis.',
+    href: '/workflows',
+  },
+  {
+    name: 'Project Implementation',
+    slug: 'project_implementation',
+    code: 'PI',
+    icon: 'ClipboardList',
+    description: 'Field school operations, project site rollouts, activity tracking, and milestone delivery.',
+    href: '/workflows',
+  },
+  {
+    name: 'Programmes',
+    slug: 'programmes',
+    code: 'PROG',
+    icon: 'Users',
+    description: 'Nationwide education programs, community development, and teacher training curriculum.',
+    href: '/workflows',
+  },
+  {
+    name: 'Private Sector (PSE)',
+    slug: 'private_sector',
+    code: 'PSE',
+    icon: 'Building2',
+    description: 'Corporate engagements, private sector partnerships, and sustainable sponsorship programs.',
+    href: '/workflows',
+  },
+  {
+    name: 'Youth Development (YDF)',
+    slug: 'youth_development',
+    code: 'YDF',
+    icon: 'HeartHandshake',
+    description: 'Volunteer For Bangladesh (VBD) chapters, youth leadership, and civic empowerment events.',
+    href: '/workflows',
+  },
+  {
+    name: 'MEAL (Monitoring & Eval)',
+    slug: 'meal_monitoring',
+    code: 'MEAL',
+    icon: 'BarChart2',
+    description: 'Monitoring, evaluation, accountability, and learning metrics across all donor grants.',
+    href: '/workflows',
+  },
+];
+
+export function normalizeDeptSlug(name: string): string {
+  if (!name) return 'general';
+  return name
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, '_')
+    .trim();
+}
+
+export function createDepartmentPermissionModule(dept: DepartmentConfigItem): PermissionModuleGroup {
+  const slug = dept.slug || normalizeDeptSlug(dept.name);
+  const modKey = `dept_${slug}`;
+  const icon = dept.icon || 'Building2';
+
+  return {
+    moduleKey: modKey,
+    moduleName: `Department: ${dept.name}`,
+    iconName: icon,
+    description: dept.description || `Departmental portal, operational requests, team oversight, and records for ${dept.name}.`,
+    permissions: [
+      {
+        id: `perm-${slug}-view`,
+        key: `dept.${slug}.view`,
+        name: `View ${dept.name} Portal`,
+        description: `Access and view ${dept.name} department dashboard, files, and staff directory`,
+        moduleKey: modKey,
+        category: 'Department Portal',
+        actionType: 'VIEW',
+        scope: 'DEPARTMENT',
+      },
+      {
+        id: `perm-${slug}-manage`,
+        key: `dept.${slug}.manage`,
+        name: `Manage ${dept.name} Operations`,
+        description: `Manage ${dept.name} functional units, team allocations, and operational tasks`,
+        moduleKey: modKey,
+        category: 'Operations',
+        actionType: 'MANAGE',
+        scope: 'DEPARTMENT',
+      },
+      {
+        id: `perm-${slug}-requests`,
+        key: `dept.${slug}.requests`,
+        name: `${dept.name} Requisitions & Requests`,
+        description: `Submit, review, and approve departmental requisitions and resource demands`,
+        moduleKey: modKey,
+        category: 'Requests',
+        actionType: 'CREATE',
+        scope: 'DEPARTMENT',
+      },
+      {
+        id: `perm-${slug}-reports`,
+        key: `dept.${slug}.reports`,
+        name: `${dept.name} Reports & KPIs`,
+        description: `Inspect monthly performance indicators, activity logs, and progress reports`,
+        moduleKey: modKey,
+        category: 'Reports',
+        actionType: 'VIEW',
+        scope: 'DEPARTMENT',
+      },
+    ],
+  };
+}
+
+export function getDepartmentPermissionModules(customDepts?: Array<{ name: string; code?: string; description?: string }>): PermissionModuleGroup[] {
+  const combinedMap = new Map<string, DepartmentConfigItem>();
+
+  // 1. Add all standard departments
+  STANDARD_DEPARTMENTS_CONFIG.forEach((d) => {
+    const slug = d.slug || normalizeDeptSlug(d.name);
+    combinedMap.set(slug, d);
+  });
+
+  // 2. Add custom or dynamically fetched departments from Supabase
+  if (Array.isArray(customDepts)) {
+    customDepts.forEach((cd) => {
+      if (!cd.name) return;
+      const slug = normalizeDeptSlug(cd.name);
+      if (!combinedMap.has(slug)) {
+        combinedMap.set(slug, {
+          name: cd.name,
+          slug,
+          code: cd.code,
+          description: cd.description,
+          icon: 'Building2',
+        });
+      }
+    });
+  }
+
+  return Array.from(combinedMap.values()).map(createDepartmentPermissionModule);
+}
+
+/**
+ * Returns all System Modules combined with all Department Modules dynamically
+ */
+export function getAllPermissionModules(customDepts?: Array<{ name: string; code?: string; description?: string }>): PermissionModuleGroup[] {
+  const deptModules = getDepartmentPermissionModules(customDepts);
+  return [...PERMISSION_MODULES, ...deptModules];
+}
+

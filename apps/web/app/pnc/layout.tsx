@@ -35,6 +35,7 @@ import {
   fetchOrganizationsFromSupabase,
   OrganizationEntity,
 } from '@/lib/supabase-organization';
+import { hasPermission, hasModuleAccess } from '@/lib/rbac-guard';
 
 export type ThemeMode = 'dark' | 'light' | 'espresso';
 
@@ -97,6 +98,37 @@ export default function PnCLayout({
     isAdmin: false,
   });
 
+  // Granular Dynamic RBAC Module Access State
+  const [permissionsState, setPermissionsState] = useState<{
+    canAccessDashboard: boolean;
+    canAccessEmployees: boolean;
+    canAccessOrg: boolean;
+    canAccessTimeOff: boolean;
+    canAccessAttendance: boolean;
+    canAccessAppraisals: boolean;
+    canAccessPayroll: boolean;
+    canAccessRequests: boolean;
+    canAccessReports: boolean;
+    canAccessAnnouncements: boolean;
+    canAccessRbac: boolean;
+    canAccessAnyPnC: boolean;
+    isLoaded: boolean;
+  }>({
+    canAccessDashboard: false,
+    canAccessEmployees: false,
+    canAccessOrg: false,
+    canAccessTimeOff: false,
+    canAccessAttendance: false,
+    canAccessAppraisals: false,
+    canAccessPayroll: false,
+    canAccessRequests: false,
+    canAccessReports: false,
+    canAccessAnnouncements: false,
+    canAccessRbac: false,
+    canAccessAnyPnC: true,
+    isLoaded: false,
+  });
+
   // Client-Side ERP Auth State Listener & User Hydration
   useEffect(() => {
     let isMounted = true;
@@ -113,7 +145,7 @@ export default function PnCLayout({
             parsed.isSuperAdmin === true ||
             rawRoleUpper === 'SUPER_ADMIN' ||
             rawRole.toLowerCase() === 'super_admin' ||
-            parsed.email?.toLowerCase().includes('nasif.kamal');
+            Boolean(parsed.email && parsed.email.toLowerCase().includes('nasif.kamal'));
 
           const isAdmin =
             isSuper ||
@@ -123,6 +155,19 @@ export default function PnCLayout({
             rawRole.toLowerCase() === 'admin' ||
             rawRole.toLowerCase() === 'hr_manager' ||
             rawRole.toLowerCase() === 'coordinator';
+
+          const canAccessDashboard = isSuper || isAdmin || hasPermission('reports.headcount.view', parsed) || hasPermission('hr.employees.view_all', parsed);
+          const canAccessEmployees = isSuper || hasPermission('hr.employees.view_all', parsed) || hasPermission('hr.employees.view_dept', parsed);
+          const canAccessOrg = isSuper || hasModuleAccess('org', parsed);
+          const canAccessTimeOff = isSuper || hasModuleAccess('time_off', parsed);
+          const canAccessAttendance = isSuper || hasModuleAccess('attendance', parsed);
+          const canAccessAppraisals = isSuper || hasModuleAccess('appraisals', parsed);
+          const canAccessPayroll = isSuper || hasModuleAccess('payroll', parsed);
+          const canAccessRequests = isSuper || hasModuleAccess('requests', parsed);
+          const canAccessReports = isSuper || hasModuleAccess('reports', parsed);
+          const canAccessAnnouncements = isSuper || hasPermission('announcements.view', parsed);
+          const canAccessRbac = isSuper || hasPermission('system.users.manage_roles', parsed);
+          const canAccessAnyPnC = isSuper || canAccessDashboard || canAccessEmployees || canAccessOrg || canAccessTimeOff || canAccessAttendance || canAccessAppraisals || canAccessPayroll || canAccessRequests || canAccessReports;
 
           if (isMounted) {
             setCurrentUser({
@@ -134,7 +179,39 @@ export default function PnCLayout({
               isAdmin,
               avatarUrl: parsed.avatarUrl || '',
             });
+
+            setPermissionsState({
+              canAccessDashboard,
+              canAccessEmployees,
+              canAccessOrg,
+              canAccessTimeOff,
+              canAccessAttendance,
+              canAccessAppraisals,
+              canAccessPayroll,
+              canAccessRequests,
+              canAccessReports,
+              canAccessAnnouncements,
+              canAccessRbac,
+              canAccessAnyPnC,
+              isLoaded: true,
+            });
           }
+        } else if (isMounted) {
+          setPermissionsState({
+            canAccessDashboard: false,
+            canAccessEmployees: false,
+            canAccessOrg: false,
+            canAccessTimeOff: false,
+            canAccessAttendance: false,
+            canAccessAppraisals: false,
+            canAccessPayroll: false,
+            canAccessRequests: false,
+            canAccessReports: false,
+            canAccessAnnouncements: false,
+            canAccessRbac: false,
+            canAccessAnyPnC: false,
+            isLoaded: true,
+          });
         }
       } catch {}
     };
@@ -158,12 +235,14 @@ export default function PnCLayout({
     };
 
     window.addEventListener('jaago_user_updated', handleUserUpdate);
+    window.addEventListener('jaago_rbac_updated', handleUserUpdate);
     window.addEventListener('storage', handleUserUpdate);
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
       window.removeEventListener('jaago_user_updated', handleUserUpdate);
+      window.removeEventListener('jaago_rbac_updated', handleUserUpdate);
       window.removeEventListener('storage', handleUserUpdate);
     };
   }, []);
@@ -360,361 +439,381 @@ export default function PnCLayout({
         {/* Middle Navigation Menu */}
         <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-1.5 no-scrollbar">
           {/* DASHBOARD */}
-          <Link
-            href="/pnc"
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
-              pathname === '/pnc'
-                ? 'bg-primary/20 text-foreground font-black border border-primary/40'
-                : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
-            }`}
-          >
-            <LayoutDashboard className="h-4 w-4 text-foreground flex-shrink-0" />
-            <span className="uppercase tracking-wider text-[11px]">DASHBOARD</span>
-          </Link>
-
-          {/* EMPLOYEES */}
-          <Link
-            href="/pnc/employees"
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
-              pathname === '/pnc/employees'
-                ? 'bg-primary/20 text-foreground font-black border border-primary/40'
-                : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
-            }`}
-          >
-            <Users className="h-4 w-4 text-foreground flex-shrink-0" />
-            <span className="uppercase tracking-wider text-[11px]">EMPLOYEES</span>
-          </Link>
-
-          {/* ORGANIZATION ACCORDION */}
-          <div className="space-y-0.5">
-            <button
-              onClick={() => toggleSection('organization')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                pathname.startsWith('/pnc/organization') ||
-                pathname.startsWith('/pnc/designations') ||
-                pathname.startsWith('/pnc/teams') ||
-                pathname.startsWith('/pnc/departments') ||
-                pathname.startsWith('/pnc/projects') ||
-                pathname.startsWith('/pnc/insurance')
-                  ? 'text-primary font-black bg-primary/10'
-                  : 'text-sidebar-foreground hover:bg-surface'
+          {permissionsState.canAccessDashboard && (
+            <Link
+              href="/pnc"
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                pathname === '/pnc'
+                  ? 'bg-primary/20 text-foreground font-black border border-primary/40'
+                  : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
               }`}
             >
-              <div className="flex items-center space-x-2.5">
-                <Building2 className={`h-4 w-4 flex-shrink-0 ${
+              <LayoutDashboard className="h-4 w-4 text-foreground flex-shrink-0" />
+              <span className="uppercase tracking-wider text-[11px]">DASHBOARD</span>
+            </Link>
+          )}
+
+          {/* EMPLOYEES */}
+          {permissionsState.canAccessEmployees && (
+            <Link
+              href="/pnc/employees"
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                pathname === '/pnc/employees'
+                  ? 'bg-primary/20 text-foreground font-black border border-primary/40'
+                  : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
+              }`}
+            >
+              <Users className="h-4 w-4 text-foreground flex-shrink-0" />
+              <span className="uppercase tracking-wider text-[11px]">EMPLOYEES</span>
+            </Link>
+          )}
+
+          {/* ORGANIZATION ACCORDION */}
+          {permissionsState.canAccessOrg && (
+            <div className="space-y-0.5">
+              <button
+                onClick={() => toggleSection('organization')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/organization') ||
                   pathname.startsWith('/pnc/designations') ||
                   pathname.startsWith('/pnc/teams') ||
                   pathname.startsWith('/pnc/departments') ||
                   pathname.startsWith('/pnc/projects') ||
                   pathname.startsWith('/pnc/insurance')
-                    ? 'text-primary'
-                    : 'text-muted-foreground'
-                }`} />
-                <span className="uppercase tracking-wider text-[11px]">ORGANIZATION</span>
-              </div>
-              {openSections['organization'] ||
-              pathname.startsWith('/pnc/organization') ||
-              pathname.startsWith('/pnc/designations') ||
-              pathname.startsWith('/pnc/teams') ||
-              pathname.startsWith('/pnc/departments') ||
-              pathname.startsWith('/pnc/projects') ||
-              pathname.startsWith('/pnc/insurance') ? (
-                <ChevronDown className="h-3.5 w-3.5 text-primary" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </button>
-            {(openSections['organization'] ||
-              pathname.startsWith('/pnc/organization') ||
-              pathname.startsWith('/pnc/designations') ||
-              pathname.startsWith('/pnc/teams') ||
-              pathname.startsWith('/pnc/departments') ||
-              pathname.startsWith('/pnc/projects') ||
-              pathname.startsWith('/pnc/insurance')) && (
-              <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <Link
-                  href="/pnc/organization"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/organization'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Organization &amp; Branches
-                </Link>
-                <Link
-                  href="/pnc/designations"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/designations'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Designations
-                </Link>
-                <Link
-                  href="/pnc/teams"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/teams'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Teams
-                </Link>
-                <Link
-                  href="/pnc/departments"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/departments'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Departments
-                </Link>
-                <Link
-                  href="/pnc/projects"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/projects'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Projects
-                </Link>
-                <Link
-                  href="/pnc/insurance"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/insurance'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Insurance Info
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* TIME OFF ACCORDION */}
-          <div className="space-y-0.5">
-            <button
-              onClick={() => toggleSection('timeOff')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                pathname.startsWith('/pnc/time-off')
-                  ? 'text-primary font-black bg-primary/10'
-                  : 'text-sidebar-foreground hover:bg-surface'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Calendar className={`h-4 w-4 flex-shrink-0 ${
-                  pathname.startsWith('/pnc/time-off')
-                    ? 'text-primary'
-                    : 'text-muted-foreground'
-                }`} />
-                <span className="uppercase tracking-wider text-[11px]">TIME OFF</span>
-              </div>
-              {openSections['timeOff'] || pathname.startsWith('/pnc/time-off') ? (
-                <ChevronDown className="h-3.5 w-3.5 text-primary" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </button>
-            {(openSections['timeOff'] || pathname.startsWith('/pnc/time-off')) && (
-              <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <Link
-                  href="/pnc/time-off/calendar"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/time-off/calendar' || pathname === '/pnc/time-off'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Leave Calendar
-                </Link>
-                <Link
-                  href="/pnc/time-off/requests"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/time-off/requests'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Leave Requests
-                </Link>
-                <Link
-                  href="/pnc/time-off/allocations"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/time-off/allocations'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Allocations
-                </Link>
-                <Link
-                  href="/pnc/time-off/holidays"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/time-off/holidays'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Public Holidays
-                </Link>
-                <Link
-                  href="/pnc/time-off/config"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/time-off/config'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Leave Config
-                </Link>
-              </div>
-            )}
-          </div>
-
-          {/* ATTENDANCE ACCORDION */}
-          <div className="space-y-0.5">
-            <button
-              onClick={() => toggleSection('attendance')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                pathname.startsWith('/pnc/attendance')
-                  ? 'text-primary font-black bg-primary/10'
-                  : 'text-sidebar-foreground hover:bg-surface'
-              }`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Fingerprint
-                  className={`h-4 w-4 flex-shrink-0 ${
-                    pathname.startsWith('/pnc/attendance')
+                    ? 'text-primary font-black bg-primary/10'
+                    : 'text-sidebar-foreground hover:bg-surface'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Building2 className={`h-4 w-4 flex-shrink-0 ${
+                    pathname.startsWith('/pnc/organization') ||
+                    pathname.startsWith('/pnc/designations') ||
+                    pathname.startsWith('/pnc/teams') ||
+                    pathname.startsWith('/pnc/departments') ||
+                    pathname.startsWith('/pnc/projects') ||
+                    pathname.startsWith('/pnc/insurance')
                       ? 'text-primary'
                       : 'text-muted-foreground'
-                  }`}
-                />
-                <span className="uppercase tracking-wider text-[11px]">ATTENDANCE</span>
-              </div>
-              {openSections['attendance'] || pathname.startsWith('/pnc/attendance') ? (
-                <ChevronDown className="h-3.5 w-3.5 text-primary" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
+                  }`} />
+                  <span className="uppercase tracking-wider text-[11px]">ORGANIZATION</span>
+                </div>
+                {openSections['organization'] ||
+                pathname.startsWith('/pnc/organization') ||
+                pathname.startsWith('/pnc/designations') ||
+                pathname.startsWith('/pnc/teams') ||
+                pathname.startsWith('/pnc/departments') ||
+                pathname.startsWith('/pnc/projects') ||
+                pathname.startsWith('/pnc/insurance') ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+              </button>
+              {(openSections['organization'] ||
+                pathname.startsWith('/pnc/organization') ||
+                pathname.startsWith('/pnc/designations') ||
+                pathname.startsWith('/pnc/teams') ||
+                pathname.startsWith('/pnc/departments') ||
+                pathname.startsWith('/pnc/projects') ||
+                pathname.startsWith('/pnc/insurance')) && (
+                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                  <Link
+                    href="/pnc/organization"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/organization'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Organization &amp; Branches
+                  </Link>
+                  <Link
+                    href="/pnc/designations"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/designations'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Designations
+                  </Link>
+                  <Link
+                    href="/pnc/teams"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/teams'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Teams
+                  </Link>
+                  <Link
+                    href="/pnc/departments"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/departments'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Departments
+                  </Link>
+                  <Link
+                    href="/pnc/projects"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/projects'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Projects
+                  </Link>
+                  <Link
+                    href="/pnc/insurance"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/insurance'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Insurance Info
+                  </Link>
+                </div>
               )}
-            </button>
-            {(openSections['attendance'] || pathname.startsWith('/pnc/attendance')) && (
-              <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <Link
-                  href="/pnc/attendance/logs"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/attendance/logs' || pathname === '/pnc/attendance'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Attendance Logs
-                </Link>
-                <Link
-                  href="/pnc/attendance/on-duty"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/attendance/on-duty'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; On Duty Logs
-                </Link>
-                <Link
-                  href="/pnc/attendance/report"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/attendance/report'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Attendance Report
-                </Link>
-                <Link
-                  href="/pnc/attendance/shifts"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname === '/pnc/attendance/shifts'
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; Working Hours &amp; Schedules
-                </Link>
-                <Link
-                  href="/pnc/attendance/biotime-logs"
-                  className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
-                    pathname.startsWith('/pnc/attendance/biotime-logs')
-                      ? 'text-primary font-black bg-primary/15'
-                      : 'hover:text-primary hover:bg-surface/60'
-                  }`}
-                >
-                  &bull; BioTime Log
-                </Link>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* TIME OFF ACCORDION */}
+          {permissionsState.canAccessTimeOff && (
+            <div className="space-y-0.5">
+              <button
+                onClick={() => toggleSection('timeOff')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  pathname.startsWith('/pnc/time-off')
+                    ? 'text-primary font-black bg-primary/10'
+                    : 'text-sidebar-foreground hover:bg-surface'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Calendar className={`h-4 w-4 flex-shrink-0 ${
+                    pathname.startsWith('/pnc/time-off')
+                      ? 'text-primary'
+                      : 'text-muted-foreground'
+                  }`} />
+                  <span className="uppercase tracking-wider text-[11px]">TIME OFF</span>
+                </div>
+                {openSections['timeOff'] || pathname.startsWith('/pnc/time-off') ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+              </button>
+              {(openSections['timeOff'] || pathname.startsWith('/pnc/time-off')) && (
+                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                  <Link
+                    href="/pnc/time-off/calendar"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/time-off/calendar' || pathname === '/pnc/time-off'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Leave Calendar
+                  </Link>
+                  <Link
+                    href="/pnc/time-off/requests"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/time-off/requests'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Leave Requests
+                  </Link>
+                  <Link
+                    href="/pnc/time-off/allocations"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/time-off/allocations'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Allocations
+                  </Link>
+                  <Link
+                    href="/pnc/time-off/holidays"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/time-off/holidays'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Public Holidays
+                  </Link>
+                  <Link
+                    href="/pnc/time-off/config"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/time-off/config'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Leave Config
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ATTENDANCE ACCORDION */}
+          {permissionsState.canAccessAttendance && (
+            <div className="space-y-0.5">
+              <button
+                onClick={() => toggleSection('attendance')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  pathname.startsWith('/pnc/attendance')
+                    ? 'text-primary font-black bg-primary/10'
+                    : 'text-sidebar-foreground hover:bg-surface'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Fingerprint
+                    className={`h-4 w-4 flex-shrink-0 ${
+                      pathname.startsWith('/pnc/attendance')
+                        ? 'text-primary'
+                        : 'text-muted-foreground'
+                    }`}
+                  />
+                  <span className="uppercase tracking-wider text-[11px]">ATTENDANCE</span>
+                </div>
+                {openSections['attendance'] || pathname.startsWith('/pnc/attendance') ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+              </button>
+              {(openSections['attendance'] || pathname.startsWith('/pnc/attendance')) && (
+                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                  <Link
+                    href="/pnc/attendance/logs"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/attendance/logs' || pathname === '/pnc/attendance'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Attendance Logs
+                  </Link>
+                  <Link
+                    href="/pnc/attendance/on-duty"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/attendance/on-duty'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; On Duty Logs
+                  </Link>
+                  <Link
+                    href="/pnc/attendance/report"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/attendance/report'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Attendance Report
+                  </Link>
+                  <Link
+                    href="/pnc/attendance/shifts"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname === '/pnc/attendance/shifts'
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; Working Hours &amp; Schedules
+                  </Link>
+                  <Link
+                    href="/pnc/attendance/biotime-logs"
+                    className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
+                      pathname.startsWith('/pnc/attendance/biotime-logs')
+                        ? 'text-primary font-black bg-primary/15'
+                        : 'hover:text-primary hover:bg-surface/60'
+                    }`}
+                  >
+                    &bull; BioTime Log
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* APPRAISALS */}
-          <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
-            <div className="flex items-center space-x-2.5">
-              <Award className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="uppercase tracking-wider text-[11px]">APPRAISALS</span>
+          {permissionsState.canAccessAppraisals && (
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
+              <div className="flex items-center space-x-2.5">
+                <Award className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="uppercase tracking-wider text-[11px]">APPRAISALS</span>
+              </div>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-          </div>
+          )}
 
           {/* PAYROLL */}
-          <div className="space-y-0.5">
-            <button
-              onClick={() => toggleSection('payroll')}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer"
-            >
-              <div className="flex items-center space-x-2.5">
-                <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="uppercase tracking-wider text-[11px]">PAYROLL</span>
-              </div>
-              {openSections['payroll'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            </button>
-            {openSections['payroll'] && (
-              <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; Contracts</div>
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; Pay Runs</div>
-                <div className="py-1 uppercase text-[10px] font-bold">&bull; Payslips</div>
-              </div>
-            )}
-          </div>
+          {permissionsState.canAccessPayroll && (
+            <div className="space-y-0.5">
+              <button
+                onClick={() => toggleSection('payroll')}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="uppercase tracking-wider text-[11px]">PAYROLL</span>
+                </div>
+                {openSections['payroll'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </button>
+              {openSections['payroll'] && (
+                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                  <div className="py-1 uppercase text-[10px] font-bold">&bull; Contracts</div>
+                  <div className="py-1 uppercase text-[10px] font-bold">&bull; Pay Runs</div>
+                  <div className="py-1 uppercase text-[10px] font-bold">&bull; Payslips</div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* REQUESTS */}
-          <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
-            <div className="flex items-center space-x-2.5">
-              <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="uppercase tracking-wider text-[11px]">REQUESTS</span>
+          {permissionsState.canAccessRequests && (
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
+              <div className="flex items-center space-x-2.5">
+                <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="uppercase tracking-wider text-[11px]">REQUESTS</span>
+              </div>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-          </div>
+          )}
 
           {/* REPORTS */}
-          <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
-            <div className="flex items-center space-x-2.5">
-              <BarChart3 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <span className="uppercase tracking-wider text-[11px]">REPORTS</span>
+          {permissionsState.canAccessReports && (
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
+              <div className="flex items-center space-x-2.5">
+                <BarChart3 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="uppercase tracking-wider text-[11px]">REPORTS</span>
+              </div>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-          </div>
+          )}
 
           {/* ANNOUNCEMENTS */}
-          <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
-            <Megaphone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <span className="uppercase tracking-wider text-[11px]">ANNOUNCEMENTS</span>
-          </div>
+          {permissionsState.canAccessAnnouncements && (
+            <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
+              <Megaphone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="uppercase tracking-wider text-[11px]">ANNOUNCEMENTS</span>
+            </div>
+          )}
 
           {/* U.ROLE (Admin / Super Admin Only) */}
-          {(currentUser.isAdmin || currentUser.isSuperAdmin) && (
+          {permissionsState.canAccessRbac && (
             <Link
               href="/admin/rbac"
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -765,7 +864,7 @@ export default function PnCLayout({
                       pathname.includes('/biotime') ? 'text-primary font-black' : ''
                     }`}
                   >
-                    &bull; Biotime Control Center
+                    &bull; BioTime Device Sync
                   </Link>
                 </div>
               )}
@@ -897,9 +996,36 @@ export default function PnCLayout({
         </header>
 
         {/* Body Page Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1700px] w-full mx-auto">
-          {children}
-        </main>
+        {permissionsState.isLoaded && !permissionsState.canAccessAnyPnC ? (
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1700px] w-full mx-auto flex items-center justify-center min-h-[65vh]">
+            <div className="p-8 sm:p-12 rounded-3xl bg-card/95 backdrop-blur-2xl border border-border shadow-2xl text-center max-w-lg space-y-5 animate-in fade-in zoom-in-95">
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 shadow-inner">
+                <ShieldAlert className="h-9 w-9 stroke-[2.5]" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-xl font-black text-foreground">
+                  Access Restricted
+                </h2>
+                <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+                  You do not have active Role-Based Access Control (RBAC) permissions to view or manage the People &amp; Culture module. Please contact your system administrator or HR lead for permission delegation.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-wider shadow-lg hover:shadow-primary/20 transition transform active:scale-95 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4 stroke-[2.5]" />
+                  <span>Return to My Dashboard</span>
+                </Link>
+              </div>
+            </div>
+          </main>
+        ) : (
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1700px] w-full mx-auto">
+            {children}
+          </main>
+        )}
       </div>
     </div>
   );

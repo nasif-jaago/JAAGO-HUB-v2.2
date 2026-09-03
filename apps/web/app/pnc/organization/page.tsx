@@ -26,6 +26,7 @@ import {
   Archive,
   RotateCw,
   Check,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   OrganizationEntity,
@@ -43,6 +44,7 @@ import {
   deletePolicyFromSupabase,
 } from '@/lib/supabase-organization';
 import { resizeAndCropImage } from '@/lib/supabase-storage';
+import { hasPermission } from '@/lib/rbac-guard';
 
 type PolicyCategory = 'ALL' | 'GENERAL' | 'LEAVE' | 'ATTENDANCE' | 'CODE OF CONDUCT' | 'TRAVEL' | 'EXPENSES' | 'OTHER';
 
@@ -52,6 +54,11 @@ export default function OrganizationPage() {
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [viewMode, setViewMode] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // ── RBAC STATE ──
+  const [rbacLoaded, setRbacLoaded] = useState(false);
+  const [canViewOrg, setCanViewOrg] = useState(false);
+  const [canManageOrg, setCanManageOrg] = useState(false);
 
   // Form State for Active Company Profile
   const [formData, setFormData] = useState<OrganizationEntity>(INITIAL_ORGANIZATIONS[0]!);
@@ -91,11 +98,47 @@ export default function OrganizationPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Load from Supabase on mount
+  // Load from Supabase and RBAC on mount
   useEffect(() => {
+    const checkRbac = () => {
+      try {
+        const userStr = localStorage.getItem('jaago_user');
+        if (userStr) {
+          const parsed = JSON.parse(userStr);
+          const rawRole = (parsed.role || (Array.isArray(parsed.roles) ? parsed.roles[0] : '') || 'USER').toString();
+          const rawRoleUpper = rawRole.toUpperCase();
+          const isSuper =
+            parsed.isSuperAdmin === true ||
+            rawRoleUpper === 'SUPER_ADMIN' ||
+            rawRole.toLowerCase() === 'super_admin' ||
+            Boolean(parsed.email && parsed.email.toLowerCase().includes('nasif.kamal'));
+
+          const view = isSuper || hasPermission('org.entities.view', parsed);
+          const manage = isSuper || hasPermission('org.entities.manage', parsed);
+
+          setCanViewOrg(view);
+          setCanManageOrg(manage);
+          setRbacLoaded(true);
+        } else {
+          setRbacLoaded(true);
+        }
+      } catch {
+        setRbacLoaded(true);
+      }
+    };
+
+    checkRbac();
+    window.addEventListener('jaago_user_updated', checkRbac);
+    window.addEventListener('jaago_rbac_updated', checkRbac);
+
     fetchOrganizationsFromSupabase().then((orgs) => {
       if (orgs) setOrganizations(orgs);
     });
+
+    return () => {
+      window.removeEventListener('jaago_user_updated', checkRbac);
+      window.removeEventListener('jaago_rbac_updated', checkRbac);
+    };
   }, []);
 
   // When selectedOrg changes, fetch its branches & policies
@@ -357,6 +400,30 @@ export default function OrganizationPage() {
     return true;
   });
 
+  if (rbacLoaded && !canViewOrg) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center max-w-lg mx-auto min-h-[60vh] space-y-5 animate-in fade-in zoom-in-95 select-none">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 shadow-inner">
+          <ShieldAlert className="h-9 w-9 stroke-[2.5]" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-foreground">Access Restricted</h2>
+          <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+            You do not have permission to view organization entities. Role-Based Access Control requires <code className="text-amber-500 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded">org.entities.view</code> permission.
+          </p>
+        </div>
+        <div className="pt-2">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs uppercase tracking-wider shadow-lg hover:shadow-primary/20 transition transform active:scale-95 cursor-pointer"
+          >
+            <span>Return to My Dashboard</span>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 select-none animate-in fade-in duration-200">
       {/* Toast Notification */}
@@ -432,14 +499,16 @@ export default function OrganizationPage() {
           {/* Action & Filter Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
             <div className="flex items-center space-x-2.5">
-              <button
-                type="button"
-                onClick={handleCreateNewOrg}
-                className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs uppercase tracking-wider transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95"
-              >
-                <Plus className="h-4 w-4" />
-                <span>NEW</span>
-              </button>
+              {canManageOrg && (
+                <button
+                  type="button"
+                  onClick={handleCreateNewOrg}
+                  className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs uppercase tracking-wider transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>NEW</span>
+                </button>
+              )}
 
               <button
                 type="button"

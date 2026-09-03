@@ -320,6 +320,10 @@ export default function AdminRbacPage() {
         });
         setInitialMatrixState(updatedInitialG);
         setInitialRegrantState(updatedInitialR);
+        try {
+          localStorage.setItem('jaago_rbac_matrix_cache', JSON.stringify(matrixPayload));
+          window.dispatchEvent(new CustomEvent('jaago_rbac_updated'));
+        } catch {}
         showToast('✓ RBAC Matrix & Delegation Toggles successfully saved!');
       } else {
         showToast(data.error || 'Failed to save matrix', 'error');

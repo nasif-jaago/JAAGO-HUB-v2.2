@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Users,
   UserPlus,
@@ -23,15 +23,44 @@ import {
   RefreshCw,
   Edit3,
   Check,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  CalendarCheck2,
+  Briefcase,
+  CreditCard,
+  FileText,
+  SlidersHorizontal,
+  ShieldCheck,
+  RotateCcw,
+  Star,
+  TrendingUp,
+  DollarSign,
+  Radio,
+  ClipboardList,
+  HeartHandshake,
+  BarChart2,
+  Cpu,
 } from 'lucide-react';
 import { EmployeeToUserModal } from '@/components/admin/employee-to-user-modal';
-import { INITIAL_ROLES, RoleItem, normalizeRoleKey, getRoleByNormalizedKey } from '@/lib/rbac-data';
+import {
+  INITIAL_ROLES,
+  RoleItem,
+  PermissionModuleGroup,
+  normalizeRoleKey,
+  getRoleByNormalizedKey,
+  getPermissionsForRole,
+  getAllPermissionModules,
+} from '@/lib/rbac-data';
 
 interface UserRecord {
   id: string;
   fullName: string;
   email: string;
   role: string;
+  roles?: string[];
+  permissions?: string[];
   department: string;
   branch: string;
   jobTitle: string;
@@ -42,6 +71,53 @@ interface UserRecord {
   avatarUrl?: string;
   createdAt: string;
   lastLoginAt: string | null;
+}
+
+function getModuleIconComponent(iconName: string) {
+  switch (iconName) {
+    case 'ShieldAlert':
+      return ShieldAlert;
+    case 'Building2':
+      return Building2;
+    case 'Users':
+      return Users;
+    case 'Clock':
+      return Clock;
+    case 'CalendarCheck2':
+      return CalendarCheck2;
+    case 'Briefcase':
+      return Briefcase;
+    case 'CreditCard':
+      return CreditCard;
+    case 'Sparkles':
+      return Sparkles;
+    case 'Send':
+      return Send;
+    case 'FileText':
+      return FileText;
+    case 'SlidersHorizontal':
+      return SlidersHorizontal;
+    case 'ShieldCheck':
+      return ShieldCheck;
+    case 'Star':
+      return Star;
+    case 'TrendingUp':
+      return TrendingUp;
+    case 'DollarSign':
+      return DollarSign;
+    case 'Radio':
+      return Radio;
+    case 'ClipboardList':
+      return ClipboardList;
+    case 'HeartHandshake':
+      return HeartHandshake;
+    case 'BarChart2':
+      return BarChart2;
+    case 'Cpu':
+      return Cpu;
+    default:
+      return Layers;
+  }
 }
 
 export default function UserManagementPage() {
@@ -65,10 +141,39 @@ export default function UserManagementPage() {
   const [showResetPasswordModal, setShowResetPasswordModal] = useState<{ user: UserRecord; tempPass: string } | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState<UserRecord | null>(null);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  
+  // ── EDIT USER ROLE & MODULE ACCESS MODAL STATE ──
   const [showEditRoleModal, setShowEditRoleModal] = useState<UserRecord | null>(null);
+  const [editModalTab, setEditModalTab] = useState<'role' | 'modules'>('role');
   const [selectedNewRole, setSelectedNewRole] = useState('USER');
+  const [userCustomPermissions, setUserCustomPermissions] = useState<string[]>([]);
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
+  const [moduleSearchQuery, setModuleSearchQuery] = useState('');
   const [isSavingRole, setIsSavingRole] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
+  const [dynamicDepartments, setDynamicDepartments] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadDepts = () => {
+      try {
+        const raw = localStorage.getItem('jaago_departments');
+        if (raw) {
+          setDynamicDepartments(JSON.parse(raw));
+        }
+      } catch {}
+    };
+    loadDepts();
+    window.addEventListener('jaago_departments_updated', loadDepts);
+    window.addEventListener('storage', loadDepts);
+    return () => {
+      window.removeEventListener('jaago_departments_updated', loadDepts);
+      window.removeEventListener('storage', loadDepts);
+    };
+  }, []);
+
+  const allAvailableModules = useMemo(() => {
+    return getAllPermissionModules(dynamicDepartments);
+  }, [dynamicDepartments]);
 
   // Form states
   const [newUserForm, setNewUserForm] = useState({
@@ -389,7 +494,119 @@ export default function UserManagementPage() {
     }
   };
 
-  // ── 9. UPDATE USER ROLE ──
+  // ── 9. OPEN EDIT USER ROLE & MODULE ACCESS MODAL ──
+  const handleOpenEditRoleModal = (user: UserRecord, initialTab: 'role' | 'modules' = 'role') => {
+    setShowEditRoleModal(user);
+    setEditModalTab(initialTab);
+    const userRoleKey = normalizeRoleKey(user.role || 'USER');
+    setSelectedNewRole(userRoleKey);
+
+    let existingPerms: string[] | null = null;
+    if (Array.isArray(user.permissions) && user.permissions.length > 0) {
+      existingPerms = user.permissions;
+    } else if (typeof window !== 'undefined') {
+      try {
+        const saved =
+          localStorage.getItem(`jaago_user_permissions_${user.id}`) ||
+          (user.email ? localStorage.getItem(`jaago_user_permissions_${user.email.toLowerCase().trim()}`) : null);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) existingPerms = parsed;
+        }
+      } catch {}
+    }
+
+    if (!existingPerms) {
+      const roleObj = availableRoles.find((r) => r.key === userRoleKey) || getRoleByNormalizedKey(userRoleKey);
+      const defaults = roleObj ? [...roleObj.permissions] : getPermissionsForRole(userRoleKey);
+      if (defaults.includes('*')) {
+        existingPerms = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
+      } else {
+        existingPerms = defaults;
+      }
+    } else if (existingPerms.includes('*')) {
+      existingPerms = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
+    }
+
+    setUserCustomPermissions(existingPerms || []);
+    setExpandedModules({});
+    setModuleSearchQuery('');
+  };
+
+  const handleSelectRole = (newRoleKey: string) => {
+    setSelectedNewRole(newRoleKey);
+    const roleObj = availableRoles.find((r) => r.key === newRoleKey) || getRoleByNormalizedKey(newRoleKey);
+    const defaultPerms = roleObj ? [...roleObj.permissions] : getPermissionsForRole(newRoleKey);
+    if (defaultPerms.includes('*')) {
+      setUserCustomPermissions(allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key)));
+    } else {
+      setUserCustomPermissions(defaultPerms);
+    }
+  };
+
+  const handleToggleModule = (mod: PermissionModuleGroup) => {
+    const modPermKeys = mod.permissions.map((p) => p.key);
+    const hasAnyActive = modPermKeys.some(
+      (k) => userCustomPermissions.includes(k) || userCustomPermissions.includes('*')
+    );
+
+    if (hasAnyActive) {
+      // Deactivate all permissions in this module
+      setUserCustomPermissions((prev) =>
+        prev.filter((k) => !modPermKeys.includes(k) && k !== '*')
+      );
+    } else {
+      // Activate all permissions in this module
+      setUserCustomPermissions((prev) =>
+        Array.from(new Set([...prev.filter((k) => k !== '*'), ...modPermKeys]))
+      );
+    }
+  };
+
+  const handleTogglePermission = (permKey: string) => {
+    setUserCustomPermissions((prev) => {
+      let currentList = prev;
+      if (prev.includes('*')) {
+        currentList = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
+      }
+      if (currentList.includes(permKey)) {
+        return currentList.filter((k) => k !== permKey);
+      } else {
+        return [...currentList, permKey];
+      }
+    });
+  };
+
+  const handleGrantAll = () => {
+    const allKeys = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
+    setUserCustomPermissions(allKeys);
+  };
+
+  const handleRevokeAll = () => {
+    setUserCustomPermissions([]);
+  };
+
+  const handleResetToRoleDefaults = () => {
+    const norm = normalizeRoleKey(selectedNewRole);
+    const roleObj = availableRoles.find((r) => r.key === norm) || getRoleByNormalizedKey(selectedNewRole);
+    const defaultPerms = roleObj ? [...roleObj.permissions] : getPermissionsForRole(norm);
+    if (defaultPerms.includes('*')) {
+      const allKeys = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
+      setUserCustomPermissions(allKeys);
+    } else {
+      setUserCustomPermissions(defaultPerms);
+    }
+    showToast(`Permissions reset to default matrix for role "${selectedNewRole}".`);
+  };
+
+  const handleToggleExpandModule = (modKey: string) => {
+    setExpandedModules((prev) => ({
+      ...prev,
+      [modKey]: !prev[modKey],
+    }));
+  };
+
+  // ── 10. SAVE USER ROLE & GRANULAR PERMISSIONS ──
   const handleUpdateRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showEditRoleModal) return;
@@ -398,18 +615,61 @@ export default function UserManagementPage() {
       const res = await fetch(`/api/v1/users/${showEditRoleModal.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: selectedNewRole }),
+        body: JSON.stringify({
+          role: selectedNewRole,
+          permissions: userCustomPermissions,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setUsers((prev) =>
-          prev.map((u) => (u.id === showEditRoleModal.id ? { ...u, role: selectedNewRole } : u))
+          prev.map((u) =>
+            u.id === showEditRoleModal.id
+              ? { ...u, role: selectedNewRole, permissions: userCustomPermissions }
+              : u
+          )
         );
-        showToast(`Role for ${showEditRoleModal.fullName} updated to "${selectedNewRole}" successfully!`);
+
+        // Store user-specific overrides in localStorage
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(
+              `jaago_user_permissions_${showEditRoleModal.id}`,
+              JSON.stringify(userCustomPermissions)
+            );
+            if (showEditRoleModal.email) {
+              localStorage.setItem(
+                `jaago_user_permissions_${showEditRoleModal.email.toLowerCase().trim()}`,
+                JSON.stringify(userCustomPermissions)
+              );
+            }
+
+            // If active session belongs to this user, update active session
+            const currentActiveStr = localStorage.getItem('jaago_user');
+            if (currentActiveStr) {
+              const currentActive = JSON.parse(currentActiveStr);
+              if (
+                currentActive.id === showEditRoleModal.id ||
+                currentActive.email?.toLowerCase().trim() === showEditRoleModal.email.toLowerCase().trim()
+              ) {
+                currentActive.role = selectedNewRole;
+                currentActive.permissions = userCustomPermissions;
+                localStorage.setItem('jaago_user', JSON.stringify(currentActive));
+              }
+            }
+
+            window.dispatchEvent(new CustomEvent('jaago_user_updated'));
+            window.dispatchEvent(new CustomEvent('jaago_rbac_updated'));
+          } catch {}
+        }
+
+        showToast(
+          `Role and module permissions for ${showEditRoleModal.fullName} updated successfully!`
+        );
         setShowEditRoleModal(null);
         fetchUsers();
       } else {
-        alert(data.error || 'Failed to update role');
+        alert(data.error || 'Failed to update user access');
       }
     } catch (err: any) {
       alert(err.message || 'Network error');
@@ -759,11 +1019,8 @@ export default function UserManagementPage() {
                           return (
                             <button
                               type="button"
-                              onClick={() => {
-                                setShowEditRoleModal(user);
-                                setSelectedNewRole(norm);
-                              }}
-                              title="Click to edit role"
+                              onClick={() => handleOpenEditRoleModal(user, 'role')}
+                              title="Click to edit role & module permissions"
                               className={`group px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer hover:scale-105 active:scale-95 ${
                                 norm === 'super_admin'
                                   ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 hover:bg-purple-500/25'
@@ -873,20 +1130,22 @@ export default function UserManagementPage() {
                       {/* Actions Column */}
                       <td className="p-4 text-right relative">
                         <div className="inline-flex items-center space-x-1">
-                          {/* Quick Edit Role */}
+                          {/* Quick Edit Role & Modules */}
                           <button
-                            onClick={() => {
-                              setShowEditRoleModal(user);
-                              setSelectedNewRole(
-                                user.role?.toUpperCase() === 'OFFICER' || user.role === 'Officer'
-                                  ? 'USER'
-                                  : user.role || 'USER'
-                              );
-                            }}
+                            onClick={() => handleOpenEditRoleModal(user, 'role')}
                             className="p-1.5 rounded-lg bg-surface border border-border text-muted-foreground hover:text-primary hover:border-primary/40 transition cursor-pointer"
-                            title="Edit Role"
+                            title="Edit Role & System Permissions"
                           >
                             <Shield className="h-3.5 w-3.5" />
+                          </button>
+
+                          {/* Quick Module & Menu Access */}
+                          <button
+                            onClick={() => handleOpenEditRoleModal(user, 'modules')}
+                            className="p-1.5 rounded-lg bg-surface border border-border text-muted-foreground hover:text-amber-500 hover:border-amber-500/40 transition cursor-pointer"
+                            title="Configure Module & Menu Access"
+                          >
+                            <Layers className="h-3.5 w-3.5" />
                           </button>
 
                           {/* Quick Create Employee if not linked */}
@@ -940,17 +1199,23 @@ export default function UserManagementPage() {
                               <button
                                 onClick={() => {
                                   setActiveActionMenuId(null);
-                                  setShowEditRoleModal(user);
-                                  setSelectedNewRole(
-                                    user.role?.toUpperCase() === 'OFFICER' || user.role === 'Officer'
-                                      ? 'USER'
-                                      : user.role || 'USER'
-                                  );
+                                  handleOpenEditRoleModal(user, 'role');
                                 }}
                                 className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition cursor-pointer"
                               >
                                 <Shield className="h-3.5 w-3.5 text-primary" />
-                                <span>Edit Role</span>
+                                <span>Edit Role Assignment</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setActiveActionMenuId(null);
+                                  handleOpenEditRoleModal(user, 'modules');
+                                }}
+                                className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface rounded-xl transition cursor-pointer"
+                              >
+                                <Layers className="h-3.5 w-3.5 text-amber-500" />
+                                <span>Module &amp; Menu Access</span>
                               </button>
 
                               {!user.isEmployeeLinked && (
@@ -1748,10 +2013,10 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* ── MODAL: EDIT USER ROLE ── */}
+      {/* ── MODAL: EDIT USER ROLE & MODULE ACCESS ── */}
       {showEditRoleModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-card border border-border rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 text-foreground max-h-[90vh] flex flex-col">
+          <div className="bg-card border border-border rounded-3xl shadow-2xl max-w-3xl w-full p-6 space-y-4 animate-in fade-in zoom-in-95 text-foreground max-h-[92vh] flex flex-col">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-border flex-shrink-0">
               <div className="flex items-center space-x-2.5">
@@ -1759,8 +2024,10 @@ export default function UserManagementPage() {
                   <Shield className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-foreground">Edit User Role</h3>
-                  <p className="text-[11px] text-muted-foreground">Assign security role and system permissions</p>
+                  <h3 className="text-base font-black text-foreground">Edit User Access &amp; Permissions</h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Assign canonical role and configure granular module &amp; menu access
+                  </p>
                 </div>
               </div>
               <button
@@ -1790,8 +2057,9 @@ export default function UserManagementPage() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-extrabold text-foreground text-sm truncate">
-                  {showEditRoleModal.fullName}
+                <div className="font-extrabold text-foreground text-sm truncate flex items-center space-x-2">
+                  <span>{showEditRoleModal.fullName}</span>
+                  <span className="text-muted-foreground text-xs font-normal">({showEditRoleModal.department})</span>
                 </div>
                 <div className="text-[11px] text-muted-foreground font-mono truncate">
                   {showEditRoleModal.email}
@@ -1807,87 +2075,383 @@ export default function UserManagementPage() {
               </div>
             </div>
 
-            {/* Role Options Selection */}
-            <form onSubmit={handleUpdateRole} className="space-y-4 overflow-y-auto pr-1 no-scrollbar flex-1">
-              <div>
-                <label className="block text-xs font-bold text-muted-foreground mb-2">
-                  Select New Role Assignment:
-                </label>
-                <div className="space-y-2">
-                  {availableRoles.map((roleItem) => {
-                    const isSelected =
-                      selectedNewRole === roleItem.key ||
-                      normalizeRoleKey(selectedNewRole) === roleItem.key;
-
-                    return (
-                      <div
-                        key={roleItem.key}
-                        onClick={() => setSelectedNewRole(roleItem.key)}
-                        className={`p-3 rounded-2xl border transition cursor-pointer flex items-start space-x-3 select-none ${
-                          isSelected
-                            ? 'bg-primary/10 border-primary/60 ring-1 ring-primary/40 shadow-sm'
-                            : 'bg-surface/60 border-border hover:bg-surface hover:border-border/80'
-                        }`}
-                      >
-                        <div className="pt-0.5">
-                          <div
-                            className={`h-4 w-4 rounded-full border flex items-center justify-center transition ${
-                              isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40 bg-transparent'
-                            }`}
-                          >
-                            {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-extrabold text-xs text-foreground">{roleItem.name}</span>
-                            <span
-                              className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border"
-                              style={{
-                                backgroundColor: `${roleItem.color}15`,
-                                color: roleItem.color,
-                                borderColor: `${roleItem.color}40`,
-                              }}
-                            >
-                              {roleItem.key}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                            {roleItem.description}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-border flex-shrink-0">
+            {/* Tab Navigation (Role Assignment vs Module Access) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/70 pb-3 flex-shrink-0">
+              <div className="flex items-center space-x-1.5 bg-surface p-1 rounded-2xl border border-border">
                 <button
                   type="button"
-                  onClick={() => setShowEditRoleModal(null)}
-                  className="px-4 py-2 rounded-xl bg-surface border border-border text-foreground font-bold text-xs hover:bg-surface/80 transition cursor-pointer"
+                  onClick={() => setEditModalTab('role')}
+                  className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    editModalTab === 'role'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
                 >
-                  Cancel
+                  <Shield className="h-3.5 w-3.5" />
+                  <span>Role Assignment</span>
                 </button>
                 <button
-                  type="submit"
-                  disabled={isSavingRole}
-                  className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider hover:bg-brand-strong transition shadow-lg flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  type="button"
+                  onClick={() => setEditModalTab('modules')}
+                  className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    editModalTab === 'modules'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
                 >
-                  {isSavingRole ? (
-                    <>
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      <span>Saving Role...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="h-3.5 w-3.5" />
-                      <span>Save Role Changes</span>
-                    </>
-                  )}
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>Module &amp; Menu Access</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                      editModalTab === 'modules'
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-primary/10 text-primary'
+                    }`}
+                  >
+                    {allAvailableModules.length}
+                  </span>
                 </button>
+              </div>
+
+              <div className="text-[11px] font-semibold text-muted-foreground flex items-center space-x-2">
+                {userCustomPermissions.includes('*') ? (
+                  <span className="px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 font-bold border border-purple-500/30">
+                    ★ SuperAdmin Master Access
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-surface border border-border text-foreground">
+                    <strong className="text-primary font-black">{userCustomPermissions.length}</strong> active permissions
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateRole} className="flex-1 overflow-hidden flex flex-col min-h-0">
+              {/* TAB 1: ROLE ASSIGNMENT */}
+              {editModalTab === 'role' && (
+                <div className="space-y-3 overflow-y-auto pr-1 no-scrollbar flex-1">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-muted-foreground">
+                      Select Base Role Assignment:
+                    </label>
+                    <span className="text-[10px] text-muted-foreground italic">
+                      Selecting a role loads its standard permissions into the Module Access tab.
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {availableRoles.map((roleItem) => {
+                      const isSelected =
+                        selectedNewRole === roleItem.key ||
+                        normalizeRoleKey(selectedNewRole) === roleItem.key;
+
+                      return (
+                        <div
+                          key={roleItem.key}
+                          onClick={() => handleSelectRole(roleItem.key)}
+                          className={`p-3 rounded-2xl border transition cursor-pointer flex items-start space-x-3 select-none ${
+                            isSelected
+                              ? 'bg-primary/10 border-primary/60 ring-1 ring-primary/40 shadow-sm'
+                              : 'bg-surface/60 border-border hover:bg-surface hover:border-border/80'
+                          }`}
+                        >
+                          <div className="pt-0.5">
+                            <div
+                              className={`h-4 w-4 rounded-full border flex items-center justify-center transition ${
+                                isSelected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'border-muted-foreground/40 bg-transparent'
+                              }`}
+                            >
+                              {isSelected && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-extrabold text-xs text-foreground">
+                                {roleItem.name}
+                              </span>
+                              <span
+                                className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border"
+                                style={{
+                                  backgroundColor: `${roleItem.color}15`,
+                                  color: roleItem.color,
+                                  borderColor: `${roleItem.color}40`,
+                                }}
+                              >
+                                {roleItem.key}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                              {roleItem.description}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: MODULE & MENU ACCESS */}
+              {editModalTab === 'modules' && (
+                <div className="space-y-3 overflow-y-auto pr-1 no-scrollbar flex-1 flex flex-col min-h-0">
+                  {/* Search and Action Toolbar */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 flex-shrink-0">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        value={moduleSearchQuery}
+                        onChange={(e) => setModuleSearchQuery(e.target.value)}
+                        placeholder="Search system modules, department portals, or sub-menus..."
+                        className="w-full h-9 pl-9 pr-3 rounded-xl bg-surface border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+                      />
+                    </div>
+
+                    <div className="flex items-center space-x-1.5 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleGrantAll}
+                        className="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold text-[11px] hover:bg-emerald-500/20 transition cursor-pointer"
+                      >
+                        Grant All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRevokeAll}
+                        className="px-2.5 py-1.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 font-bold text-[11px] hover:bg-rose-500/20 transition cursor-pointer"
+                      >
+                        Revoke All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetToRoleDefaults}
+                        className="px-2.5 py-1.5 rounded-xl bg-surface border border-border text-muted-foreground hover:text-foreground font-bold text-[11px] transition flex items-center space-x-1 cursor-pointer"
+                        title="Reset toggles to default permissions for current role"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        <span>Role Default</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Modules List */}
+                  <div className="space-y-2.5 flex-1 overflow-y-auto pr-1 no-scrollbar">
+                    {allAvailableModules.filter((mod) => {
+                      if (!moduleSearchQuery.trim()) return true;
+                      const q = moduleSearchQuery.toLowerCase().trim();
+                      if (mod.moduleName.toLowerCase().includes(q) || mod.description.toLowerCase().includes(q)) return true;
+                      return mod.permissions.some(
+                        (p) =>
+                          p.name.toLowerCase().includes(q) ||
+                          p.key.toLowerCase().includes(q) ||
+                          p.description.toLowerCase().includes(q) ||
+                          p.category.toLowerCase().includes(q) ||
+                          p.actionType.toLowerCase().includes(q)
+                      );
+                    }).map((mod) => {
+                      const IconComp = getModuleIconComponent(mod.iconName);
+                      const isDeptModule = mod.moduleKey.startsWith('dept_');
+                      const activePermsCount = mod.permissions.filter(
+                        (p) =>
+                          userCustomPermissions.includes(p.key) ||
+                          userCustomPermissions.includes('*')
+                      ).length;
+                      const totalPermsCount = mod.permissions.length;
+                      const isModuleOn =
+                        activePermsCount > 0 || userCustomPermissions.includes('*');
+                      const isExpanded =
+                        expandedModules[mod.moduleKey] || moduleSearchQuery.trim().length > 0;
+
+                      return (
+                        <div
+                          key={mod.moduleKey}
+                          className={`rounded-2xl border transition-all ${
+                            isModuleOn
+                              ? 'bg-card border-border shadow-sm'
+                              : 'bg-surface/50 border-border/60 opacity-85'
+                          }`}
+                        >
+                          {/* Module Header Bar */}
+                          <div
+                            onClick={() => handleToggleExpandModule(mod.moduleKey)}
+                            className="p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-surface/60 rounded-2xl transition"
+                          >
+                            <div className="flex items-center space-x-3 min-w-0">
+                              <div
+                                className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 border ${
+                                  isModuleOn
+                                    ? isDeptModule
+                                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                      : 'bg-primary/15 text-primary border-primary/30'
+                                    : 'bg-muted/40 text-muted-foreground border-border'
+                                }`}
+                              >
+                                <IconComp className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                  <span className="font-extrabold text-xs text-foreground truncate">
+                                    {mod.moduleName}
+                                  </span>
+                                  {isDeptModule && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                                      Department
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${
+                                      activePermsCount === totalPermsCount
+                                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                        : activePermsCount > 0
+                                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                        : 'bg-muted/30 text-muted-foreground border-border'
+                                    }`}
+                                  >
+                                    {activePermsCount}/{totalPermsCount} Active
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-muted-foreground truncate max-w-md">
+                                  {mod.description}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-3 flex-shrink-0">
+                              {/* Master Toggle Button */}
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleModule(mod);
+                                }}
+                                title={isModuleOn ? 'Disable entire module' : 'Enable entire module'}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                  isModuleOn
+                                    ? isDeptModule
+                                      ? 'bg-amber-500'
+                                      : 'bg-primary'
+                                    : 'bg-muted-foreground/30'
+                                }`}
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                    isModuleOn ? 'translate-x-5' : 'translate-x-0'
+                                  }`}
+                                />
+                              </div>
+
+                              {/* Accordion Chevron */}
+                              <div className="p-1 rounded-lg hover:bg-surface text-muted-foreground">
+                                {isExpanded ? (
+                                  <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Inside Menus / Tabs Breakdown */}
+                          {isExpanded && (
+                            <div className="p-3 pt-0 border-t border-border/60 mt-1 space-y-1.5 animate-in fade-in duration-150">
+                              <div className="text-[10px] uppercase font-bold text-muted-foreground px-1 pt-2 pb-1">
+                                Sub-Menus &amp; Feature Permissions Breakdown
+                              </div>
+                              <div className="grid grid-cols-1 gap-1.5">
+                                {mod.permissions.map((perm) => {
+                                  const isPermOn =
+                                    userCustomPermissions.includes(perm.key) ||
+                                    userCustomPermissions.includes('*');
+
+                                  return (
+                                    <div
+                                      key={perm.key}
+                                      onClick={() => handleTogglePermission(perm.key)}
+                                      className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 transition cursor-pointer select-none ${
+                                        isPermOn
+                                          ? 'bg-surface/90 border-border hover:bg-surface'
+                                          : 'bg-surface/30 border-border/40 opacity-70 hover:opacity-100 hover:bg-surface/50'
+                                      }`}
+                                    >
+                                      <div className="flex-1 min-w-0 pr-2">
+                                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                          <span className="font-extrabold text-xs text-foreground">
+                                            {perm.name}
+                                          </span>
+                                          <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase bg-primary/10 text-primary border border-primary/20">
+                                            {perm.actionType}
+                                          </span>
+                                          <span className="px-1.5 py-0.2 rounded text-[9px] font-mono text-muted-foreground bg-surface border border-border">
+                                            {perm.category}
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                                          {perm.description}
+                                        </p>
+                                        <code className="text-[10px] text-muted-foreground/60 font-mono">
+                                          {perm.key}
+                                        </code>
+                                      </div>
+
+                                      {/* Sub-menu toggle switch */}
+                                      <div
+                                        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                          isPermOn ? 'bg-emerald-500' : 'bg-muted-foreground/30'
+                                        }`}
+                                      >
+                                        <span
+                                          aria-hidden="true"
+                                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                            isPermOn ? 'translate-x-4' : 'translate-x-0'
+                                          }`}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons Footer */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border flex-shrink-0 mt-2">
+                <div className="text-[11px] text-muted-foreground">
+                  Changes take effect immediately across all modules in real time.
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditRoleModal(null)}
+                    className="px-4 py-2 rounded-xl bg-surface border border-border text-foreground font-bold text-xs hover:bg-surface/80 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingRole}
+                    className="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider hover:bg-brand-strong transition shadow-lg flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingRole ? (
+                      <>
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        <span>Saving Access...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="h-3.5 w-3.5" />
+                        <span>Save User Access</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

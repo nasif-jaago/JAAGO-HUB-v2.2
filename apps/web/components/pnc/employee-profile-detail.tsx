@@ -223,6 +223,7 @@ interface EmployeeProfileDetailProps {
     workingSchedule?: string | undefined;
   }[];
   currentUser?: { fullName: string; jobTitle: string } | undefined;
+  readOnly?: boolean | undefined;
   onSave: (updatedProfile: FullEmployeeProfile) => void;
   onBack: () => void;
   onDelete?: ((code: string) => void) | undefined;
@@ -242,6 +243,7 @@ export function EmployeeProfileDetail({
   initialData,
   allEmployees,
   currentUser = { fullName: 'Nasif Kamal', jobTitle: 'Coordinator' },
+  readOnly = false,
   onSave,
   onBack,
   onDelete,
@@ -1007,22 +1009,40 @@ export function EmployeeProfileDetail({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-4 py-2 rounded-2xl bg-card border border-border hover:bg-surface text-xs font-bold text-muted-foreground hover:text-foreground transition cursor-pointer"
-          >
-            Discard
-          </button>
+          {readOnly ? (
+            <div className="flex items-center space-x-2">
+              <span className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-bold flex items-center space-x-1.5">
+                <Shield className="h-3.5 w-3.5" />
+                <span>Read-Only View</span>
+              </span>
+              <button
+                type="button"
+                onClick={onBack}
+                className="px-4 py-2 rounded-2xl bg-card border border-border hover:bg-surface text-xs font-bold text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onBack}
+                className="px-4 py-2 rounded-2xl bg-card border border-border hover:bg-surface text-xs font-bold text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                Discard
+              </button>
 
-          <button
-            type="button"
-            onClick={() => handleSave()}
-            className="px-5 py-2 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold tracking-wide transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95"
-          >
-            <Save className="h-4 w-4 stroke-[2.5]" />
-            <span>Save Profile</span>
-          </button>
+              <button
+                type="button"
+                onClick={() => handleSave()}
+                className="px-5 py-2 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold tracking-wide transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95"
+              >
+                <Save className="h-4 w-4 stroke-[2.5]" />
+                <span>Save Profile</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -3494,29 +3514,31 @@ export function EmployeeProfileDetail({
         )}
       </div>
 
-      {/* ── 5. BOTTOM FLOATING SAVE BAR ── */}
-      <div className="sticky bottom-4 z-40 p-4 rounded-2xl bg-black/80 backdrop-blur-xl border border-white/20 shadow-2xl flex items-center justify-between gap-4">
-        <div className="text-xs text-white/80 font-medium hidden sm:block">
-          Profile Changes: <strong className="text-white">{formData.name || 'New Profile'}</strong> &bull; {formData.status}
+      {/* ── 5. BOTTOM FLOATING SAVE BAR (Only if NOT read-only) ── */}
+      {!readOnly && (
+        <div className="sticky bottom-4 z-40 p-4 rounded-2xl bg-black/80 backdrop-blur-xl border border-white/20 shadow-2xl flex items-center justify-between gap-4">
+          <div className="text-xs text-white/80 font-medium hidden sm:block">
+            Profile Changes: <strong className="text-white">{formData.name || 'New Profile'}</strong> &bull; {formData.status}
+          </div>
+          <div className="flex items-center space-x-2 ml-auto">
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSave()}
+              className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs uppercase tracking-wider transition flex items-center space-x-2 shadow-lg shadow-amber-500/30 cursor-pointer active:scale-95"
+            >
+              <Save className="h-4 w-4" />
+              <span>Save Employee Profile</span>
+            </button>
+          </div>
         </div>
-        <div className="flex items-center space-x-2 ml-auto">
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSave()}
-            className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-black text-xs uppercase tracking-wider transition flex items-center space-x-2 shadow-lg shadow-amber-500/30 cursor-pointer active:scale-95"
-          >
-            <Save className="h-4 w-4" />
-            <span>Save Employee Profile</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* ── 6. INTERACTIVE AVATAR CROP / DRAG-TO-ADJUST MODAL ── */}
       {showCropModal && cropRawImageSrc && (
