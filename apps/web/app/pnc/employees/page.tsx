@@ -43,6 +43,7 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
+  ArrowRight,
 } from 'lucide-react';
 import {
   EmployeeProfileDetail,
@@ -112,6 +113,16 @@ export default function PnCEmployeesPage() {
   const [massUpdateValue, setMassUpdateValue] = useState<string>('');
   const [massUpdateSearch, setMassUpdateSearch] = useState<string>('');
   const [isApplyingMassUpdate, setIsApplyingMassUpdate] = useState(false);
+
+  // ── CONFIRM MASS UPDATE "SMART WINDOW" STATE ──
+  const [confirmMassUpdateData, setConfirmMassUpdateData] = useState<{
+    targetCodes: string[];
+    field: keyof FullEmployeeProfile;
+    fieldLabel: string;
+    newValue: any;
+    affectedEmployees: FullEmployeeProfile[];
+  } | null>(null);
+  const [confirmSearchQuery, setConfirmSearchQuery] = useState<string>('');
 
   // ── ODOO-STYLE INLINE CELL QUICK POPOVER STATE ──
   const [activeInlineEditor, setActiveInlineEditor] = useState<{
@@ -1377,20 +1388,44 @@ function toCanonicalOrgName(raw: string): string {
     }
   };
 
-  // Execute Mass / Single Update and Sync directly to Supabase
-  const handleExecuteMassUpdate = async (targetCodes: string[], field: keyof FullEmployeeProfile, value: any) => {
+  // Open "Are You Confirm?" Smart Window for Mass Update
+  const requestMassUpdateConfirmation = (targetCodes: string[], field: keyof FullEmployeeProfile, value: any) => {
     if (targetCodes.length === 0) return;
+    const fieldConfig = ALL_EMPLOYEE_COLUMNS.find((c) => c.key === field);
+    const fieldLabel = fieldConfig ? fieldConfig.label : String(field);
+
+    const targetSet = new Set(targetCodes);
+    const affected = employees.filter((emp) => targetSet.has(emp.code));
+
+    setConfirmMassUpdateData({
+      targetCodes,
+      field,
+      fieldLabel,
+      newValue: value,
+      affectedEmployees: affected,
+    });
+    setConfirmSearchQuery('');
+
+    // Close any previous popovers or initial modals
+    setShowMassUpdateModal(false);
+    setActiveInlineEditor(null);
+    setInlineSearchQuery('');
+  };
+
+  // Execute Mass Update upon User Confirmation from the Smart Window
+  const handleExecuteMassUpdateFinal = async () => {
+    if (!confirmMassUpdateData) return;
+    const { targetCodes, field, fieldLabel, newValue } = confirmMassUpdateData;
+    if (targetCodes.length === 0) return;
+
     setIsApplyingMassUpdate(true);
     try {
-      const fieldConfig = ALL_EMPLOYEE_COLUMNS.find((c) => c.key === field);
-      const fieldLabel = fieldConfig ? fieldConfig.label : String(field);
-
       const targetSet = new Set(targetCodes);
       const updatedList = employees.map((emp) => {
         if (targetSet.has(emp.code)) {
           return {
             ...emp,
-            [field]: value,
+            [field]: newValue,
           };
         }
         return emp;
@@ -1409,14 +1444,13 @@ function toCanonicalOrgName(raw: string): string {
       }
 
       setToastMessage(
-        `✓ Successfully updated ${fieldLabel} to "${value}" for ${targetCodes.length} employee${targetCodes.length > 1 ? 's' : ''}!`
+        `✓ Successfully updated ${fieldLabel} to "${newValue}" for ${targetCodes.length} employee${targetCodes.length > 1 ? 's' : ''}!`
       );
       setTimeout(() => setToastMessage(null), 6000);
 
-      // Close modal / popover
-      setShowMassUpdateModal(false);
-      setActiveInlineEditor(null);
-      setInlineSearchQuery('');
+      // Close confirmation modal
+      setConfirmMassUpdateData(null);
+      setConfirmSearchQuery('');
     } catch (err: any) {
       alert(`Mass update error: ${err?.message || 'Failed to update employees in database'}`);
     } finally {
@@ -2186,7 +2220,7 @@ function toCanonicalOrgName(raw: string): string {
                       const targetCodes = selectedCodes.includes(activeInlineEditor.empCode)
                         ? selectedCodes
                         : [activeInlineEditor.empCode];
-                      handleExecuteMassUpdate(targetCodes, activeInlineEditor.field, opt.value);
+                      requestMassUpdateConfirmation(targetCodes, activeInlineEditor.field, opt.value);
                     }}
                     className={`w-full text-left px-3 py-2 rounded-xl transition flex items-center justify-between cursor-pointer ${
                       isCurrent
@@ -2338,22 +2372,214 @@ function toCanonicalOrgName(raw: string): string {
               <button
                 type="button"
                 disabled={!massUpdateValue || isApplyingMassUpdate}
-                onClick={() => handleExecuteMassUpdate(selectedCodes, massUpdateField, massUpdateValue)}
+                onClick={() => requestMassUpdateConfirmation(selectedCodes, massUpdateField, massUpdateValue)}
                 className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50 text-white font-black text-xs transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>Review &amp; Confirm ({selectedCodes.length} Employees)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 4.7 "ARE YOU CONFIRM?" MASS UPDATE SMART POPUP WINDOW (SMART VIEW) ── */}
+      {confirmMassUpdateData && (
+        <div className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-card border-2 border-amber-500/50 dark:border-amber-500/40 rounded-3xl p-5 sm:p-7 max-w-2xl w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-auto max-h-[92vh] flex flex-col">
+            
+            {/* Modal Top Header */}
+            <div className="flex items-center justify-between border-b border-border pb-3 flex-shrink-0">
+              <div className="flex items-center space-x-3.5">
+                <div className="h-11 w-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shadow-inner flex-shrink-0">
+                  <AlertTriangle className="h-5 w-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h2 className="text-base sm:text-lg font-black text-foreground tracking-tight">
+                      Are you Sure? Confirm Mass Update
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-black uppercase tracking-wider">
+                      Mass Action
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-0.5">
+                    Review proposed changes across <strong>{confirmMassUpdateData.targetCodes.length}</strong> employee profiles before writing to Supabase PostgreSQL.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmMassUpdateData(null);
+                  setConfirmSearchQuery('');
+                }}
+                className="p-1.5 rounded-xl hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Smart View: 3-Part Change Summary Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 flex-shrink-0">
+              <div className="p-3 rounded-2xl bg-surface/80 border border-border/80 flex flex-col justify-between">
+                <span className="text-[10px] uppercase font-black tracking-wider text-muted-foreground flex items-center space-x-1">
+                  <Layers className="h-3 w-3 text-amber-500" />
+                  <span>Target Field</span>
+                </span>
+                <span className="text-xs sm:text-[13px] font-black text-foreground pt-1 truncate">
+                  {confirmMassUpdateData.fieldLabel}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col justify-between">
+                <span className="text-[10px] uppercase font-black tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center space-x-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  <span>New Target Value</span>
+                </span>
+                <span className="text-xs sm:text-[13px] font-black text-emerald-600 dark:text-emerald-400 pt-1 truncate">
+                  {String(confirmMassUpdateData.newValue || '—')}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col justify-between">
+                <span className="text-[10px] uppercase font-black tracking-wider text-amber-600 dark:text-amber-400 flex items-center space-x-1">
+                  <Users className="h-3 w-3" />
+                  <span>Affected Profiles</span>
+                </span>
+                <span className="text-xs sm:text-[13px] font-black text-amber-600 dark:text-amber-400 pt-1">
+                  {confirmMassUpdateData.targetCodes.length} Employees
+                </span>
+              </div>
+            </div>
+
+            {/* Smart View: Live Employee Impact & Diff Preview Table */}
+            <div className="flex-1 min-h-[200px] overflow-hidden flex flex-col rounded-2xl border border-border bg-surface/30">
+              <div className="p-2.5 border-b border-border bg-surface/60 flex items-center justify-between gap-2">
+                <div className="text-[11px] font-bold text-foreground flex items-center space-x-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                  <span>Smart View &bull; Profile Impact Preview</span>
+                </div>
+                <div className="relative w-48 sm:w-64">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={confirmSearchQuery}
+                    onChange={(e) => setConfirmSearchQuery(e.target.value)}
+                    placeholder="Search affected profiles..."
+                    className="w-full pl-7 pr-2.5 py-1 rounded-xl bg-card border border-border text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-y-auto flex-1 p-2 space-y-1.5 divide-y divide-border/30">
+                {(() => {
+                  const filteredAffected = confirmMassUpdateData.affectedEmployees.filter((emp) => {
+                    if (!confirmSearchQuery.trim()) return true;
+                    const q = confirmSearchQuery.toLowerCase();
+                    return (
+                      emp.name?.toLowerCase().includes(q) ||
+                      emp.code?.toLowerCase().includes(q) ||
+                      emp.department?.toLowerCase().includes(q) ||
+                      String(emp[confirmMassUpdateData.field] || '').toLowerCase().includes(q)
+                    );
+                  });
+
+                  if (filteredAffected.length === 0) {
+                    return (
+                      <div className="p-6 text-center text-xs text-muted-foreground">
+                        No employees match &quot;{confirmSearchQuery}&quot;
+                      </div>
+                    );
+                  }
+
+                  return filteredAffected.slice(0, 50).map((emp) => {
+                    const beforeVal = String(emp[confirmMassUpdateData.field] || '—');
+                    const afterVal = String(confirmMassUpdateData.newValue || '—');
+                    return (
+                      <div key={emp.code} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs gap-2">
+                        <div className="min-w-0 flex items-center space-x-2">
+                          <div className="h-7 w-7 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-[10px] flex items-center justify-center flex-shrink-0 uppercase">
+                            {emp.name ? emp.name.slice(0, 2) : 'EM'}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-foreground text-[11px] truncate">
+                              {emp.name}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-mono truncate">
+                              {emp.code} &bull; {emp.department || 'General'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Before -> After Diff Pill */}
+                        <div className="flex items-center space-x-1.5 flex-shrink-0 text-[11px]">
+                          <span className="px-2 py-0.5 rounded-lg bg-surface border border-border text-muted-foreground line-through max-w-[110px] truncate" title={`Current: ${beforeVal}`}>
+                            {beforeVal}
+                          </span>
+                          <ArrowRight className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                          <span className="px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-bold max-w-[130px] truncate" title={`New: ${afterVal}`}>
+                            {afterVal}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              <div className="p-2 border-t border-border bg-surface/50 text-[10px] text-muted-foreground flex items-center justify-between px-3">
+                <span>
+                  Showing {Math.min(50, confirmMassUpdateData.affectedEmployees.length)} of {confirmMassUpdateData.targetCodes.length} profiles
+                </span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center space-x-1">
+                  <Check className="h-3 w-3" />
+                  <span>All records will sync to Supabase</span>
+                </span>
+              </div>
+            </div>
+
+            {/* High-Impact Notice Alert */}
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-700 dark:text-amber-300 font-medium flex items-start space-x-2.5 flex-shrink-0">
+              <Sparkles className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong>Confirmation Notice:</strong> Updating <strong>{confirmMassUpdateData.fieldLabel}</strong> to <strong className="text-foreground">&quot;{String(confirmMassUpdateData.newValue)}&quot;</strong> will batch-write to <strong>{confirmMassUpdateData.targetCodes.length} employee records</strong> in Supabase PostgreSQL and instantly reflect across all JAAGO HUB dashboards and reports.
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-2 border-t border-border flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmMassUpdateData(null);
+                  setConfirmSearchQuery('');
+                }}
+                className="px-4 py-2 rounded-xl bg-surface border border-border text-muted-foreground hover:text-foreground text-xs font-bold transition cursor-pointer"
+              >
+                Cancel &amp; Keep Existing
+              </button>
+
+              <button
+                type="button"
+                disabled={isApplyingMassUpdate}
+                onClick={handleExecuteMassUpdateFinal}
+                className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50 text-white font-black text-xs transition flex items-center space-x-2 shadow-lg shadow-amber-500/25 cursor-pointer active:scale-95"
               >
                 {isApplyingMassUpdate ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Syncing with Supabase...</span>
+                    <span>Syncing {confirmMassUpdateData.targetCodes.length} Records...</span>
                   </>
                 ) : (
                   <>
                     <Check className="h-4 w-4 stroke-[3]" />
-                    <span>Apply to {selectedCodes.length} Employees</span>
+                    <span>Confirm Mass Update ({confirmMassUpdateData.targetCodes.length} Employees)</span>
                   </>
                 )}
               </button>
             </div>
+
           </div>
         </div>
       )}
