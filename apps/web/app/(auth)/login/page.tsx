@@ -19,6 +19,7 @@ import {
   signInWithGoogle,
   requestPasswordReset,
   getSupabase,
+  buildUserSessionPayload,
 } from '@/lib/supabase-auth';
 
 export default function LoginPage() {
@@ -98,19 +99,11 @@ export default function LoginPage() {
           setErrorMessage(getDomainRestrictionError(userEmail));
           return;
         }
-        const userPayload = {
-          id: session.user.id,
-          email: session.user.email,
-          fullName: session.user.user_metadata['full_name'] || session.user.user_metadata['name'] || userEmail,
-          avatarUrl: session.user.user_metadata['avatar_url'] || session.user.user_metadata['picture'] || '',
-          jobTitle: 'Coordinator',
-          organizationName: 'JAAGO Foundation Trust',
-          roles: ['super_admin', 'coordinator'],
-          permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
-        };
+        const userPayload = buildUserSessionPayload(session.user);
         localStorage.setItem('jaago_access_token', session.access_token);
         localStorage.setItem('jaago_user', JSON.stringify(userPayload));
         document.cookie = `jaago_access_token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
+        document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=604800; SameSite=Lax`;
         const params = new URLSearchParams(window.location.search);
         const redirectTarget = params.get('redirect') || '/dashboard';
         window.location.href = redirectTarget;
@@ -140,16 +133,7 @@ export default function LoginPage() {
           setErrorMessage(getDomainRestrictionError(userEmail));
           return;
         }
-        const userPayload = {
-          id: session.user.id,
-          email: session.user.email,
-          fullName: session.user.user_metadata['full_name'] || session.user.user_metadata['name'] || userEmail,
-          avatarUrl: session.user.user_metadata['avatar_url'] || session.user.user_metadata['picture'] || '',
-          jobTitle: 'Coordinator',
-          organizationName: 'JAAGO Foundation Trust',
-          roles: ['super_admin', 'coordinator'],
-          permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
-        };
+        const userPayload = buildUserSessionPayload(session.user);
         localStorage.setItem('jaago_access_token', session.access_token);
         localStorage.setItem('jaago_user', JSON.stringify(userPayload));
         document.cookie = `jaago_access_token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
@@ -192,16 +176,7 @@ export default function LoginPage() {
       });
 
       if (!supaError && supaData?.session && supaData?.user) {
-        const userPayload = {
-          id: supaData.user.id,
-          email: supaData.user.email,
-          fullName: supaData.user.user_metadata['full_name'] || supaData.user.user_metadata['name'] || cleanEmail,
-          avatarUrl: supaData.user.user_metadata['avatar_url'] || supaData.user.user_metadata['picture'] || '',
-          jobTitle: 'Coordinator',
-          organizationName: 'JAAGO Foundation Trust',
-          roles: ['super_admin', 'coordinator'],
-          permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
-        };
+        const userPayload = buildUserSessionPayload(supaData.user);
 
         if (typeof window !== 'undefined') {
           localStorage.setItem('jaago_access_token', supaData.session.access_token);

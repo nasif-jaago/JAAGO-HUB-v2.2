@@ -45,6 +45,7 @@ export interface InviteLogItem {
     designation?: string;
     department?: string;
     workEmail?: string;
+    tempPassword?: string;
   };
 }
 

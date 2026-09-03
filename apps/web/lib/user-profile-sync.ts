@@ -107,14 +107,15 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
   if (typeof window === 'undefined') return;
 
   try {
+    const isNasif = (employee.workEmail || '').toLowerCase().includes('nasif.kamal');
     const existing: UserSessionData = getCurrentUserSession() || {
       id: employee.id || 'usr-default',
-      email: employee.workEmail || 'nasif.kamal@jaago.com.bd',
+      email: employee.workEmail || '',
       fullName: employee.name,
       jobTitle: employee.designation,
       avatarUrl: employee.avatarUrl || '',
-      roles: ['super_admin', 'coordinator'],
-      permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
+      roles: isNasif ? ['super_admin', 'coordinator'] : ['user'],
+      permissions: isNasif ? ['*'] : ['self.attendance', 'self.leaves', 'self.profile', 'self.requests'],
     };
 
     const updatedUser: UserSessionData = {

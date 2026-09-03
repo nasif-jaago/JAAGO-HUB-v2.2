@@ -39,6 +39,7 @@ import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
 import {
   getEmployeeAttendanceLogs,
+  fetchAttendanceLogsFromSupabase,
   calculateWorkingHoursString,
   getLocalShifts,
   ShiftItem,
@@ -288,11 +289,21 @@ export function EmployeeProfileDetail({
       } catch (err) {
         console.error('Error loading organization metadata:', err);
       }
+
+      fetchAttendanceLogsFromSupabase().then(() => {
+        if (isMounted) {
+          setAttendanceRefresh((prev) => prev + 1);
+        }
+      }).catch(() => {});
     }
     loadMetadata();
 
     const handleAttUpdate = () => {
-      setAttendanceRefresh((prev) => prev + 1);
+      fetchAttendanceLogsFromSupabase().then(() => {
+        setAttendanceRefresh((prev) => prev + 1);
+      }).catch(() => {
+        setAttendanceRefresh((prev) => prev + 1);
+      });
     };
     window.addEventListener('jaago_attendance_updated', handleAttUpdate);
 
@@ -3352,7 +3363,7 @@ export function EmployeeProfileDetail({
                   </thead>
                   <tbody className="divide-y divide-border/40 font-medium">
                     {(() => {
-                      const empLogs = getEmployeeAttendanceLogs(formData.code || formData.id || formData.name || '');
+                      const empLogs = getEmployeeAttendanceLogs(formData.code || formData.id || '', formData.name || '');
                       if (empLogs.length === 0) {
                         return (
                           <tr>

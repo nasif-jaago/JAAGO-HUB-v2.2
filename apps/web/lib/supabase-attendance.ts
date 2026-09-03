@@ -755,24 +755,23 @@ export async function fetchAttendanceLogsFromSupabase(): Promise<AttendanceLogIt
 /**
  * Returns filtered attendance records for an employee
  */
-export function getEmployeeAttendanceLogs(employeeCodeOrId: string): AttendanceLogItem[] {
+export function getEmployeeAttendanceLogs(employeeCodeOrId: string, employeeName?: string): AttendanceLogItem[] {
   const all = getLocalAttendanceLogs();
-  const normalized = (employeeCodeOrId || '').toLowerCase().trim();
+  const normalizedKey = (employeeCodeOrId || '').toLowerCase().trim();
+  const normalizedName = (employeeName || '').toLowerCase().trim();
 
   const filtered = all.filter((l) => {
     const code = (l.employeeCode || '').toLowerCase().trim();
     const id = (l.employeeId || '').toLowerCase().trim();
     const name = (l.employeeName || '').toLowerCase().trim();
 
-    if (code && (code === normalized || normalized.includes(code) || code.includes(normalized))) return true;
-    if (id && (id === normalized || normalized.includes(id) || id.includes(normalized))) return true;
-    if (name && (name === normalized || normalized.includes(name) || name.includes(normalized))) return true;
-    if (
-      normalized.includes('nasif') &&
-      (code === 'fo032507061190' || id === 'emp-nasif' || name.includes('nasif'))
-    ) {
-      return true;
-    }
+    // 1. Direct exact employee code or ID match (highest precision)
+    if (normalizedKey && (code === normalizedKey || id === normalizedKey)) return true;
+    
+    // 2. Direct exact full name matches
+    if (normalizedName && name && name === normalizedName) return true;
+    if (normalizedKey && name && name === normalizedKey) return true;
+
     return false;
   });
 

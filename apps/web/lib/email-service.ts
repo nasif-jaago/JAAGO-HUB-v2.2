@@ -115,63 +115,156 @@ export const INITIAL_EMAIL_TEMPLATES: EmailTemplateItem[] = [
     templateKey: 'pnc.employee_welcome',
     name: 'Employee Account Welcome & Invite',
     module: 'pnc',
-    subject: 'Welcome to JAAGO HUB — Official Account Credentials for {{employeeName}}',
+    subject: 'Welcome to JAAGO HUB — Account Invitation & Credentials for {{employeeName}}',
     bodyHtml: `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Welcome to JAAGO HUB</title></head>
-<body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#0c0f17;color:#1e293b;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.3);">
-    <div style="background:#0f172a;padding:32px 28px;text-align:center;border-bottom:4px solid #f59e0b;">
-      <span style="background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;padding:4px 12px;border-radius:12px;text-transform:uppercase;">JAAGO Foundation Trust</span>
-      <h1 style="color:#ffffff;font-size:22px;margin:12px 0 4px 0;">Official Account Provisioned</h1>
-      <p style="color:#94a3b8;font-size:13px;margin:0;">Enterprise Operations & Resource Portal</p>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Invitation — JAAGO HUB</title>
+</head>
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:#0c0f17;color:#1e293b;-webkit-font-smoothing:antialiased;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.35);border:1px solid #e2e8f0;">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:36px 32px 28px;text-align:center;border-bottom:4px solid #f59e0b;">
+      <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:5px 14px;border-radius:20px;text-transform:uppercase;margin-bottom:12px;">JAAGO FOUNDATION TRUST</span>
+      <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:800;letter-spacing:-0.5px;">JAAGO HUB &bull; Account Invitation</h1>
+      <p style="margin:6px 0 0;color:#cbd5e1;font-size:13px;font-weight:500;">Institutional Operations &amp; Enterprise Resource Planning Portal</p>
     </div>
-    <div style="padding:28px 28px 24px;line-height:1.6;font-size:14px;color:#334155;">
-      <p style="font-size:15px;font-weight:700;color:#0f172a;margin-top:0;">Dear {{employeeName}},</p>
-      <p>We are pleased to welcome you to <strong>JAAGO Foundation Trust</strong>. Your official institutional user account on JAAGO HUB is active.</p>
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin:20px 0;">
-        <table style="width:100%;font-size:13px;border-collapse:collapse;">
-          <tr><td style="color:#64748b;padding:4px 0;">Employee ID:</td><td style="font-weight:600;color:#0f172a;">{{employeeCode}}</td></tr>
-          <tr><td style="color:#64748b;padding:4px 0;">Designation:</td><td style="font-weight:600;color:#0f172a;">{{designation}}</td></tr>
-          <tr><td style="color:#64748b;padding:4px 0;">Department:</td><td style="font-weight:600;color:#0f172a;">{{department}}</td></tr>
-          <tr><td style="color:#64748b;padding:4px 0;">Work Email:</td><td style="font-weight:600;color:#0284c7;">{{workEmail}}</td></tr>
-        </table>
+
+    <!-- Content -->
+    <div style="padding:32px 32px 28px;color:#334155;font-size:14px;line-height:1.65;">
+      <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin:0 0 16px 0;">Welcome to JAAGO Foundation!</h2>
+
+      <!-- Intro Callout Box -->
+      <div style="background:#f8fafc;border-left:4px solid #0284c7;padding:14px 18px;border-radius:0 12px 12px 0;margin-bottom:24px;font-size:13.5px;color:#1e293b;">
+        Your official enterprise account on <strong>JAAGO HUB</strong> has been provisioned for <a href="mailto:{{workEmail}}" style="color:#0284c7;font-weight:700;text-decoration:none;">{{workEmail}}</a>. You are invited to access the organizational portal.
       </div>
-      <div style="text-align:center;margin:28px 0;">
-        <a href="{{loginUrl}}" style="background:linear-gradient(135deg,#f59e0b,#d97706);color:#ffffff;text-decoration:none;font-weight:800;font-size:14px;padding:14px 32px;border-radius:10px;display:inline-block;text-transform:uppercase;">Access JAAGO HUB &rarr;</a>
+
+      <!-- Employee Profile Summary -->
+      <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:24px;font-size:13px;">
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;width:38%;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Employee Name:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{employeeName}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Employee ID:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{employeeCode}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Designation:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{designation}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Department:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{department}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;">Work Email:</td><td style="padding:10px 14px;font-weight:700;color:#0284c7;">{{workEmail}}</td></tr>
+      </table>
+
+      <!-- Auto-Generated Temporary Password Card -->
+      <div style="background:linear-gradient(145deg, #fffbeb 0%, #fef3c7 100%);border:2px dashed #f59e0b;border-radius:14px;padding:20px 16px;margin:24px 0;text-align:center;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#b45309;margin-bottom:8px;">
+          Initial Auto-Generated Temporary Password
+        </div>
+        <div style="display:inline-block;font-family:'Courier New',Courier,monospace;font-size:20px;font-weight:900;color:#92400e;background:#ffffff;padding:8px 24px;border-radius:10px;border:1px solid #fde68a;letter-spacing:1.5px;box-shadow:inset 0 2px 4px rgba(0,0,0,0.06);">
+          {{tempPassword}}
+        </div>
+        <div style="font-size:11.5px;color:#78350f;margin-top:10px;font-weight:500;">
+          * Please copy this temporary password to log in. You can change it after signing in.
+        </div>
       </div>
-      <p style="font-size:12px;color:#64748b;margin-bottom:24px;">Security Notice: Please update your temporary password upon initial sign-in under Profile Settings > Security.</p>
-      <div style="border-top:1px solid #e2e8f0;padding-top:16px;font-size:12px;color:#64748b;">
-        <strong>People & Culture Department</strong><br>JAAGO Foundation Trust &bull; Banani, Dhaka, Bangladesh<br>HR Support: pnc@jaago.com.bd
+
+      <!-- Call to Action Button -->
+      <div style="text-align:center;margin:28px 0 16px 0;">
+        <a href="{{loginUrl}}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);color:#ffffff !important;font-size:15px;font-weight:800;text-decoration:none;padding:14px 36px;border-radius:12px;box-shadow:0 10px 20px rgba(245,158,11,0.35);letter-spacing:0.5px;text-transform:uppercase;">
+          Accept Invitation &amp; Set Password &rarr;
+        </a>
       </div>
+
+      <!-- Direct Access Link -->
+      <div style="text-align:center;font-size:12px;color:#64748b;margin-bottom:24px;">
+        Direct Access Link:<br>
+        <a href="{{loginUrl}}" target="_blank" rel="noopener noreferrer" style="color:#0284c7;word-break:break-all;text-decoration:underline;">{{loginUrl}}</a>
+      </div>
+
+      <!-- Getting Started Instructions -->
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:18px 20px;margin-bottom:24px;font-size:13px;">
+        <strong style="color:#0f172a;display:block;margin-bottom:10px;font-size:13.5px;">Getting Started:</strong>
+        <ol style="margin:0;padding-left:20px;color:#334155;line-height:1.7;">
+          <li style="margin-bottom:6px;">Click the button above to activate your organizational account.</li>
+          <li style="margin-bottom:6px;">Enter your official Work Email (<code>{{workEmail}}</code>) and the auto-generated Temporary Password.</li>
+          <li style="margin-bottom:6px;">Log in to access your attendance, leaves, and institutional modules.</li>
+          <li style="margin-bottom:6px;">(Alternative) You may also use <strong>"Sign In with Google"</strong> on the portal using your official organization email.</li>
+          <li>For security, update your temporary password upon initial sign-in under <strong>My Profile &gt; Security</strong>.</li>
+        </ol>
+      </div>
+
+      <!-- Security Notice -->
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px 18px;color:#991b1b;font-size:12px;line-height:1.5;margin-bottom:24px;">
+        <strong>🔒 Security Notice:</strong> This invitation link and credentials are intended exclusively for <a href="mailto:{{workEmail}}" style="color:#991b1b;font-weight:700;">{{workEmail}}</a>. Never forward this email to anyone.
+      </div>
+
+      <!-- Sign-off -->
+      <div style="border-top:1px solid #e2e8f0;padding-top:20px;font-size:13px;color:#475569;line-height:1.6;">
+        Warm regards,<br><br>
+        <strong style="color:#0f172a;">People &amp; Culture Department</strong><br>
+        <strong style="color:#0f172a;">JAAGO Foundation</strong><br>
+        <span style="font-size:12px;color:#64748b;">
+          Head Office: Banani, Dhaka - 1213, Bangladesh<br>
+          HR Inquiries: <a href="mailto:pnc@jaago.com.bd" style="color:#0284c7;">pnc@jaago.com.bd</a> &bull; IT Helpdesk: <a href="mailto:it-support@jaago.com.bd" style="color:#0284c7;">it-support@jaago.com.bd</a>
+        </span>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:20px 32px;text-align:center;font-size:11px;color:#94a3b8;line-height:1.6;">
+      This is an automated formal notification from JAAGO HUB ERP.<br>
+      &copy; JAAGO Foundation Trust. All rights reserved.
     </div>
   </div>
 </body>
 </html>`,
-    bodyText: `JAAGO HUB — OFFICIAL EMPLOYEE ACCESS INVITATION
+    bodyText: `================================================================================
+JAAGO HUB — ACCOUNT INVITATION & LOGIN CREDENTIALS
+JAAGO Foundation Trust | Enterprise Operations & Resource Planning Portal
+================================================================================
+
 Dear {{employeeName}},
 
-Your official institutional user account on JAAGO HUB is active.
-• Employee ID: {{employeeCode}}
-• Designation: {{designation}}
-• Department: {{department}}
-• Work Email: {{workEmail}}
+Welcome to JAAGO Foundation!
+Your official enterprise account on JAAGO HUB has been provisioned for {{workEmail}}.
+You are invited to access the organizational portal.
 
-Portal URL: {{loginUrl}}
+--------------------------------------------------------------------------------
+EMPLOYEE & ACCOUNT DETAILS
+--------------------------------------------------------------------------------
+• Employee Name    : {{employeeName}}
+• Employee ID      : {{employeeCode}}
+• Designation      : {{designation}}
+• Department       : {{department}}
+• Work Email       : {{workEmail}}
+• Temporary Password: {{tempPassword}}
+• Portal Access URL: {{loginUrl}}
+--------------------------------------------------------------------------------
 
+GETTING STARTED:
+1. Click the access link or navigate to: {{loginUrl}}
+2. Enter your Work Email ({{workEmail}}) and Temporary Password: {{tempPassword}}
+3. Log in to access your attendance, leaves, and institutional modules.
+4. (Alternative) You may also use "Sign In with Google" using your official organization email.
+5. For security, update your temporary password upon initial sign-in under My Profile > Security.
+
+SECURITY NOTICE:
+🔒 This invitation link and credentials are intended exclusively for {{workEmail}}. Never forward this email to anyone.
+
+--------------------------------------------------------------------------------
 Warm regards,
+
 People & Culture Department
-JAAGO Foundation Trust`,
+JAAGO Foundation
+Head Office: Banani, Dhaka - 1213, Bangladesh
+Support: pnc@jaago.com.bd | IT Helpdesk: it-support@jaago.com.bd
+================================================================================`,
     variablesSchema: [
       { key: 'employeeName', name: 'Employee Name', description: 'Full name of employee', required: true, sample: 'S M Nayeem Rahman' },
       { key: 'employeeCode', name: 'Employee Code', description: 'Official Staff ID', required: true, sample: 'FO072408021002' },
       { key: 'designation', name: 'Designation', description: 'Job Title / Role', required: true, sample: 'Team Lead' },
       { key: 'department', name: 'Department', description: 'Department Name', required: true, sample: "Founder's Office (JF)" },
       { key: 'workEmail', name: 'Work Email', description: 'Institutional email address', required: true, sample: 'hub.jaago@jaago.com.bd' },
+      { key: 'tempPassword', name: 'Temporary Password', description: 'Auto-generated temporary password for initial login', required: true, sample: 'Jaago@2026!k9Q2' },
       { key: 'loginUrl', name: 'Login URL', description: 'Direct portal authentication link', required: true, sample: 'https://hub.jaago.com.bd/login' },
     ],
     isActive: true,
-    version: 1,
+    version: 2,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -382,6 +475,29 @@ class EmailSubsystemStore {
           createdAt: r.created_at || new Date().toISOString(),
           updatedAt: r.updated_at || new Date().toISOString(),
         }));
+
+        // Upgrade pnc.employee_welcome if existing record lacks tempPassword
+        const welcomeInitial = INITIAL_EMAIL_TEMPLATES.find((t) => t.templateKey === 'pnc.employee_welcome');
+        const welcomeExisting = this.templates.find((t) => t.templateKey === 'pnc.employee_welcome');
+        if (welcomeInitial && welcomeExisting && (!welcomeExisting.bodyHtml.includes('tempPassword') || welcomeExisting.version < 2)) {
+          welcomeExisting.name = welcomeInitial.name;
+          welcomeExisting.subject = welcomeInitial.subject;
+          welcomeExisting.bodyHtml = welcomeInitial.bodyHtml;
+          welcomeExisting.bodyText = welcomeInitial.bodyText;
+          welcomeExisting.variablesSchema = welcomeInitial.variablesSchema;
+          welcomeExisting.version = 2;
+          welcomeExisting.updatedAt = new Date().toISOString();
+
+          await supabase.from('email_templates').update({
+            name: welcomeInitial.name,
+            subject: welcomeInitial.subject,
+            body_html: welcomeInitial.bodyHtml,
+            body_text: welcomeInitial.bodyText,
+            variables_schema: welcomeInitial.variablesSchema,
+            version: 2,
+            updated_at: new Date().toISOString(),
+          }).eq('template_key', 'pnc.employee_welcome');
+        }
       } else {
         // Seed initial templates to Supabase
         for (const t of this.templates) {

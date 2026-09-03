@@ -187,6 +187,7 @@ export async function POST(request: Request) {
           designation: designation || 'Staff Member',
           department: department || 'General',
           workEmail: cleanEmail,
+          tempPassword,
           loginUrl,
         },
         module: 'pnc',

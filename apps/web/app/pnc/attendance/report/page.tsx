@@ -110,8 +110,11 @@ const FALLBACK_EMPLOYEES: Partial<FullEmployeeProfile>[] = [
 
 export default function AttendanceReportPage() {
   const [timePeriod, setTimePeriod] = useState<'Today' | 'Yesterday' | 'This Week' | 'Last 7 Days' | 'Last 15 Days' | 'Last 30 Days' | 'This Month' | 'Last Month'>('Today');
-  const [selectedDate, setSelectedDate] = useState('2026-08-27');
-  const [currentMonthDate, setCurrentMonthDate] = useState(new Date(2026, 7, 1)); // August 2026
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
 
   // Filters
   const [branchFilter, setBranchFilter] = useState('');
@@ -140,11 +143,27 @@ export default function AttendanceReportPage() {
     const allLogs = getLocalAttendanceLogs();
 
     const rows: ReportRow[] = listToUse.map((emp, index) => {
-      const match = allLogs.find(
-        (l) =>
-          l.date === targetDate &&
-          (l.employeeCode === emp.code || l.employeeId === emp.id || (emp.name?.includes('Nasif') && l.employeeName?.includes('Nasif')))
-      );
+      const empName = (emp.name || '').toLowerCase().trim();
+      const empCode = (emp.code || '').toLowerCase().trim();
+      const empId = (emp.id || '').toLowerCase().trim();
+
+      const match = allLogs.find((l) => {
+        if (l.date !== targetDate) return false;
+        const lCode = (l.employeeCode || '').toLowerCase().trim();
+        const lId = (l.employeeId || '').toLowerCase().trim();
+        const lName = (l.employeeName || '').toLowerCase().trim();
+
+        // 1. Direct exact employee code match (primary unique key)
+        if (empCode && lCode && empCode === lCode) return true;
+
+        // 2. Direct exact employee ID match
+        if (empId && lId && empId === lId) return true;
+
+        // 3. Exact full name match
+        if (empName && lName && empName === lName) return true;
+
+        return false;
+      });
 
       if (match) {
         return {
@@ -152,7 +171,7 @@ export default function AttendanceReportPage() {
           employeeId: emp.id || `emp-${emp.code}`,
           employeeCode: emp.code,
           employeeName: emp.name,
-          department: emp.department || "Founder's Office / FC",
+          department: emp.department || "Founder's Office (JF)",
           designation: emp.designation || 'Staff',
           branch: emp.branch || 'Head Office (Banani)',
           avatarUrl: emp.avatarUrl || '',
@@ -165,49 +184,6 @@ export default function AttendanceReportPage() {
         };
       }
 
-      // Default mock presence for first few staff on weekdays if no explicit log
-      const isNasif = emp.name?.toLowerCase().includes('nasif');
-      if (isNasif && targetDate === '2026-08-27') {
-        const storedIn = typeof window !== 'undefined' ? localStorage.getItem('jaago_first_checkin_time') : null;
-        const storedOut = typeof window !== 'undefined' ? localStorage.getItem('jaago_last_checkout_time') : null;
-        return {
-          id: `rep-${emp.id || index}-${targetDate}`,
-          employeeId: emp.id || `emp-${emp.code}`,
-          employeeCode: emp.code,
-          employeeName: emp.name,
-          department: emp.department || "Founder's Office / FC",
-          designation: emp.designation || 'Staff',
-          branch: emp.branch || 'Head Office (Banani)',
-          avatarUrl: emp.avatarUrl || '',
-          date: targetDate,
-          checkInTime: storedIn || '02:50 PM',
-          checkOutTime: storedOut || '06:48 PM',
-          lateBy: 'N/A',
-          earlyOutBy: 'N/A',
-          status: 'Present',
-        };
-      }
-
-      const isNayeem = emp.name?.toLowerCase().includes('nayeem');
-      if (isNayeem && targetDate === '2026-08-27') {
-        return {
-          id: `rep-${emp.id || index}-${targetDate}`,
-          employeeId: emp.id || `emp-${emp.code}`,
-          employeeCode: emp.code,
-          employeeName: emp.name,
-          department: emp.department || "Founder's Office / FC",
-          designation: emp.designation || 'Staff',
-          branch: emp.branch || 'Head Office (Banani)',
-          date: targetDate,
-          checkInTime: '10:05 AM',
-          checkOutTime: '06:00 PM',
-          lateBy: '5 min',
-          earlyOutBy: 'N/A',
-          status: 'Late',
-        };
-      }
-
-      const isDefaultPresent = index < 3;
       return {
         id: `rep-${emp.id || index}-${targetDate}`,
         employeeId: emp.id || `emp-${emp.code}`,
@@ -218,11 +194,11 @@ export default function AttendanceReportPage() {
         branch: emp.branch || 'Head Office (Banani)',
         avatarUrl: emp.avatarUrl || '',
         date: targetDate,
-        checkInTime: isDefaultPresent ? '09:00 AM' : 'N/A',
-        checkOutTime: isDefaultPresent ? '05:00 PM' : 'N/A',
+        checkInTime: 'N/A',
+        checkOutTime: 'N/A',
         lateBy: 'N/A',
         earlyOutBy: 'N/A',
-        status: isDefaultPresent ? 'Present' : 'Absent',
+        status: 'Absent',
       };
     });
 
@@ -230,25 +206,38 @@ export default function AttendanceReportPage() {
   }, []);
 
   useEffect(() => {
-    fetchEmployeesFromSupabase().then((emps) => {
-      if (emps && emps.length > 0) {
-        setEmployees(emps);
-        setReportRows(generateReportForDate(selectedDate, emps));
-      } else {
-        setReportRows(generateReportForDate(selectedDate, []));
-      }
-    });
+    let isMounted = true;
 
-    fetchAttendanceLogsFromSupabase().then(() => {
-      setReportRows((prev) => (prev.length > 0 ? generateReportForDate(selectedDate, employees) : prev));
-    });
+    async function loadInitialData() {
+      const [emps] = await Promise.all([
+        fetchEmployeesFromSupabase(),
+        fetchAttendanceLogsFromSupabase(),
+      ]);
+
+      if (isMounted) {
+        const loadedEmps = emps && emps.length > 0 ? emps : [];
+        setEmployees(loadedEmps);
+        setReportRows(generateReportForDate(selectedDate, loadedEmps));
+      }
+    }
+
+    loadInitialData();
 
     const handleUpdate = () => {
-      setReportRows(generateReportForDate(selectedDate, employees));
+      fetchAttendanceLogsFromSupabase().then(() => {
+        setEmployees((currentEmps) => {
+          setReportRows(generateReportForDate(selectedDate, currentEmps));
+          return currentEmps;
+        });
+      });
     };
+
     window.addEventListener('jaago_attendance_updated', handleUpdate);
-    return () => window.removeEventListener('jaago_attendance_updated', handleUpdate);
-  }, [selectedDate, generateReportForDate, employees]);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('jaago_attendance_updated', handleUpdate);
+    };
+  }, [selectedDate, generateReportForDate]);
 
   const handleDateSelect = (dateStr: string) => {
     setSelectedDate(dateStr);
@@ -441,30 +430,52 @@ export default function AttendanceReportPage() {
           <div className="py-1 text-purple-400">Sat</div>
         </div>
 
-        {/* Date Blocks (Interactive calendar for August 2026) */}
+        {/* Date Blocks (Dynamic calendar for currentMonthDate) */}
         <div className="grid grid-cols-7 gap-2 text-xs">
-          {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
-            const dayStr = day < 10 ? `0${day}` : `${day}`;
-            const fullDate = `2026-08-${dayStr}`;
-            const isSelected = selectedDate === fullDate;
-            const isToday = fullDate === '2026-08-27';
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => handleDateSelect(fullDate)}
-                className={`h-10 rounded-xl font-bold flex items-center justify-center transition cursor-pointer ${
-                  isSelected
-                    ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 font-black scale-105'
-                    : isToday
-                    ? 'bg-emerald-500/15 border-2 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-black'
-                    : 'bg-surface/50 hover:bg-surface text-muted-foreground hover:text-foreground border border-border/40'
-                }`}
-              >
-                {day}
-              </button>
-            );
-          })}
+          {(() => {
+            const year = currentMonthDate.getFullYear();
+            const month = currentMonthDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0 = Sun
+            const todayStr = (() => {
+              const d = new Date();
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            })();
+
+            const elements = [];
+
+            // Empty offset slots
+            for (let b = 0; b < firstDayOfWeek; b++) {
+              elements.push(<div key={`blank-${b}`} className="h-10 opacity-0 pointer-events-none" />);
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+              const dayStr = day < 10 ? `0${day}` : `${day}`;
+              const monthStr = String(month + 1).padStart(2, '0');
+              const fullDate = `${year}-${monthStr}-${dayStr}`;
+              const isSelected = selectedDate === fullDate;
+              const isToday = fullDate === todayStr;
+
+              elements.push(
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => handleDateSelect(fullDate)}
+                  className={`h-10 rounded-xl font-bold flex items-center justify-center transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 font-black scale-105'
+                      : isToday
+                      ? 'bg-emerald-500/15 border-2 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-black'
+                      : 'bg-surface/50 hover:bg-surface text-muted-foreground hover:text-foreground border border-border/40'
+                  }`}
+                >
+                  {day}
+                </button>
+              );
+            }
+
+            return elements;
+          })()}
         </div>
       </div>
 

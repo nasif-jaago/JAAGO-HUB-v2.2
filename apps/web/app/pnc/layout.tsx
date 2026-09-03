@@ -42,24 +42,92 @@ export default function PnCLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Client-Side ERP Auth State Listener
+  // Active Authenticated User Session
+  const [currentUser, setCurrentUser] = useState<{
+    fullName: string;
+    jobTitle: string;
+    role: string;
+    roles: string[];
+    isSuperAdmin: boolean;
+    isAdmin: boolean;
+    avatarUrl?: string;
+  }>({
+    fullName: 'User',
+    jobTitle: 'Staff Member',
+    role: 'USER',
+    roles: ['user'],
+    isSuperAdmin: false,
+    isAdmin: false,
+  });
+
+  // Client-Side ERP Auth State Listener & User Hydration
   useEffect(() => {
     let isMounted = true;
     const supabase = getSupabase();
 
+    const loadSessionUser = () => {
+      try {
+        const raw = localStorage.getItem('jaago_user');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const rawRole = (parsed.role || (Array.isArray(parsed.roles) ? parsed.roles[0] : '') || 'USER').toString();
+          const rawRoleUpper = rawRole.toUpperCase();
+          const isSuper =
+            parsed.isSuperAdmin === true ||
+            rawRoleUpper === 'SUPER_ADMIN' ||
+            rawRole.toLowerCase() === 'super_admin' ||
+            parsed.email?.toLowerCase().includes('nasif.kamal');
+
+          const isAdmin =
+            isSuper ||
+            rawRoleUpper === 'ADMIN' ||
+            rawRoleUpper === 'HR_MANAGER' ||
+            rawRoleUpper === 'HR_ADMIN' ||
+            rawRole.toLowerCase() === 'admin' ||
+            rawRole.toLowerCase() === 'hr_manager' ||
+            rawRole.toLowerCase() === 'coordinator';
+
+          if (isMounted) {
+            setCurrentUser({
+              fullName: parsed.fullName || parsed.name || 'User',
+              jobTitle: parsed.jobTitle || parsed.designation || (isSuper ? 'Coordinator' : 'Staff Member'),
+              role: isSuper ? 'SUPER_ADMIN' : isAdmin ? 'ADMIN' : 'USER',
+              roles: parsed.roles || (isSuper ? ['super_admin'] : isAdmin ? ['admin'] : ['user']),
+              isSuperAdmin: isSuper,
+              isAdmin,
+              avatarUrl: parsed.avatarUrl || '',
+            });
+          }
+        }
+      } catch {}
+    };
+
+    loadSessionUser();
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         if (isMounted) {
           window.location.href = '/login';
         }
+      } else if (session?.user) {
+        loadSessionUser();
       }
     });
+
+    const handleUserUpdate = () => {
+      loadSessionUser();
+    };
+
+    window.addEventListener('jaago_user_updated', handleUserUpdate);
+    window.addEventListener('storage', handleUserUpdate);
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+      window.removeEventListener('jaago_user_updated', handleUserUpdate);
+      window.removeEventListener('storage', handleUserUpdate);
     };
   }, []);
 
@@ -592,73 +660,92 @@ export default function PnCLayout({
             <span className="uppercase tracking-wider text-[11px]">ANNOUNCEMENTS</span>
           </div>
 
-          {/* U.ROLE */}
-          <Link
-            href="/admin/rbac"
-            className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-              pathname.startsWith('/admin/rbac')
-                ? 'bg-primary/10 text-primary font-black'
-                : 'text-sidebar-foreground hover:bg-surface'
-            }`}
-          >
-            <ShieldAlert className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-            <span className="uppercase tracking-wider text-[11px]">U.ROLE</span>
-          </Link>
-
-          {/* SETTINGS */}
-          <div className="space-y-0.5">
-            <button
-              onClick={() => toggleSection('settings')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')
+          {/* U.ROLE (Admin / Super Admin Only) */}
+          {(currentUser.isAdmin || currentUser.isSuperAdmin) && (
+            <Link
+              href="/admin/rbac"
+              className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                pathname.startsWith('/admin/rbac')
                   ? 'bg-primary/10 text-primary font-black'
                   : 'text-sidebar-foreground hover:bg-surface'
               }`}
             >
-              <div className="flex items-center space-x-2.5">
-                <Settings className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <span className="uppercase tracking-wider text-[11px]">SETTINGS</span>
-              </div>
-              {openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') ? (
-                <ChevronDown className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5" />
+              <ShieldAlert className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <span className="uppercase tracking-wider text-[11px]">U.ROLE</span>
+            </Link>
+          )}
+
+          {/* SETTINGS (Admin / Super Admin Only) */}
+          {(currentUser.isAdmin || currentUser.isSuperAdmin) && (
+            <div className="space-y-0.5">
+              <button
+                onClick={() => toggleSection('settings')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')
+                    ? 'bg-primary/10 text-primary font-black'
+                    : 'text-sidebar-foreground hover:bg-surface'
+                }`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Settings className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="uppercase tracking-wider text-[11px]">SETTINGS</span>
+                </div>
+                {openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+              </button>
+              {(openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')) && (
+                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                  <Link
+                    href="/pnc/organization"
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-primary ${
+                      pathname === '/pnc/organization' ? 'text-primary font-black' : ''
+                    }`}
+                  >
+                    &bull; Configuration
+                  </Link>
+                  <Link
+                    href="/pnc/settings/biotime"
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-primary ${
+                      pathname.includes('/biotime') ? 'text-primary font-black' : ''
+                    }`}
+                  >
+                    &bull; Biotime Control Center
+                  </Link>
+                </div>
               )}
-            </button>
-            {(openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')) && (
-              <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                <Link
-                  href="/pnc/organization"
-                  className={`block py-1 uppercase text-[10px] font-bold transition hover:text-primary ${
-                    pathname === '/pnc/organization' ? 'text-primary font-black' : ''
-                  }`}
-                >
-                  &bull; Configuration
-                </Link>
-                <Link
-                  href="/pnc/settings/biotime"
-                  className={`block py-1 uppercase text-[10px] font-bold transition hover:text-primary ${
-                    pathname.includes('/biotime') ? 'text-primary font-black' : ''
-                  }`}
-                >
-                  &bull; Biotime Control Center
-                </Link>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Bottom User Card */}
         <div className="p-3.5 border-t border-sidebar-border flex items-center space-x-3 bg-surface/20">
-          <div className="h-8 w-8 rounded-full bg-[#26180E] text-primary flex items-center justify-center font-black text-xs shadow-sm">
-            N
-          </div>
-          <div className="overflow-hidden">
-            <div className="text-xs font-bold text-foreground truncate">
-              Nasif Kamal | Coordinator, T...
+          {currentUser.avatarUrl ? (
+            <img
+              src={currentUser.avatarUrl}
+              alt={currentUser.fullName}
+              className="h-8 w-8 rounded-full object-cover border border-primary/40 shadow-sm"
+            />
+          ) : (
+            <div className="h-8 w-8 rounded-full bg-[#26180E] text-primary flex items-center justify-center font-black text-xs shadow-sm uppercase">
+              {currentUser.fullName ? currentUser.fullName.charAt(0) : 'U'}
+            </div>
+          )}
+          <div className="overflow-hidden min-w-0 flex-1">
+            <div
+              className="text-xs font-bold text-foreground truncate"
+              title={`${currentUser.fullName} | ${currentUser.jobTitle}`}
+            >
+              {currentUser.fullName} | {currentUser.jobTitle}
             </div>
             <div className="text-[10px] font-semibold text-muted-foreground">
-              Super Admin
+              {currentUser.isSuperAdmin
+                ? 'Super Admin'
+                : currentUser.isAdmin
+                ? 'Admin / HR'
+                : 'User'}
             </div>
           </div>
         </div>

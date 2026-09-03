@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { to, cc, subject, recipientName, loginUrl } = body;
+    const { to, cc, subject, recipientName, loginUrl, tempPassword: customPass } = body;
 
     if (!to || !subject) {
       return NextResponse.json(
@@ -25,6 +25,7 @@ export async function POST(request: Request) {
     const cleanEmail = to.trim().toLowerCase();
     const cleanCC = typeof cc === 'string' && cc.includes('@') ? cc.trim().toLowerCase() : undefined;
     const redirectUrl = loginUrl || `${process.env.NEXT_PUBLIC_APP_URL || 'https://hub.jaago.com.bd'}/login`;
+    const tempPassword = customPass || `Jaago@2026!${Math.random().toString(36).substring(2, 6).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`;
 
     // ── 1. Dispatch Email via Supabase Auth (Brevo SMTP) ──
     const { getSupabaseAdminClient } = await import('@jaago/auth');
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
         designation: 'Staff Member',
         department: 'General',
         workEmail: cleanEmail,
+        tempPassword,
         loginUrl: redirectUrl,
       },
       module: 'notifications',

@@ -85,6 +85,79 @@ export async function updatePassword(newPassword: string) {
   });
 }
 
+export interface AppUserSession {
+  id: string;
+  email: string;
+  fullName: string;
+  avatarUrl: string;
+  jobTitle: string;
+  department: string;
+  branch: string;
+  employeeCode: string;
+  organizationName: string;
+  organizationId: string;
+  roles: string[];
+  role: string;
+  permissions: string[];
+  isSuperAdmin: boolean;
+}
+
+export function buildUserSessionPayload(user: any): AppUserSession {
+  const email = (user.email || '').toLowerCase().trim();
+  const meta = user.user_metadata || {};
+
+  const rawRole = (meta['role'] || (Array.isArray(meta['roles']) ? meta['roles'][0] : '') || 'USER').toString();
+  const rawRoleUpper = rawRole.toUpperCase();
+
+  // Super Admin check: either explicit super_admin role, is_super_admin flag, or system architect email
+  const isSuper =
+    rawRoleUpper === 'SUPER_ADMIN' ||
+    rawRole.toLowerCase() === 'super_admin' ||
+    meta['is_super_admin'] === true ||
+    email.includes('nasif.kamal');
+
+  // Admin / HR Manager check
+  const isAdmin =
+    isSuper ||
+    rawRoleUpper === 'ADMIN' ||
+    rawRoleUpper === 'HR_MANAGER' ||
+    rawRoleUpper === 'HR_ADMIN' ||
+    rawRole.toLowerCase() === 'admin' ||
+    rawRole.toLowerCase() === 'hr_manager' ||
+    rawRole.toLowerCase() === 'coordinator';
+
+  const canonicalRole = isSuper ? 'SUPER_ADMIN' : isAdmin ? 'ADMIN' : rawRoleUpper === 'OFFICER' ? 'USER' : rawRoleUpper;
+
+  const roles = isSuper
+    ? ['super_admin', 'coordinator']
+    : isAdmin
+    ? ['admin', rawRole.toLowerCase()]
+    : ['user'];
+
+  const permissions = isSuper
+    ? ['*']
+    : isAdmin
+    ? ['hr.*', 'finance.*', 'pnc.*', 'attendance.*', 'leaves.*', 'directory.*', 'system.*']
+    : ['self.attendance', 'self.leaves', 'self.profile', 'self.requests'];
+
+  return {
+    id: user.id,
+    email: user.email,
+    fullName: meta['full_name'] || meta['name'] || user.email?.split('@')[0] || 'User',
+    avatarUrl: meta['avatar_url'] || meta['picture'] || '',
+    jobTitle: meta['job_title'] || meta['designation'] || (isSuper ? 'Coordinator' : 'Staff Member'),
+    department: meta['department'] || 'General',
+    branch: meta['branch'] || 'Head Office (Banani)',
+    employeeCode: meta['employee_code'] || meta['employee_id'] || '',
+    organizationName: meta['organization_name'] || 'JAAGO Foundation Trust',
+    organizationId: meta['organization_id'] || 'org-jaago-dhaka',
+    roles,
+    role: canonicalRole,
+    permissions,
+    isSuperAdmin: isSuper,
+  };
+}
+
 /**
  * Completely sign out user from Supabase, clear local storage & cookies, and redirect to /login
  */

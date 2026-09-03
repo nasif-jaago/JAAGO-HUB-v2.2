@@ -67,14 +67,53 @@ export const POST = createApiHandler({
         metadata: { email },
       });
 
+      const meta = data.user.user_metadata || {};
+      const rawRole = (meta['role'] || (Array.isArray(meta['roles']) ? meta['roles'][0] : '') || 'USER').toString();
+      const rawRoleUpper = rawRole.toUpperCase();
+      const isSuper =
+        rawRoleUpper === 'SUPER_ADMIN' ||
+        rawRole.toLowerCase() === 'super_admin' ||
+        meta['is_super_admin'] === true ||
+        email.includes('nasif.kamal');
+
+      const isAdmin =
+        isSuper ||
+        rawRoleUpper === 'ADMIN' ||
+        rawRoleUpper === 'HR_MANAGER' ||
+        rawRoleUpper === 'HR_ADMIN' ||
+        rawRole.toLowerCase() === 'admin' ||
+        rawRole.toLowerCase() === 'hr_manager' ||
+        rawRole.toLowerCase() === 'coordinator';
+
+      const canonicalRole = isSuper ? 'SUPER_ADMIN' : isAdmin ? 'ADMIN' : rawRoleUpper === 'OFFICER' ? 'USER' : rawRoleUpper;
+
+      const roles = isSuper
+        ? ['super_admin', 'coordinator']
+        : isAdmin
+        ? ['admin', rawRole.toLowerCase()]
+        : ['user'];
+
+      const permissions = isSuper
+        ? ['*']
+        : isAdmin
+        ? ['hr.*', 'finance.*', 'pnc.*', 'attendance.*', 'leaves.*', 'directory.*', 'system.*']
+        : ['self.attendance', 'self.leaves', 'self.profile', 'self.requests'];
+
       const userObj = {
         id: data.user.id,
         email: data.user.email,
-        fullName: data.user.user_metadata['full_name'] || data.user.user_metadata['name'] || email,
-        organizationId: data.user.user_metadata['organization_id'] || 'org-jaago-dhaka',
-        organizationName: 'JAAGO Foundation Trust',
-        roles: ['super_admin', 'coordinator'],
-        permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
+        fullName: meta['full_name'] || meta['name'] || email,
+        avatarUrl: meta['avatar_url'] || meta['picture'] || '',
+        jobTitle: meta['job_title'] || meta['designation'] || (isSuper ? 'Coordinator' : 'Staff Member'),
+        department: meta['department'] || 'General',
+        branch: meta['branch'] || 'Head Office (Banani)',
+        employeeCode: meta['employee_code'] || meta['employee_id'] || '',
+        organizationId: meta['organization_id'] || 'org-jaago-dhaka',
+        organizationName: meta['organization_name'] || 'JAAGO Foundation Trust',
+        roles,
+        role: canonicalRole,
+        permissions,
+        isSuperAdmin: isSuper,
       };
 
       const response = Response.json({

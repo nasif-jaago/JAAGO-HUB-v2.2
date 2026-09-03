@@ -68,7 +68,6 @@ export function DashboardSidebar({
   const pathname = usePathname();
 
   // Accordion state for sidebar categories
-
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     dashboard: true,
     requests: false,
@@ -76,6 +75,47 @@ export function DashboardSidebar({
     organization: false,
     settings: false,
   });
+
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    const checkRole = () => {
+      try {
+        const raw = localStorage.getItem('jaago_user');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          const rawRole = (parsed.role || (Array.isArray(parsed.roles) ? parsed.roles[0] : '') || 'USER').toString();
+          const rawRoleUpper = rawRole.toUpperCase();
+          const superAdmin =
+            parsed.isSuperAdmin === true ||
+            rawRoleUpper === 'SUPER_ADMIN' ||
+            rawRole.toLowerCase() === 'super_admin' ||
+            parsed.email?.toLowerCase().includes('nasif.kamal');
+
+          const admin =
+            superAdmin ||
+            rawRoleUpper === 'ADMIN' ||
+            rawRoleUpper === 'HR_MANAGER' ||
+            rawRoleUpper === 'HR_ADMIN' ||
+            rawRole.toLowerCase() === 'admin' ||
+            rawRole.toLowerCase() === 'hr_manager' ||
+            rawRole.toLowerCase() === 'coordinator';
+
+          setIsSuperAdmin(Boolean(superAdmin));
+          setIsAdmin(Boolean(admin));
+        }
+      } catch {}
+    };
+
+    checkRole();
+    window.addEventListener('jaago_user_updated', checkRole);
+    window.addEventListener('storage', checkRole);
+    return () => {
+      window.removeEventListener('jaago_user_updated', checkRole);
+      window.removeEventListener('storage', checkRole);
+    };
+  }, []);
 
   const toggleSection = (key: string) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -405,131 +445,133 @@ export function DashboardSidebar({
           )}
 
           {/* ═══════════════════════════════════════════════════════════ */}
-          {/* ── 3. SETTINGS ACCORDION ─────────────────────────────────  */}
+          {/* ── 3. SETTINGS ACCORDION (Admin / Super Admin Only) ─────── */}
           {/* ═══════════════════════════════════════════════════════════ */}
-          <div className="space-y-1 pt-2 border-t border-sidebar-border">
-            <button
-              onClick={() => toggleSection('settings')}
-              title="Settings"
-              className={`w-full flex items-center ${
-                collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
-              } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition cursor-pointer`}
-            >
-              <div className="flex items-center space-x-2.5">
-                <Settings className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
-                {!collapsed && <span>Settings</span>}
-              </div>
-              {!collapsed && (
-                openSections['settings'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
-              )}
-            </button>
+          {(isAdmin || isSuperAdmin) && (
+            <div className="space-y-1 pt-2 border-t border-sidebar-border">
+              <button
+                onClick={() => toggleSection('settings')}
+                title="Settings"
+                className={`w-full flex items-center ${
+                  collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
+                } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition cursor-pointer`}
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Settings className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
+                  {!collapsed && <span>Settings</span>}
+                </div>
+                {!collapsed && (
+                  openSections['settings'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />
+                )}
+              </button>
 
-            {openSections['settings'] && !collapsed && (
-              <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
-                <Link
-                  href="/admin/users"
-                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    pathname === '/admin/users'
-                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
-                  } transition`}
-                >
-                  <Users className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>User Management</span>
-                </Link>
-                <Link
-                  href="/admin/gps-coordinates"
-                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    pathname === '/admin/gps-coordinates'
-                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
-                  } transition`}
-                >
-                  <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>GPS Coordinates</span>
-                </Link>
-                <Link
-                  href="/admin/modules"
-                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    pathname === '/admin/modules'
-                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
-                  } transition`}
-                >
-                  <Boxes className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>Modules Manager</span>
-                </Link>
-                <Link
-                  href="/admin/studio"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
-                >
-                  <Wand2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>Studio-lite Builder</span>
-                </Link>
-                <Link
-                  href="/admin/control-center"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
-                >
-                  <Cpu className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>Control Center</span>
-                </Link>
-                <Link
-                  href="/admin/logs"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
-                >
-                  <Activity className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>System Logs</span>
-                </Link>
-                <Link
-                  href="/admin/api-keys"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
-                >
-                  <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>API Settings</span>
-                </Link>
-                <Link
-                  href="/admin/integrations"
-                  className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
-                >
-                  <Bot className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                  <span>AI Agent &amp; Integrations</span>
-                </Link>
-                <Link
-                  href="/admin/rbac"
-                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    pathname === '/admin/rbac'
-                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
-                  } transition`}
-                >
-                  <Shield className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
-                  <span>RBAC Matrix</span>
-                </Link>
-                <Link
-                  href="/admin/email"
-                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    pathname?.startsWith('/admin/email')
-                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
-                  } transition`}
-                >
-                  <Mail className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
-                  <span>Email / SMTP Settings</span>
-                </Link>
-                <Link
-                  href="/admin/about"
-                  className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
-                    pathname === '/admin/about'
-                      ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                      : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
-                  } transition`}
-                >
-                  <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>About JAAGO HUB</span>
-                </Link>
-              </div>
-            )}
-          </div>
+              {openSections['settings'] && !collapsed && (
+                <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
+                  <Link
+                    href="/admin/users"
+                    className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      pathname === '/admin/users'
+                        ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                    } transition`}
+                  >
+                    <Users className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>User Management</span>
+                  </Link>
+                  <Link
+                    href="/admin/gps-coordinates"
+                    className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      pathname === '/admin/gps-coordinates'
+                        ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                    } transition`}
+                  >
+                    <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>GPS Coordinates</span>
+                  </Link>
+                  <Link
+                    href="/admin/modules"
+                    className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      pathname === '/admin/modules'
+                        ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                    } transition`}
+                  >
+                    <Boxes className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>Modules Manager</span>
+                  </Link>
+                  <Link
+                    href="/admin/studio"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  >
+                    <Wand2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span>Studio-lite Builder</span>
+                  </Link>
+                  <Link
+                    href="/admin/control-center"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  >
+                    <Cpu className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span>Control Center</span>
+                  </Link>
+                  <Link
+                    href="/admin/logs"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  >
+                    <Activity className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span>System Logs</span>
+                  </Link>
+                  <Link
+                    href="/admin/api-keys"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  >
+                    <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span>API Settings</span>
+                  </Link>
+                  <Link
+                    href="/admin/integrations"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                  >
+                    <Bot className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span>AI Agent &amp; Integrations</span>
+                  </Link>
+                  <Link
+                    href="/admin/rbac"
+                    className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      pathname === '/admin/rbac'
+                        ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                    } transition`}
+                  >
+                    <Shield className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+                    <span>RBAC Matrix</span>
+                  </Link>
+                  <Link
+                    href="/admin/email"
+                    className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      pathname?.startsWith('/admin/email')
+                        ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                    } transition`}
+                  >
+                    <Mail className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+                    <span>Email / SMTP Settings</span>
+                  </Link>
+                  <Link
+                    href="/admin/about"
+                    className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      pathname === '/admin/about'
+                        ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                    } transition`}
+                  >
+                    <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
+                    <span>About JAAGO HUB</span>
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
         </nav>
       </div>
 

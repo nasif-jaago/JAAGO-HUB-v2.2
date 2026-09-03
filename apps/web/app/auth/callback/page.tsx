@@ -7,6 +7,7 @@ import { Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import {
   getSupabase,
   isAllowedWorkDomain,
+  buildUserSessionPayload,
 } from '@/lib/supabase-auth';
 
 export default function AuthCallbackPage() {
@@ -119,17 +120,7 @@ export default function AuthCallbackPage() {
       }
 
       // Store in localStorage
-      const userPayload = {
-        id: session.user.id,
-        email: session.user.email,
-        fullName: session.user.user_metadata?.['full_name'] || session.user.user_metadata?.['name'] || email,
-        avatarUrl: session.user.user_metadata?.['avatar_url'] || session.user.user_metadata?.['picture'] || '',
-        jobTitle: 'Coordinator',
-        organizationName: 'JAAGO Foundation Trust',
-        organizationId: session.user.user_metadata?.['organization_id'] || 'org-jaago-dhaka',
-        roles: ['super_admin', 'coordinator'],
-        permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
-      };
+      const userPayload = buildUserSessionPayload(session.user);
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('jaago_access_token', session.access_token);

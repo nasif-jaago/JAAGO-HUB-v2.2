@@ -33,14 +33,42 @@ export async function validateAccessToken(token: string): Promise<UserSession> {
     if (!error && data?.user) {
       const user = data.user;
       const userMetadata = user.user_metadata || {};
+      const rawRole = (userMetadata['role'] || (Array.isArray(userMetadata['roles']) ? userMetadata['roles'][0] : '') || 'USER').toString();
+      const rawRoleUpper = rawRole.toUpperCase();
+      const isSuper =
+        rawRoleUpper === 'SUPER_ADMIN' ||
+        rawRole.toLowerCase() === 'super_admin' ||
+        userMetadata['is_super_admin'] === true ||
+        user.email?.toLowerCase().includes('nasif.kamal') === true;
+
+      const isAdmin =
+        isSuper ||
+        rawRoleUpper === 'ADMIN' ||
+        rawRoleUpper === 'HR_MANAGER' ||
+        rawRoleUpper === 'HR_ADMIN' ||
+        rawRole.toLowerCase() === 'admin' ||
+        rawRole.toLowerCase() === 'hr_manager' ||
+        rawRole.toLowerCase() === 'coordinator';
+
+      const roles = userMetadata['roles'] || (isSuper
+        ? ['super_admin', 'coordinator']
+        : isAdmin
+        ? ['admin', rawRole.toLowerCase()]
+        : ['user']);
+
+      const permissions = userMetadata['permissions'] || (isSuper
+        ? ['*']
+        : isAdmin
+        ? ['hr.*', 'finance.*', 'pnc.*', 'attendance.*', 'leaves.*', 'directory.*', 'system.*']
+        : ['self.attendance', 'self.leaves', 'self.profile', 'self.requests']);
 
       return {
         userId: user.id,
         email: user.email || '',
         organizationId: userMetadata['organization_id'] || 'org-jaago-dhaka',
-        roles: userMetadata['roles'] || ['super_admin', 'coordinator'],
-        permissions: userMetadata['permissions'] || ['system.*', 'hr.*', 'finance.*', 'pnc.*'],
-        isSuperAdmin: userMetadata['is_super_admin'] === true || user.email?.includes('nasif.kamal') === true,
+        roles,
+        permissions,
+        isSuperAdmin: isSuper,
         mfaVerified: Boolean(user.app_metadata?.['aal'] === 'aal2'),
       };
     }

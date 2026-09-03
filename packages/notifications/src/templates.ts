@@ -22,7 +22,7 @@ export function renderEmployeeWelcomeEmail(params: EmployeeWelcomeEmailParams): 
   const orgName = params.organizationName || 'JAAGO Foundation Trust';
   const supportEmail = params.supportEmail || 'pnc@jaago.com.bd';
   const itHelpdesk = params.itHelpdeskEmail || 'it-support@jaago.com.bd';
-  const subject = `Welcome to JAAGO HUB — Official Account Credentials for ${params.employeeName}`;
+  const subject = `Welcome to JAAGO HUB — Account Invitation & Credentials for ${params.employeeName}`;
   const year = new Date().getFullYear();
 
   const html = `

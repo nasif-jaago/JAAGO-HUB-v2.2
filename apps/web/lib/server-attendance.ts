@@ -286,23 +286,33 @@ export async function resolveCanonicalEmployeeId(rawIdOrCode: string): Promise<s
 
   if (byCode?.id) return byCode.id;
 
-  // Try trimmed / sanitized code
+  // Try trimmed / sanitized exact code
   const trimmed = rawIdOrCode.trim();
   const { data: byTrimmedCode } = await supabase
     .from('employees')
     .select('id')
-    .or(`code.ilike.%${trimmed}%,name.ilike.%${trimmed}%`)
-    .limit(1)
+    .eq('code', trimmed)
     .maybeSingle();
 
   if (byTrimmedCode?.id) return byTrimmedCode.id;
 
-  // Default fallback to first active employee (Nasif Kamal)
-  const { data: defaultEmp } = await supabase
+  // Try work email lookup
+  const { data: byEmail } = await supabase
     .from('employees')
     .select('id')
-    .limit(1)
+    .ilike('work_email', trimmed)
     .maybeSingle();
 
-  return defaultEmp?.id || '71a38594-d803-4e6d-b6e9-79767a16c4c6';
+  if (byEmail?.id) return byEmail.id;
+
+  // Try exact full name lookup
+  const { data: byExactName } = await supabase
+    .from('employees')
+    .select('id')
+    .ilike('name', trimmed)
+    .maybeSingle();
+
+  if (byExactName?.id) return byExactName.id;
+
+  return rawIdOrCode;
 }
