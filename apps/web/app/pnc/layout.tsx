@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase-auth';
@@ -30,6 +31,11 @@ import {
   Menu,
 } from 'lucide-react';
 
+import {
+  fetchOrganizationsFromSupabase,
+  OrganizationEntity,
+} from '@/lib/supabase-organization';
+
 export type ThemeMode = 'dark' | 'light' | 'espresso';
 
 export default function PnCLayout({
@@ -41,6 +47,37 @@ export default function PnCLayout({
   const [theme, setTheme] = useState<ThemeMode>('dark');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Global Organization Selector in Header
+  const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
+  const [selectedOrg, setSelectedOrg] = useState<string>('ALL');
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('jaago_selected_org');
+      if (saved) setSelectedOrg(saved);
+    } catch {}
+
+    fetchOrganizationsFromSupabase().then((orgs) => {
+      if (orgs) setOrganizations(orgs);
+    });
+
+    const handleOrgSync = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail) setSelectedOrg(detail);
+    };
+
+    window.addEventListener('jaago_org_changed', handleOrgSync);
+    return () => window.removeEventListener('jaago_org_changed', handleOrgSync);
+  }, []);
+
+  const handleOrgChange = (newOrg: string) => {
+    setSelectedOrg(newOrg);
+    try {
+      localStorage.setItem('jaago_selected_org', newOrg);
+    } catch {}
+    window.dispatchEvent(new CustomEvent('jaago_org_changed', { detail: newOrg }));
+  };
 
   // Active Authenticated User Session
   const [currentUser, setCurrentUser] = useState<{
@@ -243,7 +280,22 @@ export default function PnCLayout({
 
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden">
+    <div className="min-h-screen bg-transparent text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden">
+      {/* ── Global Fullscreen Background (JAAGO School Children) ── */}
+      <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden pointer-events-none select-none bg-black">
+        <Image
+          src="/pnc-bg-children.jpg"
+          alt="JAAGO Children Background"
+          fill
+          priority
+          sizes="100vw"
+          quality={95}
+          className="object-cover object-center w-full h-full opacity-85"
+        />
+        {/* Subtle Dark Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
+      </div>
+
       {/* ── Left Edge Hit Sensor Panel (Hovering here opens sidebar) ── */}
       <div
         onMouseEnter={handleMouseEnter}
@@ -792,7 +844,27 @@ export default function PnCLayout({
             </div>
           </div>
 
-          <div className="flex items-center space-x-1.5 sm:space-x-3">
+          <div className="flex items-center space-x-1.5 sm:space-x-2.5">
+            {/* Organization Switcher Dropdown in Top Header */}
+            <div className="relative">
+              <select
+                value={selectedOrg}
+                onChange={(e) => handleOrgChange(e.target.value)}
+                className="appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border border-border/80 rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition cursor-pointer shadow-sm max-w-[200px] sm:max-w-[260px] truncate"
+              >
+                <option value="ALL" className="bg-popover text-popover-foreground font-bold">
+                  All Organizations (Consolidated)
+                </option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.name} className="bg-popover text-popover-foreground">
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+              <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+
             {/* Theme Mode Switcher (3-Way: Dark / Light / Espresso) */}
             <button
               onClick={cycleTheme}
