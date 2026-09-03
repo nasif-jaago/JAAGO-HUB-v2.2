@@ -31,8 +31,10 @@ import {
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
 import { hasPermission } from '@/lib/rbac-guard';
+import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
 
 export default function TeamsPage() {
+  const { selectedOrg } = useOrganizationScope();
   const [teams, setTeams] = useState<TeamItem[]>([]);
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -326,6 +328,19 @@ export default function TeamsPage() {
       if (isArchived) return false;
     }
 
+    if (selectedOrg && selectedOrg !== 'ALL') {
+      const dept = departments.find(
+        (d) => d.name === t.departmentOrProject || d.id === t.departmentOrProject
+      );
+      const orgName = dept?.organizationName || '';
+      const hasMemberInOrg = (t.members || []).some((m) => {
+        const emp = employees.find((e) => e.code === m.employeeCode || e.id === m.employeeId);
+        return matchesSelectedOrg(emp?.organization, selectedOrg);
+      });
+      if (orgName && !matchesSelectedOrg(orgName, selectedOrg) && !hasMemberInOrg) {
+        return false;
+      }
+    }
     if (selectedDeptFilter && !t.departmentOrProject?.toLowerCase().includes(selectedDeptFilter.toLowerCase())) {
       return false;
     }

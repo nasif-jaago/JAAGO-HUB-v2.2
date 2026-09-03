@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Plus,
@@ -27,8 +27,10 @@ import {
   DepartmentItem,
   ProjectItem,
 } from '@/lib/supabase-organization';
+import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
 
 export default function LeaveAllocationsPage() {
+  const { selectedOrg } = useOrganizationScope();
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [departmentsList, setDepartmentsList] = useState<DepartmentItem[]>([]);
@@ -319,8 +321,20 @@ export default function LeaveAllocationsPage() {
     showToastMsg(`Allocated leave quotas to ${itemsToSave.length} employees successfully`);
   };
 
+  const empCodeToOrg = useMemo(() => {
+    const map = new Map<string, string>();
+    employees.forEach((e) => {
+      if (e.code) map.set(e.code, e.organization || '');
+    });
+    return map;
+  }, [employees]);
+
   // Filtered Table List
   const filtered = allocations.filter((item) => {
+    if (selectedOrg && selectedOrg !== 'ALL') {
+      const org = empCodeToOrg.get(item.employeeCode);
+      if (!matchesSelectedOrg(org, selectedOrg)) return false;
+    }
     if (selectedDeptFilter && item.department !== selectedDeptFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();

@@ -105,7 +105,15 @@ export default function PnCEmployeesPage() {
   const [selectedProfile, setSelectedProfile] = useState<FullEmployeeProfile | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedOrg, setSelectedOrg] = useState('');
+  const [selectedOrg, setSelectedOrg] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('jaago_selected_org');
+        if (saved && saved !== 'ALL') return saved;
+      } catch {}
+    }
+    return '';
+  });
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
@@ -544,11 +552,17 @@ export default function PnCEmployeesPage() {
       });
     };
 
+    const handleOrgChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setSelectedOrg(detail === 'ALL' || !detail ? '' : detail);
+    };
+
     window.addEventListener('jaago_entity_renamed', handleEntityRenamed);
     window.addEventListener('jaago_entity_updated', handleEntityUpdated);
     window.addEventListener('jaago_user_revoked', handleUserRevoked);
     window.addEventListener('jaago_user_updated', checkRbac);
     window.addEventListener('jaago_rbac_updated', checkRbac);
+    window.addEventListener('jaago_org_changed', handleOrgChanged);
     window.addEventListener('storage', handleStorageChange);
     return () => {
       window.removeEventListener('jaago_entity_renamed', handleEntityRenamed);
@@ -556,6 +570,7 @@ export default function PnCEmployeesPage() {
       window.removeEventListener('jaago_user_revoked', handleUserRevoked);
       window.removeEventListener('jaago_user_updated', checkRbac);
       window.removeEventListener('jaago_rbac_updated', checkRbac);
+      window.removeEventListener('jaago_org_changed', handleOrgChanged);
       window.removeEventListener('storage', handleStorageChange);
     };
   }, []);

@@ -45,6 +45,7 @@ import {
 } from '@/lib/supabase-organization';
 import { resizeAndCropImage } from '@/lib/supabase-storage';
 import { hasPermission } from '@/lib/rbac-guard';
+import { matchesSelectedOrg } from '@/lib/use-organization-scope';
 
 type PolicyCategory = 'ALL' | 'GENERAL' | 'LEAVE' | 'ATTENDANCE' | 'CODE OF CONDUCT' | 'TRAVEL' | 'EXPENSES' | 'OTHER';
 
@@ -98,26 +99,21 @@ export default function OrganizationPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Load from Supabase and RBAC on mount
+  // RBAC Permission Check & Fetch Orgs
   useEffect(() => {
     const checkRbac = () => {
       try {
-        const userStr = localStorage.getItem('jaago_user');
+        const userStr = typeof window !== 'undefined' ? localStorage.getItem('jaago_user') : null;
         if (userStr) {
           const parsed = JSON.parse(userStr);
-          const rawRole = (parsed.role || (Array.isArray(parsed.roles) ? parsed.roles[0] : '') || 'USER').toString();
-          const rawRoleUpper = rawRole.toUpperCase();
           const isSuper =
             parsed.isSuperAdmin === true ||
-            rawRoleUpper === 'SUPER_ADMIN' ||
-            rawRole.toLowerCase() === 'super_admin' ||
+            parsed.role === 'SUPER_ADMIN' ||
+            parsed.role === 'super_admin' ||
             Boolean(parsed.email && parsed.email.toLowerCase().includes('nasif.kamal'));
 
-          const view = isSuper || hasPermission('org.entities.view', parsed);
-          const manage = isSuper || hasPermission('org.entities.manage', parsed);
-
-          setCanViewOrg(view);
-          setCanManageOrg(manage);
+          setCanViewOrg(isSuper || hasPermission('pnc.org.view', parsed));
+          setCanManageOrg(isSuper || hasPermission('pnc.org.manage', parsed));
           setRbacLoaded(true);
         } else {
           setRbacLoaded(true);
@@ -132,12 +128,35 @@ export default function OrganizationPage() {
     window.addEventListener('jaago_rbac_updated', checkRbac);
 
     fetchOrganizationsFromSupabase().then((orgs) => {
-      if (orgs) setOrganizations(orgs);
+      if (orgs && orgs.length > 0) {
+        setOrganizations(orgs);
+        const globalSavedOrg = typeof window !== 'undefined' ? localStorage.getItem('jaago_selected_org') : null;
+        if (globalSavedOrg && globalSavedOrg !== 'ALL') {
+          const match = orgs.find((o) => matchesSelectedOrg(o.name, globalSavedOrg));
+          if (match) setSelectedOrg(match);
+          else setSelectedOrg(orgs[0] || null);
+        } else {
+          setSelectedOrg(orgs[0] || null);
+        }
+      }
     });
+
+    const handleOrgChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail !== 'ALL') {
+        setOrganizations((currentOrgs) => {
+          const match = currentOrgs.find((o) => matchesSelectedOrg(o.name, detail));
+          if (match) setSelectedOrg(match);
+          return currentOrgs;
+        });
+      }
+    };
+    window.addEventListener('jaago_org_changed', handleOrgChanged);
 
     return () => {
       window.removeEventListener('jaago_user_updated', checkRbac);
       window.removeEventListener('jaago_rbac_updated', checkRbac);
+      window.removeEventListener('jaago_org_changed', handleOrgChanged);
     };
   }, []);
 

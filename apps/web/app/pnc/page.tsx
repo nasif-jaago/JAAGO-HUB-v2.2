@@ -58,6 +58,7 @@ import {
   fetchDepartmentsFromSupabase,
   OrganizationEntity,
 } from '@/lib/supabase-organization';
+import { matchesSelectedOrg } from '@/lib/use-organization-scope';
 import { EmployeeProfileDetail } from '@/components/pnc/employee-profile-detail';
 
 type DateRangePreset = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'MTD' | 'YTD' | 'CUSTOM';
@@ -368,10 +369,8 @@ export default function PnCDashboardPage() {
 
   // Filtered Employees based on Organization
   const filteredEmployees = useMemo(() => {
-    if (selectedOrg === 'ALL') return employees;
-    return employees.filter(
-      (e) => (e.organization || '').toLowerCase() === selectedOrg.toLowerCase()
-    );
+    if (selectedOrg === 'ALL' || !selectedOrg) return employees;
+    return employees.filter((e) => matchesSelectedOrg(e.organization, selectedOrg));
   }, [employees, selectedOrg]);
 
   // Total Headcount & Active Status

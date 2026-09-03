@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   User,
   Plus,
@@ -22,8 +22,10 @@ import {
   deleteMultipleLocalAttendanceLogs,
 } from '@/lib/supabase-attendance';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
+import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
 
 export default function AttendanceLogsPage() {
+  const { selectedOrg } = useOrganizationScope();
   const [logs, setLogs] = useState<AttendanceLogItem[]>([]);
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -232,8 +234,21 @@ export default function AttendanceLogsPage() {
     );
   };
 
+  const empCodeToOrg = useMemo(() => {
+    const map = new Map<string, string>();
+    employees.forEach((e) => {
+      if (e.code) map.set(e.code, e.organization || '');
+    });
+    return map;
+  }, [employees]);
+
   // Filter computation
   const filteredLogs = logs.filter((log) => {
+    if (selectedOrg && selectedOrg !== 'ALL') {
+      const org = empCodeToOrg.get(log.employeeCode);
+      if (!matchesSelectedOrg(org, selectedOrg)) return false;
+    }
+
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       !q ||

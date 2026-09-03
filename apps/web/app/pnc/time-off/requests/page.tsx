@@ -24,6 +24,7 @@ import {
   LeaveAllocationItem,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
+import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
 
 const LEAVE_TYPES: LeaveType[] = [
   'Casual Leave',
@@ -37,6 +38,7 @@ const LEAVE_TYPES: LeaveType[] = [
 ];
 
 export default function LeaveRequestsPage() {
+  const { selectedOrg } = useOrganizationScope();
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -235,26 +237,43 @@ export default function LeaveRequestsPage() {
   };
 
   // Filtered Employee List for Search in Modal
+  const empCodeToOrg = useMemo(() => {
+    const map = new Map<string, string>();
+    employees.forEach((e) => {
+      if (e.code) map.set(e.code, e.organization || '');
+    });
+    return map;
+  }, [employees]);
+
+  const scopedRequests = useMemo(() => {
+    if (!selectedOrg || selectedOrg === 'ALL') return requests;
+    return requests.filter((r) => {
+      const org = empCodeToOrg.get(r.employeeCode);
+      return matchesSelectedOrg(org, selectedOrg);
+    });
+  }, [requests, empCodeToOrg, selectedOrg]);
+
   const modalFilteredEmployees = useMemo(() => {
-    if (!empSearchInput.trim()) return employees.slice(0, 15);
+    const orgScoped = employees.filter((e) => matchesSelectedOrg(e.organization, selectedOrg));
+    if (!empSearchInput.trim()) return orgScoped.slice(0, 15);
     const q = empSearchInput.toLowerCase();
-    return employees.filter(
+    return orgScoped.filter(
       (e) =>
         e.name?.toLowerCase().includes(q) ||
         e.code?.toLowerCase().includes(q) ||
         e.department?.toLowerCase().includes(q)
     );
-  }, [employees, empSearchInput]);
+  }, [employees, empSearchInput, selectedOrg]);
 
   // Counts
-  const totalCount = requests.length;
-  const pendingCount = requests.filter((r) => r.status === 'Pending').length;
-  const approvedCount = requests.filter((r) => r.status === 'Approved').length;
-  const rejectedCount = requests.filter((r) => r.status === 'Rejected').length;
+  const totalCount = scopedRequests.length;
+  const pendingCount = scopedRequests.filter((r) => r.status === 'Pending').length;
+  const approvedCount = scopedRequests.filter((r) => r.status === 'Approved').length;
+  const rejectedCount = scopedRequests.filter((r) => r.status === 'Rejected').length;
 
   // Filtered Requests for List View
   const filteredRequests = useMemo(() => {
-    return requests.filter((req) => {
+    return scopedRequests.filter((req) => {
       if (selectedTab === 'PENDING' && req.status !== 'Pending') return false;
       if (selectedTab === 'APPROVED' && req.status !== 'Approved') return false;
       if (selectedTab === 'REJECTED' && req.status !== 'Rejected') return false;
@@ -272,7 +291,7 @@ export default function LeaveRequestsPage() {
       }
       return true;
     });
-  }, [requests, selectedTab, searchQuery]);
+  }, [scopedRequests, selectedTab, searchQuery]);
 
   // Badge Color Helper for Leave Categories
   const getCategoryBadge = (type: LeaveType) => {
