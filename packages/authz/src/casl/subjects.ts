@@ -36,9 +36,30 @@ export const SUBJECT_NAMES = [
   // Payroll & Accounting
   'Payroll',
   'SalaryStructure',
+  'Payslip',
   'JournalEntry',
   'AccountLedger',
   'Budget',
+
+  // Performance & Appraisals
+  'Appraisal',
+  'AppraisalCycle',
+  'KpiGoal',
+
+  // Requests Central Hub
+  'GeneralRequest',
+
+  // Reports & Analytics
+  'ReportAnalytics',
+
+  // Announcements & Circulars
+  'Announcement',
+
+  // Infrastructure & Biotime Devices
+  'GpsLocation',
+  'EmailTemplate',
+  'SmtpSetting',
+  'BiotimeDevice',
 
   // Operations & Projects
   'Project',

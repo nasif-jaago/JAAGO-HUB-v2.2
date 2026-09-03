@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logger } from '@jaago/logger';
 import { getSupabaseAdminClient } from '@jaago/auth';
 import { usersDatabase, deleteUsersByIds, UserItem } from '@/lib/users-db';
+import { normalizeRoleKey } from '@/lib/rbac-data';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -100,14 +101,8 @@ export async function GET(request: Request) {
   }
 
   if (role !== 'all') {
-    const roleLower = role.toLowerCase();
-    filtered = filtered.filter((u) => {
-      const uRoleLower = (u.role || '').toLowerCase();
-      if (roleLower === 'user') {
-        return uRoleLower === 'user' || uRoleLower === 'officer';
-      }
-      return uRoleLower === roleLower;
-    });
+    const targetNorm = normalizeRoleKey(role);
+    filtered = filtered.filter((u) => normalizeRoleKey(u.role) === targetNorm);
   }
 
   if (status !== 'all') {

@@ -161,15 +161,89 @@ export function createAppAbility(context: UserAuthzContext): AppAbility {
   if (permissions.has('payroll.view_all') || permissions.has('payroll.*')) {
     can('read', 'Payroll');
   }
+  if (permissions.has('payroll.view_own')) {
+    can('read', 'Payslip', { user_id: context.userId });
+  }
   if (permissions.has('payroll.manage_structures') || permissions.has('payroll.*')) {
     can('manage', 'SalaryStructure');
+    can('process', 'Payroll');
+  }
+  if (permissions.has('payroll.process')) {
     can('process', 'Payroll');
   }
   if (permissions.has('payroll.export')) {
     can('export', 'Payroll');
   }
 
-  // 8. System & User Administration
+  // 8. Performance Appraisals & KPIs
+  if (permissions.has('appraisals.view_own')) {
+    can('read', 'Appraisal', { user_id: context.userId });
+    can('read', 'KpiGoal', { user_id: context.userId });
+  }
+  if (permissions.has('appraisals.submit_own')) {
+    can('submit', 'Appraisal', { user_id: context.userId });
+  }
+  if (permissions.has('appraisals.view_dept') && context.departmentId) {
+    can('read', 'Appraisal', { department_id: context.departmentId });
+  }
+  if (permissions.has('appraisals.evaluate_dept') && context.departmentId) {
+    can('update', 'Appraisal', { department_id: context.departmentId });
+    can('approve', 'Appraisal', { department_id: context.departmentId });
+  }
+  if (permissions.has('appraisals.manage_cycles') || permissions.has('appraisals.*')) {
+    can('manage', 'AppraisalCycle');
+    can('manage', 'KpiGoal');
+  }
+  if (permissions.has('appraisals.approve_all')) {
+    can('approve', 'Appraisal');
+  }
+
+  // 9. Requests & Approvals Central Hub
+  if (permissions.has('requests.submit_own')) {
+    can('submit', 'GeneralRequest', { user_id: context.userId });
+  }
+  if (permissions.has('requests.view_own')) {
+    can('read', 'GeneralRequest', { user_id: context.userId });
+  }
+  if (permissions.has('requests.view_dept') && context.departmentId) {
+    can('read', 'GeneralRequest', { department_id: context.departmentId });
+  }
+  if (permissions.has('requests.approve_dept') && context.departmentId) {
+    can('approve', 'GeneralRequest', { department_id: context.departmentId });
+    can('reject', 'GeneralRequest', { department_id: context.departmentId });
+  }
+  if (permissions.has('requests.approve_all') || permissions.has('requests.*')) {
+    can('approve', 'GeneralRequest');
+    can('reject', 'GeneralRequest');
+  }
+
+  // 10. Reports & Executive Analytics
+  if (
+    permissions.has('reports.headcount.view') ||
+    permissions.has('reports.attendance.view') ||
+    permissions.has('reports.leave.view') ||
+    permissions.has('reports.finance.view') ||
+    permissions.has('reports.turnover.view') ||
+    permissions.has('reports.*')
+  ) {
+    can('read', 'ReportAnalytics');
+  }
+  if (permissions.has('reports.export')) {
+    can('export', 'ReportAnalytics');
+  }
+
+  // 11. Announcements & Broadcasts
+  if (permissions.has('announcements.view') || permissions.has('announcements.*')) {
+    can('read', 'Announcement');
+  }
+  if (permissions.has('announcements.create') || permissions.has('announcements.*')) {
+    can('create', 'Announcement');
+  }
+  if (permissions.has('announcements.manage')) {
+    can('manage', 'Announcement');
+  }
+
+  // 12. System & User Administration
   if (permissions.has('system.users.view') || permissions.has('system.*')) {
     can('read', 'User');
   }
@@ -194,8 +268,18 @@ export function createAppAbility(context: UserAuthzContext): AppAbility {
     can('manage', 'Integration');
     can('manage', 'Module');
   }
+  if (permissions.has('system.gps.manage')) {
+    can('manage', 'GpsLocation');
+  }
+  if (permissions.has('system.email.manage')) {
+    can('manage', 'EmailTemplate');
+    can('manage', 'SmtpSetting');
+  }
+  if (permissions.has('attendance.biotime.manage')) {
+    can('manage', 'BiotimeDevice');
+  }
 
-  // 9. Audit & Security
+  // 13. Audit & Security
   if (permissions.has('system.audit.view') || permissions.has('audit.*') || permissions.has('system.*')) {
     can('read', 'AuditLog');
   }
@@ -204,7 +288,7 @@ export function createAppAbility(context: UserAuthzContext): AppAbility {
     can('manage', 'AuditLog');
   }
 
-  // 10. AI / MCP Tool execution
+  // 14. AI / MCP Tool execution
   can('read', 'McpTool');
   if (permissions.has('ai.tools.execute') || isSuper) {
     can('process', 'McpTool');

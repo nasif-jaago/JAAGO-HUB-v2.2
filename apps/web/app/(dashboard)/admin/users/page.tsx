@@ -25,6 +25,7 @@ import {
   Check,
 } from 'lucide-react';
 import { EmployeeToUserModal } from '@/components/admin/employee-to-user-modal';
+import { INITIAL_ROLES, RoleItem, normalizeRoleKey, getRoleByNormalizedKey } from '@/lib/rbac-data';
 
 interface UserRecord {
   id: string;
@@ -45,6 +46,7 @@ interface UserRecord {
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<UserRecord[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<RoleItem[]>(INITIAL_ROLES);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -112,10 +114,21 @@ export default function UserManagementPage() {
       if (statusFilter !== 'all') params.set('status', statusFilter);
       if (departmentFilter !== 'all') params.set('department', departmentFilter);
 
-      const res = await fetch(`/api/v1/users?${params.toString()}`);
-      const data = await res.json();
+      const [usersRes, matrixRes] = await Promise.all([
+        fetch(`/api/v1/users?${params.toString()}`),
+        fetch('/api/v1/rbac/matrix').catch(() => null),
+      ]);
+
+      const data = await usersRes.json();
       if (data.data) {
         setUsers(data.data);
+      }
+
+      if (matrixRes && matrixRes.ok) {
+        const matrixData = await matrixRes.json();
+        if (matrixData.success && matrixData.data?.roles && Array.isArray(matrixData.data.roles)) {
+          setAvailableRoles(matrixData.data.roles);
+        }
       }
     } catch {
       // Keep existing users state if fetch error
@@ -598,13 +611,11 @@ export default function UserManagementPage() {
             className="px-3 py-2.5 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
           >
             <option value="all">All Roles</option>
-            <option value="Super Admin">Super Admin</option>
-            <option value="Manager">Manager</option>
-            <option value="Coordinator">Coordinator</option>
-            <option value="USER">User</option>
-            <option value="Staff">Staff</option>
-            <option value="Intern">Intern</option>
-            <option value="Volunteer">Volunteer</option>
+            {availableRoles.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.name}
+              </option>
+            ))}
           </select>
 
           {/* Status Filter */}
@@ -740,38 +751,44 @@ export default function UserManagementPage() {
 
                       {/* Role */}
                       <td className="p-4">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowEditRoleModal(user);
-                            setSelectedNewRole(
-                              user.role?.toUpperCase() === 'OFFICER' || user.role === 'Officer'
-                                ? 'USER'
-                                : user.role || 'USER'
-                            );
-                          }}
-                          title="Click to edit role"
-                          className={`group px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer hover:scale-105 active:scale-95 ${
-                            user.role?.toUpperCase().includes('SUPER') || user.role === 'Super Admin'
-                              ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30 hover:bg-purple-500/25 hover:border-purple-500/50'
-                              : user.role?.toUpperCase().includes('DIRECTOR') || user.role === 'Executive Director'
-                              ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/25'
-                              : user.role?.toUpperCase().includes('PNC_LEAD') || user.role === 'PNC Lead'
-                              ? 'bg-pink-500/15 text-pink-400 border border-pink-500/30 hover:bg-pink-500/25'
-                              : user.role?.toUpperCase().includes('PNC') || user.role === 'PNC Officer'
-                              ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25'
-                              : user.role?.toUpperCase().includes('MANAGER') || user.role === 'Manager'
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 hover:border-emerald-500/50'
-                              : user.role?.toUpperCase().includes('COORDINATOR') || user.role === 'Coordinator'
-                              ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30 hover:bg-teal-500/25 hover:border-teal-500/50'
-                              : user.role?.toUpperCase() === 'USER' || user.role?.toUpperCase() === 'OFFICER' || user.role === 'User' || user.role === 'Officer'
-                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 hover:border-amber-500/50'
-                              : 'bg-surface text-muted-foreground border border-border hover:bg-surface/80'
-                          }`}
-                        >
-                          <span>{user.role?.toUpperCase() === 'OFFICER' || user.role === 'Officer' ? 'USER' : user.role}</span>
-                          <Edit3 className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100 group-hover:text-primary transition" />
-                        </button>
+                        {(() => {
+                          const norm = normalizeRoleKey(user.role);
+                          const roleObj = availableRoles.find((r) => r.key === norm) || getRoleByNormalizedKey(user.role);
+                          const displayName = roleObj?.name || (norm === 'user' ? 'Employee / User' : user.role);
+
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowEditRoleModal(user);
+                                setSelectedNewRole(norm);
+                              }}
+                              title="Click to edit role"
+                              className={`group px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer hover:scale-105 active:scale-95 ${
+                                norm === 'super_admin'
+                                  ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 hover:bg-purple-500/25'
+                                  : norm === 'executive_director'
+                                  ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/25'
+                                  : norm === 'admin'
+                                  ? 'bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30 hover:bg-pink-500/25'
+                                  : norm === 'pnc_officer'
+                                  ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 hover:bg-blue-500/25'
+                                  : norm === 'dept_manager'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
+                                  : norm === 'finance_lead'
+                                  ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30 hover:bg-orange-500/25'
+                                  : norm === 'auditor'
+                                  ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/25'
+                                  : norm === 'cluster_head'
+                                  ? 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/30 hover:bg-teal-500/25'
+                                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25'
+                              }`}
+                            >
+                              <span>{displayName}</span>
+                              <Edit3 className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100 group-hover:text-primary transition" />
+                            </button>
+                          );
+                        })()}
                       </td>
 
                       {/* Department & Branch */}
@@ -1059,13 +1076,11 @@ export default function UserManagementPage() {
                     onChange={(e) => setNewUserForm({ ...newUserForm, role: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground focus:ring-1 focus:ring-primary"
                   >
-                    <option value="Super Admin">Super Admin</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Coordinator">Coordinator</option>
-                    <option value="USER">User</option>
-                    <option value="Staff">Staff</option>
-                    <option value="Intern">Intern</option>
-                    <option value="Volunteer">Volunteer</option>
+                    {availableRoles.map((r) => (
+                      <option key={r.key} value={r.key}>
+                        {r.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1201,12 +1216,11 @@ export default function UserManagementPage() {
                     onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground focus:ring-1 focus:ring-primary"
                   >
-                    <option value="USER">User</option>
-                    <option value="Staff">Staff</option>
-                    <option value="Coordinator">Coordinator</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Intern">Intern</option>
-                    <option value="Volunteer">Volunteer</option>
+                    {availableRoles.map((r) => (
+                      <option key={r.key} value={r.key}>
+                        {r.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1286,11 +1300,11 @@ export default function UserManagementPage() {
                     onChange={(e) => setBulkInviteRole(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground focus:ring-1 focus:ring-primary"
                   >
-                    <option value="USER">User</option>
-                    <option value="Staff">Staff</option>
-                    <option value="Coordinator">Coordinator</option>
-                    <option value="Intern">Intern</option>
-                    <option value="Volunteer">Volunteer</option>
+                    {availableRoles.map((r) => (
+                      <option key={r.key} value={r.key}>
+                        {r.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -1800,76 +1814,10 @@ export default function UserManagementPage() {
                   Select New Role Assignment:
                 </label>
                 <div className="space-y-2">
-                  {[
-                    {
-                      key: 'Super Admin',
-                      label: 'Super Admin',
-                      badgeClass: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
-                      description: 'Full master access to all system modules, configurations, databases, and RBAC matrix.',
-                    },
-                    {
-                      key: 'Executive Director',
-                      label: 'Executive Director',
-                      badgeClass: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
-                      description: 'Strategic organizational visibility, executive dashboards, audit access, and top-level approvals.',
-                    },
-                    {
-                      key: 'PNC Lead',
-                      label: 'People & Culture (HR) Lead',
-                      badgeClass: 'bg-pink-500/15 text-pink-400 border-pink-500/30',
-                      description: 'Full control over HR operations, employee management, attendance, leaves, and salary structures.',
-                    },
-                    {
-                      key: 'PNC Officer',
-                      label: 'People & Culture Officer',
-                      badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-                      description: 'HR staff handling employee records, shift scheduling, daily attendance logs, and leave review.',
-                    },
-                    {
-                      key: 'Manager',
-                      label: 'Department Manager',
-                      badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-                      description: 'Line manager overseeing department staff, shift rosters, leave approvals, and on-duty sign-off.',
-                    },
-                    {
-                      key: 'Coordinator',
-                      label: 'Coordinator',
-                      badgeClass: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
-                      description: 'Field & project coordinator managing project tasks, reports, and team movement workflows.',
-                    },
-                    {
-                      key: 'USER',
-                      label: 'User',
-                      badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-                      description: 'Standard user account with module operations and personal self-service portal requests.',
-                    },
-                    {
-                      key: 'Staff',
-                      label: 'Staff Member',
-                      badgeClass: 'bg-slate-500/15 text-slate-300 border-slate-500/30',
-                      description: 'Standard employee account for attendance logging, leave applications, and announcements.',
-                    },
-                    {
-                      key: 'Intern',
-                      label: 'Intern',
-                      badgeClass: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
-                      description: 'Limited internship access with department viewing and self-service attendance.',
-                    },
-                    {
-                      key: 'Volunteer',
-                      label: 'Volunteer (VBD)',
-                      badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
-                      description: 'Volunteer contributor account for events, activity tracking, and community logging.',
-                    },
-                  ].map((roleItem) => {
+                  {availableRoles.map((roleItem) => {
                     const isSelected =
                       selectedNewRole === roleItem.key ||
-                      selectedNewRole.toUpperCase() === roleItem.key.toUpperCase().replace(/ /g, '_') ||
-                      (roleItem.key === 'USER' &&
-                        (selectedNewRole?.toUpperCase() === 'USER' ||
-                          selectedNewRole?.toUpperCase() === 'OFFICER' ||
-                          selectedNewRole === 'User' ||
-                          selectedNewRole === 'Officer'));
+                      normalizeRoleKey(selectedNewRole) === roleItem.key;
 
                     return (
                       <div
@@ -1892,8 +1840,15 @@ export default function UserManagementPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="font-extrabold text-xs text-foreground">{roleItem.label}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${roleItem.badgeClass}`}>
+                            <span className="font-extrabold text-xs text-foreground">{roleItem.name}</span>
+                            <span
+                              className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border"
+                              style={{
+                                backgroundColor: `${roleItem.color}15`,
+                                color: roleItem.color,
+                                borderColor: `${roleItem.color}40`,
+                              }}
+                            >
                               {roleItem.key}
                             </span>
                           </div>

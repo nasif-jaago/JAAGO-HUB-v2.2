@@ -26,6 +26,7 @@ import {
   INITIAL_ROLES,
   RoleItem,
   PermissionModuleGroup,
+  normalizeRoleKey,
 } from '@/lib/rbac-data';
 
 interface UserRecord {
@@ -54,6 +55,7 @@ export default function AdminRbacPage() {
   const [roleSearchQuery, setRoleSearchQuery] = useState<string>('');
   const [permSearchQuery, setPermSearchQuery] = useState<string>('');
   const [selectedModuleKey, setSelectedModuleKey] = useState<string>('all');
+  const [actionFilter, setActionFilter] = useState<'all' | 'view' | 'create_edit' | 'approve' | 'export' | 'config'>('all');
   const [showDelegationGuide, setShowDelegationGuide] = useState<boolean>(true);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -176,6 +178,16 @@ export default function AdminRbacPage() {
   const activeRole = useMemo(() => {
     return roles.find((r) => r.key === selectedRoleKey) || roles[0];
   }, [roles, selectedRoleKey]);
+
+  // Active user counts dynamically mapped per role
+  const roleUserCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    usersList.forEach((u) => {
+      const norm = normalizeRoleKey(u.role);
+      map[norm] = (map[norm] || 0) + 1;
+    });
+    return map;
+  }, [usersList]);
 
   // Total permissions count
   const allPermissionsCount = useMemo(() => {
@@ -721,7 +733,10 @@ export default function AdminRbacPage() {
                     </div>
 
                     <div className="mt-1.5 pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span>{role.userCount || 0} user{(role.userCount || 0) === 1 ? '' : 's'}</span>
+                      <span>
+                        {roleUserCounts[role.key] || (role.key === 'super_admin' ? (roleUserCounts['super_admin'] || 1) : 0)} user
+                        {(roleUserCounts[role.key] || (role.key === 'super_admin' ? (roleUserCounts['super_admin'] || 1) : 0)) === 1 ? '' : 's'}
+                      </span>
                       <span>
                         {isSuper ? (
                           <strong className="text-amber-500">Root Access</strong>
@@ -789,45 +804,75 @@ export default function AdminRbacPage() {
               </div>
 
               {/* Search & Module filter row */}
-              <div className="flex gap-2 pt-2 border-t border-border/60">
-                <div className="relative flex-1">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Filter permissions..."
-                    value={permSearchQuery}
-                    onChange={(e) => setPermSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-background border border-border text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
-                  />
+              <div className="space-y-2 pt-2 border-t border-border/60">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search permissions, actions, or scopes (e.g. attendance, VIEW, EXPORT)..."
+                      value={permSearchQuery}
+                      onChange={(e) => setPermSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-background border border-border text-[11px] focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+                    />
+                  </div>
+
+                  <select
+                    value={selectedModuleKey}
+                    onChange={(e) => setSelectedModuleKey(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg bg-background border border-border text-[11px] font-medium text-foreground focus:outline-none"
+                  >
+                    <option value="all">All Modules ({permissionModules.length})</option>
+                    {permissionModules.map((m) => (
+                      <option key={m.moduleKey} value={m.moduleKey}>
+                        {m.moduleName} ({m.permissions.length})
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allExpanded = permissionModules.every((m) => expandedModules[m.moduleKey]);
+                      const next: Record<string, boolean> = {};
+                      permissionModules.forEach((m) => {
+                        next[m.moduleKey] = !allExpanded;
+                      });
+                      setExpandedModules(next);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-background hover:bg-accent border border-border text-[11px] font-semibold text-muted-foreground transition-all shrink-0"
+                  >
+                    {permissionModules.every((m) => expandedModules[m.moduleKey]) ? 'Collapse All' : 'Expand All'}
+                  </button>
                 </div>
 
-                <select
-                  value={selectedModuleKey}
-                  onChange={(e) => setSelectedModuleKey(e.target.value)}
-                  className="px-2.5 py-1.5 rounded-lg bg-background border border-border text-[11px] font-medium text-foreground focus:outline-none"
-                >
-                  <option value="all">All Modules ({permissionModules.length})</option>
-                  {permissionModules.map((m) => (
-                    <option key={m.moduleKey} value={m.moduleKey}>
-                      {m.moduleName}
-                    </option>
+                {/* Micro-Level Action Filter Tabs */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mr-1">
+                    Filter by Action:
+                  </span>
+                  {[
+                    { key: 'all', label: 'All Operations' },
+                    { key: 'view', label: 'View & Read (VIEW)' },
+                    { key: 'create_edit', label: 'Create & Modify' },
+                    { key: 'approve', label: 'Approvals (APPROVE)' },
+                    { key: 'export', label: 'Data Exports (EXPORT)' },
+                    { key: 'config', label: 'System & Config' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setActionFilter(tab.key as any)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                        actionFilter === tab.key
+                          ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                          : 'bg-background hover:bg-surface border border-border text-muted-foreground'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
                   ))}
-                </select>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const allExpanded = permissionModules.every((m) => expandedModules[m.moduleKey]);
-                    const next: Record<string, boolean> = {};
-                    permissionModules.forEach((m) => {
-                      next[m.moduleKey] = !allExpanded;
-                    });
-                    setExpandedModules(next);
-                  }}
-                  className="px-2.5 py-1.5 rounded-lg bg-background hover:bg-accent border border-border text-[11px] font-semibold text-muted-foreground transition-all shrink-0"
-                >
-                  {permissionModules.every((m) => expandedModules[m.moduleKey]) ? 'Collapse All' : 'Expand All'}
-                </button>
+                </div>
               </div>
             </div>
           )}
@@ -846,12 +891,20 @@ export default function AdminRbacPage() {
                   const isAllGranted = grantedCount === totalCount;
 
                   const filteredPerms = moduleGroup.permissions.filter((p) => {
+                    if (actionFilter === 'view' && p.actionType !== 'VIEW') return false;
+                    if (actionFilter === 'create_edit' && !['CREATE', 'EDIT', 'DELETE'].includes(p.actionType)) return false;
+                    if (actionFilter === 'approve' && p.actionType !== 'APPROVE') return false;
+                    if (actionFilter === 'export' && p.actionType !== 'EXPORT') return false;
+                    if (actionFilter === 'config' && !['CONFIG', 'MANAGE'].includes(p.actionType)) return false;
+
                     if (!permSearchQuery.trim()) return true;
                     const q = permSearchQuery.toLowerCase();
                     return (
                       p.name.toLowerCase().includes(q) ||
                       p.key.toLowerCase().includes(q) ||
-                      p.description.toLowerCase().includes(q)
+                      p.description.toLowerCase().includes(q) ||
+                      p.actionType.toLowerCase().includes(q) ||
+                      p.scope.toLowerCase().includes(q)
                     );
                   });
 
@@ -862,7 +915,7 @@ export default function AdminRbacPage() {
                       key={moduleGroup.moduleKey}
                       className="rounded-xl bg-card border border-border shadow-2xs overflow-hidden"
                     >
-                      {/* Module Block Header (Screenshot-styled with colored vertical bar) */}
+                      {/* Module Block Header */}
                       <div
                         onClick={() =>
                           setExpandedModules((prev) => ({
@@ -875,9 +928,9 @@ export default function AdminRbacPage() {
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="w-1 h-3.5 rounded-full bg-cyan-500 shrink-0" />
+                          <span className="w-1.5 h-4 rounded-full bg-amber-500 shrink-0" />
                           <span className="text-xs font-bold text-foreground">{moduleGroup.moduleName}</span>
-                          <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20">
+                          <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20">
                             {totalCount} PERMISSIONS
                           </span>
                         </div>
@@ -902,7 +955,7 @@ export default function AdminRbacPage() {
                         </div>
                       </div>
 
-                      {/* Permissions List with Compact Dual Toggles */}
+                      {/* Permissions List with Rich Micro-Labels & Dual Toggles */}
                       {isExpanded && (
                         <div className="divide-y divide-border/40 bg-background/40">
                           {filteredPerms.map((perm) => {
@@ -916,18 +969,60 @@ export default function AdminRbacPage() {
                             return (
                               <div
                                 key={perm.key}
-                                className="p-3 hover:bg-accent/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                                className="p-3 hover:bg-accent/20 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                               >
-                                {/* Left side: Permission Key & Role Inherited Badge */}
+                                {/* Left side: Micro-Labels & Description */}
                                 <div className="space-y-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-xs font-bold text-foreground">{perm.key}</span>
-                                    <span className="px-2 py-0.2 rounded-full text-[9px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/20 flex items-center gap-1">
-                                      <Shield className="w-2.5 h-2.5" />
-                                      ROLE INHERITED
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-mono font-bold text-foreground">{perm.key}</span>
+                                    
+                                    {/* Action Type Micro-Badge */}
+                                    <span
+                                      className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider border ${
+                                        perm.actionType === 'VIEW'
+                                          ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30'
+                                          : perm.actionType === 'CREATE'
+                                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                          : perm.actionType === 'EDIT'
+                                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                          : perm.actionType === 'DELETE'
+                                          ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                          : perm.actionType === 'APPROVE'
+                                          ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30'
+                                          : perm.actionType === 'EXPORT'
+                                          ? 'bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30'
+                                          : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
+                                      }`}
+                                    >
+                                      {perm.actionType}
                                     </span>
+
+                                    {/* Scope Micro-Badge */}
+                                    <span
+                                      className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider border ${
+                                        perm.scope === 'GLOBAL'
+                                          ? 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/25'
+                                          : perm.scope === 'DEPARTMENT'
+                                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
+                                          : perm.scope === 'OWN'
+                                          ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25'
+                                          : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25'
+                                      }`}
+                                    >
+                                      {perm.scope}
+                                    </span>
+
+                                    {isGranted && (
+                                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-300 border border-purple-500/20 flex items-center gap-1">
+                                        <Shield className="w-2.5 h-2.5" />
+                                        ROLE INHERITED
+                                      </span>
+                                    )}
                                   </div>
-                                  <div className="text-[11px] text-muted-foreground truncate">{perm.name} — {perm.description}</div>
+
+                                  <div className="text-[11px] text-muted-foreground leading-snug">
+                                    <strong className="text-foreground">{perm.name}</strong> &mdash; {perm.description}
+                                  </div>
                                 </div>
 
                                 {/* Right side: GRANT and RE-GRANT Toggle Switches */}

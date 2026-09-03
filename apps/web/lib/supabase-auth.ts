@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { normalizeRoleKey, getPermissionsForRole } from '@/lib/rbac-data';
 
 export const ALLOWED_WORK_DOMAINS = [
   '@jaago.com.bd',
@@ -116,29 +117,37 @@ export function buildUserSessionPayload(user: any): AppUserSession {
     meta['is_super_admin'] === true ||
     email.includes('nasif.kamal');
 
-  // Admin / HR Manager check
-  const isAdmin =
-    isSuper ||
-    rawRoleUpper === 'ADMIN' ||
-    rawRoleUpper === 'HR_MANAGER' ||
-    rawRoleUpper === 'HR_ADMIN' ||
-    rawRole.toLowerCase() === 'admin' ||
-    rawRole.toLowerCase() === 'hr_manager' ||
-    rawRole.toLowerCase() === 'coordinator';
+  // Normalized RBAC Role Key
+  const normKey = isSuper ? 'super_admin' : normalizeRoleKey(rawRole);
 
-  const canonicalRole = isSuper ? 'SUPER_ADMIN' : isAdmin ? 'ADMIN' : rawRoleUpper === 'OFFICER' ? 'USER' : rawRoleUpper;
+  const canonicalRole = isSuper
+    ? 'SUPER_ADMIN'
+    : normKey === 'admin'
+    ? 'ADMIN'
+    : normKey === 'executive_director'
+    ? 'EXECUTIVE_DIRECTOR'
+    : normKey === 'dept_manager'
+    ? 'DEPT_MANAGER'
+    : normKey === 'finance_lead'
+    ? 'FINANCE_LEAD'
+    : normKey === 'pnc_officer'
+    ? 'PNC_OFFICER'
+    : normKey === 'auditor'
+    ? 'AUDITOR'
+    : normKey === 'cluster_head'
+    ? 'CLUSTER_HEAD'
+    : 'USER';
 
   const roles = isSuper
     ? ['super_admin', 'coordinator']
-    : isAdmin
-    ? ['admin', rawRole.toLowerCase()]
-    : ['user'];
+    : normKey === 'admin'
+    ? ['admin', 'pnc_lead']
+    : [normKey];
 
+  // Dynamic RBAC Permissions from Central RBAC Matrix
   const permissions = isSuper
     ? ['*']
-    : isAdmin
-    ? ['hr.*', 'finance.*', 'pnc.*', 'attendance.*', 'leaves.*', 'directory.*', 'system.*']
-    : ['self.attendance', 'self.leaves', 'self.profile', 'self.requests'];
+    : getPermissionsForRole(normKey);
 
   return {
     id: user.id,
