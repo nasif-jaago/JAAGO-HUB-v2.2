@@ -31,10 +31,10 @@ import {
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
 import { hasPermission } from '@/lib/rbac-guard';
-import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
+import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
 
 export default function ProjectsPage() {
-  const { selectedOrg } = useOrganizationScope();
+  const { selectedOrg, selectedDept } = useOrganizationScope();
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
@@ -287,6 +287,10 @@ export default function ProjectsPage() {
     if (selectedOrg && selectedOrg !== 'ALL') {
       const orgName = prj.organizationName || organizations.find((o) => o.id === prj.organizationId)?.name;
       if (!matchesSelectedOrg(orgName, selectedOrg)) return false;
+    }
+    if (selectedDept && selectedDept !== 'ALL') {
+      const deptName = prj.parentDepartmentName || departments.find((d) => d.id === prj.parentDepartmentId)?.name;
+      if (!matchesSelectedDept(deptName, selectedDept)) return false;
     }
     if (selectedDeptFilter && prj.parentDepartmentId !== selectedDeptFilter) {
       return false;

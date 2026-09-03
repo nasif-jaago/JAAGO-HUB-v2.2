@@ -31,10 +31,10 @@ import {
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
 import { hasPermission } from '@/lib/rbac-guard';
-import { useOrganizationScope, matchesSelectedOrg } from '@/lib/use-organization-scope';
+import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
 
 export default function TeamsPage() {
-  const { selectedOrg } = useOrganizationScope();
+  const { selectedOrg, selectedDept } = useOrganizationScope();
   const [teams, setTeams] = useState<TeamItem[]>([]);
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -338,6 +338,19 @@ export default function TeamsPage() {
         return matchesSelectedOrg(emp?.organization, selectedOrg);
       });
       if (orgName && !matchesSelectedOrg(orgName, selectedOrg) && !hasMemberInOrg) {
+        return false;
+      }
+    }
+    if (selectedDept && selectedDept !== 'ALL') {
+      const dept = departments.find(
+        (d) => d.name === t.departmentOrProject || d.id === t.departmentOrProject
+      );
+      const deptName = dept?.name || t.departmentOrProject || '';
+      const hasMemberInDept = (t.members || []).some((m) => {
+        const emp = employees.find((e) => e.code === m.employeeCode || e.id === m.employeeId);
+        return matchesSelectedDept(emp?.department, selectedDept);
+      });
+      if (!matchesSelectedDept(deptName, selectedDept) && !hasMemberInDept) {
         return false;
       }
     }
