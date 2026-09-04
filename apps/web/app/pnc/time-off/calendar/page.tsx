@@ -23,7 +23,6 @@ import {
   matchesSelectedOrg,
   matchesSelectedDept,
   isDspDepartment,
-  isDspOnlyScoped,
 } from '@/lib/use-organization-scope';
 
 const MONTH_NAMES = [
@@ -67,7 +66,7 @@ export default function PnCLeaveCalendarPage() {
       const emp = empCodeToProfile.get(r.employeeCode);
       const org = emp?.organization || '';
       const dept = emp?.department || r.department || '';
-      if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept)) {
+      if (isDspScoped && !isDspDepartment(dept)) {
         return false;
       }
       return matchesSelectedOrg(org, selectedOrg) && matchesSelectedDept(dept, selectedDept);

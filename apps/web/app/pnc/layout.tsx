@@ -60,7 +60,6 @@ export default function PnCLayout({
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
 
   useEffect(() => {
-    setMounted(true);
     try {
       const savedOrg = localStorage.getItem('jaago_selected_org');
       if (savedOrg) setSelectedOrg(savedOrg);
@@ -150,7 +149,7 @@ export default function PnCLayout({
     window.dispatchEvent(new CustomEvent('jaago_org_changed', { detail: newOrg }));
   };
 
-  const [mounted, setMounted] = useState(false);
+  const [isDspScoped, setIsDspScoped] = useState(false);
 
   // Active Authenticated User Session
   const [currentUser, setCurrentUser] = useState<{
@@ -174,7 +173,13 @@ export default function PnCLayout({
     isAdmin: false,
   });
 
-  const isDspScoped = mounted ? isDspOnlyScoped(currentUser) : false;
+  useEffect(() => {
+    const dsp = isDspOnlyScoped(currentUser);
+    setIsDspScoped(dsp);
+    if (dsp) {
+      setSelectedDept('Digital School Program');
+    }
+  }, [currentUser]);
 
   const handleDeptChange = (newDept: string) => {
     if (isDspScoped) return;

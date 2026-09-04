@@ -29,7 +29,6 @@ import {
   matchesSelectedOrg,
   matchesSelectedDept,
   isDspDepartment,
-  isDspOnlyScoped,
 } from '@/lib/use-organization-scope';
 
 export default function AttendanceLogsPage() {
@@ -256,7 +255,7 @@ export default function AttendanceLogsPage() {
   }, [employees]);
 
   const availableEmployees = useMemo(() => {
-    if (isDspScoped || isDspOnlyScoped()) {
+    if (isDspScoped) {
       return employees.filter((e) => isDspDepartment(e.department, e.leaveGroup));
     }
     return employees;
@@ -268,7 +267,7 @@ export default function AttendanceLogsPage() {
     const org = emp?.organization || '';
     const dept = emp?.department || log.department || '';
 
-    if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept)) {
+    if (isDspScoped && !isDspDepartment(dept)) {
       return false;
     }
     if (!matchesSelectedOrg(org, selectedOrg)) return false;

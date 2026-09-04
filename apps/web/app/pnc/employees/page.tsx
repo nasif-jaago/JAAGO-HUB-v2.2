@@ -105,24 +105,8 @@ export default function PnCEmployeesPage() {
   const [selectedProfile, setSelectedProfile] = useState<FullEmployeeProfile | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedOrg, setSelectedOrg] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('jaago_selected_org');
-        if (saved && saved !== 'ALL') return saved;
-      } catch {}
-    }
-    return '';
-  });
-  const [selectedDept, setSelectedDept] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('jaago_selected_dept');
-        if (saved && saved !== 'ALL') return saved;
-      } catch {}
-    }
-    return '';
-  });
+  const [selectedOrg, setSelectedOrg] = useState<string>('');
+  const [selectedDept, setSelectedDept] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedDesignation, setSelectedDesignation] = useState('');
@@ -393,6 +377,13 @@ export default function PnCEmployeesPage() {
             setEmployees(parsed);
           }
         }
+      } catch {}
+
+      try {
+        const savedOrg = localStorage.getItem('jaago_selected_org');
+        if (savedOrg && savedOrg !== 'ALL') setSelectedOrg(savedOrg);
+        const savedDept = localStorage.getItem('jaago_selected_dept');
+        if (savedDept && savedDept !== 'ALL') setSelectedDept(savedDept);
       } catch {}
 
       checkRbac();

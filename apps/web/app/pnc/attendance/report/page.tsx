@@ -28,7 +28,6 @@ import {
   matchesSelectedOrg,
   matchesSelectedDept,
   isDspDepartment,
-  isDspOnlyScoped,
 } from '@/lib/use-organization-scope';
 import { TimePickerInput } from '@/components/ui/time-picker-input';
 
@@ -152,7 +151,7 @@ export default function AttendanceReportPage() {
     (targetDate: string, empList: FullEmployeeProfile[], leaves: LeaveRequestItem[] = []) => {
       const rawList = empList && empList.length > 0 ? empList : (FALLBACK_EMPLOYEES as FullEmployeeProfile[]);
       const listToUse = rawList.filter((emp) => {
-        if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(emp.department, emp.leaveGroup)) {
+        if (isDspScoped && !isDspDepartment(emp.department, emp.leaveGroup)) {
           return false;
         }
         return matchesSelectedOrg(emp.organization, selectedOrg) && matchesSelectedDept(emp.department, selectedDept);
@@ -588,18 +587,18 @@ export default function AttendanceReportPage() {
           <div>
             <select
               suppressHydrationWarning
-              value={isDspScoped || isDspOnlyScoped() ? 'Digital School Program' : departmentFilter}
+              value={isDspScoped ? 'Digital School Program' : departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
-              disabled={isDspScoped || isDspOnlyScoped()}
+              disabled={isDspScoped}
               className={`w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm ${
-                isDspScoped || isDspOnlyScoped() ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'
+                isDspScoped ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'
               }`}
             >
-              {!(isDspScoped || isDspOnlyScoped()) && <option value="">Department (All)</option>}
-              {!(isDspScoped || isDspOnlyScoped()) && <option value="Founder's Office">Founder&apos;s Office / FC</option>}
+              {!isDspScoped && <option value="">Department (All)</option>}
+              {!isDspScoped && <option value="Founder's Office">Founder&apos;s Office / FC</option>}
               <option value="Digital School Program">Digital School Program</option>
-              {!(isDspScoped || isDspOnlyScoped()) && <option value="Program Implementation">Program Implementation</option>}
-              {!(isDspScoped || isDspOnlyScoped()) && <option value="DSP Central Team">DSP Central Team</option>}
+              {!isDspScoped && <option value="Program Implementation">Program Implementation</option>}
+              {!isDspScoped && <option value="DSP Central Team">DSP Central Team</option>}
             </select>
           </div>
 

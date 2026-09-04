@@ -32,7 +32,6 @@ import {
   matchesSelectedOrg,
   matchesSelectedDept,
   isDspDepartment,
-  isDspOnlyScoped,
 } from '@/lib/use-organization-scope';
 
 export default function LeaveAllocationsPage() {
@@ -154,7 +153,7 @@ export default function LeaveAllocationsPage() {
 
   // Filter employees inside the Allocate Modal
   const modalFilteredEmployees = employees.filter((emp) => {
-    if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(emp.department, emp.leaveGroup)) {
+    if (isDspScoped && !isDspDepartment(emp.department, emp.leaveGroup)) {
       return false;
     }
     if (modalDeptFilter && emp.department !== modalDeptFilter) return false;
@@ -355,7 +354,7 @@ export default function LeaveAllocationsPage() {
     const org = emp?.organization || '';
     const dept = emp?.department || item.department || '';
 
-    if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept, item.leaveGroup)) {
+    if (isDspScoped && !isDspDepartment(dept, item.leaveGroup)) {
       return false;
     }
     if (!matchesSelectedOrg(org, selectedOrg)) return false;
@@ -375,7 +374,7 @@ export default function LeaveAllocationsPage() {
   });
 
   const departmentFilterOptions = useMemo(() => {
-    if (isDspScoped || isDspOnlyScoped()) {
+    if (isDspScoped) {
       return ['Digital School Program'];
     }
     return Array.from(
@@ -464,14 +463,14 @@ export default function LeaveAllocationsPage() {
 
         <select
           suppressHydrationWarning
-          value={isDspScoped || isDspOnlyScoped() ? 'Digital School Program' : selectedDeptFilter}
+          value={isDspScoped ? 'Digital School Program' : selectedDeptFilter}
           onChange={(e) => setSelectedDeptFilter(e.target.value)}
-          disabled={isDspScoped || isDspOnlyScoped()}
+          disabled={isDspScoped}
           className={`w-full sm:w-64 h-10 px-3.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm ${
-            isDspScoped || isDspOnlyScoped() ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'
+            isDspScoped ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'
           }`}
         >
-          {!(isDspScoped || isDspOnlyScoped()) && (
+          {!isDspScoped && (
             <option value="">Department (All)</option>
           )}
           {departmentFilterOptions.map((d) => (

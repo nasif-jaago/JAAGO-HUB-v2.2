@@ -32,7 +32,6 @@ import {
   matchesSelectedOrg,
   matchesSelectedDept,
   isDspDepartment,
-  isDspOnlyScoped,
 } from '@/lib/use-organization-scope';
 import { createNotification } from '@/lib/notifications';
 import { getCurrentUserSession } from '@/lib/user-profile-sync';
@@ -380,7 +379,7 @@ export default function LeaveRequestsPage() {
       const emp = empCodeToProfile.get(r.employeeCode);
       const org = emp?.organization || '';
       const dept = emp?.department || r.department || '';
-      if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept)) {
+      if (isDspScoped && !isDspDepartment(dept)) {
         return false;
       }
       return matchesSelectedOrg(org, selectedOrg) && matchesSelectedDept(dept, selectedDept);
@@ -389,7 +388,7 @@ export default function LeaveRequestsPage() {
 
   const modalFilteredEmployees = useMemo(() => {
     const orgScoped = employees.filter((e) => {
-      if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(e.department, e.leaveGroup)) {
+      if (isDspScoped && !isDspDepartment(e.department, e.leaveGroup)) {
         return false;
       }
       return matchesSelectedOrg(e.organization, selectedOrg) && matchesSelectedDept(e.department, selectedDept);
