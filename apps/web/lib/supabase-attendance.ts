@@ -1,4 +1,5 @@
 import { getSupabase } from './supabase-auth';
+import { fetchWithCache, invalidateCache } from './data-cache';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & INTERFACES
@@ -436,6 +437,7 @@ export function deleteLocalAttendanceLog(id: string): AttendanceLogItem[] {
 
   saveDeletedAttendanceLogKeys(Array.from(new Set(deletedKeys)));
 
+  invalidateCache('pnc_attendance_logs_list');
   const updated = currentLogs.filter((l) => l.id !== id);
   saveLocalAttendanceLogs(updated);
 
@@ -709,6 +711,7 @@ export function recordLocalAttendanceLog(logData: {
     currentLogs.unshift(updatedItem);
   }
 
+  invalidateCache('pnc_attendance_logs_list');
   saveLocalAttendanceLogs(currentLogs);
 
   // Sync punch / record with Supabase PostgreSQL
@@ -746,58 +749,65 @@ export function recordLocalAttendanceLog(logData: {
 }
 
 /**
- * Fetch and merge attendance logs from Supabase & localStorage
+ * Fetch and merge attendance logs from Supabase & localStorage with SWR caching
  */
-export async function fetchAttendanceLogsFromSupabase(): Promise<AttendanceLogItem[]> {
-  try {
-    const res = await fetch('/api/v1/attendance/logs', { cache: 'no-store' });
-    const json = await res.json();
+export async function fetchAttendanceLogsFromSupabase(forceRefresh: boolean = false): Promise<AttendanceLogItem[]> {
+  return fetchWithCache(
+    'pnc_attendance_logs_list',
+    async () => {
+      try {
+        const res = await fetch('/api/v1/attendance/logs', { cache: 'no-store' });
+        const json = await res.json();
 
-    if (res.ok && json.success && Array.isArray(json.data) && json.data.length > 0) {
-      const deletedKeysSet = new Set(getDeletedAttendanceLogKeys());
+        if (res.ok && json.success && Array.isArray(json.data) && json.data.length > 0) {
+          const deletedKeysSet = new Set(getDeletedAttendanceLogKeys());
 
-      const remoteLogs: AttendanceLogItem[] = json.data
-        .filter((r: any) => !deletedKeysSet.has(r.id) && !deletedKeysSet.has(`${r.employeeCode}_${r.date}`))
-        .map((r: any) => ({
-          id: String(r.id),
-          employeeId: r.employeeId || r.employee_id,
-          employeeCode: r.employeeCode || r.employee_code,
-          employeeName: r.employeeName || 'Staff Member',
-          designation: r.designation || 'Staff',
-          department: r.department || "Founder's Office",
-          branch: r.branch || 'Head Office (Banani)',
-          avatarUrl: r.avatarUrl || '',
-          status: (r.is_auto_checkout || r.isAutoCheckout ? 'Auto Check Out' : r.status) as AttendanceLogItem['status'],
-          device: (r.device as AttendanceLogItem['device']) || (r.check_in_source === 'gps' ? 'Web Portal' : 'Device Login'),
-          date: r.date,
-          checkInTime: r.checkInTime || '09:00 AM',
-          checkOutTime: r.checkOutTime,
-          lateByMin: Number(r.lateByMin || r.late_by_minutes || 0),
-          earlyOutByMin: 0,
-          locationName: r.locationName || r.location_name || 'JAAGO HQ (Banani)',
-          checkInLat: r.checkInLat !== undefined ? Number(r.checkInLat) : r.check_in_lat !== undefined ? Number(r.check_in_lat) : undefined,
-          checkInLng: r.checkInLng !== undefined ? Number(r.checkInLng) : r.check_in_lng !== undefined ? Number(r.check_in_lng) : undefined,
-          checkOutLat: r.checkOutLat !== undefined ? Number(r.checkOutLat) : r.check_out_lat !== undefined ? Number(r.check_out_lat) : undefined,
-          checkOutLng: r.checkOutLng !== undefined ? Number(r.checkOutLng) : r.check_out_lng !== undefined ? Number(r.check_out_lng) : undefined,
-          isAutoCheckout: Boolean(r.isAutoCheckout || r.is_auto_checkout),
-          workedMinutes: r.workedMinutes ?? r.worked_minutes,
-          createdBy: r.createdBy || r.employeeName,
-          createdAt: r.createdAt || new Date().toLocaleString(),
-          updatedAt: r.updatedAt || new Date().toLocaleString(),
-          timestamp: r.timestamp || r.createdAt || new Date().toLocaleString(),
-          notes: r.notes || (r.is_auto_checkout ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified'),
-        }));
+          const remoteLogs: AttendanceLogItem[] = json.data
+            .filter((r: any) => !deletedKeysSet.has(r.id) && !deletedKeysSet.has(`${r.employeeCode}_${r.date}`))
+            .map((r: any) => ({
+              id: String(r.id),
+              employeeId: r.employeeId || r.employee_id,
+              employeeCode: r.employeeCode || r.employee_code,
+              employeeName: r.employeeName || 'Staff Member',
+              designation: r.designation || 'Staff',
+              department: r.department || "Founder's Office",
+              branch: r.branch || 'Head Office (Banani)',
+              avatarUrl: r.avatarUrl || '',
+              status: (r.is_auto_checkout || r.isAutoCheckout ? 'Auto Check Out' : r.status) as AttendanceLogItem['status'],
+              device: (r.device as AttendanceLogItem['device']) || (r.check_in_source === 'gps' ? 'Web Portal' : 'Device Login'),
+              date: r.date,
+              checkInTime: r.checkInTime || '09:00 AM',
+              checkOutTime: r.checkOutTime,
+              lateByMin: Number(r.lateByMin || r.late_by_minutes || 0),
+              earlyOutByMin: 0,
+              locationName: r.locationName || r.location_name || 'JAAGO HQ (Banani)',
+              checkInLat: r.checkInLat !== undefined ? Number(r.checkInLat) : r.check_in_lat !== undefined ? Number(r.check_in_lat) : undefined,
+              checkInLng: r.checkInLng !== undefined ? Number(r.checkInLng) : r.check_in_lng !== undefined ? Number(r.check_in_lng) : undefined,
+              checkOutLat: r.checkOutLat !== undefined ? Number(r.checkOutLat) : r.check_out_lat !== undefined ? Number(r.check_out_lat) : undefined,
+              checkOutLng: r.checkOutLng !== undefined ? Number(r.checkOutLng) : r.check_out_lng !== undefined ? Number(r.check_out_lng) : undefined,
+              isAutoCheckout: Boolean(r.isAutoCheckout || r.is_auto_checkout),
+              workedMinutes: r.workedMinutes ?? r.worked_minutes,
+              createdBy: r.createdBy || r.employeeName,
+              createdAt: r.createdAt || new Date().toLocaleString(),
+              updatedAt: r.updatedAt || new Date().toLocaleString(),
+              timestamp: r.timestamp || r.createdAt || new Date().toLocaleString(),
+              notes: r.notes || (r.is_auto_checkout ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified'),
+            }));
 
-      if (remoteLogs.length > 0) {
-        saveLocalAttendanceLogs(remoteLogs);
-        return remoteLogs;
+          if (remoteLogs.length > 0) {
+            saveLocalAttendanceLogs(remoteLogs);
+            return remoteLogs;
+          }
+        }
+      } catch (err) {
+        console.warn('Error fetching attendance logs from Supabase:', err);
       }
-    }
-  } catch (err) {
-    console.warn('Error fetching attendance logs from Supabase:', err);
-  }
 
-  return getLocalAttendanceLogs();
+      return getLocalAttendanceLogs();
+    },
+    20000,
+    forceRefresh
+  );
 }
 
 /**

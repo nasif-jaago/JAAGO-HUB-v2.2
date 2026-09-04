@@ -1,5 +1,6 @@
 import { getSupabase } from './supabase-auth';
 import { fetchEmployeesFromSupabase } from './supabase-employees';
+import { fetchWithCache, invalidateCache } from './data-cache';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & INTERFACES
@@ -636,83 +637,93 @@ export const INITIAL_LEAVE_ALLOCATIONS: LeaveAllocationItem[] = [];
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── LEAVE REQUESTS ────────────────────────────────────────────────────────
-export async function fetchLeaveRequests(): Promise<LeaveRequestItem[]> {
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('leave_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
+export async function fetchLeaveRequests(forceRefresh: boolean = false): Promise<LeaveRequestItem[]> {
+  return fetchWithCache(
+    'pnc_leave_requests_list',
+    async () => {
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('leave_requests')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return data.map((row: any) => {
-          let attachmentName = row.attachment_name || '';
-          let attachmentUrl = row.attachment_url || '';
-          let rawReason = row.reason || '';
-          if (/\[Attachment:\s*([\s\S]*?)\]/i.test(rawReason)) {
-            const match = rawReason.match(/\[Attachment:\s*([\s\S]*?)\]/i);
-            if (match && match[1]) {
-              const parts = match[1].trim().split('|');
-              if (!attachmentName) attachmentName = parts[0]?.trim() || '';
-              if (parts[1]) attachmentUrl = parts[1].trim();
-            }
-          }
-          if (attachmentName && !attachmentUrl) {
-            attachmentUrl = `/api/v1/leaves/attachments?name=${encodeURIComponent(attachmentName)}`;
-          }
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const mapped = data.map((row: any) => {
+              let attachmentName = row.attachment_name || '';
+              let attachmentUrl = row.attachment_url || '';
+              let rawReason = row.reason || '';
+              if (/\[Attachment:\s*([\s\S]*?)\]/i.test(rawReason)) {
+                const match = rawReason.match(/\[Attachment:\s*([\s\S]*?)\]/i);
+                if (match && match[1]) {
+                  const parts = match[1].trim().split('|');
+                  if (!attachmentName) attachmentName = parts[0]?.trim() || '';
+                  if (parts[1]) attachmentUrl = parts[1].trim();
+                }
+              }
+              if (attachmentName && !attachmentUrl) {
+                attachmentUrl = `/api/v1/leaves/attachments?name=${encodeURIComponent(attachmentName)}`;
+              }
 
-          let rejectionReason = row.rejection_reason || '';
-          if (!rejectionReason && /\[Refusal Note:\s*([\s\S]*?)\]/i.test(rawReason)) {
-            const match = rawReason.match(/\[Refusal Note:\s*([\s\S]*?)\]/i);
-            if (match && match[1]) rejectionReason = match[1].trim();
-          }
-          const cleanReason = rawReason
-            .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
-            .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
-            .trim();
+              let rejectionReason = row.rejection_reason || '';
+              if (!rejectionReason && /\[Refusal Note:\s*([\s\S]*?)\]/i.test(rawReason)) {
+                const match = rawReason.match(/\[Refusal Note:\s*([\s\S]*?)\]/i);
+                if (match && match[1]) rejectionReason = match[1].trim();
+              }
+              const cleanReason = rawReason
+                .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
+                .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
+                .trim();
 
-          return {
-            id: row.id,
-            employeeId: row.employee_id,
-            employeeCode: row.employee_code,
-            employeeName: row.employee_name,
-            department: row.department || "Founder's Office",
-            designation: row.designation || 'Staff',
-            leaveType: row.leave_type || 'Casual Leave',
-            fromDate: row.from_date,
-            toDate: row.to_date,
-            totalDays: Number(row.total_days || 1),
-            reason: cleanReason,
-            rejectionReason: rejectionReason || undefined,
-            attachmentName: attachmentName || undefined,
-            attachmentUrl: attachmentUrl || undefined,
-            status: (row.status as LeaveStatus) || 'Pending',
-            appliedAt: row.applied_at || row.created_at,
-            approvedBy: row.approved_by,
-            approvedAt: row.approved_at,
-          };
-        });
+              return {
+                id: row.id,
+                employeeId: row.employee_id,
+                employeeCode: row.employee_code,
+                employeeName: row.employee_name,
+                department: row.department || "Founder's Office",
+                designation: row.designation || 'Staff',
+                leaveType: row.leave_type || 'Casual Leave',
+                fromDate: row.from_date,
+                toDate: row.to_date,
+                totalDays: Number(row.total_days || 1),
+                reason: cleanReason,
+                rejectionReason: rejectionReason || undefined,
+                attachmentName: attachmentName || undefined,
+                attachmentUrl: attachmentUrl || undefined,
+                status: (row.status as LeaveStatus) || 'Pending',
+                appliedAt: row.applied_at || row.created_at,
+                approvedBy: row.approved_by,
+                approvedAt: row.approved_at,
+              };
+            });
+            try {
+              localStorage.setItem('jaago_pnc_leave_requests_v3', JSON.stringify(mapped));
+            } catch {}
+            return mapped;
+          }
+        }
+      } catch (err) {
+        console.warn('Error fetching leave requests from Supabase:', err);
       }
-    }
-  } catch (err) {
-    console.warn('Error fetching leave requests from Supabase:', err);
-  }
 
-  if (typeof window !== 'undefined') {
-    try {
-      const cached = localStorage.getItem('jaago_pnc_leave_requests_v3');
-      if (cached) {
-        const parsed: LeaveRequestItem[] = JSON.parse(cached);
-        // Filter out any legacy mock entries
-        const clean = parsed.filter(
-          (r) => !['lv-101', 'lv-102', 'lv-103', 'lv-104'].includes(r.id)
-        );
-        return clean;
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = localStorage.getItem('jaago_pnc_leave_requests_v3');
+          if (cached) {
+            const parsed: LeaveRequestItem[] = JSON.parse(cached);
+            const clean = parsed.filter(
+              (r) => !['lv-101', 'lv-102', 'lv-103', 'lv-104'].includes(r.id)
+            );
+            return clean;
+          }
+        } catch {}
       }
-    } catch {}
-  }
-  return [];
+      return [];
+    },
+    20000,
+    forceRefresh
+  );
 }
 
 function syncLeaveToAttendanceLogs(request: LeaveRequestItem) {
@@ -783,6 +794,8 @@ function syncLeaveToAttendanceLogs(request: LeaveRequestItem) {
 }
 
 export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boolean> {
+  invalidateCache('pnc_leave_requests_list');
+  invalidateCache('pnc_attendance_logs_list');
   if (typeof window !== 'undefined') {
     try {
       const current = await fetchLeaveRequests();
@@ -842,6 +855,8 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
 }
 
 export async function deleteLeaveRequest(id: string): Promise<boolean> {
+  invalidateCache('pnc_leave_requests_list');
+  invalidateCache('pnc_attendance_logs_list');
   if (typeof window !== 'undefined') {
     try {
       const current = await fetchLeaveRequests();

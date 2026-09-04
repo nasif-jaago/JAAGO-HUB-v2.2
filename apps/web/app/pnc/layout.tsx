@@ -40,6 +40,7 @@ import {
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import { hasPermission, hasModuleAccess, isDspOnlyScoped } from '@/lib/rbac-guard';
 import { matchesSelectedOrg } from '@/lib/use-organization-scope';
+import { RouteProgressBar } from '@/components/ui/route-progress-bar';
 
 export type ThemeMode = 'dark' | 'light' | 'espresso';
 
@@ -474,6 +475,7 @@ export default function PnCLayout({
 
   return (
     <div className={`min-h-screen ${isDashboard ? 'bg-transparent' : 'bg-background'} text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden`}>
+      <RouteProgressBar />
       {/* ── Dashboard ONLY Fullscreen Background (JAAGO School Children) ── */}
       {isDashboard && (
         <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden pointer-events-none select-none bg-black">

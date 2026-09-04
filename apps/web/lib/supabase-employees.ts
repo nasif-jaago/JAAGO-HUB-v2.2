@@ -281,24 +281,37 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
   };
 }
 
+import { fetchWithCache, invalidateCache } from './data-cache';
+
 /**
- * Fetch all employees directly from Supabase
+ * Fetch all employees directly from Supabase with in-memory deduplication and SWR caching
  */
-export async function fetchEmployeesFromSupabase(): Promise<FullEmployeeProfile[] | null> {
-  try {
-    const res = await fetch('/api/v1/hr/employees', {
-      cache: 'no-store',
-    });
-    const json = await res.json();
-    if (res.ok && json.success && Array.isArray(json.data)) {
-      if (json.data.length === 0) return [];
-      return json.data.map(mapRowToEmployeeProfile);
-    }
-    return null;
-  } catch (err) {
-    console.warn('Supabase fetch employees error:', err);
-    return null;
-  }
+export async function fetchEmployeesFromSupabase(forceRefresh: boolean = false): Promise<FullEmployeeProfile[] | null> {
+  return fetchWithCache(
+    'pnc_employees_list',
+    async () => {
+      try {
+        const res = await fetch('/api/v1/hr/employees', {
+          cache: 'no-store',
+        });
+        const json = await res.json();
+        if (res.ok && json.success && Array.isArray(json.data)) {
+          if (json.data.length === 0) return [];
+          const mapped = json.data.map(mapRowToEmployeeProfile);
+          try {
+            localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(mapped));
+          } catch {}
+          return mapped;
+        }
+        return null;
+      } catch (err) {
+        console.warn('Supabase fetch employees error:', err);
+        return null;
+      }
+    },
+    25000,
+    forceRefresh
+  );
 }
 
 export async function saveEmployeeToSupabase(
@@ -321,6 +334,7 @@ export async function saveEmployeeToSupabase(
 
     const json = await res.json();
     if (res.ok && json.success && json.data) {
+      invalidateCache('pnc_employees_list');
       const savedProfile = mapRowToEmployeeProfile(json.data);
       return { success: true, data: savedProfile };
     }
@@ -356,6 +370,7 @@ export async function bulkImportEmployeesToSupabase(
 
     const json = await res.json();
     if (res.ok && json.success) {
+      invalidateCache('pnc_employees_list');
       return {
         success: true,
         totalUpserted: json.totalUpserted,

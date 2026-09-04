@@ -1,4 +1,5 @@
 import { getSupabase } from './supabase-auth';
+import { fetchWithCache, invalidateCache } from './data-cache';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & INTERFACES
@@ -760,52 +761,60 @@ export function deduplicateEntitiesByName<T extends { id: string; name: string }
 // --- ORGANIZATIONS ---
 const ORGS_CACHE_KEY = 'jaago_pnc_organizations_cache';
 
-export async function fetchOrganizationsFromSupabase(): Promise<OrganizationEntity[]> {
-  const deletedIds = getDeletedEntityIds();
-  let baseList: OrganizationEntity[] = [];
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('organizations').select('*').order('name', { ascending: true });
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems: OrganizationEntity[] = data.map((row: any) => ({
-          id: row.id,
-          name: row.name,
-          logoUrl: row.logo_url || '',
-          address: row.address || '',
-          banani: row.banani || '',
-          city: row.city || 'Dhaka',
-          division: row.division || 'Dhaka Division',
-          postalCode: row.postal_code || '1213',
-          country: row.country || 'Bangladesh',
-          partnerCountry: row.partner_country || 'Bangladesh',
-          phone: row.phone || '',
-          email: row.email || '',
-          website: row.website || 'https://jaago.com.bd',
-          emailDomain: row.email_domain || 'jaago.com.bd',
-          brandColor: row.brand_color || '#FED900',
-          taxId: row.tax_id || '',
-          companyId: row.company_id || '',
-          currency: row.currency || 'BDT',
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        }));
-        baseList = deduplicateEntitiesByName(dbItems, INITIAL_ORGANIZATIONS);
+export async function fetchOrganizationsFromSupabase(forceRefresh: boolean = false): Promise<OrganizationEntity[]> {
+  return fetchWithCache(
+    'pnc_orgs_list',
+    async () => {
+      const deletedIds = getDeletedEntityIds();
+      let baseList: OrganizationEntity[] = [];
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          const { data, error } = await supabase.from('organizations').select('*').order('name', { ascending: true });
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const dbItems: OrganizationEntity[] = data.map((row: any) => ({
+              id: row.id,
+              name: row.name,
+              logoUrl: row.logo_url || '',
+              address: row.address || '',
+              banani: row.banani || '',
+              city: row.city || 'Dhaka',
+              division: row.division || 'Dhaka Division',
+              postalCode: row.postal_code || '1213',
+              country: row.country || 'Bangladesh',
+              partnerCountry: row.partner_country || 'Bangladesh',
+              phone: row.phone || '',
+              email: row.email || '',
+              website: row.website || 'https://jaago.com.bd',
+              emailDomain: row.email_domain || 'jaago.com.bd',
+              brandColor: row.brand_color || '#FED900',
+              taxId: row.tax_id || '',
+              companyId: row.company_id || '',
+              currency: row.currency || 'BDT',
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            }));
+            baseList = deduplicateEntitiesByName(dbItems, INITIAL_ORGANIZATIONS);
+          }
+        }
+      } catch {}
+
+      if (baseList.length === 0) {
+        const cached = getLocalCache(ORGS_CACHE_KEY, INITIAL_ORGANIZATIONS);
+        baseList = deduplicateEntitiesByName(cached, INITIAL_ORGANIZATIONS);
       }
-    }
-  } catch {}
 
-  if (baseList.length === 0) {
-    const cached = getLocalCache(ORGS_CACHE_KEY, INITIAL_ORGANIZATIONS);
-    baseList = deduplicateEntitiesByName(cached, INITIAL_ORGANIZATIONS);
-  }
-
-  const result = deduplicateEntitiesByName(baseList, []).filter((o) => !deletedIds.has(o.id));
-  setLocalCache(ORGS_CACHE_KEY, result);
-  return result;
+      const result = deduplicateEntitiesByName(baseList, []).filter((o) => !deletedIds.has(o.id));
+      setLocalCache(ORGS_CACHE_KEY, result);
+      return result;
+    },
+    30000,
+    forceRefresh
+  );
 }
 
 export async function saveOrganizationToSupabase(org: OrganizationEntity, oldName?: string): Promise<boolean> {
+  invalidateCache('pnc_orgs_list');
   removeDeletedEntityId(org.id);
   const current = await fetchOrganizationsFromSupabase();
   const existing = current.find((o) => o.id === org.id);
@@ -854,6 +863,7 @@ export async function saveOrganizationToSupabase(org: OrganizationEntity, oldNam
 }
 
 export async function deleteOrganizationFromSupabase(id: string, name?: string): Promise<boolean> {
+  invalidateCache('pnc_orgs_list');
   addDeletedEntityId(id);
   const cached = getLocalCache(ORGS_CACHE_KEY, INITIAL_ORGANIZATIONS).filter(
     (o) => o.id !== id && (!name || o.name.trim().toLowerCase() !== name.trim().toLowerCase())
@@ -882,47 +892,56 @@ export async function deleteOrganizationFromSupabase(id: string, name?: string):
 // --- BRANCHES ---
 const BRANCHES_CACHE_KEY = 'jaago_pnc_branches_cache';
 
-export async function fetchBranchesFromSupabase(organizationId?: string): Promise<OrganizationBranch[]> {
-  const deletedIds = getDeletedEntityIds();
-  let baseList: OrganizationBranch[] = [];
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      let query = supabase.from('organization_branches').select('*');
-      if (organizationId) {
-        query = query.eq('organization_id', organizationId);
-      }
-      const { data, error } = await query.order('name', { ascending: true });
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems: OrganizationBranch[] = data.map((row: any) => ({
-          id: row.id,
-          organizationId: row.organization_id,
-          name: row.name,
-          code: row.code || '',
-          phone: row.phone || '',
-          email: row.email || '',
-          address: row.address || '',
-          city: row.city || 'Dhaka',
-          country: row.country || 'Bangladesh',
-          createdAt: row.created_at,
-        }));
-        baseList = deduplicateEntitiesByName(dbItems, []);
-      }
-    }
-  } catch {}
+export async function fetchBranchesFromSupabase(organizationId?: string, forceRefresh: boolean = false): Promise<OrganizationBranch[]> {
+  const cacheKey = organizationId ? `pnc_branches_${organizationId}` : 'pnc_branches_all';
+  return fetchWithCache(
+    cacheKey,
+    async () => {
+      const deletedIds = getDeletedEntityIds();
+      let baseList: OrganizationBranch[] = [];
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          let query = supabase.from('organization_branches').select('*');
+          if (organizationId) {
+            query = query.eq('organization_id', organizationId);
+          }
+          const { data, error } = await query.order('name', { ascending: true });
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const dbItems: OrganizationBranch[] = data.map((row: any) => ({
+              id: row.id,
+              organizationId: row.organization_id,
+              name: row.name,
+              code: row.code || '',
+              phone: row.phone || '',
+              email: row.email || '',
+              address: row.address || '',
+              city: row.city || 'Dhaka',
+              country: row.country || 'Bangladesh',
+              createdAt: row.created_at,
+            }));
+            baseList = deduplicateEntitiesByName(dbItems, []);
+          }
+        }
+      } catch {}
 
-  if (baseList.length === 0) {
-    const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES);
-    baseList = deduplicateEntitiesByName(cached, INITIAL_BRANCHES);
-  }
+      if (baseList.length === 0) {
+        const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES);
+        baseList = deduplicateEntitiesByName(cached, INITIAL_BRANCHES);
+      }
 
-  const filteredByOrg = organizationId ? baseList.filter((b) => b.organizationId === organizationId) : baseList;
-  const result = deduplicateEntitiesByName(filteredByOrg, []).filter((b) => !deletedIds.has(b.id));
-  setLocalCache(BRANCHES_CACHE_KEY, result);
-  return result;
+      const filteredByOrg = organizationId ? baseList.filter((b) => b.organizationId === organizationId) : baseList;
+      const result = deduplicateEntitiesByName(filteredByOrg, []).filter((b) => !deletedIds.has(b.id));
+      setLocalCache(BRANCHES_CACHE_KEY, result);
+      return result;
+    },
+    30000,
+    forceRefresh
+  );
 }
 
 export async function saveBranchToSupabase(branch: OrganizationBranch, oldName?: string): Promise<boolean> {
+  invalidateCache('pnc_branches_');
   removeDeletedEntityId(branch.id);
   const current = await fetchBranchesFromSupabase();
   const existing = current.find((b) => b.id === branch.id);
@@ -961,6 +980,7 @@ export async function saveBranchToSupabase(branch: OrganizationBranch, oldName?:
 }
 
 export async function deleteBranchFromSupabase(id: string, name?: string): Promise<boolean> {
+  invalidateCache('pnc_branches_');
   addDeletedEntityId(id);
   const cached = getLocalCache(BRANCHES_CACHE_KEY, INITIAL_BRANCHES).filter(
     (b) => b.id !== id && (!name || b.name.trim().toLowerCase() !== name.trim().toLowerCase())
@@ -1071,40 +1091,48 @@ export async function deletePolicyFromSupabase(id: string): Promise<boolean> {
 // --- DESIGNATIONS ---
 const DESIGNATIONS_CACHE_KEY = 'jaago_pnc_designations_cache';
 
-export async function fetchDesignationsFromSupabase(): Promise<DesignationItem[]> {
-  const deletedIds = getDeletedEntityIds();
-  let baseList: DesignationItem[] = [];
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('designations').select('*').order('name', { ascending: true });
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems: DesignationItem[] = data.map((row: any) => ({
-          id: row.id,
-          name: row.name,
-          code: row.code || '',
-          grade: row.grade || '',
-          departmentOrProject: row.department_or_project || '',
-          description: row.description || '',
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        }));
-        baseList = deduplicateEntitiesByName(dbItems, []);
+export async function fetchDesignationsFromSupabase(forceRefresh: boolean = false): Promise<DesignationItem[]> {
+  return fetchWithCache(
+    'pnc_designations_list',
+    async () => {
+      const deletedIds = getDeletedEntityIds();
+      let baseList: DesignationItem[] = [];
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          const { data, error } = await supabase.from('designations').select('*').order('name', { ascending: true });
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const dbItems: DesignationItem[] = data.map((row: any) => ({
+              id: row.id,
+              name: row.name,
+              code: row.code || '',
+              grade: row.grade || '',
+              departmentOrProject: row.department_or_project || '',
+              description: row.description || '',
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            }));
+            baseList = deduplicateEntitiesByName(dbItems, []);
+          }
+        }
+      } catch {}
+
+      if (baseList.length === 0) {
+        const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS);
+        baseList = deduplicateEntitiesByName(cached, INITIAL_DESIGNATIONS);
       }
-    }
-  } catch {}
 
-  if (baseList.length === 0) {
-    const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS);
-    baseList = deduplicateEntitiesByName(cached, INITIAL_DESIGNATIONS);
-  }
-
-  const result = deduplicateEntitiesByName(baseList, []).filter((d) => !deletedIds.has(d.id));
-  setLocalCache(DESIGNATIONS_CACHE_KEY, result);
-  return result;
+      const result = deduplicateEntitiesByName(baseList, []).filter((d) => !deletedIds.has(d.id));
+      setLocalCache(DESIGNATIONS_CACHE_KEY, result);
+      return result;
+    },
+    30000,
+    forceRefresh
+  );
 }
 
 export async function saveDesignationToSupabase(des: DesignationItem, oldName?: string): Promise<boolean> {
+  invalidateCache('pnc_designations_list');
   removeDeletedEntityId(des.id);
   const current = await fetchDesignationsFromSupabase();
   const existing = current.find((d) => d.id === des.id);
@@ -1141,6 +1169,7 @@ export async function saveDesignationToSupabase(des: DesignationItem, oldName?: 
 }
 
 export async function deleteDesignationFromSupabase(id: string, name?: string): Promise<boolean> {
+  invalidateCache('pnc_designations_list');
   addDeletedEntityId(id);
   const cached = getLocalCache(DESIGNATIONS_CACHE_KEY, INITIAL_DESIGNATIONS).filter(
     (d) => d.id !== id && (!name || d.name.trim().toLowerCase() !== name.trim().toLowerCase())
@@ -1168,73 +1197,81 @@ export async function deleteDesignationFromSupabase(id: string, name?: string): 
 // --- DEPARTMENTS ---
 const DEPARTMENTS_CACHE_KEY = 'jaago_pnc_departments_cache';
 
-export async function fetchDepartmentsFromSupabase(): Promise<DepartmentItem[]> {
-  const deletedIds = getDeletedEntityIds();
-  let baseList: DepartmentItem[] = [];
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('departments').select('*').order('name', { ascending: true });
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems: DepartmentItem[] = data.map((row: any) => ({
-          id: row.id,
-          name: row.name,
-          code: row.code || '',
-          organizationId: row.organization_id || '',
-          organizationName: row.organization_name || '',
-          parentDepartmentId: row.parent_department_id || '',
-          parentDepartmentName: row.parent_department_name || '',
-          managerName: row.manager_name || '',
-          managerId: row.manager_id || '',
-          description: row.description || '',
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        }));
-        baseList = deduplicateEntitiesByName(dbItems, INITIAL_DEPARTMENTS);
-      }
-    }
-  } catch {}
-
-  if (baseList.length === 0) {
-    const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS);
-    baseList = deduplicateEntitiesByName(cached, INITIAL_DEPARTMENTS);
-  } else {
-    const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, []);
-    baseList = deduplicateEntitiesByName(baseList, cached);
-  }
-
-  // Safety net: Incorporate any unique departments present in cached employees
-  if (typeof window !== 'undefined') {
-    try {
-      const cachedEmpsRaw = localStorage.getItem('jaago_pnc_employees_v2');
-      if (cachedEmpsRaw) {
-        const emps = JSON.parse(cachedEmpsRaw);
-        if (Array.isArray(emps)) {
-          const empDepts: DepartmentItem[] = [];
-          emps.forEach((e: any) => {
-            if (e.department && typeof e.department === 'string' && e.department.trim()) {
-              const deptName = e.department.trim();
-              empDepts.push({
-                id: `dept-${deptName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-                name: deptName,
-                code: deptName.slice(0, 4).toUpperCase(),
-                organizationName: e.organization || 'JAAGO Foundation',
-                isArchived: false,
-              });
-            }
-          });
-          baseList = deduplicateEntitiesByName(baseList, empDepts);
+export async function fetchDepartmentsFromSupabase(forceRefresh: boolean = false): Promise<DepartmentItem[]> {
+  return fetchWithCache(
+    'pnc_departments_list',
+    async () => {
+      const deletedIds = getDeletedEntityIds();
+      let baseList: DepartmentItem[] = [];
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          const { data, error } = await supabase.from('departments').select('*').order('name', { ascending: true });
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const dbItems: DepartmentItem[] = data.map((row: any) => ({
+              id: row.id,
+              name: row.name,
+              code: row.code || '',
+              organizationId: row.organization_id || '',
+              organizationName: row.organization_name || '',
+              parentDepartmentId: row.parent_department_id || '',
+              parentDepartmentName: row.parent_department_name || '',
+              managerName: row.manager_name || '',
+              managerId: row.manager_id || '',
+              description: row.description || '',
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            }));
+            baseList = deduplicateEntitiesByName(dbItems, INITIAL_DEPARTMENTS);
+          }
         }
-      }
-    } catch {}
-  }
+      } catch {}
 
-  const result = deduplicateEntitiesByName(baseList, []).filter((d) => !deletedIds.has(d.id));
-  setLocalCache(DEPARTMENTS_CACHE_KEY, result);
-  return result;
+      if (baseList.length === 0) {
+        const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS);
+        baseList = deduplicateEntitiesByName(cached, INITIAL_DEPARTMENTS);
+      } else {
+        const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, []);
+        baseList = deduplicateEntitiesByName(baseList, cached);
+      }
+
+      // Safety net: Incorporate any unique departments present in cached employees
+      if (typeof window !== 'undefined') {
+        try {
+          const cachedEmpsRaw = localStorage.getItem('jaago_pnc_employees_v2');
+          if (cachedEmpsRaw) {
+            const emps = JSON.parse(cachedEmpsRaw);
+            if (Array.isArray(emps)) {
+              const empDepts: DepartmentItem[] = [];
+              emps.forEach((e: any) => {
+                if (e.department && typeof e.department === 'string' && e.department.trim()) {
+                  const deptName = e.department.trim();
+                  empDepts.push({
+                    id: `dept-${deptName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                    name: deptName,
+                    code: deptName.slice(0, 4).toUpperCase(),
+                    organizationName: e.organization || 'JAAGO Foundation',
+                    isArchived: false,
+                  });
+                }
+              });
+              baseList = deduplicateEntitiesByName(baseList, empDepts);
+            }
+          }
+        } catch {}
+      }
+
+      const result = deduplicateEntitiesByName(baseList, []).filter((d) => !deletedIds.has(d.id));
+      setLocalCache(DEPARTMENTS_CACHE_KEY, result);
+      return result;
+    },
+    30000,
+    forceRefresh
+  );
 }
 
 export async function saveDepartmentToSupabase(dept: DepartmentItem, oldName?: string): Promise<boolean> {
+  invalidateCache('pnc_departments_list');
   removeDeletedEntityId(dept.id);
   const current = await fetchDepartmentsFromSupabase();
   const existing = current.find((d) => d.id === dept.id);
@@ -1341,50 +1378,58 @@ export async function deleteDepartmentFromSupabase(id: string, name?: string): P
 // --- PROJECTS ---
 const PROJECTS_CACHE_KEY = 'jaago_pnc_projects_cache';
 
-export async function fetchProjectsFromSupabase(): Promise<ProjectItem[]> {
-  const deletedIds = getDeletedEntityIds();
-  let baseList: ProjectItem[] = [];
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true });
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const dbItems: ProjectItem[] = data.map((row: any) => ({
-          id: row.id,
-          name: row.name,
-          code: row.code || '',
-          organizationId: row.organization_id || '',
-          organizationName: row.organization_name || '',
-          parentDepartmentId: row.parent_department_id || '',
-          parentDepartmentName: row.parent_department_name || '',
-          projectManagerName: row.project_manager_name || '',
-          projectManagerId: row.project_manager_id || '',
-          managerName: row.project_manager_name || '',
-          managerId: row.project_manager_id || '',
-          financeLeadName: row.finance_lead_name || '',
-          financeLeadId: row.finance_lead_id || '',
-          description: row.description || '',
-          status: row.status || 'ACTIVE',
-          budget: Number(row.budget || 0),
-          createdAt: row.created_at,
-          updatedAt: row.updated_at,
-        }));
-        baseList = deduplicateEntitiesByName(dbItems, []);
+export async function fetchProjectsFromSupabase(forceRefresh: boolean = false): Promise<ProjectItem[]> {
+  return fetchWithCache(
+    'pnc_projects_list',
+    async () => {
+      const deletedIds = getDeletedEntityIds();
+      let baseList: ProjectItem[] = [];
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          const { data, error } = await supabase.from('projects').select('*').order('name', { ascending: true });
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const dbItems: ProjectItem[] = data.map((row: any) => ({
+              id: row.id,
+              name: row.name,
+              code: row.code || '',
+              organizationId: row.organization_id || '',
+              organizationName: row.organization_name || '',
+              parentDepartmentId: row.parent_department_id || '',
+              parentDepartmentName: row.parent_department_name || '',
+              projectManagerName: row.project_manager_name || '',
+              projectManagerId: row.project_manager_id || '',
+              managerName: row.project_manager_name || '',
+              managerId: row.project_manager_id || '',
+              financeLeadName: row.finance_lead_name || '',
+              financeLeadId: row.finance_lead_id || '',
+              description: row.description || '',
+              status: row.status || 'ACTIVE',
+              budget: Number(row.budget || 0),
+              createdAt: row.created_at,
+              updatedAt: row.updated_at,
+            }));
+            baseList = deduplicateEntitiesByName(dbItems, []);
+          }
+        }
+      } catch {}
+
+      if (baseList.length === 0) {
+        const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS);
+        baseList = deduplicateEntitiesByName(cached, INITIAL_PROJECTS);
       }
-    }
-  } catch {}
 
-  if (baseList.length === 0) {
-    const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS);
-    baseList = deduplicateEntitiesByName(cached, INITIAL_PROJECTS);
-  }
-
-  const result = deduplicateEntitiesByName(baseList, []).filter((p) => !deletedIds.has(p.id));
-  setLocalCache(PROJECTS_CACHE_KEY, result);
-  return result;
+      const result = deduplicateEntitiesByName(baseList, []).filter((p) => !deletedIds.has(p.id));
+      setLocalCache(PROJECTS_CACHE_KEY, result);
+      return result;
+    },
+    30000,
+    forceRefresh
+  );
 }
 
 export async function saveProjectToSupabase(proj: ProjectItem, oldName?: string): Promise<boolean> {
+  invalidateCache('pnc_projects_list');
   removeDeletedEntityId(proj.id);
   const current = await fetchProjectsFromSupabase();
   const existing = current.find((p) => p.id === proj.id);
@@ -1429,6 +1474,7 @@ export async function saveProjectToSupabase(proj: ProjectItem, oldName?: string)
 }
 
 export async function deleteProjectFromSupabase(id: string, name?: string): Promise<boolean> {
+  invalidateCache('pnc_projects_list');
   addDeletedEntityId(id);
   const cached = getLocalCache(PROJECTS_CACHE_KEY, INITIAL_PROJECTS).filter(
     (p) => p.id !== id && (!name || p.name.trim().toLowerCase() !== name.trim().toLowerCase())
@@ -1456,57 +1502,65 @@ export async function deleteProjectFromSupabase(id: string, name?: string): Prom
 // --- TEAMS & MEMBERS ---
 const TEAMS_CACHE_KEY = 'jaago_pnc_teams_cache';
 
-export async function fetchTeamsFromSupabase(): Promise<TeamItem[]> {
-  const deletedIds = getDeletedEntityIds();
-  let baseList: TeamItem[] = [];
-  try {
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data: teamsData, error: teamsError } = await supabase.from('teams').select('*').order('name', { ascending: true });
-      if (!teamsError && Array.isArray(teamsData) && teamsData.length > 0) {
-        const { data: membersData } = await supabase.from('team_members').select('*');
+export async function fetchTeamsFromSupabase(forceRefresh: boolean = false): Promise<TeamItem[]> {
+  return fetchWithCache(
+    'pnc_teams_list',
+    async () => {
+      const deletedIds = getDeletedEntityIds();
+      let baseList: TeamItem[] = [];
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          const { data: teamsData, error: teamsError } = await supabase.from('teams').select('*').order('name', { ascending: true });
+          if (!teamsError && Array.isArray(teamsData) && teamsData.length > 0) {
+            const { data: membersData } = await supabase.from('team_members').select('*');
 
-        const dbItems = teamsData.map((t: any) => {
-          const teamMems = (membersData || [])
-            .filter((m: any) => m.team_id === t.id)
-            .map((m: any) => ({
-              id: m.id,
-              teamId: m.team_id,
-              employeeId: m.employee_id,
-              employeeName: m.employee_name,
-              employeeCode: m.employee_code,
-              role: m.role || 'Member',
-            }));
+            const dbItems = teamsData.map((t: any) => {
+              const teamMems = (membersData || [])
+                .filter((m: any) => m.team_id === t.id)
+                .map((m: any) => ({
+                  id: m.id,
+                  teamId: m.team_id,
+                  employeeId: m.employee_id,
+                  employeeName: m.employee_name,
+                  employeeCode: m.employee_code,
+                  role: m.role || 'Member',
+                }));
 
-          return {
-            id: t.id,
-            name: t.name,
-            code: t.code || '',
-            departmentOrProject: t.department_or_project || '',
-            teamLeadName: t.team_lead_name || '',
-            teamLeadId: t.team_lead_id || '',
-            description: t.description || '',
-            members: teamMems.length > 0 ? teamMems : undefined,
-            createdAt: t.created_at,
-            updatedAt: t.updated_at,
-          };
-        });
-        baseList = deduplicateEntitiesByName(dbItems, []);
+              return {
+                id: t.id,
+                name: t.name,
+                code: t.code || '',
+                departmentOrProject: t.department_or_project || '',
+                teamLeadName: t.team_lead_name || '',
+                teamLeadId: t.team_lead_id || '',
+                description: t.description || '',
+                members: teamMems.length > 0 ? teamMems : undefined,
+                createdAt: t.created_at,
+                updatedAt: t.updated_at,
+              };
+            });
+            baseList = deduplicateEntitiesByName(dbItems, []);
+          }
+        }
+      } catch {}
+
+      if (baseList.length === 0) {
+        const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS);
+        baseList = deduplicateEntitiesByName(cached, INITIAL_TEAMS);
       }
-    }
-  } catch {}
 
-  if (baseList.length === 0) {
-    const cached = getLocalCache(TEAMS_CACHE_KEY, INITIAL_TEAMS);
-    baseList = deduplicateEntitiesByName(cached, INITIAL_TEAMS);
-  }
-
-  const result = deduplicateEntitiesByName(baseList, []).filter((t) => !deletedIds.has(t.id));
-  setLocalCache(TEAMS_CACHE_KEY, result);
-  return result;
+      const result = deduplicateEntitiesByName(baseList, []).filter((t) => !deletedIds.has(t.id));
+      setLocalCache(TEAMS_CACHE_KEY, result);
+      return result;
+    },
+    30000,
+    forceRefresh
+  );
 }
 
 export async function saveTeamToSupabase(team: TeamItem, oldName?: string): Promise<boolean> {
+  invalidateCache('pnc_teams_list');
   removeDeletedEntityId(team.id);
   const current = await fetchTeamsFromSupabase();
   const existing = current.find((t) => t.id === team.id);

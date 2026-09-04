@@ -49,9 +49,42 @@ const LEAVE_TYPES: LeaveType[] = [
 
 export default function LeaveRequestsPage() {
   const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
-  const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
-  const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [requests, setRequests] = useState<LeaveRequestItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_leave_requests_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [allocations, setAllocations] = useState<LeaveAllocationItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_leave_allocations');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [employees, setEmployees] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_employees_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [selectedTab, setSelectedTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);

@@ -33,9 +33,42 @@ const MONTH_NAMES = [
 export default function PnCLeaveCalendarPage() {
   const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
   const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 7, 1)); // August 2026 default
-  const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
-  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
-  const [holidays, setHolidays] = useState<PublicHolidayItem[]>([]);
+  const [requests, setRequests] = useState<LeaveRequestItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_leave_requests_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_employees_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [holidays, setHolidays] = useState<PublicHolidayItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_public_holidays');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
 
   const loadData = async () => {
     const [reqs, hols, emps] = await Promise.all([

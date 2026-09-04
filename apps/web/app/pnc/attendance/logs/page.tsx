@@ -33,8 +33,24 @@ import {
 
 export default function AttendanceLogsPage() {
   const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
-  const [logs, setLogs] = useState<AttendanceLogItem[]>([]);
-  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
+  const [logs, setLogs] = useState<AttendanceLogItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      return getLocalAttendanceLogs();
+    }
+    return [];
+  });
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_employees_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [employeeFilter, setEmployeeFilter] = useState('');

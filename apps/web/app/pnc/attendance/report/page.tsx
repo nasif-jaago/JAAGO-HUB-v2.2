@@ -256,11 +256,27 @@ export default function AttendanceReportPage() {
 
       return rows;
     },
-    [selectedOrg, selectedDept]
+    [selectedOrg, selectedDept, isDspScoped]
   );
 
+  // 1. Instant optimistic load from cache on mount + background SWR fetch
   useEffect(() => {
     let isMounted = true;
+
+    // Instant optimistic render
+    try {
+      const rawEmps = localStorage.getItem('jaago_pnc_employees_v2');
+      const rawLeaves = localStorage.getItem('jaago_pnc_leave_requests_v3');
+      if (rawEmps) {
+        const initialEmps = JSON.parse(rawEmps);
+        const initialLeaves = rawLeaves ? JSON.parse(rawLeaves) : [];
+        if (Array.isArray(initialEmps) && initialEmps.length > 0) {
+          setEmployees(initialEmps);
+          setLeaveRequests(initialLeaves);
+          setReportRows(generateReportForDate(selectedDate, initialEmps, initialLeaves));
+        }
+      }
+    } catch {}
 
     async function loadInitialData() {
       const [emps, , leaves] = await Promise.all([
@@ -281,7 +297,7 @@ export default function AttendanceReportPage() {
     loadInitialData();
 
     const handleUpdate = () => {
-      Promise.all([fetchAttendanceLogsFromSupabase(), fetchLeaveRequests()]).then(([, leaves]) => {
+      Promise.all([fetchAttendanceLogsFromSupabase(true), fetchLeaveRequests(true)]).then(([, leaves]) => {
         if (!isMounted) return;
         const currentLeaves = leaves || [];
         setLeaveRequests(currentLeaves);
@@ -301,11 +317,17 @@ export default function AttendanceReportPage() {
       window.removeEventListener('jaago_leave_request_updated', handleUpdate);
       window.removeEventListener('jaago_leave_allocation_updated', handleUpdate);
     };
-  }, [selectedDate, generateReportForDate]);
+  }, []);
+
+  // Update report rows whenever date, scope or raw data changes
+  useEffect(() => {
+    if (employees.length > 0) {
+      setReportRows(generateReportForDate(selectedDate, employees, leaveRequests));
+    }
+  }, [selectedDate, selectedOrg, selectedDept, isDspScoped, employees, leaveRequests, generateReportForDate]);
 
   const handleDateSelect = (dateStr: string) => {
     setSelectedDate(dateStr);
-    setReportRows(generateReportForDate(dateStr, employees, leaveRequests));
   };
 
   const handleOpenManualModal = (row: ReportRow) => {

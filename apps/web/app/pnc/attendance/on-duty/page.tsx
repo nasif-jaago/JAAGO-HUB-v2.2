@@ -29,8 +29,24 @@ import {
 
 export default function OnDutyLogsPage() {
   const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
-  const [logs, setLogs] = useState<OnDutyLogItem[]>([]);
-  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
+  const [logs, setLogs] = useState<OnDutyLogItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      return getLocalOnDutyLogs();
+    }
+    return [];
+  });
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_employees_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [showModal, setShowModal] = useState(false);

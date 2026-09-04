@@ -24,18 +24,37 @@ export interface EmployeeDirectoryItem {
   sickLeaveBalance: number;
 }
 
+let cachedAuthUsers: any[] | null = null;
+let cachedAuthUsersExpiresAt = 0;
+
+async function getCachedAuthUsers(supabaseAdmin: any): Promise<any[]> {
+  const now = Date.now();
+  if (cachedAuthUsers && now < cachedAuthUsersExpiresAt) {
+    return cachedAuthUsers;
+  }
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+    if (!error && data?.users) {
+      cachedAuthUsers = data.users;
+      cachedAuthUsersExpiresAt = now + 60000; // 60s TTL
+      return cachedAuthUsers ?? [];
+    }
+  } catch {}
+  return cachedAuthUsers || [];
+}
+
 export async function GET() {
   try {
     const supabaseAdmin = getSupabaseAdminClient();
     
-    // Fetch both employees and live Supabase Auth users in parallel
-    const [{ data: empData, error: empError }, { data: authData, error: authError }] = await Promise.all([
+    // Fetch both employees and live Supabase Auth users in parallel (Auth users cached)
+    const [{ data: empData, error: empError }, authUsers] = await Promise.all([
       supabaseAdmin
         .from('employees')
         .select('*')
         .range(0, 5000)
         .order('name', { ascending: true }),
-      supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
+      getCachedAuthUsers(supabaseAdmin),
     ]);
 
     if (empError) {
@@ -43,7 +62,6 @@ export async function GET() {
     }
 
     const employees = empData || [];
-    const authUsers = (!authError && authData?.users) ? authData.users : [];
 
     // Map active Auth users by ID and by Email for instantaneous lookups
     const authUserIds = new Set<string>(authUsers.map((u) => u.id));
@@ -206,6 +224,7 @@ export async function POST(request: Request) {
       metadata: { code: employeePayload.code, name: employeePayload.name },
     });
 
+    cachedAuthUsers = null;
     return NextResponse.json({ success: true, data });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || 'Failed to save employee' }, { status: 500 });
@@ -214,6 +233,7 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    cachedAuthUsers = null;
     const body = await request.json();
     const { codes } = body;
 

@@ -36,8 +36,30 @@ import {
 
 export default function LeaveAllocationsPage() {
   const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
-  const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
-  const [employees, setEmployees] = useState<any[]>([]);
+  const [allocations, setAllocations] = useState<LeaveAllocationItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_leave_allocations');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [employees, setEmployees] = useState<any[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_employees_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [departmentsList, setDepartmentsList] = useState<DepartmentItem[]>([]);
   const [projectsList, setProjectsList] = useState<ProjectItem[]>([]);
 
