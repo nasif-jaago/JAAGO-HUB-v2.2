@@ -84,7 +84,7 @@ import {
   fetchTeamsFromSupabase,
 } from '@/lib/supabase-organization';
 import { getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
-import { hasPermission } from '@/lib/rbac-guard';
+import { hasPermission, isDspDepartment, isDspOnlyScoped } from '@/lib/rbac-guard';
 
 export default function PnCEmployeesPage() {
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
@@ -651,6 +651,11 @@ function toCanonicalOrgName(raw: string): string {
 
   // 2. Available Departments (Connected to selected Organization, with live counts)
   const availableDepartments = useMemo(() => {
+    if (isDspOnlyScoped()) {
+      const dspCount = employees.filter((e) => isDspDepartment(e.department, e.leaveGroup)).length;
+      return [{ label: 'Digital School Program', count: dspCount }];
+    }
+
     const deptMap = new Map<string, { label: string; count: number }>();
 
     masterDepartments.forEach((d) => {
@@ -693,6 +698,7 @@ function toCanonicalOrgName(raw: string): string {
     });
 
     employees.forEach((e) => {
+      if (isDspOnlyScoped() && !isDspDepartment(e.department, e.leaveGroup)) return;
       if (!e.branch || !e.branch.trim()) return;
       if (selectedOrg) {
         if (normalizeOrgKey(e.organization) !== normalizeOrgKey(selectedOrg)) return;
@@ -725,6 +731,7 @@ function toCanonicalOrgName(raw: string): string {
     });
 
     employees.forEach((e) => {
+      if (isDspOnlyScoped() && !isDspDepartment(e.department, e.leaveGroup)) return;
       if (!e.project || !e.project.trim() || e.project === 'General Operations') return;
       if (selectedOrg) {
         if (normalizeOrgKey(e.organization) !== normalizeOrgKey(selectedOrg)) return;
@@ -760,6 +767,7 @@ function toCanonicalOrgName(raw: string): string {
     });
 
     employees.forEach((e) => {
+      if (isDspOnlyScoped() && !isDspDepartment(e.department, e.leaveGroup)) return;
       if (!e.designation || !e.designation.trim()) return;
       if (selectedOrg) {
         if (normalizeOrgKey(e.organization) !== normalizeOrgKey(selectedOrg)) return;
@@ -793,7 +801,12 @@ function toCanonicalOrgName(raw: string): string {
 
   // Filter & Sort employees (Hierarchical connection across all entities)
   const filtered = useMemo(() => {
+    const isDspScope = isDspOnlyScoped();
     const list = employees.filter((emp) => {
+      if (isDspScope && !isDspDepartment(emp.department, emp.leaveGroup)) {
+        return false;
+      }
+
       const isArchived = emp.status === 'Archived' || Boolean(emp.isArchived);
 
       // If ARCHIVED tab is selected, show ONLY archived employees

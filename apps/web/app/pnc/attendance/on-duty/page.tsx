@@ -20,10 +20,16 @@ import {
   saveLocalOnDutyLogs,
 } from '@/lib/supabase-attendance';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
-import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
+import {
+  useOrganizationScope,
+  matchesSelectedOrg,
+  matchesSelectedDept,
+  isDspDepartment,
+  isDspOnlyScoped,
+} from '@/lib/use-organization-scope';
 
 export default function OnDutyLogsPage() {
-  const { selectedOrg, selectedDept } = useOrganizationScope();
+  const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
   const [logs, setLogs] = useState<OnDutyLogItem[]>([]);
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -198,12 +204,22 @@ export default function OnDutyLogsPage() {
     return map;
   }, [employees]);
 
+  const availableEmployees = useMemo(() => {
+    if (isDspScoped || isDspOnlyScoped()) {
+      return employees.filter((e) => isDspDepartment(e.department, e.leaveGroup));
+    }
+    return employees;
+  }, [employees, isDspScoped]);
+
   // Filter computation
   const filteredLogs = logs.filter((log) => {
     const emp = empCodeToProfile.get(log.employeeCode);
     const org = emp?.organization || '';
     const dept = emp?.department || log.department || '';
 
+    if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept)) {
+      return false;
+    }
     if (!matchesSelectedOrg(org, selectedOrg)) return false;
     if (!matchesSelectedDept(dept, selectedDept)) return false;
 
@@ -462,7 +478,7 @@ export default function OnDutyLogsPage() {
                     onChange={(e) => handleEmployeeSelectInForm(e.target.value)}
                     className="w-full h-11 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
                   >
-                    {employees.map((emp) => (
+                    {availableEmployees.map((emp) => (
                       <option key={emp.code} value={emp.code}>
                         {emp.name} ({emp.code}) &bull; {emp.designation}
                       </option>

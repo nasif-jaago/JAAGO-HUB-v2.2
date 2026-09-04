@@ -1190,7 +1190,7 @@ export async function fetchDepartmentsFromSupabase(): Promise<DepartmentItem[]> 
           createdAt: row.created_at,
           updatedAt: row.updated_at,
         }));
-        baseList = deduplicateEntitiesByName(dbItems, []);
+        baseList = deduplicateEntitiesByName(dbItems, INITIAL_DEPARTMENTS);
       }
     }
   } catch {}
@@ -1198,6 +1198,35 @@ export async function fetchDepartmentsFromSupabase(): Promise<DepartmentItem[]> 
   if (baseList.length === 0) {
     const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, INITIAL_DEPARTMENTS);
     baseList = deduplicateEntitiesByName(cached, INITIAL_DEPARTMENTS);
+  } else {
+    const cached = getLocalCache(DEPARTMENTS_CACHE_KEY, []);
+    baseList = deduplicateEntitiesByName(baseList, cached);
+  }
+
+  // Safety net: Incorporate any unique departments present in cached employees
+  if (typeof window !== 'undefined') {
+    try {
+      const cachedEmpsRaw = localStorage.getItem('jaago_pnc_employees_v2');
+      if (cachedEmpsRaw) {
+        const emps = JSON.parse(cachedEmpsRaw);
+        if (Array.isArray(emps)) {
+          const empDepts: DepartmentItem[] = [];
+          emps.forEach((e: any) => {
+            if (e.department && typeof e.department === 'string' && e.department.trim()) {
+              const deptName = e.department.trim();
+              empDepts.push({
+                id: `dept-${deptName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                name: deptName,
+                code: deptName.slice(0, 4).toUpperCase(),
+                organizationName: e.organization || 'JAAGO Foundation',
+                isArchived: false,
+              });
+            }
+          });
+          baseList = deduplicateEntitiesByName(baseList, empDepts);
+        }
+      }
+    } catch {}
   }
 
   const result = deduplicateEntitiesByName(baseList, []).filter((d) => !deletedIds.has(d.id));

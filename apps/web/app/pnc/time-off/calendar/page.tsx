@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   CheckCircle2,
   Clock,
@@ -17,6 +17,14 @@ import {
   LeaveRequestItem,
   PublicHolidayItem,
 } from '@/lib/supabase-time-off';
+import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
+import {
+  useOrganizationScope,
+  matchesSelectedOrg,
+  matchesSelectedDept,
+  isDspDepartment,
+  isDspOnlyScoped,
+} from '@/lib/use-organization-scope';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -24,22 +32,47 @@ const MONTH_NAMES = [
 ];
 
 export default function PnCLeaveCalendarPage() {
+  const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
   const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 7, 1)); // August 2026 default
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
   const [holidays, setHolidays] = useState<PublicHolidayItem[]>([]);
 
   const loadData = async () => {
-    const [reqs, hols] = await Promise.all([
+    const [reqs, hols, emps] = await Promise.all([
       fetchLeaveRequests(),
       fetchPublicHolidays(),
+      fetchEmployeesFromSupabase(),
     ]);
     if (reqs) setRequests(reqs);
     if (hols) setHolidays(hols);
+    if (emps) setEmployees(emps);
   };
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const empCodeToProfile = useMemo(() => {
+    const map = new Map<string, FullEmployeeProfile>();
+    employees.forEach((e) => {
+      if (e.code) map.set(e.code, e);
+    });
+    return map;
+  }, [employees]);
+
+  // Filter requests based on organization and department (strictly respects DSP-only scope)
+  const scopedRequests = useMemo(() => {
+    return requests.filter((r) => {
+      const emp = empCodeToProfile.get(r.employeeCode);
+      const org = emp?.organization || '';
+      const dept = emp?.department || r.department || '';
+      if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept)) {
+        return false;
+      }
+      return matchesSelectedOrg(org, selectedOrg) && matchesSelectedDept(dept, selectedDept);
+    });
+  }, [requests, empCodeToProfile, selectedOrg, selectedDept, isDspScoped]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -58,8 +91,8 @@ export default function PnCLeaveCalendarPage() {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   // Metrics for current month
-  const approvedLeaves = requests.filter((r) => r.status === 'Approved');
-  const pendingLeaves = requests.filter((r) => r.status === 'Pending');
+  const approvedLeaves = scopedRequests.filter((r) => r.status === 'Approved');
+  const pendingLeaves = scopedRequests.filter((r) => r.status === 'Pending');
   const holidaysThisMonth = holidays.filter((h) => {
     const hDate = new Date(h.date);
     return hDate.getFullYear() === year && hDate.getMonth() === month;
@@ -81,9 +114,16 @@ export default function PnCLeaveCalendarPage() {
             <span>/</span>
             <span className="text-foreground font-bold">Leave Calendar</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sans">
-            Leave Calendar
-          </h1>
+          <div className="flex items-center space-x-3 mt-1">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sans">
+              Leave Calendar
+            </h1>
+            {isDspScoped && (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                DSP Scoped
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -201,8 +241,8 @@ export default function PnCLeaveCalendarPage() {
               return false;
             });
 
-            // Find leaves on this date
-            const dayLeaves = requests.filter((r) => {
+            // Find leaves on this date (filtered to scoped requests)
+            const dayLeaves = scopedRequests.filter((r) => {
               return dateStr >= r.fromDate && dateStr <= r.toDate;
             });
 

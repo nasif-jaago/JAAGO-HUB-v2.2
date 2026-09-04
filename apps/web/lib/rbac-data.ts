@@ -28,6 +28,8 @@ export interface PermissionModuleGroup {
   permissions: PermissionItem[];
 }
 
+export const PERM_DSP_ONLY_SCOPE = 'pnc.scope.dsp_only';
+
 export const PERMISSION_MODULES: PermissionModuleGroup[] = [
   {
     moduleKey: 'system_admin',

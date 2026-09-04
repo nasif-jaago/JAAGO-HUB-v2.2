@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Menu,
   Sun,
@@ -50,6 +50,9 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
+  const notifMenuRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
   const loadNotifications = async () => {
     // 1. Immediate sync from local cache
     const cached = fetchUserNotifications();
@@ -82,6 +85,36 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
       window.removeEventListener('jaago_leave_request_updated', handleNotifUpdate);
       window.removeEventListener('storage', handleNotifUpdate);
       clearInterval(interval);
+    };
+  }, []);
+
+  // Close dropdowns on outside click or ESC key
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (notifMenuRef.current && !notifMenuRef.current.contains(event.target as Node)) {
+        setShowNotifMenu(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowNotifMenu(false);
+        setShowUserMenu(false);
+        setShowSearchModal(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
@@ -222,8 +255,14 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
 
         {/* Global Search Modal */}
         {showSearchModal && (
-          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start justify-center pt-20 p-4">
-            <div className="bg-card border border-border/90 rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden animate-in fade-in zoom-in-95 space-y-3 p-4">
+          <div
+            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start justify-center pt-20 p-4"
+            onClick={() => setShowSearchModal(false)}
+          >
+            <div
+              className="bg-card border border-border/90 rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden animate-in fade-in zoom-in-95 space-y-3 p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="relative">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
                 <input
@@ -325,7 +364,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         </button>
 
         {/* Notifications */}
-        <div className="relative">
+        <div className="relative" ref={notifMenuRef}>
           <button
             onClick={() => setShowNotifMenu(!showNotifMenu)}
             className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition relative cursor-pointer"
@@ -417,7 +456,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         </div>
 
         {/* User Profile Avatar with Yellow Circle */}
-        <div className="relative pl-1">
+        <div className="relative pl-1" ref={userMenuRef}>
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center space-x-2 p-0.5 rounded-full hover:ring-2 hover:ring-primary/50 transition cursor-pointer"

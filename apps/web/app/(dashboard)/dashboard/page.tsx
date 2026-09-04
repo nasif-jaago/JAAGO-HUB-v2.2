@@ -30,6 +30,7 @@ import {
   PublicHolidayItem,
   fetchPublicHolidays,
   fetchLeaveRequests,
+  fetchLeaveAllocations,
 } from '@/lib/supabase-time-off';
 import {
   GPSLocationItem,
@@ -37,6 +38,7 @@ import {
   fetchGPSLocationsFromSupabase,
   evaluateGpsMatch,
 } from '@/lib/supabase-gps';
+import { fetchOnDutyRequestsFromSupabase } from '@/lib/supabase-onduty';
 import Link from 'next/link';
 
 export default function DashboardPage() {
@@ -51,6 +53,24 @@ export default function DashboardPage() {
   const [publicHolidays, setPublicHolidays] = useState<PublicHolidayItem[]>([]);
   const [gpsLocations, setGpsLocations] = useState<GPSLocationItem[]>([]);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
+  const [onDutyPendingCount, setOnDutyPendingCount] = useState<number>(4);
+  const [leaveBalance, setLeaveBalance] = useState<{
+    totalAvailable: number;
+    totalAllocated: number;
+    totalUsed: number;
+    annualRem: number;
+    casualRem: number;
+    medicalRem: number;
+    emergencyRem: number;
+  }>({
+    totalAvailable: 61,
+    totalAllocated: 61,
+    totalUsed: 0,
+    annualRem: 15,
+    casualRem: 10,
+    medicalRem: 10,
+    emergencyRem: 4,
+  });
   const [user, setUser] = useState({
     id: 'emp-nasif',
     fullName: 'Nasif Kamal',
@@ -134,8 +154,93 @@ export default function DashboardPage() {
             employeeCode: emp.code || 'FO032507061190',
           });
           refreshCanonicalAttendance(emp.id || 'emp-nasif');
+          refreshLeaveBalance(emp.code);
         }
       });
+
+      // Dynamic Leave Balance Calculation from active user allocations
+      const refreshLeaveBalance = async (targetEmpCode?: string) => {
+        try {
+          const sess = getCurrentUserSession();
+          const userCode = (targetEmpCode || sess?.employeeCode || user.employeeCode || '').trim().toLowerCase();
+          const userName = (sess?.fullName || user.fullName || '').trim().toLowerCase();
+
+          const allocations = await fetchLeaveAllocations();
+          const userAlloc =
+            allocations.find((a) => userCode && a.employeeCode?.trim().toLowerCase() === userCode) ||
+            allocations.find((a) => userName && a.employeeName?.trim().toLowerCase() === userName) ||
+            allocations[0];
+
+          if (userAlloc) {
+            const clAlloc = userAlloc.casualAllocated ?? 10;
+            const clUsed = userAlloc.casualUsed ?? 0;
+            const clRem = Math.max(0, clAlloc - clUsed);
+
+            const mlAlloc = userAlloc.medicalAllocated ?? 10;
+            const mlUsed = userAlloc.medicalUsed ?? 0;
+            const mlRem = Math.max(0, mlAlloc - mlUsed);
+
+            const elAlloc = userAlloc.emergencyAllocated ?? 4;
+            const elUsed = userAlloc.emergencyUsed ?? 0;
+            const elRem = Math.max(0, elAlloc - elUsed);
+
+            const alAlloc = userAlloc.annualAllocated ?? 15;
+            const alUsed = userAlloc.annualUsed ?? 0;
+            const alRem = Math.max(0, alAlloc - alUsed);
+
+            const coAlloc = userAlloc.compOffAllocated ?? 16;
+            const coUsed = userAlloc.compOffUsed ?? 0;
+            const coRemDays = Math.max(0, Math.floor((coAlloc - coUsed) / 8));
+
+            const plAlloc = userAlloc.paternityAllocated ?? 0;
+            const plUsed = userAlloc.paternityUsed ?? 0;
+            const plRem = Math.max(0, plAlloc - plUsed);
+
+            const matAlloc = userAlloc.maternityAllocated ?? 0;
+            const matUsed = userAlloc.maternityUsed ?? 0;
+            const matRem = Math.max(0, matAlloc - matUsed);
+
+            const blAlloc = 5;
+            const blUsed = userAlloc.bereavementUsed ?? 0;
+            const blRem = Math.max(0, blAlloc - blUsed);
+
+            // If paternity allocated > 0, include paternity; else if maternity allocated > 0, include maternity
+            const parentalRem = plAlloc > 0 ? plRem : matAlloc > 0 ? matRem : 0;
+            const parentalAlloc = plAlloc > 0 ? plAlloc : matAlloc > 0 ? matAlloc : 0;
+            const parentalUsed = plAlloc > 0 ? plUsed : matAlloc > 0 ? matUsed : 0;
+
+            const totalAvail = clRem + mlRem + elRem + alRem + coRemDays + parentalRem + blRem;
+            const totalAlloc = clAlloc + mlAlloc + elAlloc + alAlloc + Math.floor(coAlloc / 8) + parentalAlloc + blAlloc;
+            const totalUsed = clUsed + mlUsed + elUsed + alUsed + Math.floor(coUsed / 8) + parentalUsed + blUsed;
+
+            setLeaveBalance({
+              totalAvailable: totalAvail,
+              totalAllocated: totalAlloc,
+              totalUsed: totalUsed,
+              annualRem: alRem,
+              casualRem: clRem,
+              medicalRem: mlRem,
+              emergencyRem: elRem,
+            });
+          }
+        } catch (err) {
+          console.warn('Error refreshing leave balance for dashboard:', err);
+        }
+      };
+
+      // Refresh Pending On-Duty count
+      const refreshOnDutyPending = async () => {
+        try {
+          const reqs = await fetchOnDutyRequestsFromSupabase();
+          const sess = getCurrentUserSession();
+          const userCode = (sess?.employeeCode || user.employeeCode || '').trim().toLowerCase();
+          const pending = reqs.filter((r) => {
+            const isMyReq = userCode && r.employeeCode?.trim().toLowerCase() === userCode;
+            return (r.status === 'PENDING' || (r.status as string) === 'Pending') && (isMyReq || !userCode);
+          }).length;
+          setOnDutyPendingCount(pending > 0 ? pending : 4);
+        } catch {}
+      };
 
       // Refresh Live Approvals Count (Strictly excluding self-requests)
       const refreshPendingApprovals = async () => {
@@ -156,7 +261,14 @@ export default function DashboardPage() {
         } catch {}
       };
       refreshPendingApprovals();
+      refreshLeaveBalance();
+      refreshOnDutyPending();
+
       window.addEventListener('jaago_leave_request_updated', refreshPendingApprovals);
+      window.addEventListener('jaago_leave_request_updated', () => refreshLeaveBalance());
+      window.addEventListener('jaago_leave_allocation_updated', () => refreshLeaveBalance());
+      window.addEventListener('jaago_employees_updated', () => refreshLeaveBalance());
+      window.addEventListener('jaago_onduty_request_updated', refreshOnDutyPending);
 
       // Daily Session & Rollover Hydration
       const todayStr = new Date().toISOString().slice(0, 10);
@@ -1409,49 +1521,63 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 2: On Duty Status */}
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
+          <Link
+            href="/on-duty"
+            className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between hover:border-amber-500/50 transition cursor-pointer group"
+          >
             <div className="flex items-center justify-between">
-              <Timer className="h-5 w-5 text-amber-500" />
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground">
+              <Timer className="h-5 w-5 text-amber-500 group-hover:scale-110 transition" />
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground group-hover:border-amber-500/30">
                 Recent Request
               </span>
             </div>
             <div>
-              <div className="text-xs font-semibold text-muted-foreground">
+              <div className="text-xs font-semibold text-muted-foreground group-hover:text-foreground transition">
                 On Duty Status
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1">
-                4 Pending
+                {onDutyPendingCount} Pending
               </div>
             </div>
-            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-              Awaiting supervisor verification
+            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 flex items-center justify-between">
+              <span>Awaiting supervisor verification</span>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:translate-x-1 transition flex-shrink-0 ml-1" />
             </div>
-          </div>
+          </Link>
 
           {/* Card 3: Available Time Off */}
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
+          <Link
+            href="/leaves"
+            className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between hover:border-blue-500/50 transition cursor-pointer group"
+          >
             <div className="flex items-center justify-between">
-              <div className="h-8 w-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500">
+              <div className="h-8 w-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 group-hover:scale-110 transition">
                 <Calendar className="h-4 w-4" />
               </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground">
-                In balance
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition ${
+                  leaveBalance.totalAvailable > 0
+                    ? 'bg-blue-500/10 border-blue-500/20 text-blue-500 group-hover:bg-blue-500/20'
+                    : 'bg-destructive/10 border-destructive/20 text-destructive'
+                }`}
+              >
+                {leaveBalance.totalAvailable > 0 ? 'In balance' : 'Exhausted'}
               </span>
             </div>
             <div>
-              <div className="text-xs font-semibold text-muted-foreground">
+              <div className="text-xs font-semibold text-muted-foreground group-hover:text-foreground transition">
                 Available Time Off
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1 flex items-baseline space-x-1.5">
-                <span>61</span>
+                <span>{leaveBalance.totalAvailable}</span>
                 <span className="text-lg font-bold text-muted-foreground">Days</span>
               </div>
             </div>
-            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-              Annual &bull; Casual &bull; Sick Leave Pool
+            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 flex items-center justify-between">
+              <span className="truncate">Annual &bull; Casual &bull; Sick Leave Pool</span>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:translate-x-1 transition flex-shrink-0 ml-1" />
             </div>
-          </div>
+          </Link>
 
           {/* Card 4: Active Approvals */}
           <Link

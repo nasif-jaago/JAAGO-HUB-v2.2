@@ -315,6 +315,8 @@ export default function AttendancePage() {
     };
 
     window.addEventListener('jaago_attendance_updated', handleAttUpdated);
+    window.addEventListener('jaago_leave_request_updated', handleAttUpdated);
+    window.addEventListener('jaago_leave_allocation_updated', handleAttUpdated);
     window.addEventListener('jaago_user_updated', handleUserUpdated);
     window.addEventListener('jaago_onduty_updated', handleODUpdated);
     window.addEventListener('storage', handleAttUpdated);
@@ -322,6 +324,8 @@ export default function AttendancePage() {
 
     return () => {
       window.removeEventListener('jaago_attendance_updated', handleAttUpdated);
+      window.removeEventListener('jaago_leave_request_updated', handleAttUpdated);
+      window.removeEventListener('jaago_leave_allocation_updated', handleAttUpdated);
       window.removeEventListener('jaago_user_updated', handleUserUpdated);
       window.removeEventListener('jaago_onduty_updated', handleODUpdated);
       window.removeEventListener('storage', handleAttUpdated);
@@ -1746,6 +1750,10 @@ export default function AttendancePage() {
                             <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/30 text-[11px] font-black">
                               Absent
                             </span>
+                          ) : log.status === 'Leave' ? (
+                            <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[11px] font-black">
+                              Leave
+                            </span>
                           ) : (
                             <span className="px-2.5 py-1 rounded-lg bg-surface text-muted-foreground border border-border text-[11px] font-bold">
                               {log.status}
@@ -2242,6 +2250,10 @@ function AttendanceLogRow({
         ) : log.status === 'Absent' ? (
           <span className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-500 border border-rose-500/30 text-[10px] font-black">
             Absent
+          </span>
+        ) : log.status === 'Leave' ? (
+          <span className="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px] font-black">
+            Leave
           </span>
         ) : (
           <span className="px-2 py-0.5 rounded-md bg-surface text-muted-foreground border border-border text-[10px] font-bold">

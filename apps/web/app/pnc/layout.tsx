@@ -37,7 +37,8 @@ import {
   OrganizationEntity,
   DepartmentItem,
 } from '@/lib/supabase-organization';
-import { hasPermission, hasModuleAccess } from '@/lib/rbac-guard';
+import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
+import { hasPermission, hasModuleAccess, isDspOnlyScoped } from '@/lib/rbac-guard';
 import { matchesSelectedOrg } from '@/lib/use-organization-scope';
 
 export type ThemeMode = 'dark' | 'light' | 'espresso';
@@ -59,6 +60,7 @@ export default function PnCLayout({
   const [selectedDept, setSelectedDept] = useState<string>('ALL');
 
   useEffect(() => {
+    setMounted(true);
     try {
       const savedOrg = localStorage.getItem('jaago_selected_org');
       if (savedOrg) setSelectedOrg(savedOrg);
@@ -66,13 +68,43 @@ export default function PnCLayout({
       if (savedDept) setSelectedDept(savedDept);
     } catch {}
 
-    const loadOrgsAndDepts = () => {
-      fetchOrganizationsFromSupabase().then((orgs) => {
+    const loadOrgsAndDepts = async () => {
+      try {
+        const [orgs, depts, emps] = await Promise.all([
+          fetchOrganizationsFromSupabase(),
+          fetchDepartmentsFromSupabase(),
+          fetchEmployeesFromSupabase(),
+        ]);
         if (orgs) setOrganizations(orgs);
-      });
-      fetchDepartmentsFromSupabase().then((depts) => {
-        if (depts) setDepartments(depts);
-      });
+
+        const deptMap = new Map<string, DepartmentItem>();
+        (depts || []).forEach((d) => {
+          if (d.name && d.name.trim()) {
+            deptMap.set(d.name.trim().toLowerCase(), d);
+          }
+        });
+
+        // Ensure all departments assigned to any employee are also included
+        (emps || []).forEach((e) => {
+          if (e.department && e.department.trim()) {
+            const key = e.department.trim().toLowerCase();
+            if (!deptMap.has(key)) {
+              deptMap.set(key, {
+                id: `dept-${key.replace(/[^a-z0-9]+/g, '-')}`,
+                name: e.department.trim(),
+                code: e.department.trim().slice(0, 4).toUpperCase(),
+                organizationName: e.organization || 'JAAGO Foundation',
+                organizationId: orgs?.find((o) => o.name === e.organization)?.id || 'org-1',
+                isArchived: false,
+              });
+            }
+          }
+        });
+
+        setDepartments(Array.from(deptMap.values()));
+      } catch (err) {
+        console.warn('Error loading orgs and departments in layout:', err);
+      }
     };
 
     loadOrgsAndDepts();
@@ -97,12 +129,14 @@ export default function PnCLayout({
     window.addEventListener('jaago_org_changed', handleOrgSync);
     window.addEventListener('jaago_dept_changed', handleDeptSync);
     window.addEventListener('jaago_departments_updated', loadOrgsAndDepts);
+    window.addEventListener('jaago_employees_updated', loadOrgsAndDepts);
     window.addEventListener('jaago_entity_updated', handleEntityUpdate);
     window.addEventListener('storage', loadOrgsAndDepts);
     return () => {
       window.removeEventListener('jaago_org_changed', handleOrgSync);
       window.removeEventListener('jaago_dept_changed', handleDeptSync);
       window.removeEventListener('jaago_departments_updated', loadOrgsAndDepts);
+      window.removeEventListener('jaago_employees_updated', loadOrgsAndDepts);
       window.removeEventListener('jaago_entity_updated', handleEntityUpdate);
       window.removeEventListener('storage', loadOrgsAndDepts);
     };
@@ -116,32 +150,14 @@ export default function PnCLayout({
     window.dispatchEvent(new CustomEvent('jaago_org_changed', { detail: newOrg }));
   };
 
-  const handleDeptChange = (newDept: string) => {
-    setSelectedDept(newDept);
-    try {
-      localStorage.setItem('jaago_selected_dept', newDept);
-    } catch {}
-    window.dispatchEvent(new CustomEvent('jaago_dept_changed', { detail: newDept }));
-  };
-
-  const availableDepts = React.useMemo(() => {
-    const deptMap = new Map<string, string>();
-    departments.forEach((d) => {
-      if (!d.name || d.isArchived) return;
-      if (selectedOrg !== 'ALL') {
-        const orgName = d.organizationName || organizations.find((o) => o.id === d.organizationId)?.name;
-        if (orgName && !matchesSelectedOrg(orgName, selectedOrg)) return;
-      }
-      const key = d.name.trim().toLowerCase();
-      if (!deptMap.has(key)) {
-        deptMap.set(key, d.name.trim());
-      }
-    });
-    return Array.from(deptMap.values()).sort((a, b) => a.localeCompare(b));
-  }, [departments, selectedOrg, organizations]);
+  const [mounted, setMounted] = useState(false);
 
   // Active Authenticated User Session
   const [currentUser, setCurrentUser] = useState<{
+    id?: string;
+    email?: string;
+    employeeCode?: string;
+    permissions?: string[];
     fullName: string;
     jobTitle: string;
     role: string;
@@ -157,6 +173,36 @@ export default function PnCLayout({
     isSuperAdmin: false,
     isAdmin: false,
   });
+
+  const isDspScoped = mounted ? isDspOnlyScoped(currentUser) : false;
+
+  const handleDeptChange = (newDept: string) => {
+    if (isDspScoped) return;
+    setSelectedDept(newDept);
+    try {
+      localStorage.setItem('jaago_selected_dept', newDept);
+    } catch {}
+    window.dispatchEvent(new CustomEvent('jaago_dept_changed', { detail: newDept }));
+  };
+
+  const availableDepts = React.useMemo(() => {
+    if (isDspScoped) {
+      return ['Digital School Program'];
+    }
+    const deptMap = new Map<string, string>();
+    departments.forEach((d) => {
+      if (!d.name || d.isArchived) return;
+      if (selectedOrg !== 'ALL') {
+        const orgName = d.organizationName || organizations.find((o) => o.id === d.organizationId)?.name;
+        if (orgName && !matchesSelectedOrg(orgName, selectedOrg)) return;
+      }
+      const key = d.name.trim().toLowerCase();
+      if (!deptMap.has(key)) {
+        deptMap.set(key, d.name.trim());
+      }
+    });
+    return Array.from(deptMap.values()).sort((a, b) => a.localeCompare(b));
+  }, [departments, selectedOrg, organizations, isDspScoped]);
 
   // Granular Dynamic RBAC Module Access State
   const [permissionsState, setPermissionsState] = useState<{
@@ -231,6 +277,10 @@ export default function PnCLayout({
 
           if (isMounted) {
             setCurrentUser({
+              id: parsed.id,
+              email: parsed.email,
+              employeeCode: parsed.employeeCode,
+              permissions: parsed.permissions,
               fullName: parsed.fullName || parsed.name || 'User',
               jobTitle: parsed.jobTitle || parsed.designation || (isSuper ? 'Coordinator' : 'Staff Member'),
               role: isSuper ? 'SUPER_ADMIN' : isAdmin ? 'ADMIN' : 'USER',
@@ -1008,6 +1058,7 @@ export default function PnCLayout({
             {/* Organization Switcher Dropdown in Top Header */}
             <div className="relative">
               <select
+                suppressHydrationWarning
                 value={selectedOrg}
                 onChange={(e) => handleOrgChange(e.target.value)}
                 className="appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border border-border/80 rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition cursor-pointer shadow-sm max-w-[160px] sm:max-w-[210px] truncate"
@@ -1029,14 +1080,22 @@ export default function PnCLayout({
             {/* Department Switcher Dropdown in Top Header */}
             <div className="relative">
               <select
-                value={selectedDept}
+                suppressHydrationWarning
+                value={isDspScoped ? 'Digital School Program' : selectedDept}
                 onChange={(e) => handleDeptChange(e.target.value)}
-                className="appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border border-border/80 rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition cursor-pointer shadow-sm max-w-[150px] sm:max-w-[200px] truncate"
-                title="Select Active Department"
+                disabled={isDspScoped}
+                className={`appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition shadow-sm max-w-[150px] sm:max-w-[200px] truncate ${
+                  isDspScoped
+                    ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 cursor-not-allowed'
+                    : 'border-border/80 cursor-pointer'
+                }`}
+                title={isDspScoped ? 'Locked to Digital School Program Scope' : 'Select Active Department'}
               >
-                <option value="ALL" className="bg-popover text-popover-foreground font-bold">
-                  All Departments
-                </option>
+                {!isDspScoped && (
+                  <option value="ALL" className="bg-popover text-popover-foreground font-bold">
+                    All Departments
+                  </option>
+                )}
                 {availableDepts.map((deptName) => (
                   <option key={deptName} value={deptName} className="bg-popover text-popover-foreground">
                     {deptName}

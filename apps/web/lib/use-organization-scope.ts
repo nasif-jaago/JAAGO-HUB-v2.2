@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { FullEmployeeProfile } from '@/lib/supabase-employees';
+import { isDspDepartment, isDspOnlyScoped } from '@/lib/rbac-guard';
+
+export { isDspDepartment, isDspOnlyScoped };
 
 export function normalizeOrgKey(str: string | null | undefined): string {
   if (!str) return '';
@@ -26,6 +29,10 @@ export function normalizeDeptKey(str: string | null | undefined): string {
 }
 
 export function matchesSelectedDept(itemDept: string | null | undefined, selectedDept: string): boolean {
+  // If DSP-only scope is active, ONLY DSP employees and departments match
+  if (isDspOnlyScoped()) {
+    return isDspDepartment(itemDept);
+  }
   if (!selectedDept || selectedDept === 'ALL' || selectedDept.trim() === '') return true;
   if (!itemDept) return false;
   const d1 = normalizeDeptKey(itemDept);
@@ -34,25 +41,40 @@ export function matchesSelectedDept(itemDept: string | null | undefined, selecte
 }
 
 export function useOrganizationScope() {
-  const [selectedOrg, setSelectedOrg] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return localStorage.getItem('jaago_selected_org') || 'ALL';
-      } catch {}
-    }
-    return 'ALL';
-  });
+  const [mounted, setMounted] = useState<boolean>(false);
+  const [isDspScopedState, setIsDspScopedState] = useState<boolean>(false);
+  const [selectedOrg, setSelectedOrg] = useState<string>('ALL');
+  const [selectedDept, setSelectedDept] = useState<string>('ALL');
 
-  const [selectedDept, setSelectedDept] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return localStorage.getItem('jaago_selected_dept') || 'ALL';
-      } catch {}
+  const checkDspScope = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const isDsp = isDspOnlyScoped();
+    setIsDspScopedState(isDsp);
+    if (isDsp) {
+      setSelectedDept('Digital School Program');
     }
-    return 'ALL';
-  });
+  }, []);
 
   useEffect(() => {
+    setMounted(true);
+    try {
+      const savedOrg = localStorage.getItem('jaago_selected_org');
+      if (savedOrg) setSelectedOrg(savedOrg);
+
+      const isDsp = isDspOnlyScoped();
+      setIsDspScopedState(isDsp);
+      if (isDsp) {
+        setSelectedDept('Digital School Program');
+      } else {
+        const savedDept = localStorage.getItem('jaago_selected_dept');
+        if (savedDept) setSelectedDept(savedDept);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    checkDspScope();
+
     const handleOrgChanged = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       if (detail) {
@@ -61,10 +83,18 @@ export function useOrganizationScope() {
     };
 
     const handleDeptChanged = (e: Event) => {
+      if (isDspOnlyScoped()) {
+        setSelectedDept('Digital School Program');
+        return;
+      }
       const detail = (e as CustomEvent).detail;
       if (detail) {
         setSelectedDept(detail);
       }
+    };
+
+    const handleUserUpdated = () => {
+      checkDspScope();
     };
 
     const handleStorage = (e: StorageEvent) => {
@@ -72,19 +102,37 @@ export function useOrganizationScope() {
         setSelectedOrg(e.newValue);
       }
       if (e.key === 'jaago_selected_dept' && e.newValue) {
-        setSelectedDept(e.newValue);
+        if (isDspOnlyScoped()) {
+          setSelectedDept('Digital School Program');
+        } else {
+          setSelectedDept(e.newValue);
+        }
+      }
+      if (
+        e.key === 'jaago_user' ||
+        e.key === 'jaago_active_user_permissions' ||
+        (e.key && e.key.startsWith('jaago_user_permissions_'))
+      ) {
+        checkDspScope();
       }
     };
 
     window.addEventListener('jaago_org_changed', handleOrgChanged);
     window.addEventListener('jaago_dept_changed', handleDeptChanged);
+    window.addEventListener('jaago_user_updated', handleUserUpdated);
+    window.addEventListener('jaago_rbac_updated', handleUserUpdated);
     window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('jaago_org_changed', handleOrgChanged);
       window.removeEventListener('jaago_dept_changed', handleDeptChanged);
+      window.removeEventListener('jaago_user_updated', handleUserUpdated);
+      window.removeEventListener('jaago_rbac_updated', handleUserUpdated);
       window.removeEventListener('storage', handleStorage);
     };
-  }, []);
+  }, [checkDspScope]);
+
+  const isDsp = mounted && (isDspScopedState || isDspOnlyScoped());
+  const activeDept = isDsp ? 'Digital School Program' : selectedDept;
 
   const filterEmployeesByOrg = useCallback((employees: FullEmployeeProfile[]) => {
     if (!selectedOrg || selectedOrg === 'ALL') return employees;
@@ -93,24 +141,28 @@ export function useOrganizationScope() {
 
   const filterEmployeesByScope = useCallback((employees: FullEmployeeProfile[]) => {
     return employees.filter((emp) => {
+      if ((isDspScopedState || isDspOnlyScoped()) && !isDspDepartment(emp.department, emp.leaveGroup)) {
+        return false;
+      }
       const matchesOrg = matchesSelectedOrg(emp.organization, selectedOrg);
-      const matchesDept = matchesSelectedDept(emp.department, selectedDept);
+      const matchesDept = matchesSelectedDept(emp.department, activeDept);
       return matchesOrg && matchesDept;
     });
-  }, [selectedOrg, selectedDept]);
+  }, [selectedOrg, activeDept, isDspScopedState]);
 
   const isMatchingOrg = useCallback((orgName: string | null | undefined) => {
     return matchesSelectedOrg(orgName, selectedOrg);
   }, [selectedOrg]);
 
   const isMatchingDept = useCallback((deptName: string | null | undefined) => {
-    return matchesSelectedDept(deptName, selectedDept);
-  }, [selectedDept]);
+    return matchesSelectedDept(deptName, activeDept);
+  }, [activeDept]);
 
   return {
+    isDspScoped: isDsp,
     selectedOrg,
     setSelectedOrg,
-    selectedDept,
+    selectedDept: activeDept,
     setSelectedDept,
     isMatchingOrg,
     isMatchingDept,
@@ -120,5 +172,7 @@ export function useOrganizationScope() {
     matchesSelectedDept,
     normalizeOrgKey,
     normalizeDeptKey,
+    isDspDepartment,
+    isDspOnlyScoped,
   };
 }

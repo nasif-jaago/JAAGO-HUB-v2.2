@@ -21,6 +21,7 @@ import {
 import { EnterpriseTable, ColumnDef } from '@jaago/ui';
 import { getCurrentUserSession, UserSessionData } from '@/lib/user-profile-sync';
 import { downloadAttachment } from '@/lib/attachment-helper';
+import { isDspOnlyScoped, isDspDepartment } from '@/lib/rbac-guard';
 
 interface WorkflowInstance {
   id: string;
@@ -260,9 +261,13 @@ function WorkflowsContent() {
     }
   };
 
-  // Strictly filter out self-requests: employees cannot approve or review their own leave applications
+  // Strictly filter out self-requests and enforce DSP scope if active
   const scopedInstances = useMemo(() => {
+    const isDspScoped = typeof window !== 'undefined' ? isDspOnlyScoped() : false;
     return instances.filter((item) => {
+      if (isDspScoped && !isDspDepartment(item.metadata?.department)) {
+        return false;
+      }
       const itemRequesterCode = (item.metadata.employeeCode || item.requesterId || '').toLowerCase().trim();
       const userCode = (session?.employeeCode || '').toLowerCase().trim();
       const userName = (session?.fullName || '').toLowerCase().trim();

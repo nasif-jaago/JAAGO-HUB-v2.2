@@ -42,6 +42,7 @@ import {
   HeartHandshake,
   BarChart2,
   Cpu,
+  GraduationCap,
 } from 'lucide-react';
 import { EmployeeToUserModal } from '@/components/admin/employee-to-user-modal';
 import {
@@ -52,6 +53,7 @@ import {
   getRoleByNormalizedKey,
   getPermissionsForRole,
   getAllPermissionModules,
+  PERM_DSP_ONLY_SCOPE,
 } from '@/lib/rbac-data';
 
 interface UserRecord {
@@ -502,8 +504,10 @@ export default function UserManagementPage() {
     setSelectedNewRole(userRoleKey);
 
     let existingPerms: string[] | null = null;
+    let hasDspScope = false;
     if (Array.isArray(user.permissions) && user.permissions.length > 0) {
-      existingPerms = user.permissions;
+      existingPerms = [...user.permissions];
+      hasDspScope = user.permissions.includes(PERM_DSP_ONLY_SCOPE) || user.permissions.includes('hr.scope.dsp_only');
     } else if (typeof window !== 'undefined') {
       try {
         const saved =
@@ -511,7 +515,10 @@ export default function UserManagementPage() {
           (user.email ? localStorage.getItem(`jaago_user_permissions_${user.email.toLowerCase().trim()}`) : null);
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) existingPerms = parsed;
+          if (Array.isArray(parsed)) {
+            existingPerms = parsed;
+            hasDspScope = parsed.includes(PERM_DSP_ONLY_SCOPE) || parsed.includes('hr.scope.dsp_only');
+          }
         }
       } catch {}
     }
@@ -520,12 +527,15 @@ export default function UserManagementPage() {
       const roleObj = availableRoles.find((r) => r.key === userRoleKey) || getRoleByNormalizedKey(userRoleKey);
       const defaults = roleObj ? [...roleObj.permissions] : getPermissionsForRole(userRoleKey);
       if (defaults.includes('*')) {
-        existingPerms = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
+        existingPerms = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key)).filter((k) => k !== PERM_DSP_ONLY_SCOPE && k !== 'hr.scope.dsp_only');
       } else {
         existingPerms = defaults;
       }
     } else if (existingPerms.includes('*')) {
-      existingPerms = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
+      existingPerms = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key)).filter((k) => k !== PERM_DSP_ONLY_SCOPE && k !== 'hr.scope.dsp_only');
+      if (hasDspScope) {
+        existingPerms.push(PERM_DSP_ONLY_SCOPE);
+      }
     }
 
     setUserCustomPermissions(existingPerms || []);
@@ -535,17 +545,23 @@ export default function UserManagementPage() {
 
   const handleSelectRole = (newRoleKey: string) => {
     setSelectedNewRole(newRoleKey);
+    const isDspScopeOn = userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only');
     const roleObj = availableRoles.find((r) => r.key === newRoleKey) || getRoleByNormalizedKey(newRoleKey);
     const defaultPerms = roleObj ? [...roleObj.permissions] : getPermissionsForRole(newRoleKey);
+    let newPerms: string[] = [];
     if (defaultPerms.includes('*')) {
-      setUserCustomPermissions(allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key)));
+      newPerms = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key)).filter((k) => k !== PERM_DSP_ONLY_SCOPE && k !== 'hr.scope.dsp_only');
     } else {
-      setUserCustomPermissions(defaultPerms);
+      newPerms = defaultPerms;
     }
+    if (isDspScopeOn && !newPerms.includes(PERM_DSP_ONLY_SCOPE)) {
+      newPerms.push(PERM_DSP_ONLY_SCOPE);
+    }
+    setUserCustomPermissions(newPerms);
   };
 
   const handleToggleModule = (mod: PermissionModuleGroup) => {
-    const modPermKeys = mod.permissions.map((p) => p.key);
+    const modPermKeys = mod.permissions.map((p) => p.key).filter((k) => k !== PERM_DSP_ONLY_SCOPE && k !== 'hr.scope.dsp_only');
     const hasAnyActive = modPermKeys.some(
       (k) => userCustomPermissions.includes(k) || userCustomPermissions.includes('*')
     );
@@ -577,9 +593,21 @@ export default function UserManagementPage() {
     });
   };
 
+  const handleToggleDspScope = () => {
+    setUserCustomPermissions((prev) => {
+      const isCurrentlyOn = prev.includes(PERM_DSP_ONLY_SCOPE) || prev.includes('hr.scope.dsp_only');
+      if (isCurrentlyOn) {
+        return prev.filter((k) => k !== PERM_DSP_ONLY_SCOPE && k !== 'hr.scope.dsp_only');
+      } else {
+        return [...prev.filter((k) => k !== PERM_DSP_ONLY_SCOPE && k !== 'hr.scope.dsp_only'), PERM_DSP_ONLY_SCOPE];
+      }
+    });
+  };
+
   const handleGrantAll = () => {
-    const allKeys = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
-    setUserCustomPermissions(allKeys);
+    const isDspScopeOn = userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only');
+    const allKeys = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key)).filter((k) => k !== PERM_DSP_ONLY_SCOPE && k !== 'hr.scope.dsp_only');
+    setUserCustomPermissions(isDspScopeOn ? [...allKeys, PERM_DSP_ONLY_SCOPE] : allKeys);
   };
 
   const handleRevokeAll = () => {
@@ -591,7 +619,7 @@ export default function UserManagementPage() {
     const roleObj = availableRoles.find((r) => r.key === norm) || getRoleByNormalizedKey(selectedNewRole);
     const defaultPerms = roleObj ? [...roleObj.permissions] : getPermissionsForRole(norm);
     if (defaultPerms.includes('*')) {
-      const allKeys = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key));
+      const allKeys = allAvailableModules.flatMap((m) => m.permissions.map((p) => p.key)).filter((k) => k !== PERM_DSP_ONLY_SCOPE && k !== 'hr.scope.dsp_only');
       setUserCustomPermissions(allKeys);
     } else {
       setUserCustomPermissions(defaultPerms);
@@ -630,7 +658,7 @@ export default function UserManagementPage() {
           )
         );
 
-        // Store user-specific overrides in localStorage
+        // Store user-specific overrides in localStorage under all candidate keys
         if (typeof window !== 'undefined') {
           try {
             localStorage.setItem(
@@ -643,23 +671,48 @@ export default function UserManagementPage() {
                 JSON.stringify(userCustomPermissions)
               );
             }
+            if (showEditRoleModal.fullName) {
+              localStorage.setItem(
+                `jaago_user_permissions_${showEditRoleModal.fullName.toLowerCase().trim()}`,
+                JSON.stringify(userCustomPermissions)
+              );
+            }
+            const empCode = (showEditRoleModal as any).employeeCode || showEditRoleModal.employeeId;
+            if (empCode) {
+              localStorage.setItem(
+                `jaago_user_permissions_${empCode.toLowerCase().trim()}`,
+                JSON.stringify(userCustomPermissions)
+              );
+            }
 
             // If active session belongs to this user, update active session
             const currentActiveStr = localStorage.getItem('jaago_user');
             if (currentActiveStr) {
               const currentActive = JSON.parse(currentActiveStr);
-              if (
+              const isCurrent =
                 currentActive.id === showEditRoleModal.id ||
-                currentActive.email?.toLowerCase().trim() === showEditRoleModal.email.toLowerCase().trim()
-              ) {
+                (currentActive.email && showEditRoleModal.email && currentActive.email.toLowerCase().trim() === showEditRoleModal.email.toLowerCase().trim()) ||
+                (currentActive.fullName && showEditRoleModal.fullName && currentActive.fullName.toLowerCase().trim() === showEditRoleModal.fullName.toLowerCase().trim()) ||
+                (currentActive.employeeCode && empCode && currentActive.employeeCode.toLowerCase().trim() === empCode.toLowerCase().trim());
+
+              if (isCurrent) {
                 currentActive.role = selectedNewRole;
                 currentActive.permissions = userCustomPermissions;
                 localStorage.setItem('jaago_user', JSON.stringify(currentActive));
+                localStorage.setItem('jaago_active_user_permissions', JSON.stringify(userCustomPermissions));
+                document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(currentActive))}; path=/; max-age=604800; SameSite=Lax`;
+
+                if (userCustomPermissions.includes('pnc.scope.dsp_only') || userCustomPermissions.includes('hr.scope.dsp_only')) {
+                  localStorage.setItem('jaago_selected_dept', 'Digital School Program');
+                }
               }
             }
 
             window.dispatchEvent(new CustomEvent('jaago_user_updated'));
             window.dispatchEvent(new CustomEvent('jaago_rbac_updated'));
+            if (userCustomPermissions.includes('pnc.scope.dsp_only') || userCustomPermissions.includes('hr.scope.dsp_only')) {
+              window.dispatchEvent(new CustomEvent('jaago_dept_changed', { detail: 'Digital School Program' }));
+            }
           } catch {}
         }
 
@@ -2356,11 +2409,76 @@ export default function UserManagementPage() {
                           {/* Inside Menus / Tabs Breakdown */}
                           {isExpanded && (
                             <div className="p-3 pt-0 border-t border-border/60 mt-1 space-y-1.5 animate-in fade-in duration-150">
+                              {/* DSP ONLY SCOPE TOGGLE SWITCH AT FIRST (PEOPLE & CULTURE) */}
+                              {mod.moduleKey === 'hr_employees' && (
+                                <div
+                                  onClick={handleToggleDspScope}
+                                  className={`p-3.5 rounded-2xl border-2 flex items-center justify-between gap-3 transition-all cursor-pointer select-none mb-3 mt-1.5 ${
+                                    userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only')
+                                      ? 'bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/10 border-amber-500/50 shadow-md shadow-amber-500/10'
+                                      : 'bg-surface/70 border-border/80 hover:bg-surface hover:border-amber-500/40'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-3.5 min-w-0">
+                                    <div
+                                      className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 border transition-all ${
+                                        userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only')
+                                          ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/30 ring-2 ring-amber-500/20'
+                                          : 'bg-muted/40 text-muted-foreground border-border'
+                                      }`}
+                                    >
+                                      <GraduationCap className="h-5 w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                                        <span className="font-black text-xs text-foreground tracking-tight">
+                                          Only Show DSP (Digital School Program)
+                                        </span>
+                                        <span
+                                          className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black uppercase tracking-wider border ${
+                                            userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only')
+                                              ? 'bg-amber-500 text-white border-amber-400 shadow-sm'
+                                              : 'bg-surface text-muted-foreground border-border'
+                                          }`}
+                                        >
+                                          {userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only')
+                                            ? 'DSP Scope Active'
+                                            : 'Unrestricted'}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                                        {userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only')
+                                          ? 'RESTRICTED: User strictly only sees and takes action for Digital School Program department employees (List, Leaves, Attendance, Time Off, Calendar, Reports, Appraisals, Payroll, Requests). All other departments are completely hidden.'
+                                          : 'UNRESTRICTED: User can access and manage all department employee data across the entire organization without DSP-only restriction.'}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Toggle Switch */}
+                                  <div
+                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                      userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only')
+                                        ? 'bg-amber-500'
+                                        : 'bg-muted-foreground/30'
+                                    }`}
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                        userCustomPermissions.includes(PERM_DSP_ONLY_SCOPE) || userCustomPermissions.includes('hr.scope.dsp_only')
+                                          ? 'translate-x-5'
+                                          : 'translate-x-0'
+                                      }`}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
                               <div className="text-[10px] uppercase font-bold text-muted-foreground px-1 pt-2 pb-1">
                                 Sub-Menus &amp; Feature Permissions Breakdown
                               </div>
                               <div className="grid grid-cols-1 gap-1.5">
-                                {mod.permissions.map((perm) => {
+                                {mod.permissions.filter((p) => p.key !== PERM_DSP_ONLY_SCOPE && p.key !== 'hr.scope.dsp_only').map((perm) => {
                                   const isPermOn =
                                     userCustomPermissions.includes(perm.key) ||
                                     userCustomPermissions.includes('*');

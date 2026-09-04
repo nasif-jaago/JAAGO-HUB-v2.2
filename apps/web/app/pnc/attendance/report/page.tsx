@@ -22,7 +22,14 @@ import {
   recordLocalAttendanceLog,
   fetchAttendanceLogsFromSupabase,
 } from '@/lib/supabase-attendance';
-import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
+import { fetchLeaveRequests, LeaveRequestItem } from '@/lib/supabase-time-off';
+import {
+  useOrganizationScope,
+  matchesSelectedOrg,
+  matchesSelectedDept,
+  isDspDepartment,
+  isDspOnlyScoped,
+} from '@/lib/use-organization-scope';
 import { TimePickerInput } from '@/components/ui/time-picker-input';
 
 interface ReportRow {
@@ -110,7 +117,7 @@ const FALLBACK_EMPLOYEES: Partial<FullEmployeeProfile>[] = [
 ];
 
 export default function AttendanceReportPage() {
-  const { selectedOrg, selectedDept } = useOrganizationScope();
+  const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
   const [timePeriod, setTimePeriod] = useState<'Today' | 'Yesterday' | 'This Week' | 'Last 7 Days' | 'Last 15 Days' | 'Last 30 Days' | 'This Month' | 'Last Month'>('Today');
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
@@ -133,6 +140,7 @@ export default function AttendanceReportPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestItem[]>([]);
   const [reportRows, setReportRows] = useState<ReportRow[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -140,113 +148,165 @@ export default function AttendanceReportPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const generateReportForDate = useCallback((targetDate: string, empList: FullEmployeeProfile[]) => {
-    const rawList = empList && empList.length > 0 ? empList : (FALLBACK_EMPLOYEES as FullEmployeeProfile[]);
-    const listToUse = rawList.filter(
-      (emp) => matchesSelectedOrg(emp.organization, selectedOrg) && matchesSelectedDept(emp.department, selectedDept)
-    );
-    const allLogs = getLocalAttendanceLogs();
-
-    const rows: ReportRow[] = listToUse.map((emp, index) => {
-      const empName = (emp.name || '').toLowerCase().trim();
-      const empCode = (emp.code || '').toLowerCase().trim();
-      const empId = (emp.id || '').toLowerCase().trim();
-
-      const match = allLogs.find((l) => {
-        if (l.date !== targetDate) return false;
-        const lCode = (l.employeeCode || '').toLowerCase().trim();
-        const lId = (l.employeeId || '').toLowerCase().trim();
-        const lName = (l.employeeName || '').toLowerCase().trim();
-
-        // 1. Direct exact employee code match (primary unique key)
-        if (empCode && lCode && empCode === lCode) return true;
-
-        // 2. Direct exact employee ID match
-        if (empId && lId && empId === lId) return true;
-
-        // 3. Exact full name match
-        if (empName && lName && empName === lName) return true;
-
-        return false;
+  const generateReportForDate = useCallback(
+    (targetDate: string, empList: FullEmployeeProfile[], leaves: LeaveRequestItem[] = []) => {
+      const rawList = empList && empList.length > 0 ? empList : (FALLBACK_EMPLOYEES as FullEmployeeProfile[]);
+      const listToUse = rawList.filter((emp) => {
+        if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(emp.department, emp.leaveGroup)) {
+          return false;
+        }
+        return matchesSelectedOrg(emp.organization, selectedOrg) && matchesSelectedDept(emp.department, selectedDept);
       });
+      const allLogs = getLocalAttendanceLogs();
 
-      if (match) {
+      const rows: ReportRow[] = listToUse.map((emp, index) => {
+        const empName = (emp.name || '').toLowerCase().trim();
+        const empCode = (emp.code || '').toLowerCase().trim();
+        const empId = (emp.id || '').toLowerCase().trim();
+
+        const match = allLogs.find((l) => {
+          if (l.date !== targetDate) return false;
+          const lCode = (l.employeeCode || '').toLowerCase().trim();
+          const lId = (l.employeeId || '').toLowerCase().trim();
+          const lName = (l.employeeName || '').toLowerCase().trim();
+
+          // 1. Direct exact employee code match (primary unique key)
+          if (empCode && lCode && empCode === lCode) return true;
+
+          // 2. Direct exact employee ID match
+          if (empId && lId && empId === lId) return true;
+
+          // 3. Exact full name match
+          if (empName && lName && empName === lName) return true;
+
+          return false;
+        });
+
+        if (match) {
+          return {
+            id: `rep-${emp.id || index}-${targetDate}`,
+            employeeId: emp.id || `emp-${emp.code}`,
+            employeeCode: emp.code,
+            employeeName: emp.name,
+            department: emp.department || "Founder's Office (JF)",
+            designation: emp.designation || 'Staff',
+            branch: emp.branch || 'Head Office (Banani)',
+            avatarUrl: emp.avatarUrl || '',
+            date: targetDate,
+            checkInTime: match.checkInTime || 'N/A',
+            checkOutTime: match.checkOutTime || 'N/A',
+            lateBy: match.lateByMin ? `${match.lateByMin} min` : 'N/A',
+            earlyOutBy: match.earlyOutByMin ? `${match.earlyOutByMin} min` : 'N/A',
+            status: match.status || 'Present',
+          };
+        }
+
+        // Check if employee has an Approved Leave covering targetDate
+        const matchingLeave = leaves.find((lv) => {
+          if (lv.status !== 'Approved') return false;
+          const lvCode = (lv.employeeCode || '').toLowerCase().trim();
+          const lvId = (lv.employeeId || '').toLowerCase().trim();
+          const lvName = (lv.employeeName || '').toLowerCase().trim();
+
+          const isEmpMatch =
+            (empCode && lvCode && empCode === lvCode) ||
+            (empId && lvId && empId === lvId) ||
+            (empName && lvName && empName === lvName);
+
+          if (!isEmpMatch) return false;
+          return targetDate >= lv.fromDate && targetDate <= lv.toDate;
+        });
+
+        if (matchingLeave) {
+          const isHalf = matchingLeave.halfDayType && matchingLeave.halfDayType !== 'Full Day';
+          return {
+            id: `rep-${emp.id || index}-${targetDate}`,
+            employeeId: emp.id || `emp-${emp.code}`,
+            employeeCode: emp.code,
+            employeeName: emp.name,
+            department: emp.department || "Founder's Office (JF)",
+            designation: emp.designation || 'Staff',
+            branch: emp.branch || 'Head Office (Banani)',
+            avatarUrl: emp.avatarUrl || '',
+            date: targetDate,
+            checkInTime: matchingLeave.halfDayType === 'Second Half' ? '02:00 PM' : 'N/A',
+            checkOutTime: matchingLeave.halfDayType === 'First Half' ? '02:00 PM' : 'N/A',
+            lateBy: 'N/A',
+            earlyOutBy: 'N/A',
+            status: isHalf ? 'Half Day' : 'Leave',
+          };
+        }
+
         return {
           id: `rep-${emp.id || index}-${targetDate}`,
           employeeId: emp.id || `emp-${emp.code}`,
           employeeCode: emp.code,
           employeeName: emp.name,
-          department: emp.department || "Founder's Office (JF)",
-          designation: emp.designation || 'Staff',
+          department: emp.department || 'General',
+          designation: emp.designation || 'Staff Member',
           branch: emp.branch || 'Head Office (Banani)',
           avatarUrl: emp.avatarUrl || '',
           date: targetDate,
-          checkInTime: match.checkInTime || 'N/A',
-          checkOutTime: match.checkOutTime || 'N/A',
-          lateBy: match.lateByMin ? `${match.lateByMin} min` : 'N/A',
-          earlyOutBy: match.earlyOutByMin ? `${match.earlyOutByMin} min` : 'N/A',
-          status: match.status || 'Present',
+          checkInTime: 'N/A',
+          checkOutTime: 'N/A',
+          lateBy: 'N/A',
+          earlyOutBy: 'N/A',
+          status: 'Absent',
         };
-      }
+      });
 
-      return {
-        id: `rep-${emp.id || index}-${targetDate}`,
-        employeeId: emp.id || `emp-${emp.code}`,
-        employeeCode: emp.code,
-        employeeName: emp.name,
-        department: emp.department || 'General',
-        designation: emp.designation || 'Staff Member',
-        branch: emp.branch || 'Head Office (Banani)',
-        avatarUrl: emp.avatarUrl || '',
-        date: targetDate,
-        checkInTime: 'N/A',
-        checkOutTime: 'N/A',
-        lateBy: 'N/A',
-        earlyOutBy: 'N/A',
-        status: 'Absent',
-      };
-    });
-
-    return rows;
-  }, [selectedOrg, selectedDept]);
+      return rows;
+    },
+    [selectedOrg, selectedDept]
+  );
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadInitialData() {
-      const [emps] = await Promise.all([
+      const [emps, , leaves] = await Promise.all([
         fetchEmployeesFromSupabase(),
         fetchAttendanceLogsFromSupabase(),
+        fetchLeaveRequests(),
       ]);
 
       if (isMounted) {
         const loadedEmps = emps && emps.length > 0 ? emps : [];
+        const loadedLeaves = leaves && leaves.length > 0 ? leaves : [];
         setEmployees(loadedEmps);
-        setReportRows(generateReportForDate(selectedDate, loadedEmps));
+        setLeaveRequests(loadedLeaves);
+        setReportRows(generateReportForDate(selectedDate, loadedEmps, loadedLeaves));
       }
     }
 
     loadInitialData();
 
     const handleUpdate = () => {
-      fetchAttendanceLogsFromSupabase().then(() => {
+      Promise.all([fetchAttendanceLogsFromSupabase(), fetchLeaveRequests()]).then(([, leaves]) => {
+        if (!isMounted) return;
+        const currentLeaves = leaves || [];
+        setLeaveRequests(currentLeaves);
         setEmployees((currentEmps) => {
-          setReportRows(generateReportForDate(selectedDate, currentEmps));
+          setReportRows(generateReportForDate(selectedDate, currentEmps, currentLeaves));
           return currentEmps;
         });
       });
     };
 
     window.addEventListener('jaago_attendance_updated', handleUpdate);
+    window.addEventListener('jaago_leave_request_updated', handleUpdate);
+    window.addEventListener('jaago_leave_allocation_updated', handleUpdate);
     return () => {
       isMounted = false;
       window.removeEventListener('jaago_attendance_updated', handleUpdate);
+      window.removeEventListener('jaago_leave_request_updated', handleUpdate);
+      window.removeEventListener('jaago_leave_allocation_updated', handleUpdate);
     };
   }, [selectedDate, generateReportForDate]);
 
   const handleDateSelect = (dateStr: string) => {
     setSelectedDate(dateStr);
-    setReportRows(generateReportForDate(dateStr, employees));
+    setReportRows(generateReportForDate(dateStr, employees, leaveRequests));
   };
 
   const handleOpenManualModal = (row: ReportRow) => {
@@ -312,6 +372,22 @@ export default function AttendanceReportPage() {
 
   const monthName = currentMonthDate.toLocaleString('default', { month: 'long', year: 'numeric' });
 
+  // Status counts
+  const statusCounts = React.useMemo(() => {
+    const all = reportRows.length;
+    const present = reportRows.filter((r) => r.status === 'Present' || r.status === 'Late').length;
+    const absent = reportRows.filter((r) => r.status === 'Absent').length;
+    const late = reportRows.filter((r) => r.status === 'Late').length;
+    const earlyOut = reportRows.filter((r) => r.earlyOutBy !== 'N/A').length;
+    const checkedIn = reportRows.filter((r) => r.checkInTime !== 'N/A').length;
+    const checkedOut = reportRows.filter((r) => r.checkOutTime !== 'N/A').length;
+    const halfDay = reportRows.filter((r) => r.status === 'Half Day').length;
+    const leave = reportRows.filter((r) => r.status === 'Leave').length;
+    const holiday = reportRows.filter((r) => r.status === 'Holiday').length;
+    const weekend = reportRows.filter((r) => r.status === 'Weekend').length;
+    return { all, present, absent, late, earlyOut, checkedIn, checkedOut, halfDay, leave, holiday, weekend };
+  }, [reportRows]);
+
   // Filtering
   const filteredRows = reportRows.filter((r) => {
     const q = searchQuery.toLowerCase();
@@ -329,8 +405,13 @@ export default function AttendanceReportPage() {
       (activeStatusTab === 'Present' && (r.status === 'Present' || r.status === 'Late')) ||
       (activeStatusTab === 'Absent' && r.status === 'Absent') ||
       (activeStatusTab === 'Late' && r.status === 'Late') ||
+      (activeStatusTab === 'Early Out' && r.earlyOutBy !== 'N/A') ||
       (activeStatusTab === 'Checked In' && r.checkInTime !== 'N/A') ||
-      (activeStatusTab === 'Checked Out' && r.checkOutTime !== 'N/A');
+      (activeStatusTab === 'Checked Out' && r.checkOutTime !== 'N/A') ||
+      (activeStatusTab === 'Half Day' && r.status === 'Half Day') ||
+      (activeStatusTab === 'Leave' && r.status === 'Leave') ||
+      (activeStatusTab === 'Holiday' && r.status === 'Holiday') ||
+      (activeStatusTab === 'Weekend' && r.status === 'Weekend');
 
     return matchesSearch && matchesBranch && matchesDept && matchesDesig && matchesStatusTab;
   });
@@ -506,15 +587,19 @@ export default function AttendanceReportPage() {
           {/* Department */}
           <div>
             <select
-              value={departmentFilter}
+              suppressHydrationWarning
+              value={isDspScoped || isDspOnlyScoped() ? 'Digital School Program' : departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+              disabled={isDspScoped || isDspOnlyScoped()}
+              className={`w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm ${
+                isDspScoped || isDspOnlyScoped() ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'
+              }`}
             >
-              <option value="">Department (All)</option>
-              <option value="Founder's Office">Founder&apos;s Office / FC</option>
+              {!(isDspScoped || isDspOnlyScoped()) && <option value="">Department (All)</option>}
+              {!(isDspScoped || isDspOnlyScoped()) && <option value="Founder's Office">Founder&apos;s Office / FC</option>}
               <option value="Digital School Program">Digital School Program</option>
-              <option value="Program Implementation">Program Implementation</option>
-              <option value="DSP Central Team">DSP Central Team</option>
+              {!(isDspScoped || isDspOnlyScoped()) && <option value="Program Implementation">Program Implementation</option>}
+              {!(isDspScoped || isDspOnlyScoped()) && <option value="DSP Central Team">DSP Central Team</option>}
             </select>
           </div>
 
@@ -645,17 +730,17 @@ export default function AttendanceReportPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
         <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 no-scrollbar text-xs">
           {[
-            { id: 'All', label: 'All 408' },
-            { id: 'Present', label: 'Present 363' },
-            { id: 'Absent', label: 'Absent 45' },
-            { id: 'Late', label: 'Late 22' },
-            { id: 'Early Out', label: 'Early Out 15' },
-            { id: 'Checked In', label: 'Checked In 15' },
-            { id: 'Checked Out', label: 'Checked Out 348' },
-            { id: 'Half Day', label: 'Half Day 2' },
-            { id: 'Leave', label: 'Leave 4' },
-            { id: 'Holiday', label: 'Holiday 0' },
-            { id: 'Weekend', label: 'Weekend 0' },
+            { id: 'All', label: `All ${statusCounts.all}` },
+            { id: 'Present', label: `Present ${statusCounts.present}` },
+            { id: 'Absent', label: `Absent ${statusCounts.absent}` },
+            { id: 'Late', label: `Late ${statusCounts.late}` },
+            { id: 'Early Out', label: `Early Out ${statusCounts.earlyOut}` },
+            { id: 'Checked In', label: `Checked In ${statusCounts.checkedIn}` },
+            { id: 'Checked Out', label: `Checked Out ${statusCounts.checkedOut}` },
+            { id: 'Half Day', label: `Half Day ${statusCounts.halfDay}` },
+            { id: 'Leave', label: `Leave ${statusCounts.leave}` },
+            { id: 'Holiday', label: `Holiday ${statusCounts.holiday}` },
+            { id: 'Weekend', label: `Weekend ${statusCounts.weekend}` },
           ].map((tab) => (
             <button
               key={tab.id}

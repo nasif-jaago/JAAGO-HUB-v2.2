@@ -109,8 +109,8 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
   try {
     const isNasif = (employee.workEmail || '').toLowerCase().includes('nasif.kamal');
     const existing: UserSessionData = getCurrentUserSession() || {
-      id: employee.id || 'usr-default',
-      email: employee.workEmail || '',
+      id: employee.userId || employee.id || 'usr-default',
+      email: employee.workEmail || employee.personalEmail || '',
       fullName: employee.name,
       jobTitle: employee.designation,
       avatarUrl: employee.avatarUrl || '',
@@ -118,8 +118,36 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       permissions: isNasif ? ['*'] : ['self.attendance', 'self.leaves', 'self.profile', 'self.requests'],
     };
 
+    // Look up any saved custom permissions for this employee
+    let userPermissions = existing.permissions;
+    const lookupKeys = [
+      employee.id,
+      employee.userId,
+      employee.workEmail,
+      employee.personalEmail,
+      employee.name,
+      employee.code,
+    ].filter(Boolean) as string[];
+
+    for (const k of lookupKeys) {
+      const saved =
+        localStorage.getItem(`jaago_user_permissions_${k.toLowerCase().trim()}`) ||
+        localStorage.getItem(`jaago_user_permissions_${k}`);
+      if (saved) {
+        try {
+          const parsedPerms = JSON.parse(saved);
+          if (Array.isArray(parsedPerms) && parsedPerms.length > 0) {
+            userPermissions = parsedPerms;
+            break;
+          }
+        } catch {}
+      }
+    }
+
     const updatedUser: UserSessionData = {
       ...existing,
+      id: employee.userId || employee.id || existing.id,
+      email: employee.workEmail || employee.personalEmail || existing.email,
       fullName: employee.name,
       jobTitle: employee.designation,
       avatarUrl: employee.avatarUrl || existing.avatarUrl || '',
@@ -128,6 +156,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       manager: employee.supervisor || 'Founder & Executive Director',
       employeeCode: employee.code,
       workingSchedule: employee.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
+      permissions: userPermissions || existing.permissions || [],
     };
 
     localStorage.setItem('jaago_user', JSON.stringify(updatedUser));

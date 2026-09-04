@@ -27,10 +27,16 @@ import {
   DepartmentItem,
   ProjectItem,
 } from '@/lib/supabase-organization';
-import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
+import {
+  useOrganizationScope,
+  matchesSelectedOrg,
+  matchesSelectedDept,
+  isDspDepartment,
+  isDspOnlyScoped,
+} from '@/lib/use-organization-scope';
 
 export default function LeaveAllocationsPage() {
-  const { selectedOrg, selectedDept } = useOrganizationScope();
+  const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [departmentsList, setDepartmentsList] = useState<DepartmentItem[]>([]);
@@ -148,6 +154,9 @@ export default function LeaveAllocationsPage() {
 
   // Filter employees inside the Allocate Modal
   const modalFilteredEmployees = employees.filter((emp) => {
+    if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(emp.department, emp.leaveGroup)) {
+      return false;
+    }
     if (modalDeptFilter && emp.department !== modalDeptFilter) return false;
     if (modalProjectFilter && emp.project !== modalProjectFilter) return false;
     if (modalEmpSearch.trim()) {
@@ -346,6 +355,9 @@ export default function LeaveAllocationsPage() {
     const org = emp?.organization || '';
     const dept = emp?.department || item.department || '';
 
+    if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept, item.leaveGroup)) {
+      return false;
+    }
     if (!matchesSelectedOrg(org, selectedOrg)) return false;
     if (!matchesSelectedDept(dept, selectedDept)) return false;
 
@@ -362,13 +374,18 @@ export default function LeaveAllocationsPage() {
     return true;
   });
 
-  const departmentFilterOptions = Array.from(
-    new Set([
-      ...departmentsList.map((d) => d.name),
-      ...allocations.map((a) => a.department),
-      ...employees.map((e) => e.department),
-    ])
-  ).filter(Boolean);
+  const departmentFilterOptions = useMemo(() => {
+    if (isDspScoped || isDspOnlyScoped()) {
+      return ['Digital School Program'];
+    }
+    return Array.from(
+      new Set([
+        ...departmentsList.map((d) => d.name),
+        ...allocations.map((a) => a.department),
+        ...employees.map((e) => e.department),
+      ])
+    ).filter(Boolean);
+  }, [departmentsList, allocations, employees, isDspScoped]);
 
   const projectFilterOptions = Array.from(
     new Set([
@@ -446,11 +463,17 @@ export default function LeaveAllocationsPage() {
         </div>
 
         <select
-          value={selectedDeptFilter}
+          suppressHydrationWarning
+          value={isDspScoped || isDspOnlyScoped() ? 'Digital School Program' : selectedDeptFilter}
           onChange={(e) => setSelectedDeptFilter(e.target.value)}
-          className="w-full sm:w-64 h-10 px-3.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+          disabled={isDspScoped || isDspOnlyScoped()}
+          className={`w-full sm:w-64 h-10 px-3.5 rounded-2xl bg-card border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm ${
+            isDspScoped || isDspOnlyScoped() ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'
+          }`}
         >
-          <option value="">Department (All)</option>
+          {!(isDspScoped || isDspOnlyScoped()) && (
+            <option value="">Department (All)</option>
+          )}
           {departmentFilterOptions.map((d) => (
             <option key={d} value={d}>
               {d}

@@ -27,7 +27,13 @@ import {
   LeaveAllocationItem,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
-import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
+import {
+  useOrganizationScope,
+  matchesSelectedOrg,
+  matchesSelectedDept,
+  isDspDepartment,
+  isDspOnlyScoped,
+} from '@/lib/use-organization-scope';
 import { createNotification } from '@/lib/notifications';
 import { getCurrentUserSession } from '@/lib/user-profile-sync';
 
@@ -43,7 +49,7 @@ const LEAVE_TYPES: LeaveType[] = [
 ];
 
 export default function LeaveRequestsPage() {
-  const { selectedOrg, selectedDept } = useOrganizationScope();
+  const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -374,14 +380,20 @@ export default function LeaveRequestsPage() {
       const emp = empCodeToProfile.get(r.employeeCode);
       const org = emp?.organization || '';
       const dept = emp?.department || r.department || '';
+      if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept)) {
+        return false;
+      }
       return matchesSelectedOrg(org, selectedOrg) && matchesSelectedDept(dept, selectedDept);
     });
-  }, [requests, empCodeToProfile, selectedOrg, selectedDept]);
+  }, [requests, empCodeToProfile, selectedOrg, selectedDept, isDspScoped]);
 
   const modalFilteredEmployees = useMemo(() => {
-    const orgScoped = employees.filter(
-      (e) => matchesSelectedOrg(e.organization, selectedOrg) && matchesSelectedDept(e.department, selectedDept)
-    );
+    const orgScoped = employees.filter((e) => {
+      if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(e.department, e.leaveGroup)) {
+        return false;
+      }
+      return matchesSelectedOrg(e.organization, selectedOrg) && matchesSelectedDept(e.department, selectedDept);
+    });
     if (!empSearchInput.trim()) return orgScoped.slice(0, 15);
     const q = empSearchInput.toLowerCase();
     return orgScoped.filter(
@@ -390,7 +402,7 @@ export default function LeaveRequestsPage() {
         e.code?.toLowerCase().includes(q) ||
         e.department?.toLowerCase().includes(q)
     );
-  }, [employees, empSearchInput, selectedOrg, selectedDept]);
+  }, [employees, empSearchInput, selectedOrg, selectedDept, isDspScoped]);
 
   // Counts
   const totalCount = scopedRequests.length;

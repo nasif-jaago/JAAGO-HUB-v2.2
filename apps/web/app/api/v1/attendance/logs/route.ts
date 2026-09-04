@@ -47,11 +47,13 @@ export async function GET(request: Request) {
       { data: emps },
       { data: gpsLocs },
       { data: geoLocs },
+      { data: approvedLeaves },
     ] = await Promise.all([
       query,
       supabase.from('employees').select('id, name, code, designation, department, branch, avatar_url'),
       supabase.from('gps_locations').select('id, name, branch_office, latitude, longitude'),
       supabase.from('geofence_locations').select('id, name, branch_office, latitude, longitude'),
+      supabase.from('leave_requests').select('*').eq('status', 'Approved'),
     ]);
 
     if (rawErr) {
@@ -122,6 +124,84 @@ export async function GET(request: Request) {
         notes: r.notes || (r.status === 'On Duty' ? 'On Duty' : r.is_auto_checkout ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified'),
       };
     });
+
+    // Expand and merge approved leave requests into attendance logs
+    const existingKeys = new Set(enriched.map((e) => `${(e.employeeCode || '').toLowerCase().trim()}_${e.date}`));
+
+    if (Array.isArray(approvedLeaves)) {
+      for (const lv of approvedLeaves) {
+        const lvCode = (lv.employee_code || '').trim();
+        const lvId = (lv.employee_id || '').trim();
+        const emp = empMap.get(lvId) || empMap.get(lvCode);
+
+        // Check if employeeId filter matches
+        if (employeeId && lvId !== employeeId && lvCode !== employeeId && emp?.code !== employeeId && emp?.id !== employeeId) {
+          continue;
+        }
+
+        // Check if status filter excludes Leave
+        if (status && status !== 'ALL' && status !== 'All Status' && status.toLowerCase() !== 'leave' && status.toLowerCase() !== 'half day') {
+          continue;
+        }
+
+        const start = new Date(lv.from_date);
+        const end = new Date(lv.to_date);
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
+
+        const current = new Date(start);
+        while (current <= end) {
+          const dateStr = current.toISOString().split('T')[0]!;
+          current.setDate(current.getDate() + 1);
+
+          // Apply date filters
+          if (date && dateStr !== date) continue;
+          if (startDate && endDate && (dateStr < startDate || dateStr > endDate)) continue;
+          if (month && !dateStr.startsWith(month)) continue;
+
+          const matchKey = `${(lvCode || emp?.code || '').toLowerCase().trim()}_${dateStr}`;
+          if (existingKeys.has(matchKey)) continue;
+
+          const rawReason = lv.reason || '';
+          const cleanReason = rawReason
+            .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
+            .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
+            .trim();
+
+          enriched.push({
+            id: `att-leave-${lvCode || lvId}-${dateStr}`,
+            employeeId: lvId || emp?.id || `emp-${lvCode}`,
+            employeeCode: lvCode || emp?.code || 'EMP',
+            employeeName: emp?.name || lv.employee_name || 'Staff Member',
+            designation: emp?.designation || 'Staff',
+            department: emp?.department || "Founder's Office",
+            branch: emp?.branch || 'Head Office (Banani)',
+            avatarUrl: emp?.avatar_url || '',
+            status: 'Leave',
+            device: 'Web Portal',
+            date: dateStr,
+            checkInTime: 'N/A',
+            checkOutTime: 'N/A',
+            lateByMin: 0,
+            earlyOutByMin: 0,
+            locationName: 'On Leave',
+            checkInLat: 23.7937,
+            checkInLng: 90.4066,
+            checkOutLat: 23.7937,
+            checkOutLng: 90.4066,
+            isAutoCheckout: false,
+            workedMinutes: 0,
+            createdBy: lv.approved_by || `${lv.employee_name} (${lvCode})`,
+            createdAt: lv.created_at ? new Date(lv.created_at).toLocaleString() : new Date().toLocaleString(),
+            updatedAt: lv.updated_at ? new Date(lv.updated_at).toLocaleString() : new Date().toLocaleString(),
+            timestamp: `${dateStr} 09:00 AM`,
+            notes: `Approved Leave: ${lv.leave_type}${cleanReason ? ` - ${cleanReason}` : ''}`,
+          });
+          existingKeys.add(matchKey);
+        }
+      }
+    }
+
+    enriched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     return NextResponse.json({ success: true, data: enriched });
   } catch (err: any) {

@@ -31,7 +31,10 @@ export function getActiveUser(): RBACUserContext | null {
  * Gets the consolidated list of permissions for the active user
  */
 export function getUserPermissions(user?: RBACUserContext | null): string[] {
-  const active = user || getActiveUser();
+  let active = user;
+  if (!active || (!active.id && !active.email && !Array.isArray(active.permissions))) {
+    active = getActiveUser() || user || null;
+  }
   if (!active) return [];
 
   const rawRole = (active.role || (Array.isArray(active.roles) ? active.roles[0] : '') || 'USER').toString();
@@ -50,26 +53,34 @@ export function getUserPermissions(user?: RBACUserContext | null): string[] {
   if (Array.isArray(active.permissions) && active.permissions.length > 0) {
     return active.permissions;
   }
+
+  // 2. Check localStorage custom permissions across all candidate keys
   if (typeof window !== 'undefined') {
     try {
-      if (active.id) {
-        const userSaved = localStorage.getItem(`jaago_user_permissions_${active.id}`);
+      const candidateKeys = [
+        active.id,
+        active.email ? active.email.toLowerCase().trim() : null,
+        (active as any).employeeCode ? (active as any).employeeCode.toLowerCase().trim() : null,
+        (active as any).fullName ? (active as any).fullName.toLowerCase().trim() : null,
+      ].filter(Boolean) as string[];
+
+      for (const k of candidateKeys) {
+        const userSaved = localStorage.getItem(`jaago_user_permissions_${k}`);
         if (userSaved) {
           const parsed = JSON.parse(userSaved);
-          if (Array.isArray(parsed)) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         }
       }
-      if (active.email) {
-        const userSavedEmail = localStorage.getItem(`jaago_user_permissions_${active.email.toLowerCase().trim()}`);
-        if (userSavedEmail) {
-          const parsed = JSON.parse(userSavedEmail);
-          if (Array.isArray(parsed)) return parsed;
-        }
+
+      const activePermsSaved = localStorage.getItem('jaago_active_user_permissions');
+      if (activePermsSaved) {
+        const parsed = JSON.parse(activePermsSaved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
   }
 
-  // 2. Check local matrix cache if updated from /admin/rbac
+  // 3. Check local matrix cache if updated from /admin/rbac
   if (typeof window !== 'undefined') {
     try {
       const savedMatrix = localStorage.getItem('jaago_rbac_matrix_cache');
@@ -83,7 +94,7 @@ export function getUserPermissions(user?: RBACUserContext | null): string[] {
     } catch {}
   }
 
-  // 3. Fallback to runtime roles
+  // 4. Fallback to runtime roles
   const normKey = normalizeRoleKey(rawRole);
   return getPermissionsForRole(normKey);
 }
@@ -255,4 +266,115 @@ export function hasDepartmentAccess(
   const permKey = `dept.${cleanSlug}.view`;
   return hasPermission(permKey, user) || hasPermission(`dept.${cleanSlug}.*`, user) || hasPermission('*', user);
 }
+
+/**
+ * Checks if a department or leave group belongs to Digital School Program (DSP)
+ */
+export function isDspDepartment(deptName?: string | null, leaveGroup?: string | null): boolean {
+  if (!deptName && !leaveGroup) return false;
+  const d = (deptName || '').toLowerCase().trim();
+  const g = (leaveGroup || '').toLowerCase().trim();
+  if (
+    d.includes('digital school') ||
+    d.includes('dsp') ||
+    d === 'digi' ||
+    d.startsWith('dsp ') ||
+    d === 'digital school program' ||
+    d === 'dsp faculty group' ||
+    d.includes('dsp hub') ||
+    d.includes('dsp central')
+  ) {
+    return true;
+  }
+  if (g.includes('dsp') || g.includes('digital school') || g === 'dsp faculty group') {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if the current active user or specified user context has the "Only Show DSP" scope active
+ */
+export function isDspOnlyScoped(user?: RBACUserContext | null): boolean {
+  // 1. Direct active permissions check if array exists
+  if (user && Array.isArray(user.permissions) && user.permissions.length > 0) {
+    if (user.permissions.includes('pnc.scope.dsp_only') || user.permissions.includes('hr.scope.dsp_only')) {
+      return true;
+    }
+  }
+
+  // 2. Lookup against all candidate identifiers in localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const candidateKeys: string[] = [];
+      if (user?.id) candidateKeys.push(user.id);
+      if (user?.email) candidateKeys.push(user.email.toLowerCase().trim());
+      if ((user as any)?.employeeCode) candidateKeys.push((user as any).employeeCode.toLowerCase().trim());
+      if ((user as any)?.fullName) candidateKeys.push((user as any).fullName.toLowerCase().trim());
+
+      for (const k of candidateKeys) {
+        const saved = localStorage.getItem(`jaago_user_permissions_${k}`);
+        if (saved && (saved.includes('pnc.scope.dsp_only') || saved.includes('hr.scope.dsp_only'))) {
+          return true;
+        }
+      }
+
+      // 3. Check active session user in localStorage ('jaago_user')
+      const activeRaw = localStorage.getItem('jaago_user');
+      if (activeRaw) {
+        const activeObj = JSON.parse(activeRaw);
+        if (Array.isArray(activeObj.permissions)) {
+          if (activeObj.permissions.includes('pnc.scope.dsp_only') || activeObj.permissions.includes('hr.scope.dsp_only')) {
+            return true;
+          }
+        }
+        const activeCandidates = [
+          activeObj.id,
+          activeObj.email ? activeObj.email.toLowerCase().trim() : null,
+          activeObj.employeeCode ? activeObj.employeeCode.toLowerCase().trim() : null,
+          activeObj.fullName ? activeObj.fullName.toLowerCase().trim() : null,
+          activeObj.name ? activeObj.name.toLowerCase().trim() : null,
+        ].filter(Boolean);
+
+        for (const k of activeCandidates) {
+          const saved = localStorage.getItem(`jaago_user_permissions_${k}`);
+          if (saved && (saved.includes('pnc.scope.dsp_only') || saved.includes('hr.scope.dsp_only'))) {
+            return true;
+          }
+        }
+      }
+
+      // 4. Check explicit active permissions storage key
+      const activePermsSaved = localStorage.getItem('jaago_active_user_permissions');
+      if (activePermsSaved && (activePermsSaved.includes('pnc.scope.dsp_only') || activePermsSaved.includes('hr.scope.dsp_only'))) {
+        return true;
+      }
+
+      // 5. Check if any jaago_user_permissions_* key in localStorage contains DSP scope matching the session
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('jaago_user_permissions_')) {
+          const val = localStorage.getItem(key);
+          if (val && (val.includes('pnc.scope.dsp_only') || val.includes('hr.scope.dsp_only'))) {
+            if (activeRaw) {
+              const activeObj = JSON.parse(activeRaw);
+              const suffix = key.replace('jaago_user_permissions_', '').toLowerCase().trim();
+              if (
+                suffix === activeObj.id?.toLowerCase().trim() ||
+                suffix === activeObj.email?.toLowerCase().trim() ||
+                suffix === activeObj.employeeCode?.toLowerCase().trim() ||
+                suffix === activeObj.fullName?.toLowerCase().trim()
+              ) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return false;
+}
+
 

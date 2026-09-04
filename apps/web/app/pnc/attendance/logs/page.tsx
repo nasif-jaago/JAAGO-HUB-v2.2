@@ -11,6 +11,7 @@ import {
   X,
   Smartphone,
   Clock,
+  Calendar,
 } from 'lucide-react';
 import {
   AttendanceLogItem,
@@ -22,10 +23,17 @@ import {
   deleteMultipleLocalAttendanceLogs,
 } from '@/lib/supabase-attendance';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
-import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
+import { fetchLeaveRequests } from '@/lib/supabase-time-off';
+import {
+  useOrganizationScope,
+  matchesSelectedOrg,
+  matchesSelectedDept,
+  isDspDepartment,
+  isDspOnlyScoped,
+} from '@/lib/use-organization-scope';
 
 export default function AttendanceLogsPage() {
-  const { selectedOrg, selectedDept } = useOrganizationScope();
+  const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
   const [logs, setLogs] = useState<AttendanceLogItem[]>([]);
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -84,23 +92,28 @@ export default function AttendanceLogsPage() {
     const loadedLogs = getLocalAttendanceLogs();
     setLogs(loadedLogs);
 
-    fetchAttendanceLogsFromSupabase().then((supaLogs) => {
-      if (supaLogs && supaLogs.length > 0) {
-        setLogs(supaLogs);
-      }
-    });
-
-    fetchEmployeesFromSupabase().then((emps) => {
+    Promise.all([
+      fetchAttendanceLogsFromSupabase(),
+      fetchEmployeesFromSupabase(),
+      fetchLeaveRequests(),
+    ]).then(([, emps]) => {
       if (emps && emps.length > 0) {
         setEmployees(emps);
       }
+      setLogs(getLocalAttendanceLogs());
     });
 
     const handleUpdate = () => {
       setLogs(getLocalAttendanceLogs());
     };
     window.addEventListener('jaago_attendance_updated', handleUpdate);
-    return () => window.removeEventListener('jaago_attendance_updated', handleUpdate);
+    window.addEventListener('jaago_leave_request_updated', handleUpdate);
+    window.addEventListener('jaago_leave_allocation_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('jaago_attendance_updated', handleUpdate);
+      window.removeEventListener('jaago_leave_request_updated', handleUpdate);
+      window.removeEventListener('jaago_leave_allocation_updated', handleUpdate);
+    };
   }, []);
 
   const handleOpenAddModal = () => {
@@ -242,12 +255,22 @@ export default function AttendanceLogsPage() {
     return map;
   }, [employees]);
 
+  const availableEmployees = useMemo(() => {
+    if (isDspScoped || isDspOnlyScoped()) {
+      return employees.filter((e) => isDspDepartment(e.department, e.leaveGroup));
+    }
+    return employees;
+  }, [employees, isDspScoped]);
+
   // Filter computation
   const filteredLogs = logs.filter((log) => {
     const emp = empCodeToProfile.get(log.employeeCode);
     const org = emp?.organization || '';
     const dept = emp?.department || log.department || '';
 
+    if ((isDspScoped || isDspOnlyScoped()) && !isDspDepartment(dept)) {
+      return false;
+    }
     if (!matchesSelectedOrg(org, selectedOrg)) return false;
     if (!matchesSelectedDept(dept, selectedDept)) return false;
 
@@ -365,7 +388,7 @@ export default function AttendanceLogsPage() {
               className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
             >
               <option value="">Employee (All)</option>
-              {employees.map((emp) => (
+              {availableEmployees.map((emp) => (
                 <option key={emp.code} value={emp.code}>
                   {emp.name} ({emp.code})
                 </option>
@@ -512,19 +535,38 @@ export default function AttendanceLogsPage() {
                         <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/30 text-[11px] font-bold">
                           Absent
                         </span>
+                      ) : log.status === 'Leave' ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[11px] font-bold">
+                          Leave
+                        </span>
+                      ) : log.status === 'On Duty' ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-sky-500/15 text-sky-400 border border-sky-500/30 text-[11px] font-bold">
+                          On Duty
+                        </span>
+                      ) : log.status === 'Half Day' ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 text-[11px] font-bold">
+                          Half Day
+                        </span>
                       ) : (
-                        <span className="text-muted-foreground font-semibold text-[11px]">
-                          N/A
+                        <span className="px-2.5 py-1 rounded-lg bg-slate-500/15 text-slate-400 border border-slate-500/30 text-[11px] font-bold">
+                          {log.status || 'N/A'}
                         </span>
                       )}
                     </td>
 
                     {/* Device Badge */}
                     <td className="py-4 px-3">
-                      <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[11px] font-bold">
-                        <Smartphone className="h-3 w-3" />
-                        <span>{log.device}</span>
-                      </span>
+                      {log.status === 'Leave' ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[11px] font-bold">
+                          <Calendar className="h-3 w-3" />
+                          <span>Leave Portal</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[11px] font-bold">
+                          <Smartphone className="h-3 w-3" />
+                          <span>{log.device}</span>
+                        </span>
+                      )}
                     </td>
 
                     {/* Timestamp & Working Times */}
@@ -532,14 +574,22 @@ export default function AttendanceLogsPage() {
                       <div className="text-foreground font-mono font-bold text-xs">
                         {log.date || log.timestamp}
                       </div>
-                      <div className="text-[11px] text-muted-foreground flex items-center space-x-1.5 pt-0.5 font-mono">
-                        <span className="text-emerald-500 font-semibold">In: {log.checkInTime || '--:--'}</span>
-                        <span>&bull;</span>
-                        <span className="text-rose-500 font-semibold">Out: {log.checkOutTime || '--:--'}</span>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground/80 font-bold pt-0.5">
-                        Duration: {calculateWorkingHoursString(log.checkInTime, log.checkOutTime)}
-                      </div>
+                      {log.status === 'Leave' ? (
+                        <div className="text-[11px] text-purple-400 font-semibold pt-0.5 max-w-[220px] truncate">
+                          {log.notes || 'Approved Leave'}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-[11px] text-muted-foreground flex items-center space-x-1.5 pt-0.5 font-mono">
+                            <span className="text-emerald-500 font-semibold">In: {log.checkInTime || '--:--'}</span>
+                            <span>&bull;</span>
+                            <span className="text-rose-500 font-semibold">Out: {log.checkOutTime || '--:--'}</span>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground/80 font-bold pt-0.5">
+                            Duration: {calculateWorkingHoursString(log.checkInTime, log.checkOutTime)}
+                          </div>
+                        </>
+                      )}
                     </td>
 
                     {/* Created By Details */}
@@ -632,7 +682,7 @@ export default function AttendanceLogsPage() {
                     onChange={(e) => handleEmployeeSelectInForm(e.target.value)}
                     className="w-full h-11 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
                   >
-                    {employees.map((emp) => (
+                    {availableEmployees.map((emp) => (
                       <option key={emp.code} value={emp.code}>
                         {emp.name} ({emp.code}) &bull; {emp.designation}
                       </option>

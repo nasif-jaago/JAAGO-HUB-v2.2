@@ -144,9 +144,11 @@ export function buildUserSessionPayload(user: any): AppUserSession {
     ? ['admin', 'pnc_lead']
     : [normKey];
 
-  // Dynamic RBAC Permissions from Central RBAC Matrix
+  // Dynamic RBAC Permissions from Central RBAC Matrix or user_metadata
   const permissions = isSuper
     ? ['*']
+    : Array.isArray(meta['permissions']) && meta['permissions'].length > 0
+    ? meta['permissions']
     : getPermissionsForRole(normKey);
 
   return {

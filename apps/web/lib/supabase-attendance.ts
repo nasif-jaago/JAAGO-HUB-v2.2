@@ -347,15 +347,63 @@ export function getLocalAttendanceLogs(): AttendanceLogItem[] {
       (item) =>
         !deletedKeysSet.has(item.id) &&
         !deletedKeysSet.has(`${item.employeeCode}_${item.date}`) &&
-        !item.id.startsWith('att-nasif-') &&
-        !item.id.startsWith('att-nayeem-') &&
-        !item.id.startsWith('att-nurul-') &&
-        !item.id.startsWith('att-rishan-') &&
-        !item.id.startsWith('att-akkas-') &&
         !item.id.startsWith('mock-')
     );
-    if (parsed.length !== cleanLogs.length) {
-      localStorage.setItem(STORAGE_KEY_ATTENDANCE, JSON.stringify(cleanLogs));
+
+    // Also merge approved leave requests from local store
+    const rawLeaves = localStorage.getItem('jaago_pnc_leave_requests_v3');
+    if (rawLeaves) {
+      try {
+        const leaves: any[] = JSON.parse(rawLeaves);
+        const existingKeys = new Set(cleanLogs.map((l) => `${(l.employeeCode || '').toLowerCase().trim()}_${l.date}`));
+
+        leaves.forEach((lv) => {
+          if (lv.status !== 'Approved') return;
+          const lvCode = (lv.employeeCode || '').trim();
+          const start = new Date(lv.fromDate);
+          const end = new Date(lv.toDate);
+          if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
+
+          const current = new Date(start);
+          while (current <= end) {
+            const dateStr = current.toISOString().split('T')[0]!;
+            current.setDate(current.getDate() + 1);
+
+            const matchKey = `${lvCode.toLowerCase()}_${dateStr}`;
+            const logId = `att-leave-${lvCode}-${dateStr}`;
+            if (deletedKeysSet.has(logId) || deletedKeysSet.has(matchKey)) continue;
+            if (existingKeys.has(matchKey)) continue;
+
+            const isHalf = lv.halfDayType && lv.halfDayType !== 'Full Day';
+            cleanLogs.push({
+              id: logId,
+              employeeId: lv.employeeId || `emp-${lvCode}`,
+              employeeCode: lvCode,
+              employeeName: lv.employeeName || 'Staff Member',
+              designation: lv.designation || 'Staff',
+              department: lv.department || "Founder's Office",
+              branch: 'Head Office (Banani)',
+              avatarUrl: lv.avatarUrl || '',
+              status: isHalf ? 'Half Day' : 'Leave',
+              device: 'Web Portal',
+              date: dateStr,
+              checkInTime: lv.halfDayType === 'Second Half' ? '02:00 PM' : 'N/A',
+              checkOutTime: lv.halfDayType === 'First Half' ? '02:00 PM' : 'N/A',
+              lateByMin: 0,
+              earlyOutByMin: 0,
+              locationName: 'On Leave',
+              isAutoCheckout: false,
+              workedMinutes: 0,
+              createdBy: lv.approvedBy || `${lv.employeeName} (${lvCode})`,
+              createdAt: lv.appliedAt || new Date().toISOString(),
+              updatedAt: lv.approvedAt || new Date().toISOString(),
+              timestamp: `${dateStr} 09:00 AM`,
+              notes: `Approved Leave: ${lv.leaveType}${isHalf ? ` (${lv.halfDayType})` : ''} - ${lv.reason || ''}`,
+            });
+            existingKeys.add(matchKey);
+          }
+        });
+      } catch {}
     }
 
     return cleanLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
