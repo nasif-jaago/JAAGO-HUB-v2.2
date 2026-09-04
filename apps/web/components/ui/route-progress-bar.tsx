@@ -1,19 +1,17 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import React, { useEffect, useState, useRef, Suspense } from 'react';
+import { usePathname } from 'next/navigation';
 
-export function RouteProgressBar() {
+function RouteProgressBarContent() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [progress, setProgress] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const completeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Trigger pulse on navigation changes
+  // Trigger pulse on pathname change
   useEffect(() => {
-    // Start progress
     setIsVisible(true);
     setProgress(30);
 
@@ -37,7 +35,7 @@ export function RouteProgressBar() {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (completeTimerRef.current) clearTimeout(completeTimerRef.current);
     };
-  }, [pathname, searchParams]);
+  }, [pathname]);
 
   // Support global custom events for async work
   useEffect(() => {
@@ -84,5 +82,13 @@ export function RouteProgressBar() {
         }}
       />
     </div>
+  );
+}
+
+export function RouteProgressBar() {
+  return (
+    <Suspense fallback={null}>
+      <RouteProgressBarContent />
+    </Suspense>
   );
 }
