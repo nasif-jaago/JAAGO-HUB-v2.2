@@ -12,11 +12,12 @@ import {
   EyeOff,
   Clock,
   CheckCircle2,
-  FileText,
   X,
   Sparkles,
   Paperclip,
+  Download,
 } from 'lucide-react';
+import { downloadAttachment } from '@/lib/attachment-helper';
 import {
   LeaveRequestItem,
   LeaveType,
@@ -340,6 +341,17 @@ export default function MyLeavePage() {
       }
       setAttachedFileName(file.name);
       showToastMsg(`Attached document: ${file.name}`);
+
+      // Cache file dataURL for instant browser downloading
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          if (reader.result) {
+            localStorage.setItem(`jaago_attachment_${file.name.trim()}`, reader.result as string);
+          }
+        } catch {}
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -352,6 +364,8 @@ export default function MyLeavePage() {
         ? halfPeriod === 'First Half'
           ? 'First Half'
           : 'Second Half'
+        : 'Full Day';
+
     const rawReason = reason.trim() || 'General leave application';
     const baseReason = rawReason.replace(/\[Attachment:\s*[\s\S]*?\]/gi, '').replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '').trim();
     const persistedReason = attachedFileName
@@ -1196,12 +1210,31 @@ export default function MyLeavePage() {
                         {req.bereavementRelationship ? `[${req.bereavementRelationship}] ` : ''}
                         {req.reason}
                       </td>
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
                         {req.attachmentName ? (
-                          <span className="inline-flex items-center space-x-1 text-[11px] text-amber-500 font-semibold">
-                            <FileText className="h-3 w-3" />
-                            <span className="truncate max-w-[100px]">{req.attachmentName}</span>
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              downloadAttachment(req.attachmentName!, {
+                                requesterName: req.employeeName,
+                                employeeCode: req.employeeCode,
+                                department: req.department,
+                                leaveType: req.leaveType,
+                                startDate: req.fromDate,
+                                endDate: req.toDate,
+                                reason: req.reason,
+                                requestId: req.id,
+                              })
+                            }
+                            className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 active:bg-amber-500/30 text-[11px] text-amber-500 font-bold border border-amber-500/30 hover:border-amber-500 transition cursor-pointer group shadow-sm"
+                            title={`Click to download "${req.attachmentName}"`}
+                          >
+                            <Paperclip className="h-3 w-3 group-hover:scale-110 transition shrink-0" />
+                            <span className="truncate max-w-[100px] underline decoration-amber-500/30 underline-offset-2">
+                              {req.attachmentName}
+                            </span>
+                            <Download className="h-2.5 w-2.5 opacity-70 group-hover:opacity-100 transition shrink-0" />
+                          </button>
                         ) : (
                           <span className="text-muted-foreground/60 text-[11px]">—</span>
                         )}
@@ -1294,12 +1327,41 @@ export default function MyLeavePage() {
               </div>
 
               {selectedRequest.attachmentName && (
-                <div className="p-3 rounded-xl bg-surface/50 border border-border space-y-1">
-                  <div className="text-[10px] uppercase font-bold text-muted-foreground">Attached Document</div>
-                  <div className="flex items-center space-x-2 text-amber-500 font-bold">
-                    <FileText className="h-4 w-4" />
-                    <span>{selectedRequest.attachmentName}</span>
+                <div className="p-3 rounded-xl bg-surface/50 border border-border space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] uppercase font-bold text-muted-foreground">
+                    <span>Attached Document</span>
+                    <span className="text-emerald-500 font-bold flex items-center space-x-1">
+                      <Download className="h-3 w-3" />
+                      <span>Click to download</span>
+                    </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadAttachment(selectedRequest.attachmentName!, {
+                        requesterName: selectedRequest.employeeName,
+                        employeeCode: selectedRequest.employeeCode,
+                        department: selectedRequest.department,
+                        leaveType: selectedRequest.leaveType,
+                        startDate: selectedRequest.fromDate,
+                        endDate: selectedRequest.toDate,
+                        reason: selectedRequest.reason,
+                        requestId: selectedRequest.id,
+                      })
+                    }
+                    className="w-full flex items-center justify-between p-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold transition cursor-pointer text-left group"
+                    title={`Click to download "${selectedRequest.attachmentName}"`}
+                  >
+                    <div className="flex items-center space-x-2 truncate">
+                      <Paperclip className="h-4 w-4 shrink-0 group-hover:scale-110 transition text-emerald-500" />
+                      <span className="truncate text-xs underline decoration-emerald-500/30 underline-offset-2">
+                        {selectedRequest.attachmentName}
+                      </span>
+                    </div>
+                    <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition shrink-0 ml-2">
+                      <Download className="h-3.5 w-3.5" />
+                    </div>
+                  </button>
                 </div>
               )}
 

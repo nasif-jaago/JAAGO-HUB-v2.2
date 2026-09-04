@@ -13,7 +13,9 @@ import {
   CalendarDays,
   MessageSquareQuote,
   Paperclip,
+  Download,
 } from 'lucide-react';
+import { downloadAttachment } from '@/lib/attachment-helper';
 import {
   LeaveRequestItem,
   LeaveType,
@@ -694,10 +696,30 @@ export default function LeaveRequestsPage() {
                     <MessageSquareQuote className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span className="truncate">&ldquo;{req.reason}&rdquo;</span>
                     {req.attachmentName && (
-                      <span className="ml-auto flex items-center space-x-1 text-[10px] font-sans not-italic text-emerald-500 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded-md border border-emerald-500/20 shrink-0">
-                        <Paperclip className="h-3 w-3" />
-                        <span className="truncate max-w-[120px]">{req.attachmentName}</span>
-                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadAttachment(req.attachmentName!, {
+                            requesterName: req.employeeName,
+                            employeeCode: req.employeeCode,
+                            department: req.department,
+                            leaveType: req.leaveType,
+                            startDate: req.fromDate,
+                            endDate: req.toDate,
+                            reason: req.reason,
+                            requestId: req.id,
+                          });
+                        }}
+                        className="ml-auto flex items-center space-x-1 text-[10px] font-sans not-italic text-emerald-500 hover:text-emerald-400 font-bold bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 px-2 py-0.5 rounded-md border border-emerald-500/20 hover:border-emerald-500 transition cursor-pointer shrink-0 group"
+                        title={`Click to download "${req.attachmentName}"`}
+                      >
+                        <Paperclip className="h-3 w-3 group-hover:scale-110 transition" />
+                        <span className="truncate max-w-[120px] underline decoration-emerald-500/30 underline-offset-2">
+                          {req.attachmentName}
+                        </span>
+                        <Download className="h-2.5 w-2.5 opacity-70 group-hover:opacity-100 transition" />
+                      </button>
                     )}
                   </div>
                 </div>

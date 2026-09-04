@@ -649,18 +649,18 @@ export async function fetchLeaveRequests(): Promise<LeaveRequestItem[]> {
         return data.map((row: any) => {
           let attachmentName = row.attachment_name || '';
           let rawReason = row.reason || '';
-          if (!attachmentName && rawReason.includes('[Attachment:')) {
-            const match = rawReason.match(/\[Attachment:\s*(.*?)\]/);
-            if (match) attachmentName = match[1].trim();
+          if (!attachmentName && /\[Attachment:\s*([\s\S]*?)\]/i.test(rawReason)) {
+            const match = rawReason.match(/\[Attachment:\s*([\s\S]*?)\]/i);
+            if (match && match[1]) attachmentName = match[1].trim();
           }
           let rejectionReason = row.rejection_reason || '';
-          if (!rejectionReason && rawReason.includes('[Refusal Note:')) {
-            const match = rawReason.match(/\[Refusal Note:\s*(.*?)\]/);
-            if (match) rejectionReason = match[1].trim();
+          if (!rejectionReason && /\[Refusal Note:\s*([\s\S]*?)\]/i.test(rawReason)) {
+            const match = rawReason.match(/\[Refusal Note:\s*([\s\S]*?)\]/i);
+            if (match && match[1]) rejectionReason = match[1].trim();
           }
           const cleanReason = rawReason
-            .replace(/\[Attachment:\s*.*?\]/g, '')
-            .replace(/\[Refusal Note:\s*.*?\]/g, '')
+            .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
+            .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
             .trim();
 
           return {

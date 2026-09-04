@@ -15,10 +15,12 @@ import {
   History,
   Search,
   Paperclip,
+  Download,
   ShieldCheck,
 } from 'lucide-react';
 import { EnterpriseTable, ColumnDef } from '@jaago/ui';
 import { getCurrentUserSession, UserSessionData } from '@/lib/user-profile-sync';
+import { downloadAttachment } from '@/lib/attachment-helper';
 
 interface WorkflowInstance {
   id: string;
@@ -348,12 +350,30 @@ function WorkflowsContent() {
       header: 'Supporting Document',
       accessor: (row) =>
         row.metadata.attachmentName ? (
-          <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-            <Paperclip className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-            <span className="truncate max-w-[130px]" title={row.metadata.attachmentName}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              downloadAttachment(row.metadata.attachmentName!, {
+                requesterName: row.metadata.requesterName,
+                employeeCode: row.metadata.employeeCode,
+                department: row.metadata.department,
+                leaveType: row.metadata.leaveType,
+                startDate: row.metadata.startDate,
+                endDate: row.metadata.endDate,
+                reason: row.metadata.reason,
+                requestId: row.id,
+              });
+            }}
+            className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition cursor-pointer shadow-sm group"
+            title={`Click to download "${row.metadata.attachmentName}"`}
+          >
+            <Paperclip className="h-3.5 w-3.5 text-emerald-500 shrink-0 group-hover:scale-110 transition" />
+            <span className="truncate max-w-[120px] underline decoration-emerald-500/30 underline-offset-2">
               {row.metadata.attachmentName}
             </span>
-          </div>
+            <Download className="h-3 w-3 opacity-70 group-hover:opacity-100 transition shrink-0" />
+          </button>
         ) : (
           <span className="text-[11px] text-muted-foreground/60 italic">No Document</span>
         ),
@@ -733,15 +753,48 @@ function WorkflowsContent() {
                   </div>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Attached Document / Evidence:</span>
-                  {selectedInstance.metadata.attachmentName ? (
-                    <div className="mt-1 flex items-center space-x-2 p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-medium min-h-[42px]">
-                      <Paperclip className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="font-bold truncate text-[11px]">{selectedInstance.metadata.attachmentName}</span>
-                      <span className="ml-auto px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-[9px] font-black uppercase tracking-wider shrink-0">
-                        Attached
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span>Attached Document / Evidence:</span>
+                    {selectedInstance.metadata.attachmentName && (
+                      <span className="text-[10px] text-emerald-500 font-bold flex items-center space-x-1">
+                        <Download className="h-3 w-3" />
+                        <span>Click to download</span>
                       </span>
-                    </div>
+                    )}
+                  </div>
+                  {selectedInstance.metadata.attachmentName ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadAttachment(selectedInstance.metadata.attachmentName!, {
+                          requesterName: selectedInstance.metadata.requesterName,
+                          employeeCode: selectedInstance.metadata.employeeCode,
+                          department: selectedInstance.metadata.department,
+                          leaveType: selectedInstance.metadata.leaveType,
+                          startDate: selectedInstance.metadata.startDate,
+                          endDate: selectedInstance.metadata.endDate,
+                          reason: selectedInstance.metadata.reason,
+                          requestId: selectedInstance.id,
+                        })
+                      }
+                      className="w-full mt-1 flex items-center justify-between space-x-2 p-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500 text-emerald-600 dark:text-emerald-400 font-medium min-h-[42px] transition group cursor-pointer shadow-sm text-left"
+                      title={`Click to download "${selectedInstance.metadata.attachmentName}"`}
+                    >
+                      <div className="flex items-center space-x-2 truncate">
+                        <Paperclip className="h-4 w-4 text-emerald-500 shrink-0 group-hover:scale-110 transition" />
+                        <span className="font-bold truncate text-[11px] underline decoration-emerald-500/30 underline-offset-2">
+                          {selectedInstance.metadata.attachmentName}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-1.5 shrink-0 ml-2">
+                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-[9px] font-black uppercase tracking-wider">
+                          Attached
+                        </span>
+                        <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition">
+                          <Download className="h-3.5 w-3.5" />
+                        </div>
+                      </div>
+                    </button>
                   ) : (
                     <div className="mt-1 flex items-center space-x-2 p-2 rounded-xl bg-card/40 border border-border/60 text-muted-foreground text-[11px] min-h-[42px]">
                       <Paperclip className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
