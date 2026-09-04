@@ -123,8 +123,8 @@ export const INITIAL_EMAIL_TEMPLATES: EmailTemplateItem[] = [
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Account Invitation — JAAGO HUB</title>
 </head>
-<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:#0c0f17;color:#1e293b;-webkit-font-smoothing:antialiased;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.35);border:1px solid #e2e8f0;">
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:#f8fafc;color:#1e293b;-webkit-font-smoothing:antialiased;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
     <!-- Header -->
     <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:36px 32px 28px;text-align:center;border-bottom:4px solid #f59e0b;">
       <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:5px 14px;border-radius:20px;text-transform:uppercase;margin-bottom:12px;">JAAGO FOUNDATION TRUST</span>
@@ -264,7 +264,7 @@ Support: pnc@jaago.com.bd | IT Helpdesk: it-support@jaago.com.bd
       { key: 'loginUrl', name: 'Login URL', description: 'Direct portal authentication link', required: true, sample: 'https://hub.jaago.com.bd/login' },
     ],
     isActive: true,
-    version: 2,
+    version: 3,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -277,8 +277,8 @@ Support: pnc@jaago.com.bd | IT Helpdesk: it-support@jaago.com.bd
     bodyHtml: `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Pending Approval</title></head>
-<body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#0c0f17;color:#1e293b;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;">
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f8fafc;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
     <div style="background:#0f172a;padding:24px 28px;border-bottom:4px solid #f59e0b;">
       <h2 style="color:#ffffff;font-size:18px;margin:0;">Pending Approval Notification</h2>
     </div>
@@ -307,7 +307,7 @@ Review URL: {{actionUrl}}`,
       { key: 'actionUrl', name: 'Action URL', description: 'Direct approval workflow link', required: true, sample: 'https://hub.jaago.com.bd/workflows' },
     ],
     isActive: true,
-    version: 1,
+    version: 3,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -320,8 +320,8 @@ Review URL: {{actionUrl}}`,
     bodyHtml: `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Reset Password</title></head>
-<body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#0c0f17;color:#1e293b;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;">
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f8fafc;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
     <div style="background:#0f172a;padding:24px;border-bottom:4px solid #f59e0b;text-align:center;">
       <h2 style="color:#ffffff;font-size:20px;margin:0;">Password Reset Request</h2>
     </div>
@@ -343,7 +343,7 @@ Reset URL: {{resetUrl}}`,
       { key: 'resetUrl', name: 'Reset URL', description: 'Single-use reset link', required: true, sample: 'https://hub.jaago.com.bd/reset-password' },
     ],
     isActive: true,
-    version: 1,
+    version: 3,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -360,8 +360,8 @@ Reset URL: {{resetUrl}}`,
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Leave Application — JAAGO HUB</title>
 </head>
-<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#0c0f17;color:#1e293b;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.35);border:1px solid #e2e8f0;">
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#f8fafc;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
     <!-- Header -->
     <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:32px 28px 24px;text-align:center;border-bottom:4px solid #f59e0b;">
       <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:4px 12px;border-radius:20px;text-transform:uppercase;margin-bottom:10px;">JAAGO FOUNDATION TRUST</span>
@@ -424,7 +424,7 @@ Review & Authorize URL: {{actionUrl}}`,
       { key: 'actionUrl', name: 'Action URL', description: 'Direct link to approve or refuse', required: true, sample: 'https://hub.jaago.com.bd/workflows' },
     ],
     isActive: true,
-    version: 1,
+    version: 3,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -441,8 +441,8 @@ Review & Authorize URL: {{actionUrl}}`,
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Leave Decision — JAAGO HUB</title>
 </head>
-<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#0c0f17;color:#1e293b;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.35);border:1px solid #e2e8f0;">
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#f8fafc;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
     <!-- Header -->
     <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:32px 28px 24px;text-align:center;border-bottom:4px solid #f59e0b;">
       <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:4px 12px;border-radius:20px;text-transform:uppercase;margin-bottom:10px;">JAAGO FOUNDATION TRUST</span>
@@ -471,13 +471,6 @@ Review & Authorize URL: {{actionUrl}}`,
         <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Review Timestamp:</td><td style="padding:10px 14px;color:#64748b;border-bottom:1px solid #e2e8f0;">{{reviewedAt}}</td></tr>
         <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;">Supervisor Remarks / Note:</td><td style="padding:10px 14px;color:#1e293b;font-weight:600;">{{refusalReason}}</td></tr>
       </table>
-
-      <!-- Action Button -->
-      <div style="text-align:center;margin:28px 0 16px;">
-        <a href="{{portalUrl}}" style="background:#0f172a;color:#ffffff;text-decoration:none;font-weight:800;font-size:13px;padding:12px 28px;border-radius:10px;display:inline-block;">
-          View Updated Leave Balance in JAAGO HUB &rarr;
-        </a>
-      </div>
     </div>
 
     <!-- Footer -->
@@ -489,8 +482,7 @@ Review & Authorize URL: {{actionUrl}}`,
 </html>`,
     bodyText: `Your Leave Request has been {{decisionStatus}} for {{leaveType}} ({{fromDate}} to {{toDate}} - {{totalDays}} Days).
 Reviewed by: {{reviewedBy}} at {{reviewedAt}}
-Remarks: {{refusalReason}}
-Portal: {{portalUrl}}`,
+Remarks: {{refusalReason}}`,
     variablesSchema: [
       { key: 'employeeName', name: 'Employee Name', description: 'Staff member name', required: true, sample: 'S M Nayeem Rahman' },
       { key: 'leaveType', name: 'Leave Type', description: 'Leave Category', required: true, sample: 'Annual Leave' },
@@ -501,10 +493,9 @@ Portal: {{portalUrl}}`,
       { key: 'reviewedBy', name: 'Reviewed By', description: 'Reviewer name', required: true, sample: 'Nasif Kamal (Supervisor)' },
       { key: 'reviewedAt', name: 'Reviewed At', description: 'Decision timestamp', required: true, sample: '04-Sep-2026 11:45 AM' },
       { key: 'refusalReason', name: 'Refusal Reason / Remarks', description: 'Supervisor notes or refusal reason', required: true, sample: 'Approved as requested' },
-      { key: 'portalUrl', name: 'Portal URL', description: 'Leave dashboard URL', required: true, sample: 'https://hub.jaago.com.bd/leaves' },
     ],
     isActive: true,
-    version: 1,
+    version: 3,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -636,15 +627,14 @@ class EmailSubsystemStore {
         updatedAt: r.updated_at || new Date().toISOString(),
       }));
 
-      // Merge INITIAL_EMAIL_TEMPLATES with dbTemplates so all built-in templates are always available
+      // Merge INITIAL_EMAIL_TEMPLATES with dbTemplates so all built-in templates are always available and updated
       const templateMap = new Map<string, EmailTemplateItem>();
-      INITIAL_EMAIL_TEMPLATES.forEach((t) => templateMap.set(t.templateKey, t));
       dbTemplates.forEach((t) => templateMap.set(t.templateKey, t));
-      this.templates = Array.from(templateMap.values());
 
-      // Upsert any missing initial templates to Supabase
       for (const t of INITIAL_EMAIL_TEMPLATES) {
-        if (!dbTemplates.some((d) => d.templateKey === t.templateKey)) {
+        const existing = templateMap.get(t.templateKey);
+        if (!existing || (t.version && (!existing.version || t.version > existing.version))) {
+          templateMap.set(t.templateKey, t);
           await supabase.from('email_templates').upsert({
             id: t.id,
             template_key: t.templateKey,
@@ -659,6 +649,7 @@ class EmailSubsystemStore {
           }, { onConflict: 'template_key' });
         }
       }
+      this.templates = Array.from(templateMap.values());
 
       // 3. Pre-fetch recent logs from Supabase
       const { data: logRows } = await supabase.from('email_logs').select('*').order('queued_at', { ascending: false }).limit(100);

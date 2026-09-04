@@ -105,10 +105,19 @@ export async function GET(request: NextRequest) {
 
       // Parse attachment and refusal reason if stored in reason string
       let attachmentName = row.attachment_name || '';
+      let attachmentUrl = row.attachment_url || '';
       let rawReason = row.reason || '';
-      if (!attachmentName && /\[Attachment:\s*([\s\S]*?)\]/i.test(rawReason)) {
+      if (/\[Attachment:\s*([\s\S]*?)\]/i.test(rawReason)) {
         const match = rawReason.match(/\[Attachment:\s*([\s\S]*?)\]/i);
-        if (match && match[1]) attachmentName = match[1].trim();
+        if (match && match[1]) {
+          const parts = match[1].trim().split('|');
+          if (!attachmentName) attachmentName = parts[0]?.trim() || '';
+          if (parts[1]) attachmentUrl = parts[1].trim();
+        }
+      }
+
+      if (attachmentName && !attachmentUrl) {
+        attachmentUrl = `/api/v1/leaves/attachments?name=${encodeURIComponent(attachmentName)}`;
       }
 
       let rejectionReason = row.rejection_reason || '';
@@ -179,6 +188,7 @@ export async function GET(request: NextRequest) {
           reason: cleanReason,
           rejectionReason,
           attachmentName: attachmentName,
+          attachmentUrl: attachmentUrl || undefined,
           approvedBy: row.approved_by || '',
           approvedAt: row.approved_at || '',
         },

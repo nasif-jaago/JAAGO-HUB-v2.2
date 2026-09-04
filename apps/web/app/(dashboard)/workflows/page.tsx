@@ -363,6 +363,7 @@ function WorkflowsContent() {
                 endDate: row.metadata.endDate,
                 reason: row.metadata.reason,
                 requestId: row.id,
+                attachmentUrl: (row.metadata as any).attachmentUrl,
               });
             }}
             className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition cursor-pointer shadow-sm group"
@@ -775,6 +776,7 @@ function WorkflowsContent() {
                           endDate: selectedInstance.metadata.endDate,
                           reason: selectedInstance.metadata.reason,
                           requestId: selectedInstance.id,
+                          attachmentUrl: (selectedInstance.metadata as any).attachmentUrl,
                         })
                       }
                       className="w-full mt-1 flex items-center justify-between space-x-2 p-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500 text-emerald-600 dark:text-emerald-400 font-medium min-h-[42px] transition group cursor-pointer shadow-sm text-left"

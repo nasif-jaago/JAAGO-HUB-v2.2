@@ -648,11 +648,20 @@ export async function fetchLeaveRequests(): Promise<LeaveRequestItem[]> {
       if (!error && Array.isArray(data) && data.length > 0) {
         return data.map((row: any) => {
           let attachmentName = row.attachment_name || '';
+          let attachmentUrl = row.attachment_url || '';
           let rawReason = row.reason || '';
-          if (!attachmentName && /\[Attachment:\s*([\s\S]*?)\]/i.test(rawReason)) {
+          if (/\[Attachment:\s*([\s\S]*?)\]/i.test(rawReason)) {
             const match = rawReason.match(/\[Attachment:\s*([\s\S]*?)\]/i);
-            if (match && match[1]) attachmentName = match[1].trim();
+            if (match && match[1]) {
+              const parts = match[1].trim().split('|');
+              if (!attachmentName) attachmentName = parts[0]?.trim() || '';
+              if (parts[1]) attachmentUrl = parts[1].trim();
+            }
           }
+          if (attachmentName && !attachmentUrl) {
+            attachmentUrl = `/api/v1/leaves/attachments?name=${encodeURIComponent(attachmentName)}`;
+          }
+
           let rejectionReason = row.rejection_reason || '';
           if (!rejectionReason && /\[Refusal Note:\s*([\s\S]*?)\]/i.test(rawReason)) {
             const match = rawReason.match(/\[Refusal Note:\s*([\s\S]*?)\]/i);
@@ -677,6 +686,7 @@ export async function fetchLeaveRequests(): Promise<LeaveRequestItem[]> {
             reason: cleanReason,
             rejectionReason: rejectionReason || undefined,
             attachmentName: attachmentName || undefined,
+            attachmentUrl: attachmentUrl || undefined,
             status: (row.status as LeaveStatus) || 'Pending',
             appliedAt: row.applied_at || row.created_at,
             approvedBy: row.approved_by,
@@ -799,7 +809,10 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
     if (supabase) {
       let finalReason = request.reason || '';
       if (request.attachmentName && !finalReason.includes('[Attachment:')) {
-        finalReason = `[Attachment: ${request.attachmentName}] ${finalReason}`.trim();
+        const attachStr = request.attachmentUrl
+          ? `${request.attachmentName}|${request.attachmentUrl}`
+          : request.attachmentName;
+        finalReason = `[Attachment: ${attachStr}] ${finalReason}`.trim();
       }
       if (request.rejectionReason && !finalReason.includes('[Refusal Note:')) {
         finalReason = `${finalReason} [Refusal Note: ${request.rejectionReason}]`.trim();

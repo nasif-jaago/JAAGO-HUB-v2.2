@@ -709,6 +709,7 @@ export default function LeaveRequestsPage() {
                             endDate: req.toDate,
                             reason: req.reason,
                             requestId: req.id,
+                            attachmentUrl: req.attachmentUrl,
                           });
                         }}
                         className="ml-auto flex items-center space-x-1 text-[10px] font-sans not-italic text-emerald-500 hover:text-emerald-400 font-bold bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 px-2 py-0.5 rounded-md border border-emerald-500/20 hover:border-emerald-500 transition cursor-pointer shrink-0 group"

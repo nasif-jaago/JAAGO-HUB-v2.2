@@ -36,7 +36,6 @@ import {
   getActiveEmployeeProfile,
   getCurrentUserSession,
 } from '@/lib/user-profile-sync';
-import { useAbility } from '@/lib/casl-ability';
 import { createNotification } from '@/lib/notifications';
 
 // ── MODERN CIRCULAR PROGRESS DONUT RING ──
@@ -91,7 +90,7 @@ function CircularProgress({
 }
 
 export default function MyLeavePage() {
-  const ability = useAbility();
+  const [mounted, setMounted] = useState(false);
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -110,6 +109,8 @@ export default function MyLeavePage() {
   const [pregnancyDate, setPregnancyDate] = useState<string>('');
   const [eddDate, setEddDate] = useState<string>('');
   const [attachedFileName, setAttachedFileName] = useState<string>('');
+  const [attachedFileUrl, setAttachedFileUrl] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Comp Off Ledger toggle
@@ -131,20 +132,22 @@ export default function MyLeavePage() {
     if (allocs) setAllocations(allocs);
     if (emps && emps.length > 0) {
       setEmployees(emps);
-      setSelectedEmpCode((prev) => {
-        if (prev && emps.some((e) => e.code === prev)) return prev;
-        const currentSession = getCurrentUserSession();
-        const match = emps.find(
-          (e) =>
-            (currentSession?.employeeCode && e.code === currentSession.employeeCode) ||
-            (currentSession?.email && (e.workEmail?.toLowerCase() === currentSession.email.toLowerCase() || e.personalEmail?.toLowerCase() === currentSession.email.toLowerCase()))
-        );
-        return match?.code || emps[0]?.code || '';
-      });
+      const currentSession = getCurrentUserSession();
+      const match = emps.find(
+        (e) =>
+          (currentSession?.employeeCode && e.code === currentSession.employeeCode) ||
+          (currentSession?.email && (e.workEmail?.toLowerCase() === currentSession.email.toLowerCase() || e.personalEmail?.toLowerCase() === currentSession.email.toLowerCase()))
+      );
+      if (match?.code) {
+        setSelectedEmpCode(match.code);
+      } else if (currentSession?.employeeCode) {
+        setSelectedEmpCode(currentSession.employeeCode);
+      }
     }
   };
 
   useEffect(() => {
+    setMounted(true);
     // Initial sync with active user session
     const sessionUser = getCurrentUserSession();
     if (sessionUser?.employeeCode) {
@@ -152,7 +155,7 @@ export default function MyLeavePage() {
     }
     getActiveEmployeeProfile().then((p) => {
       if (p?.code) {
-        setSelectedEmpCode((prev) => prev || p.code);
+        setSelectedEmpCode(p.code);
       }
     });
 
@@ -190,12 +193,12 @@ export default function MyLeavePage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Active Employee resolution
+  // Active Employee resolution (strictly based on logged-in user)
   const session = getCurrentUserSession();
   const currentEmp =
-    employees.find((e) => e.code === selectedEmpCode) ||
     employees.find((e) => session?.employeeCode && e.code === session.employeeCode) ||
     employees.find((e) => session?.email && (e.workEmail?.toLowerCase() === session.email.toLowerCase() || e.personalEmail?.toLowerCase() === session.email.toLowerCase())) ||
+    (selectedEmpCode ? employees.find((e) => e.code === selectedEmpCode) : undefined) ||
     employees[0] || {
       name: session?.fullName || 'Staff Member',
       code: session?.employeeCode || 'EMP-001',
@@ -332,17 +335,18 @@ export default function MyLeavePage() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        showToastMsg('Document size exceeds 5 MB. Please choose a file up to 5 MB.', 'error');
+      if (file.size > 10 * 1024 * 1024) {
+        showToastMsg('Document size exceeds 10 MB. Please choose a file up to 10 MB.', 'error');
         return;
       }
+      setSelectedFile(file);
       setAttachedFileName(file.name);
       showToastMsg(`Attached document: ${file.name}`);
 
-      // Cache file dataURL for instant browser downloading
+      // Cache file dataURL for immediate local download preview
       const reader = new FileReader();
       reader.onload = () => {
         try {
@@ -352,6 +356,24 @@ export default function MyLeavePage() {
         } catch {}
       };
       reader.readAsDataURL(file);
+
+      // Upload actual original document to server storage endpoint
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('employeeCode', currentEmp.code || 'emp');
+        formData.append('fileName', file.name);
+        const res = await fetch('/api/v1/leaves/attachments', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.success && data.url) {
+          setAttachedFileUrl(data.url);
+        }
+      } catch (err) {
+        console.warn('Background attachment upload notice:', err);
+      }
     }
   };
 
@@ -366,11 +388,31 @@ export default function MyLeavePage() {
           : 'Second Half'
         : 'Full Day';
 
+    // Ensure attached file is uploaded to server if not done yet
+    let finalAttachmentUrl = attachedFileUrl;
+    if (selectedFile && !finalAttachmentUrl) {
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('employeeCode', currentEmp.code || 'emp');
+        formData.append('fileName', selectedFile.name);
+        const res = await fetch('/api/v1/leaves/attachments', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.success && data.url) {
+          finalAttachmentUrl = data.url;
+        }
+      } catch {}
+    }
+
     const rawReason = reason.trim() || 'General leave application';
     const baseReason = rawReason.replace(/\[Attachment:\s*[\s\S]*?\]/gi, '').replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '').trim();
-    const persistedReason = attachedFileName
-      ? `${baseReason || 'Leave application'} [Attachment: ${attachedFileName.trim()}]`
-      : (baseReason || 'General leave application');
+    const attachTag = attachedFileName
+      ? ` [Attachment: ${attachedFileName.trim()}${finalAttachmentUrl ? `|${finalAttachmentUrl}` : ''}]`
+      : '';
+    const persistedReason = `${baseReason || 'General leave application'}${attachTag}`.trim();
 
     const newReq: LeaveRequestItem = {
       id: `req-${Date.now()}`,
@@ -391,6 +433,7 @@ export default function MyLeavePage() {
       intendedMaternityStartDate: startDate,
       bereavementRelationship: bereavementRelation as BereavementRelationship,
       attachmentName: attachedFileName || '',
+      attachmentUrl: finalAttachmentUrl || '',
       status: 'Pending',
       appliedAt: new Date().toISOString(),
     };
@@ -446,6 +489,11 @@ export default function MyLeavePage() {
 
     setReason('');
     setAttachedFileName('');
+    setAttachedFileUrl('');
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     showToastMsg('Your leave request has been submitted successfully, supervisor notified, and synced to attendance logs!');
     loadData();
   };
@@ -529,22 +577,6 @@ export default function MyLeavePage() {
         >
           {toast.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           <span>{toast.message}</span>
-        </div>
-      )}
-
-      {/* Unallocated Warning Alert */}
-      {!hasAllocation && (
-        <div className="flex items-center justify-between p-3.5 px-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-semibold animate-in fade-in shadow-sm">
-          <div className="flex items-center space-x-2.5">
-            <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            <span>You currently have 0 allocated leave quota. Please contact People &amp; Culture to allocate your annual leave package.</span>
-          </div>
-          <a
-            href="/pnc/time-off/allocations"
-            className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition shadow-sm flex-shrink-0"
-          >
-            Go to Allocations
-          </a>
         </div>
       )}
 
@@ -751,28 +783,19 @@ export default function MyLeavePage() {
             <Sparkles className="h-3.5 w-3.5 text-amber-500" />
           </div>
           <div className="flex items-center space-x-3">
-            {ability.can('manage', 'all') && employees.length > 1 ? (
-              <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase hidden sm:inline">Applicant:</span>
-                <select
-                  value={selectedEmpCode || currentEmp.code}
-                  onChange={(e) => setSelectedEmpCode(e.target.value)}
-                  className="h-8 px-2.5 rounded-xl bg-surface border border-border text-[11px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
-                >
-                  {employees.map((emp) => (
-                    <option key={emp.code} value={emp.code}>
-                      {emp.name} ({emp.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-2 px-3 py-1 rounded-xl bg-surface/80 border border-border/80 text-[11px] font-bold text-foreground">
-                <span className="text-foreground">{currentEmp.name}</span>
-                <span className="text-[10px] font-mono text-amber-500">({currentEmp.code})</span>
-              </div>
-            )}
-            <span className="text-[11px] font-mono font-bold text-muted-foreground tracking-widest uppercase">
+            <div
+              className="flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-surface border border-border/80 text-[11px] font-bold text-foreground shadow-sm"
+              suppressHydrationWarning
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Applicant:</span>
+              <span className="text-foreground font-semibold" suppressHydrationWarning>
+                {mounted ? currentEmp.name : '...'}
+              </span>
+              <span className="text-[10px] font-mono font-bold text-amber-500" suppressHydrationWarning>
+                {mounted ? `(${currentEmp.code})` : ''}
+              </span>
+            </div>
+            <span className="text-[11px] font-mono font-bold text-muted-foreground tracking-widest uppercase hidden sm:inline">
               NEW REQUEST
             </span>
           </div>

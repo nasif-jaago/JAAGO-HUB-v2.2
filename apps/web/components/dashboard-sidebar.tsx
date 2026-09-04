@@ -16,7 +16,6 @@ import {
   User,
   LayoutGrid,
   FileText,
-  Tag,
   Briefcase,
   ShoppingCart,
   DollarSign,
@@ -319,7 +318,6 @@ export function DashboardSidebar({
                         <span>All Requests</span>
                       </Link>
                       {[
-                        { label: 'Leave Request', icon: Tag, href: '/leaves' },
                         { label: 'General Requisition...', icon: Briefcase, href: '/workflows' },
                         { label: 'Purchase Requisition...', icon: ShoppingCart, href: '/workflows' },
                         { label: 'Expenses', icon: DollarSign, href: '/workflows' },

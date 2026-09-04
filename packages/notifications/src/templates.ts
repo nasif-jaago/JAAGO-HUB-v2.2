@@ -35,7 +35,7 @@ export function renderEmployeeWelcomeEmail(params: EmployeeWelcomeEmailParams): 
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background-color: #0c0f17;
+      background-color: #f8fafc;
       color: #1e293b;
       margin: 0;
       padding: 32px 16px;
@@ -47,7 +47,7 @@ export function renderEmployeeWelcomeEmail(params: EmployeeWelcomeEmailParams): 
       background: #ffffff;
       border-radius: 20px;
       overflow: hidden;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
       border: 1px solid #e2e8f0;
     }
     .header {
