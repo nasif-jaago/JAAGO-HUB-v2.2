@@ -23,7 +23,7 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     branch: row.branch || 'Head Office (Banani)',
     department: row.department || 'Program Implementation',
     project: row.project || 'General Operations',
-    team: row.team || 'Core Development Team',
+    team: row.team || '',
     supervisor: row.supervisor || '',
     secondarySupervisor: row.secondary_supervisor || '',
     workLocation: row.work_location || 'Banani, Dhaka',

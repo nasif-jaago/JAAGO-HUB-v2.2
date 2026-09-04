@@ -6,9 +6,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // POST /api/v1/admin/email/logs/[id]/retry — Manual re-queue of failed email
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const result = await retryEmailLog(id);
     logger.info('AUDIT', 'admin.email_log_retried', { metadata: { logId: id, success: result.success } });
 

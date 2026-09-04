@@ -322,7 +322,7 @@ export function EmployeeProfileDetail({
     if (initialData) {
       return {
         ...initialData,
-        team: initialData.team || 'Core Development Team',
+        team: initialData.team || '',
         insuranceStatus: initialData.insuranceStatus || 'Active',
         insuranceCoverageCategory: initialData.insuranceCoverageCategory || 'Standard Full-Time (Plan B)',
         insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 1500,
@@ -356,7 +356,7 @@ export function EmployeeProfileDetail({
       branch: 'Head Office (Banani)',
       department: 'Program Implementation',
       project: 'General Operations',
-      team: 'Core Development Team',
+      team: '',
       supervisor: 'Nasif Kamal',
       secondarySupervisor: 'S M Nayeem Rahman',
       workLocation: 'Banani, Dhaka',
@@ -602,7 +602,7 @@ export function EmployeeProfileDetail({
     if (initialData && initialData.code) {
       setFormData({
         ...initialData,
-        team: initialData.team || 'Core Development Team',
+        team: initialData.team || '',
         insuranceStatus: initialData.insuranceStatus || 'Active',
         insuranceCoverageCategory: initialData.insuranceCoverageCategory || 'Standard Full-Time (Plan B)',
         insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 1500,

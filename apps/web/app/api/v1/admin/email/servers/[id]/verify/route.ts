@@ -5,9 +5,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // POST /api/v1/admin/email/servers/[id]/verify — Test SMTP connection (verify handshake without sending)
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const result = await verifyServerConnection(id);
     return NextResponse.json({
       success: result.success,

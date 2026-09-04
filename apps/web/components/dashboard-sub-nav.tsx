@@ -41,12 +41,12 @@ export const DASHBOARD_SUB_NAV_ITEMS: SubNavItem[] = [
   { id: 'my-leave', label: 'MY LEAVE', href: '/dashboard#leave', icon: Calendar },
   { id: 'approvals', label: 'APPROVALS', href: '/workflows', icon: CheckCircle2 },
   { id: 'expenses', label: 'EXPENSES', href: '/dashboard#expenses', icon: CreditCard },
-  { id: 'appraisal', label: 'APPRAISAL', href: '/dashboard#appraisal', icon: Award },
+  { id: 'appraisal', label: 'APPRAISAL', href: '/organization/performance', icon: Award },
   { id: 'payroll', label: 'PAYROLL', href: '/dashboard#payroll', icon: DollarSign },
   { id: 'tax-noc', label: 'TAX & NOC REQUEST', href: '/dashboard#tax', icon: FileText },
-  { id: 'on-leave', label: 'ON LEAVE', href: '/dashboard#onleave', icon: UserCheck },
-  { id: 'my-department', label: 'MY DEPARTMENT', href: '/dashboard#department', icon: Users },
-  { id: 'my-team', label: 'MY TEAM', href: '/dashboard#team', icon: Users },
+  { id: 'on-leave', label: 'ON LEAVE', href: '/organization/on-leave', icon: UserCheck },
+  { id: 'my-department', label: 'MY DEPARTMENT', href: '/organization/department', icon: Users },
+  { id: 'my-team', label: 'MY TEAM', href: '/organization/team', icon: Users },
 ];
 
 export function DashboardSubNav({ activeTab }: { activeTab?: string }) {

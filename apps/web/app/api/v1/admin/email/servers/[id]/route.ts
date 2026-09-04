@@ -14,8 +14,8 @@ function maskServer(server: EmailServerItem) {
 }
 
 // GET /api/v1/admin/email/servers/[id]
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
   const url = new URL(request.url);
   const shouldReveal = url.searchParams.get('reveal') === 'true';
 
@@ -44,9 +44,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 // PATCH /api/v1/admin/email/servers/[id] — Update server (empty password keeps existing)
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const body = await request.json();
     const { password, ...fields } = body;
 
@@ -64,9 +64,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 // DELETE /api/v1/admin/email/servers/[id]
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const deleted = await emailStore.deleteServer(id);
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Server not found' }, { status: 404 });

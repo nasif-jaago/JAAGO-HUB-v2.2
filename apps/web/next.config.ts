@@ -49,6 +49,7 @@ const nextConfig: NextConfig = {
     '@jaago/ui',
     '@jaago/workflow',
   ],
+  serverExternalPackages: ['nodemailer'],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {

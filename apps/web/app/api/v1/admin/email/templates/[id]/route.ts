@@ -6,8 +6,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // GET /api/v1/admin/email/templates/[id]
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
   const templateList = await emailStore.getTemplates();
   const template = templateList.find((t) => t.id === id);
   if (!template) {
@@ -17,9 +17,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 // PATCH /api/v1/admin/email/templates/[id] — Update template (increments version)
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const body = await request.json();
     const updated = await emailStore.updateTemplate(id, body);
 
@@ -32,9 +32,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 // DELETE /api/v1/admin/email/templates/[id]
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const deleted = await emailStore.deleteTemplate(id);
     if (!deleted) {
       return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 });

@@ -9,15 +9,16 @@ export interface UserSessionData {
   id: string;
   email: string;
   fullName: string;
-  avatarUrl?: string;
-  jobTitle?: string;
-  organizationName?: string;
-  department?: string;
-  manager?: string;
-  employeeCode?: string;
-  workingSchedule?: string;
-  roles?: string[];
-  permissions?: string[];
+  avatarUrl?: string | undefined;
+  jobTitle?: string | undefined;
+  organizationName?: string | undefined;
+  department?: string | undefined;
+  team?: string | undefined;
+  manager?: string | undefined;
+  employeeCode?: string | undefined;
+  workingSchedule?: string | undefined;
+  roles?: string[] | undefined;
+  permissions?: string[] | undefined;
 }
 
 /**
@@ -153,6 +154,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       avatarUrl: employee.avatarUrl || existing.avatarUrl || '',
       organizationName: employee.organization,
       department: employee.department,
+      team: employee.team,
       manager: employee.supervisor || 'Founder & Executive Director',
       employeeCode: employee.code,
       workingSchedule: employee.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
