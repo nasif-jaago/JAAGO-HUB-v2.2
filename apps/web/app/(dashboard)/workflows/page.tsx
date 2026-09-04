@@ -305,12 +305,18 @@ function WorkflowsContent() {
       accessor: (row) => (
         <div>
           <div className="font-bold text-foreground hover:text-primary transition">{row.title}</div>
-          <div className="text-[10px] text-muted-foreground flex items-center space-x-2">
+          <div className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
             <span className="font-mono">ID: {row.entityId}</span>
             <span>&bull;</span>
             <span className="capitalize">{row.metadata.leaveType || row.definitionKey.replace(/_/g, ' ')}</span>
             <span>&bull;</span>
             <span>{row.metadata.totalDays} Day(s)</span>
+            {row.metadata.attachmentName && (
+              <span className="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 font-bold text-[10px]">
+                <Paperclip className="h-3 w-3" />
+                <span className="truncate max-w-[140px]">{row.metadata.attachmentName}</span>
+              </span>
+            )}
           </div>
         </div>
       ),
@@ -338,6 +344,21 @@ function WorkflowsContent() {
       ),
     },
     {
+      key: 'attachment',
+      header: 'Supporting Document',
+      accessor: (row) =>
+        row.metadata.attachmentName ? (
+          <div className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+            <Paperclip className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span className="truncate max-w-[130px]" title={row.metadata.attachmentName}>
+              {row.metadata.attachmentName}
+            </span>
+          </div>
+        ) : (
+          <span className="text-[11px] text-muted-foreground/60 italic">No Document</span>
+        ),
+    },
+    {
       key: 'currentState',
       header: 'Status',
       accessor: (row) => getStatusBadge(row.currentState),
@@ -352,7 +373,7 @@ function WorkflowsContent() {
               <button
                 onClick={() => handleApprove(row)}
                 disabled={isSubmitting}
-                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/30 text-[11px] font-bold flex items-center space-x-1 transition"
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/30 text-[11px] font-bold flex items-center space-x-1 transition cursor-pointer"
               >
                 <Check className="h-3 w-3" />
                 <span>Approve</span>
@@ -363,7 +384,7 @@ function WorkflowsContent() {
                   setRefusalNote('');
                 }}
                 disabled={isSubmitting}
-                className="px-2.5 py-1 rounded-lg bg-destructive/10 hover:bg-destructive text-destructive hover:text-white border border-destructive/30 text-[11px] font-bold flex items-center space-x-1 transition"
+                className="px-2.5 py-1 rounded-lg bg-destructive/10 hover:bg-destructive text-destructive hover:text-white border border-destructive/30 text-[11px] font-bold flex items-center space-x-1 transition cursor-pointer"
               >
                 <X className="h-3 w-3" />
                 <span>Refuse</span>
@@ -372,7 +393,7 @@ function WorkflowsContent() {
           ) : (
             <button
               onClick={() => setSelectedInstance(row)}
-              className="px-2.5 py-1 rounded-lg bg-surface hover:bg-surface/80 text-muted-foreground text-[11px] font-medium border border-border"
+              className="px-2.5 py-1 rounded-lg bg-surface hover:bg-surface/80 text-muted-foreground text-[11px] font-medium border border-border cursor-pointer"
             >
               View Details
             </button>
