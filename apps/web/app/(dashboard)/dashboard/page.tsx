@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   X,
 } from 'lucide-react';
-import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
+import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
 import {
   recordLocalAttendanceLog,
   getEmployeeAttendanceLogs,
@@ -29,6 +29,7 @@ import {
 import {
   PublicHolidayItem,
   fetchPublicHolidays,
+  fetchLeaveRequests,
 } from '@/lib/supabase-time-off';
 import {
   GPSLocationItem,
@@ -49,6 +50,7 @@ export default function DashboardPage() {
   const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
   const [publicHolidays, setPublicHolidays] = useState<PublicHolidayItem[]>([]);
   const [gpsLocations, setGpsLocations] = useState<GPSLocationItem[]>([]);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
   const [user, setUser] = useState({
     id: 'emp-nasif',
     fullName: 'Nasif Kamal',
@@ -134,6 +136,27 @@ export default function DashboardPage() {
           refreshCanonicalAttendance(emp.id || 'emp-nasif');
         }
       });
+
+      // Refresh Live Approvals Count (Strictly excluding self-requests)
+      const refreshPendingApprovals = async () => {
+        try {
+          const sess = getCurrentUserSession();
+          const userCode = (sess?.employeeCode || '').trim().toLowerCase();
+          const userName = (sess?.fullName || '').trim().toLowerCase();
+
+          const reqs = await fetchLeaveRequests();
+          const pending = (reqs || []).filter((r) => {
+            if (r.status !== 'Pending') return false;
+            // Exclude self-requests: request owner cannot approve their own leave
+            if (userCode && r.employeeCode?.trim().toLowerCase() === userCode) return false;
+            if (userName && r.employeeName?.trim().toLowerCase() === userName) return false;
+            return true;
+          }).length;
+          setPendingApprovalsCount(pending);
+        } catch {}
+      };
+      refreshPendingApprovals();
+      window.addEventListener('jaago_leave_request_updated', refreshPendingApprovals);
 
       // Daily Session & Rollover Hydration
       const todayStr = new Date().toISOString().slice(0, 10);
@@ -1431,12 +1454,15 @@ export default function DashboardPage() {
           </div>
 
           {/* Card 4: Active Approvals */}
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
+          <Link
+            href="/workflows"
+            className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between hover:border-emerald-500/50 transition cursor-pointer group"
+          >
             <div className="flex items-center justify-between">
-              <div className="h-8 w-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500">
+              <div className="h-8 w-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 group-hover:scale-110 transition">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground group-hover:border-emerald-500/30">
                 Action required
               </span>
             </div>
@@ -1444,14 +1470,15 @@ export default function DashboardPage() {
               <div className="text-xs font-semibold text-muted-foreground">
                 Active Approvals
               </div>
-              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1">
-                2
+              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1 font-mono text-emerald-500">
+                {pendingApprovalsCount}
               </div>
             </div>
-            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-              Purchase requisitions &bull; Leave
+            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 flex items-center justify-between">
+              <span>Leave &amp; Workflow Requests</span>
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:translate-x-1 transition" />
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* ── 3. LOWER 3-COLUMN SECTION (Strictly from Image) ── */}

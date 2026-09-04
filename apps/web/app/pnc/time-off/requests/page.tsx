@@ -12,6 +12,7 @@ import {
   History,
   CalendarDays,
   MessageSquareQuote,
+  Paperclip,
 } from 'lucide-react';
 import {
   LeaveRequestItem,
@@ -25,6 +26,8 @@ import {
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import { useOrganizationScope, matchesSelectedOrg, matchesSelectedDept } from '@/lib/use-organization-scope';
+import { createNotification } from '@/lib/notifications';
+import { getCurrentUserSession } from '@/lib/user-profile-sync';
 
 const LEAVE_TYPES: LeaveType[] = [
   'Casual Leave',
@@ -49,6 +52,8 @@ export default function LeaveRequestsPage() {
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [refusalModalReq, setRefusalModalReq] = useState<LeaveRequestItem | null>(null);
+  const [refusalNoteText, setRefusalNoteText] = useState<string>('');
 
   // Create & Direct Approve Form State
   const [selectedEmpCode, setSelectedEmpCode] = useState<string>('');
@@ -151,28 +156,145 @@ export default function LeaveRequestsPage() {
 
   // Handle Approve / Re-Approve
   const handleApprove = async (req: LeaveRequestItem) => {
+    const session = getCurrentUserSession();
+    const userCode = session?.employeeCode?.trim().toLowerCase();
+    const userName = session?.fullName?.trim().toLowerCase();
+    const isSuperAdmin = (session?.roles || []).includes('super_admin') || (session?.email || '').includes('nasif.kamal');
+
+    if (!isSuperAdmin && ((userCode && req.employeeCode?.trim().toLowerCase() === userCode) || (userName && req.employeeName?.trim().toLowerCase() === userName))) {
+      showToastMsg('Self-approval is forbidden: You cannot approve your own leave request.', 'error');
+      return;
+    }
+
+    const approverName = session?.fullName || 'Supervisor / PNC Manager';
     const updated: LeaveRequestItem = {
       ...req,
       status: 'Approved',
-      approvedBy: 'Admin / HR Manager',
+      approvedBy: approverName,
       approvedAt: new Date().toISOString(),
     };
     setRequests((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
     await saveLeaveRequest(updated);
+
+    // Look up employee email
+    const emp = employees.find((e) => e.code === req.employeeCode || e.id === req.employeeId);
+    const empEmail = emp?.workEmail || emp?.personalEmail;
+
+    // Send decision email
+    if (empEmail) {
+      try {
+        fetch('/api/v1/emails/leave-notification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'employee_decision',
+            employeeName: req.employeeName,
+            employeeEmail: empEmail,
+            leaveType: req.leaveType,
+            fromDate: req.fromDate,
+            toDate: req.toDate,
+            totalDays: req.totalDays,
+            decisionStatus: 'Approved',
+            reviewedBy: approverName,
+            refusalReason: 'Approved by Supervisor / PNC Manager',
+            requestId: req.id,
+          }),
+        }).catch((e) => console.warn('Decision email warning:', e));
+      } catch {}
+    }
+
+    // In-app notification
+    createNotification({
+      targetEmployeeCode: req.employeeCode,
+      targetEmail: empEmail,
+      title: `Leave Request Approved (${req.leaveType})`,
+      message: `Your leave application for ${req.leaveType} (${req.totalDays} Days) from ${req.fromDate} to ${req.toDate} has been approved by ${approverName}.`,
+      category: 'time_off',
+      actionUrl: '/leaves',
+      relatedEntity: { type: 'leave_request', id: req.id },
+    });
+
     showToastMsg(`Leave application approved for ${req.employeeName}`);
   };
 
-  // Handle Reject / Refuse (Approved -> Refused or Pending -> Refused)
-  const handleReject = async (req: LeaveRequestItem) => {
+  // Trigger Refusal Modal
+  const handleRejectClick = (req: LeaveRequestItem) => {
+    const session = getCurrentUserSession();
+    const userCode = session?.employeeCode?.trim().toLowerCase();
+    const userName = session?.fullName?.trim().toLowerCase();
+    const isSuperAdmin = (session?.roles || []).includes('super_admin') || (session?.email || '').includes('nasif.kamal');
+
+    if (!isSuperAdmin && ((userCode && req.employeeCode?.trim().toLowerCase() === userCode) || (userName && req.employeeName?.trim().toLowerCase() === userName))) {
+      showToastMsg('Self-refusal is forbidden: You cannot refuse your own leave request.', 'error');
+      return;
+    }
+
+    setRefusalModalReq(req);
+    setRefusalNoteText('');
+  };
+
+  // Submit Refusal with Mandatory Note
+  const handleSubmitRefusal = async () => {
+    if (!refusalModalReq) return;
+    if (!refusalNoteText.trim()) {
+      showToastMsg('Mandatory refusal note is required before refusing a leave request.', 'error');
+      return;
+    }
+
+    const session = getCurrentUserSession();
+    const reviewerName = session?.fullName || 'Supervisor / PNC Manager';
     const updated: LeaveRequestItem = {
-      ...req,
+      ...refusalModalReq,
       status: 'Rejected',
-      approvedBy: 'Admin / HR Manager',
+      approvedBy: reviewerName,
       approvedAt: new Date().toISOString(),
+      reason: `${refusalModalReq.reason || ''} [Refusal Note: ${refusalNoteText.trim()}]`.trim(),
     };
-    setRequests((prev) => prev.map((r) => (r.id === req.id ? updated : r)));
+
+    setRequests((prev) => prev.map((r) => (r.id === refusalModalReq.id ? updated : r)));
     await saveLeaveRequest(updated);
-    showToastMsg(`Leave request marked as Refused / Rejected for ${req.employeeName}`, 'error');
+
+    // Look up employee email
+    const emp = employees.find((e) => e.code === refusalModalReq.employeeCode || e.id === refusalModalReq.employeeId);
+    const empEmail = emp?.workEmail || emp?.personalEmail;
+
+    // Send decision email with refusal note
+    if (empEmail) {
+      try {
+        fetch('/api/v1/emails/leave-notification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'employee_decision',
+            employeeName: refusalModalReq.employeeName,
+            employeeEmail: empEmail,
+            leaveType: refusalModalReq.leaveType,
+            fromDate: refusalModalReq.fromDate,
+            toDate: refusalModalReq.toDate,
+            totalDays: refusalModalReq.totalDays,
+            decisionStatus: 'Refused',
+            reviewedBy: reviewerName,
+            refusalReason: refusalNoteText.trim(),
+            requestId: refusalModalReq.id,
+          }),
+        }).catch((e) => console.warn('Decision email warning:', e));
+      } catch {}
+    }
+
+    // In-app notification
+    createNotification({
+      targetEmployeeCode: refusalModalReq.employeeCode,
+      targetEmail: empEmail,
+      title: `Leave Request Refused (${refusalModalReq.leaveType})`,
+      message: `Your leave application for ${refusalModalReq.leaveType} was refused by ${reviewerName}. Note: ${refusalNoteText.trim()}`,
+      category: 'time_off',
+      actionUrl: '/leaves',
+      relatedEntity: { type: 'leave_request', id: refusalModalReq.id },
+    });
+
+    showToastMsg(`Leave request marked as Refused with note for ${refusalModalReq.employeeName}`, 'error');
+    setRefusalModalReq(null);
+    setRefusalNoteText('');
   };
 
   // Handle Delete Request
@@ -571,6 +693,12 @@ export default function LeaveRequestsPage() {
                   <div className="text-xs text-foreground/80 font-medium flex items-center space-x-1.5 italic bg-surface/50 p-1.5 px-2.5 rounded-xl max-w-xl">
                     <MessageSquareQuote className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span className="truncate">&ldquo;{req.reason}&rdquo;</span>
+                    {req.attachmentName && (
+                      <span className="ml-auto flex items-center space-x-1 text-[10px] font-sans not-italic text-emerald-500 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded-md border border-emerald-500/20 shrink-0">
+                        <Paperclip className="h-3 w-3" />
+                        <span className="truncate max-w-[120px]">{req.attachmentName}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -610,7 +738,7 @@ export default function LeaveRequestsPage() {
 
                       <button
                         type="button"
-                        onClick={() => handleReject(req)}
+                        onClick={() => handleRejectClick(req)}
                         className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-500/30 text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center space-x-1 active:scale-95 shadow-sm"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -628,7 +756,7 @@ export default function LeaveRequestsPage() {
                     <>
                       <button
                         type="button"
-                        onClick={() => handleReject(req)}
+                        onClick={() => handleRejectClick(req)}
                         className="px-3.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-500/30 text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center space-x-1 active:scale-95 shadow-sm"
                         title="Refuse / Reject this approved leave"
                       >
@@ -1004,6 +1132,81 @@ export default function LeaveRequestsPage() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          MODAL: MANDATORY REFUSAL NOTE
+          ═══════════════════════════════════════════════════════════════════ */}
+      {refusalModalReq && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-card border border-destructive/40 shadow-2xl p-6 sm:p-7 space-y-4">
+            <div className="flex items-center justify-between border-b border-border/70 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-9 w-9 rounded-xl bg-destructive/15 text-destructive flex items-center justify-center">
+                  <X className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">
+                    Refuse Leave Request
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Mandatory refusal note required for employee decision email
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRefusalModalReq(null)}
+                className="p-1 rounded-xl text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-surface border border-border text-xs space-y-1">
+              <div className="font-extrabold text-foreground">
+                {refusalModalReq.employeeName} ({refusalModalReq.employeeCode})
+              </div>
+              <div className="text-muted-foreground">
+                {refusalModalReq.leaveType} &bull; {refusalModalReq.totalDays} Days ({refusalModalReq.fromDate} to {refusalModalReq.toDate})
+              </div>
+              <div className="text-muted-foreground italic">
+                Reason: &ldquo;{refusalModalReq.reason}&rdquo;
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-black uppercase tracking-wider text-destructive flex items-center space-x-1">
+                <span>Mandatory Refusal Note / Justification *</span>
+              </label>
+              <textarea
+                rows={3}
+                value={refusalNoteText}
+                onChange={(e) => setRefusalNoteText(e.target.value)}
+                placeholder="Explain the reason for refusing this leave request (this will be sent to the employee via email)..."
+                className="w-full p-3 rounded-2xl bg-surface border border-destructive/30 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-destructive shadow-sm placeholder:text-muted-foreground/60"
+              />
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setRefusalModalReq(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-muted-foreground hover:bg-surface transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitRefusal}
+                disabled={!refusalNoteText.trim()}
+                className="px-5 py-2 rounded-xl bg-destructive text-white text-xs font-black uppercase tracking-wider hover:bg-destructive/90 transition shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Confirm &amp; Refuse Leave
+              </button>
             </div>
           </div>
         </div>

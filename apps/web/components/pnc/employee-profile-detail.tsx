@@ -714,8 +714,10 @@ export function EmployeeProfileDetail({
       loadEmpLeaveData();
     };
     window.addEventListener('jaago_leave_allocation_updated', handleAllocationUpdate);
+    window.addEventListener('jaago_leave_request_updated', handleAllocationUpdate);
     return () => {
       window.removeEventListener('jaago_leave_allocation_updated', handleAllocationUpdate);
+      window.removeEventListener('jaago_leave_request_updated', handleAllocationUpdate);
     };
   }, [formData.code]);
 

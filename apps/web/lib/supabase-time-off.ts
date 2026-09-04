@@ -1,4 +1,5 @@
 import { getSupabase } from './supabase-auth';
+import { fetchEmployeesFromSupabase } from './supabase-employees';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & INTERFACES
@@ -645,23 +646,43 @@ export async function fetchLeaveRequests(): Promise<LeaveRequestItem[]> {
         .order('created_at', { ascending: false });
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        return data.map((row: any) => ({
-          id: row.id,
-          employeeId: row.employee_id,
-          employeeCode: row.employee_code,
-          employeeName: row.employee_name,
-          department: row.department || "Founder's Office",
-          designation: row.designation || 'Staff',
-          leaveType: row.leave_type || 'Casual Leave',
-          fromDate: row.from_date,
-          toDate: row.to_date,
-          totalDays: Number(row.total_days || 1),
-          reason: row.reason || '',
-          status: (row.status as LeaveStatus) || 'Pending',
-          appliedAt: row.applied_at || row.created_at,
-          approvedBy: row.approved_by,
-          approvedAt: row.approved_at,
-        }));
+        return data.map((row: any) => {
+          let attachmentName = row.attachment_name || '';
+          let rawReason = row.reason || '';
+          if (!attachmentName && rawReason.includes('[Attachment:')) {
+            const match = rawReason.match(/\[Attachment:\s*(.*?)\]/);
+            if (match) attachmentName = match[1].trim();
+          }
+          let rejectionReason = row.rejection_reason || '';
+          if (!rejectionReason && rawReason.includes('[Refusal Note:')) {
+            const match = rawReason.match(/\[Refusal Note:\s*(.*?)\]/);
+            if (match) rejectionReason = match[1].trim();
+          }
+          const cleanReason = rawReason
+            .replace(/\[Attachment:\s*.*?\]/g, '')
+            .replace(/\[Refusal Note:\s*.*?\]/g, '')
+            .trim();
+
+          return {
+            id: row.id,
+            employeeId: row.employee_id,
+            employeeCode: row.employee_code,
+            employeeName: row.employee_name,
+            department: row.department || "Founder's Office",
+            designation: row.designation || 'Staff',
+            leaveType: row.leave_type || 'Casual Leave',
+            fromDate: row.from_date,
+            toDate: row.to_date,
+            totalDays: Number(row.total_days || 1),
+            reason: cleanReason,
+            rejectionReason: rejectionReason || undefined,
+            attachmentName: attachmentName || undefined,
+            status: (row.status as LeaveStatus) || 'Pending',
+            appliedAt: row.applied_at || row.created_at,
+            approvedBy: row.approved_by,
+            approvedAt: row.approved_at,
+          };
+        });
       }
     }
   } catch (err) {
@@ -776,6 +797,14 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
   try {
     const supabase = getSupabase();
     if (supabase) {
+      let finalReason = request.reason || '';
+      if (request.attachmentName && !finalReason.includes('[Attachment:')) {
+        finalReason = `[Attachment: ${request.attachmentName}] ${finalReason}`.trim();
+      }
+      if (request.rejectionReason && !finalReason.includes('[Refusal Note:')) {
+        finalReason = `${finalReason} [Refusal Note: ${request.rejectionReason}]`.trim();
+      }
+
       await supabase.from('leave_requests').upsert({
         id: request.id,
         employee_id: request.employeeId || null,
@@ -785,7 +814,7 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
         from_date: request.fromDate,
         to_date: request.toDate,
         total_days: request.totalDays,
-        reason: request.reason,
+        reason: finalReason,
         status: request.status,
         applied_at: request.appliedAt,
         approved_by: request.approvedBy || null,
@@ -848,73 +877,146 @@ export function saveDeletedAllocationKeys(keys: string[]): void {
 export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
   const deletedKeysSet = new Set(getDeletedAllocationKeys());
 
+  // 1. Fetch live employees from Supabase / API
+  let employees: any[] = [];
+  try {
+    const emps = await fetchEmployeesFromSupabase();
+    if (emps && emps.length > 0) {
+      employees = emps;
+    }
+  } catch (err) {
+    console.warn('Error fetching employees for leave allocation:', err);
+  }
+
+  // Fallback to cached employees if network unavailable
+  if (employees.length === 0 && typeof window !== 'undefined') {
+    try {
+      const cachedEmps = localStorage.getItem('jaago_pnc_employees_v2');
+      if (cachedEmps) {
+        employees = JSON.parse(cachedEmps);
+      }
+    } catch {}
+  }
+
+  // 2. Fetch approved requests to calculate used balances
+  const requests = await fetchLeaveRequests();
+  const approvedReqs = requests.filter((r) => r.status === 'Approved');
+
+  // 3. Load any custom cached allocations
+  let cachedAllocations: LeaveAllocationItem[] = [];
   if (typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem('jaago_pnc_leave_allocations_v3');
       if (cached !== null) {
-        const parsed: LeaveAllocationItem[] = JSON.parse(cached);
-        const requests = await fetchLeaveRequests();
-        const cleaned = parsed
-          .filter((item) => !deletedKeysSet.has(item.id) && !deletedKeysSet.has(item.employeeCode))
-          .map((item) => {
-            const empApprovedReqs = requests.filter(
-              (r) => r.employeeCode === item.employeeCode && r.status === 'Approved'
-            );
-            if (empApprovedReqs.length === 0) {
-              return {
-                ...item,
-                casualUsed: 0,
-                medicalUsed: 0,
-                emergencyUsed: 0,
-                annualUsed: 0,
-                maternityUsed: 0,
-                paternityUsed: 0,
-                compOffUsed: 0,
-                bereavementUsed: 0,
-                unpaidUsed: 0,
-              };
-            }
-            return item;
-          });
-        localStorage.setItem('jaago_pnc_leave_allocations_v3', JSON.stringify(cleaned));
-        return cleaned;
+        cachedAllocations = JSON.parse(cached);
       }
     } catch {}
   }
 
-  const initialFiltered = INITIAL_LEAVE_ALLOCATIONS.filter(
-    (item) => !deletedKeysSet.has(item.id) && !deletedKeysSet.has(item.employeeCode)
-  );
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('jaago_pnc_leave_allocations_v3', JSON.stringify(initialFiltered));
+  const cachedMap = new Map<string, LeaveAllocationItem>();
+  cachedAllocations.forEach((item) => {
+    if (item.employeeCode && !deletedKeysSet.has(item.id) && !deletedKeysSet.has(item.employeeCode)) {
+      cachedMap.set(item.employeeCode, item);
+    }
+  });
+
+  // 4. Construct comprehensive list of allocations for all active employees
+  const resultMap = new Map<string, LeaveAllocationItem>();
+
+  for (const emp of employees) {
+    if (deletedKeysSet.has(emp.code) || deletedKeysSet.has(emp.id)) {
+      continue;
+    }
+
+    const existing = cachedMap.get(emp.code);
+
+    // Calculate usage dynamically from approved requests
+    const empApproved = approvedReqs.filter((r) => r.employeeCode === emp.code);
+    let clUsed = 0;
+    let mlUsed = 0;
+    let elUsed = 0;
+    let alUsed = 0;
+    let matUsed = 0;
+    let plUsed = 0;
+    let coUsed = 0;
+    let blUsed = 0;
+    let unpaidUsed = 0;
+
+    empApproved.forEach((r) => {
+      const days = Number(r.totalDays) || 0;
+      if (r.leaveType === 'Casual Leave') clUsed += days;
+      else if (r.leaveType === 'Medical Leave') mlUsed += days;
+      else if (r.leaveType === 'Emergency Leave') elUsed += days;
+      else if (r.leaveType === 'Annual Leave') alUsed += days;
+      else if (r.leaveType === 'Maternity Leave') matUsed += days;
+      else if (r.leaveType === 'Paternity Leave') plUsed += days;
+      else if (r.leaveType === 'Compensatory Leave') coUsed += (r.compOffHoursClaimed || days * 8);
+      else if (r.leaveType === 'Bereavement Leave') blUsed += days;
+    });
+
+    const isDsp = emp.department === 'Digital School Program' || emp.leaveGroup === 'DSP Faculty Group';
+    const isProbation = emp.probationaryStatus === 'Probationary' || emp.leaveGroup === 'Probationary Staff';
+
+    // Base allocations (from custom cache, or employee profile fields, or standard defaults)
+    const casualAlloc = existing?.casualAllocated ?? (emp.casualLeaveAllocated ? Number(emp.casualLeaveAllocated) : isProbation ? 0 : isDsp ? 12 : 10);
+    const medicalAlloc = existing?.medicalAllocated ?? (emp.sickLeaveAllocated ? Number(emp.sickLeaveAllocated) : isProbation ? 3 : 10);
+    const emergencyAlloc = existing?.emergencyAllocated ?? (emp.specialLeaveAllocated ? Number(emp.specialLeaveAllocated) : isProbation ? 3 : 4);
+    const annualAlloc = existing?.annualAllocated ?? (emp.earnedLeaveAllocated ? Number(emp.earnedLeaveAllocated) : isProbation ? 0 : 15);
+    const maternityAlloc = existing?.maternityAllocated ?? (isProbation ? 90 : 120);
+    const paternityAlloc = existing?.paternityAllocated ?? (isProbation ? 7 : 15);
+    const compOffAlloc = existing?.compOffAllocated ?? 16;
+
+    const allocationItem: LeaveAllocationItem = {
+      id: existing?.id || `alloc-${emp.code}`,
+      employeeId: emp.id || existing?.employeeId || `emp-${emp.code}`,
+      employeeCode: emp.code,
+      employeeName: emp.name || existing?.employeeName || 'Staff Member',
+      department: emp.department || existing?.department || "Founder's Office",
+      designation: emp.designation || existing?.designation || 'Staff',
+      avatarUrl: emp.avatarUrl || existing?.avatarUrl || '',
+      leaveGroup: existing?.leaveGroup || emp.leaveGroup || (isDsp ? 'DSP Faculty Group' : isProbation ? 'Probationary Staff' : 'Standard Full-time'),
+      casualAllocated: casualAlloc,
+      casualUsed: clUsed,
+      medicalAllocated: medicalAlloc,
+      medicalUsed: mlUsed,
+      emergencyAllocated: emergencyAlloc,
+      emergencyUsed: elUsed,
+      annualAllocated: annualAlloc,
+      annualUsed: alUsed,
+      maternityAllocated: maternityAlloc,
+      maternityUsed: matUsed,
+      paternityAllocated: paternityAlloc,
+      paternityUsed: plUsed,
+      compOffAllocated: compOffAlloc,
+      compOffUsed: coUsed,
+      bereavementUsed: blUsed,
+      unpaidUsed: unpaidUsed,
+      fiscalYear: existing?.fiscalYear || '2026-2027',
+    };
+
+    resultMap.set(emp.code, allocationItem);
   }
-  return initialFiltered;
+
+  // Include any extra cached items that weren't in employees list (as long as not deleted)
+  for (const [code, item] of cachedMap.entries()) {
+    if (!resultMap.has(code) && !deletedKeysSet.has(item.id) && !deletedKeysSet.has(code)) {
+      resultMap.set(code, item);
+    }
+  }
+
+  const finalAllocations = Array.from(resultMap.values());
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('jaago_pnc_leave_allocations_v3', JSON.stringify(finalAllocations));
+    } catch {}
+  }
+
+  return finalAllocations;
 }
 
 export async function saveLeaveAllocation(item: LeaveAllocationItem): Promise<boolean> {
-  if (typeof window !== 'undefined') {
-    try {
-      const current = await fetchLeaveAllocations();
-      const idx = current.findIndex((a) => a.id === item.id || a.employeeCode === item.employeeCode);
-      let updated: LeaveAllocationItem[];
-      if (idx >= 0) {
-        updated = [...current];
-        updated[idx] = item;
-      } else {
-        updated = [item, ...current];
-      }
-      localStorage.setItem('jaago_pnc_leave_allocations_v3', JSON.stringify(updated));
-
-      // Remove from deleted tracker if re-allocating
-      const deleted = getDeletedAllocationKeys().filter(
-        (k) => k !== item.id && k !== item.employeeCode
-      );
-      saveDeletedAllocationKeys(deleted);
-
-      window.dispatchEvent(new CustomEvent('jaago_leave_allocation_updated', { detail: { item, all: updated } }));
-    } catch {}
-  }
-  return true;
+  return saveBulkLeaveAllocations([item]);
 }
 
 export async function saveBulkLeaveAllocations(items: LeaveAllocationItem[]): Promise<boolean> {
@@ -941,8 +1043,33 @@ export async function saveBulkLeaveAllocations(items: LeaveAllocationItem[]): Pr
       saveDeletedAllocationKeys(deleted);
 
       window.dispatchEvent(new CustomEvent('jaago_leave_allocation_updated', { detail: { items, all: updated } }));
+      window.dispatchEvent(new CustomEvent('jaago_employees_updated'));
     } catch {}
   }
+
+  // Sync to Supabase employees table
+  try {
+    const supabase = getSupabase();
+    if (supabase) {
+      for (const item of items) {
+        await supabase
+          .from('employees')
+          .update({
+            casual_leave_allocated: item.casualAllocated,
+            sick_leave_allocated: item.medicalAllocated,
+            special_leave_allocated: item.emergencyAllocated,
+            earned_leave_allocated: item.annualAllocated,
+            leave_group: item.leaveGroup,
+            leave_policy: item.leaveGroup,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('code', item.employeeCode);
+      }
+    }
+  } catch (err) {
+    console.warn('Error syncing leave allocations to Supabase employees table:', err);
+  }
+
   return true;
 }
 

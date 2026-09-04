@@ -108,6 +108,17 @@ export default function LeaveAllocationsPage() {
 
   useEffect(() => {
     loadData();
+
+    const handleUpdate = () => {
+      loadData();
+    };
+    window.addEventListener('jaago_leave_allocation_updated', handleUpdate);
+    window.addEventListener('jaago_employees_updated', handleUpdate);
+
+    return () => {
+      window.removeEventListener('jaago_leave_allocation_updated', handleUpdate);
+      window.removeEventListener('jaago_employees_updated', handleUpdate);
+    };
   }, []);
 
   const showToastMsg = (message: string, type: 'success' | 'error' = 'success') => {

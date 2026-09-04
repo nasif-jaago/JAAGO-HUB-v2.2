@@ -12,10 +12,18 @@ import {
   Smartphone,
   LogOut,
   ChevronDown,
+  Check,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signOutUser } from '@/lib/supabase-auth';
+import {
+  fetchUserNotifications,
+  fetchUserNotificationsAsync,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  AppNotification,
+} from '@/lib/notifications';
 
 
 export interface DashboardHeaderProps {
@@ -40,6 +48,42 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  const loadNotifications = async () => {
+    // 1. Immediate sync from local cache
+    const cached = fetchUserNotifications();
+    if (cached.length > 0) {
+      setNotifications(cached);
+    }
+    // 2. Fetch live data from Supabase / API
+    try {
+      const live = await fetchUserNotificationsAsync();
+      setNotifications(live);
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadNotifications();
+
+    const handleNotifUpdate = () => {
+      loadNotifications();
+    };
+
+    window.addEventListener('jaago_notifications_updated', handleNotifUpdate);
+    window.addEventListener('jaago_leave_request_updated', handleNotifUpdate);
+    window.addEventListener('storage', handleNotifUpdate);
+
+    // Periodic live sync every 15 seconds
+    const interval = setInterval(loadNotifications, 15000);
+
+    return () => {
+      window.removeEventListener('jaago_notifications_updated', handleNotifUpdate);
+      window.removeEventListener('jaago_leave_request_updated', handleNotifUpdate);
+      window.removeEventListener('storage', handleNotifUpdate);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Load saved theme and view mode from localStorage on mount
   useEffect(() => {
@@ -288,60 +332,82 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
             title="Notifications"
           >
             <Bell className="h-4 w-4 hover:text-primary" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
+            {notifications.some((n) => !n.isRead) && (
+              <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse border-2 border-background" />
+            )}
           </button>
 
           {showNotifMenu && (
-            <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-card border border-border shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 space-y-3">
+            <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-card border border-border shadow-2xl p-3.5 z-50 animate-in fade-in zoom-in-95 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-border">
-                <span className="text-xs font-bold text-foreground">Notifications</span>
-                <button
-                  onClick={() => setShowNotifMenu(false)}
-                  className="text-[10px] text-primary hover:underline font-semibold"
-                >
-                  Mark all as read
-                </button>
+                <div className="flex items-center space-x-2">
+                  <span className="text-xs font-bold text-foreground">Notifications</span>
+                  {notifications.filter((n) => !n.isRead).length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[10px]">
+                      {notifications.filter((n) => !n.isRead).length} new
+                    </span>
+                  )}
+                </div>
+                {notifications.length > 0 && (
+                  <button
+                    onClick={() => markAllNotificationsAsRead()}
+                    className="text-[10px] text-primary hover:underline font-semibold cursor-pointer"
+                  >
+                    Mark all as read
+                  </button>
+                )}
               </div>
 
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                <div
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {notifications.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-muted-foreground">
+                    <Check className="h-5 w-5 mx-auto mb-1 text-muted-foreground/60" />
+                    <span>All caught up! No notifications right now.</span>
+                  </div>
+                ) : (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      onClick={() => {
+                        markNotificationAsRead(notif.id);
+                        setShowNotifMenu(false);
+                        router.push(notif.actionUrl || '/workflows');
+                      }}
+                      className={`p-2.5 rounded-xl border cursor-pointer transition space-y-1 ${
+                        !notif.isRead
+                          ? 'bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/30'
+                          : 'bg-surface/70 hover:bg-surface border-border/80 opacity-80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-[9px] font-black uppercase tracking-wider ${
+                            notif.category === 'approvals' ? 'text-amber-400' : 'text-primary'
+                          }`}
+                        >
+                          {notif.category.replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-[9px] font-mono text-muted-foreground">
+                          {new Date(notif.createdAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-foreground leading-snug">{notif.title}</div>
+                      <div className="text-[11px] text-muted-foreground leading-relaxed">{notif.message}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="pt-1.5 text-center border-t border-border">
+                <button
                   onClick={() => {
                     setShowNotifMenu(false);
                     router.push('/workflows');
                   }}
-                  className="p-2.5 rounded-xl bg-surface/80 hover:bg-surface border border-border/80 cursor-pointer transition space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase text-amber-400">Approval Required</span>
-                    <span className="text-[9px] font-mono text-muted-foreground">15m ago</span>
-                  </div>
-                  <div className="text-xs font-bold text-foreground">Leave Request (Habibur Rahman)</div>
-                  <div className="text-[11px] text-muted-foreground">Tier 2 supervisor authorization pending</div>
-                </div>
-
-                <div
-                  onClick={() => {
-                    setShowNotifMenu(false);
-                    router.push('/admin/modules');
-                  }}
-                  className="p-2.5 rounded-xl bg-surface/80 hover:bg-surface border border-border/80 cursor-pointer transition space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase text-primary">Circular Notice</span>
-                    <span className="text-[9px] font-mono text-muted-foreground">2h ago</span>
-                  </div>
-                  <div className="text-xs font-bold text-foreground">Independence Day Holiday Notice</div>
-                  <div className="text-[11px] text-muted-foreground">Broadcasted to all nationwide branches</div>
-                </div>
-              </div>
-
-              <div className="pt-1 text-center border-t border-border">
-                <button
-                  onClick={() => {
-                    setShowNotifMenu(false);
-                    router.push('/workflows');
-                  }}
-                  className="text-[11px] text-primary font-bold hover:underline"
+                  className="text-[11px] text-primary font-bold hover:underline cursor-pointer"
                 >
                   View all in Workflows &rarr;
                 </button>

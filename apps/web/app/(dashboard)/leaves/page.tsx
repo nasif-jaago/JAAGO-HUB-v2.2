@@ -31,6 +31,12 @@ import {
   LeaveAllocationItem,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
+import {
+  getActiveEmployeeProfile,
+  getCurrentUserSession,
+} from '@/lib/user-profile-sync';
+import { useAbility } from '@/lib/casl-ability';
+import { createNotification } from '@/lib/notifications';
 
 // ── MODERN CIRCULAR PROGRESS DONUT RING ──
 function CircularProgress({
@@ -84,10 +90,11 @@ function CircularProgress({
 }
 
 export default function MyLeavePage() {
+  const ability = useAbility();
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
-  const [selectedEmpCode, setSelectedEmpCode] = useState<string>('FO032507061190');
+  const [selectedEmpCode, setSelectedEmpCode] = useState<string>('');
   const [selectedTab, setSelectedTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -121,22 +128,59 @@ export default function MyLeavePage() {
     ]);
     if (reqs) setRequests(reqs);
     if (allocs) setAllocations(allocs);
-    if (emps) {
+    if (emps && emps.length > 0) {
       setEmployees(emps);
-      if (emps.length > 0 && !selectedEmpCode && emps[0]?.code) {
-        setSelectedEmpCode(emps[0].code);
-      }
+      setSelectedEmpCode((prev) => {
+        if (prev && emps.some((e) => e.code === prev)) return prev;
+        const currentSession = getCurrentUserSession();
+        const match = emps.find(
+          (e) =>
+            (currentSession?.employeeCode && e.code === currentSession.employeeCode) ||
+            (currentSession?.email && (e.workEmail?.toLowerCase() === currentSession.email.toLowerCase() || e.personalEmail?.toLowerCase() === currentSession.email.toLowerCase()))
+        );
+        return match?.code || emps[0]?.code || '';
+      });
     }
   };
 
   useEffect(() => {
+    // Initial sync with active user session
+    const sessionUser = getCurrentUserSession();
+    if (sessionUser?.employeeCode) {
+      setSelectedEmpCode(sessionUser.employeeCode);
+    }
+    getActiveEmployeeProfile().then((p) => {
+      if (p?.code) {
+        setSelectedEmpCode((prev) => prev || p.code);
+      }
+    });
+
     loadData();
+
     const handleAllocUpdate = () => {
       loadData();
     };
+    const handleReqUpdate = () => {
+      loadData();
+    };
+    const handleUserUpdate = (e: any) => {
+      const user = e.detail?.user;
+      if (user?.employeeCode) {
+        setSelectedEmpCode(user.employeeCode);
+      }
+      loadData();
+    };
+
     window.addEventListener('jaago_leave_allocation_updated', handleAllocUpdate);
+    window.addEventListener('jaago_leave_request_updated', handleReqUpdate);
+    window.addEventListener('jaago_user_updated', handleUserUpdate);
+    window.addEventListener('jaago_employees_updated', handleAllocUpdate);
+
     return () => {
       window.removeEventListener('jaago_leave_allocation_updated', handleAllocUpdate);
+      window.removeEventListener('jaago_leave_request_updated', handleReqUpdate);
+      window.removeEventListener('jaago_user_updated', handleUserUpdate);
+      window.removeEventListener('jaago_employees_updated', handleAllocUpdate);
     };
   }, []);
 
@@ -145,13 +189,18 @@ export default function MyLeavePage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Active Employee
-  const currentEmp = employees.find((e) => e.code === selectedEmpCode) || employees[0] || {
-    name: 'Nasif Kamal',
-    code: 'FO032507061190',
-    department: "Founder's Office / FC",
-    designation: 'Coordinator, Tech 4 Development',
-  };
+  // Active Employee resolution
+  const session = getCurrentUserSession();
+  const currentEmp =
+    employees.find((e) => e.code === selectedEmpCode) ||
+    employees.find((e) => session?.employeeCode && e.code === session.employeeCode) ||
+    employees.find((e) => session?.email && (e.workEmail?.toLowerCase() === session.email.toLowerCase() || e.personalEmail?.toLowerCase() === session.email.toLowerCase())) ||
+    employees[0] || {
+      name: session?.fullName || 'Staff Member',
+      code: session?.employeeCode || 'EMP-001',
+      department: session?.department || "Founder's Office",
+      designation: session?.jobTitle || 'Staff',
+    };
 
   // Current Employee Allocation
   const hasAllocation = Boolean(allocations.find((a) => a.employeeCode === currentEmp.code));
@@ -303,34 +352,88 @@ export default function MyLeavePage() {
         ? halfPeriod === 'First Half'
           ? 'First Half'
           : 'Second Half'
-        : 'Full Day';
+    const rawReason = reason.trim() || 'General leave application';
+    const baseReason = rawReason.replace(/\[Attachment:\s*[\s\S]*?\]/gi, '').replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '').trim();
+    const persistedReason = attachedFileName
+      ? `${baseReason || 'Leave application'} [Attachment: ${attachedFileName.trim()}]`
+      : (baseReason || 'General leave application');
 
     const newReq: LeaveRequestItem = {
       id: `req-${Date.now()}`,
+      employeeId: currentEmp.id || `emp-${currentEmp.code}`,
       employeeCode: currentEmp.code,
       employeeName: currentEmp.name,
       department: currentEmp.department,
       designation: currentEmp.designation,
+      avatarUrl: currentEmp.avatarUrl,
       leaveType: leaveCategory,
       fromDate: startDate,
       toDate: isHalfDayAllowed(leaveCategory) && leaveDurationMode === 'HALF' ? startDate : endDate,
       totalDays: totalCalculatedDays,
       halfDayType: halfType,
-      reason: reason.trim(),
+      reason: persistedReason,
       pregnancyConfirmationDate: pregnancyDate,
       expectedDeliveryDate: eddDate,
       intendedMaternityStartDate: startDate,
       bereavementRelationship: bereavementRelation as BereavementRelationship,
-      attachmentName: attachedFileName,
+      attachmentName: attachedFileName || '',
       status: 'Pending',
       appliedAt: new Date().toISOString(),
     };
 
     setRequests([newReq, ...requests]);
     await saveLeaveRequest(newReq);
+
+    // Resolve supervisor information
+    const supervisorName = currentEmp.supervisor || currentEmp.manager || "Nasif Kamal";
+    const supervisorEmp = employees.find(
+      (e) =>
+        (e.name && e.name.toLowerCase().trim() === supervisorName.toLowerCase().trim()) ||
+        (e.code && e.code === currentEmp.supervisorCode)
+    );
+    const supervisorEmail = supervisorEmp?.workEmail || supervisorEmp?.personalEmail || 'nasif.kamal@jaago.com.bd';
+    const supervisorCode = supervisorEmp?.code || 'FO032507061190';
+
+    // 1. Dispatch Email to Supervisor
+    try {
+      fetch('/api/v1/emails/leave-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'supervisor_submit',
+          supervisorName,
+          supervisorEmail,
+          employeeName: currentEmp.name,
+          employeeCode: currentEmp.code,
+          designation: currentEmp.designation,
+          department: currentEmp.department,
+          leaveType: leaveCategory,
+          fromDate: startDate,
+          toDate: newReq.toDate,
+          totalDays: totalCalculatedDays,
+          reason: reason.trim() || 'General leave application',
+          attachmentName: attachedFileName || 'None Attached',
+          requestId: newReq.id,
+        }),
+      }).catch((err) => console.warn('Email trigger error:', err));
+    } catch {}
+
+    // 2. Dispatch In-App Notification to Supervisor
+    createNotification({
+      targetSupervisorName: supervisorName,
+      targetEmail: supervisorEmail,
+      targetEmployeeCode: supervisorCode,
+      title: `Approval Required: ${leaveCategory} (${currentEmp.name})`,
+      message: `${currentEmp.name} (${currentEmp.code}) applied for ${totalCalculatedDays} Day(s) of ${leaveCategory} from ${startDate} to ${newReq.toDate}. Reason: ${reason.trim() || 'General leave'}`,
+      category: 'approvals',
+      actionUrl: `/workflows?requestId=${newReq.id}`,
+      relatedEntity: { type: 'leave_request', id: newReq.id },
+    });
+
     setReason('');
     setAttachedFileName('');
-    showToastMsg('Your leave request has been submitted successfully and synced to attendance logs!');
+    showToastMsg('Your leave request has been submitted successfully, supervisor notified, and synced to attendance logs!');
+    loadData();
   };
 
   const handleDelete = async (id: string) => {
@@ -634,18 +737,26 @@ export default function MyLeavePage() {
             <Sparkles className="h-3.5 w-3.5 text-amber-500" />
           </div>
           <div className="flex items-center space-x-3">
-            {employees.length > 1 && (
-              <select
-                value={selectedEmpCode}
-                onChange={(e) => setSelectedEmpCode(e.target.value)}
-                className="h-8 px-2.5 rounded-xl bg-surface border border-border text-[11px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
-              >
-                {employees.map((emp) => (
-                  <option key={emp.code} value={emp.code}>
-                    {emp.name} ({emp.code})
-                  </option>
-                ))}
-              </select>
+            {ability.can('manage', 'all') && employees.length > 1 ? (
+              <div className="flex items-center space-x-2">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase hidden sm:inline">Applicant:</span>
+                <select
+                  value={selectedEmpCode || currentEmp.code}
+                  onChange={(e) => setSelectedEmpCode(e.target.value)}
+                  className="h-8 px-2.5 rounded-xl bg-surface border border-border text-[11px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+                >
+                  {employees.map((emp) => (
+                    <option key={emp.code} value={emp.code}>
+                      {emp.name} ({emp.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2 px-3 py-1 rounded-xl bg-surface/80 border border-border/80 text-[11px] font-bold text-foreground">
+                <span className="text-foreground">{currentEmp.name}</span>
+                <span className="text-[10px] font-mono text-amber-500">({currentEmp.code})</span>
+              </div>
             )}
             <span className="text-[11px] font-mono font-bold text-muted-foreground tracking-widest uppercase">
               NEW REQUEST

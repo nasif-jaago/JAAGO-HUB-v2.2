@@ -347,6 +347,167 @@ Reset URL: {{resetUrl}}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
+  {
+    id: 'a0000000-0000-0000-0000-000000000004',
+    templateKey: 'time_off.leave_submitted_supervisor',
+    name: 'Leave Application Supervisor Notification',
+    module: 'time_off',
+    subject: 'Action Required: Leave Application from {{employeeName}} ({{employeeCode}}) — {{leaveType}}',
+    bodyHtml: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leave Application — JAAGO HUB</title>
+</head>
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#0c0f17;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.35);border:1px solid #e2e8f0;">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:32px 28px 24px;text-align:center;border-bottom:4px solid #f59e0b;">
+      <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:4px 12px;border-radius:20px;text-transform:uppercase;margin-bottom:10px;">JAAGO FOUNDATION TRUST</span>
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:-0.5px;">Leave Application Pending Review</h1>
+      <p style="margin:6px 0 0;color:#cbd5e1;font-size:13px;font-weight:500;">Supervisor Action Required &bull; Time Off Authorization</p>
+    </div>
+
+    <!-- Content -->
+    <div style="padding:28px 28px 24px;color:#334155;font-size:14px;line-height:1.6;">
+      <p style="margin-top:0;font-size:15px;">Hello <strong>{{supervisorName}}</strong>,</p>
+      <p>A team member under your direct supervision has submitted a leave application awaiting your review and authorization:</p>
+
+      <!-- Requester & Leave Details Table -->
+      <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin:20px 0;font-size:13px;">
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;width:36%;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Applicant Name:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{employeeName}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Employee ID:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;"><span style="font-family:monospace;background:#e2e8f0;padding:2px 6px;border-radius:4px;">{{employeeCode}}</span></td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Designation / Dept:</td><td style="padding:10px 14px;font-weight:600;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{designation}} &bull; {{department}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Leave Category:</td><td style="padding:10px 14px;font-weight:800;color:#d97706;border-bottom:1px solid #e2e8f0;">{{leaveType}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Duration &amp; Dates:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{fromDate}} to {{toDate}} (<strong>{{totalDays}} Day(s)</strong>)</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Purpose / Reason:</td><td style="padding:10px 14px;color:#1e293b;border-bottom:1px solid #e2e8f0;">{{reason}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;">Attachment / Doc:</td><td style="padding:10px 14px;color:#0284c7;font-weight:600;">{{attachmentName}}</td></tr>
+      </table>
+
+      <!-- Action Callout -->
+      <div style="text-align:center;margin:28px 0 16px;">
+        <a href="{{actionUrl}}" style="background:#f59e0b;color:#0f172a;text-decoration:none;font-weight:900;font-size:14px;letter-spacing:0.3px;padding:14px 32px;border-radius:12px;display:inline-block;box-shadow:0 6px 16px rgba(245,158,11,0.35);text-transform:uppercase;">
+          Review &bull; Approve or Refuse in JAAGO HUB &rarr;
+        </a>
+      </div>
+      <p style="text-align:center;font-size:11.5px;color:#64748b;margin-bottom:0;">
+        Clicking the button will open the request directly in your Approvals &amp; Workflows management console.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f8fafc;padding:18px 28px;border-top:1px solid #e2e8f0;font-size:11px;color:#64748b;text-align:center;">
+      JAAGO Foundation &bull; People &amp; Culture Automated Workflow Notification System
+    </div>
+  </div>
+</body>
+</html>`,
+    bodyText: `Action Required: Leave Application from {{employeeName}} ({{employeeCode}})
+Category: {{leaveType}}
+Duration: {{fromDate}} to {{toDate}} ({{totalDays}} Days)
+Reason: {{reason}}
+Attachment: {{attachmentName}}
+Review & Authorize URL: {{actionUrl}}`,
+    variablesSchema: [
+      { key: 'supervisorName', name: 'Supervisor Name', description: 'Name of the supervisor', required: true, sample: 'Nasif Kamal' },
+      { key: 'employeeName', name: 'Employee Name', description: 'Staff member applying', required: true, sample: 'S M Nayeem Rahman' },
+      { key: 'employeeCode', name: 'Employee Code', description: 'Staff ID', required: true, sample: 'FO072408021002' },
+      { key: 'designation', name: 'Designation', description: 'Staff Role', required: true, sample: 'Team Lead' },
+      { key: 'department', name: 'Department', description: 'Department Name', required: true, sample: "Founder's Office (JF)" },
+      { key: 'leaveType', name: 'Leave Type', description: 'Leave Category', required: true, sample: 'Annual Leave' },
+      { key: 'fromDate', name: 'Start Date', description: 'Leave Start Date', required: true, sample: '2026-09-25' },
+      { key: 'toDate', name: 'End Date', description: 'Leave End Date', required: true, sample: '2026-09-30' },
+      { key: 'totalDays', name: 'Total Days', description: 'Number of days requested', required: true, sample: '6' },
+      { key: 'reason', name: 'Reason', description: 'Reason for leave application', required: true, sample: 'Family vacation' },
+      { key: 'attachmentName', name: 'Attachment Name', description: 'Attached document name', required: false, sample: 'flight_tickets.pdf' },
+      { key: 'actionUrl', name: 'Action URL', description: 'Direct link to approve or refuse', required: true, sample: 'https://hub.jaago.com.bd/workflows' },
+    ],
+    isActive: true,
+    version: 1,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'a0000000-0000-0000-0000-000000000005',
+    templateKey: 'time_off.leave_decision_employee',
+    name: 'Leave Decision Status Employee Notification',
+    module: 'time_off',
+    subject: 'Leave Request {{decisionStatus}}: {{leaveType}} ({{fromDate}} to {{toDate}})',
+    bodyHtml: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leave Decision — JAAGO HUB</title>
+</head>
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#0c0f17;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.35);border:1px solid #e2e8f0;">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:32px 28px 24px;text-align:center;border-bottom:4px solid #f59e0b;">
+      <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:4px 12px;border-radius:20px;text-transform:uppercase;margin-bottom:10px;">JAAGO FOUNDATION TRUST</span>
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:-0.5px;">Leave Application Status Update</h1>
+      <p style="margin:6px 0 0;color:#cbd5e1;font-size:13px;font-weight:500;">Official Decision Notice</p>
+    </div>
+
+    <!-- Content -->
+    <div style="padding:28px 28px 24px;color:#334155;font-size:14px;line-height:1.6;">
+      <p style="margin-top:0;font-size:15px;">Hello <strong>{{employeeName}}</strong>,</p>
+      <p>Your leave request has been reviewed by your supervisor/administration. The official status is outlined below:</p>
+
+      <!-- Decision Status Banner -->
+      <div style="background:#f8fafc;border-left:5px solid #f59e0b;padding:16px;border-radius:8px;margin:18px 0;">
+        <div style="font-size:12px;font-weight:800;text-transform:uppercase;color:#64748b;">Decision Status</div>
+        <div style="font-size:18px;font-weight:900;color:#0f172a;margin-top:2px;">
+          {{decisionStatus}}
+        </div>
+      </div>
+
+      <!-- Details Table -->
+      <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin:20px 0;font-size:13px;">
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;width:36%;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Leave Category:</td><td style="padding:10px 14px;font-weight:800;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{leaveType}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Requested Period:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{fromDate}} to {{toDate}} ({{totalDays}} Days)</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Reviewed By:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{reviewedBy}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Review Timestamp:</td><td style="padding:10px 14px;color:#64748b;border-bottom:1px solid #e2e8f0;">{{reviewedAt}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;">Supervisor Remarks / Note:</td><td style="padding:10px 14px;color:#1e293b;font-weight:600;">{{refusalReason}}</td></tr>
+      </table>
+
+      <!-- Action Button -->
+      <div style="text-align:center;margin:28px 0 16px;">
+        <a href="{{portalUrl}}" style="background:#0f172a;color:#ffffff;text-decoration:none;font-weight:800;font-size:13px;padding:12px 28px;border-radius:10px;display:inline-block;">
+          View Updated Leave Balance in JAAGO HUB &rarr;
+        </a>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f8fafc;padding:18px 28px;border-top:1px solid #e2e8f0;font-size:11px;color:#64748b;text-align:center;">
+      JAAGO Foundation &bull; People &amp; Culture Automated Workflow Notification System
+    </div>
+  </div>
+</body>
+</html>`,
+    bodyText: `Your Leave Request has been {{decisionStatus}} for {{leaveType}} ({{fromDate}} to {{toDate}} - {{totalDays}} Days).
+Reviewed by: {{reviewedBy}} at {{reviewedAt}}
+Remarks: {{refusalReason}}
+Portal: {{portalUrl}}`,
+    variablesSchema: [
+      { key: 'employeeName', name: 'Employee Name', description: 'Staff member name', required: true, sample: 'S M Nayeem Rahman' },
+      { key: 'leaveType', name: 'Leave Type', description: 'Leave Category', required: true, sample: 'Annual Leave' },
+      { key: 'fromDate', name: 'Start Date', description: 'Leave Start Date', required: true, sample: '2026-09-25' },
+      { key: 'toDate', name: 'End Date', description: 'Leave End Date', required: true, sample: '2026-09-30' },
+      { key: 'totalDays', name: 'Total Days', description: 'Duration in days', required: true, sample: '6' },
+      { key: 'decisionStatus', name: 'Decision Status', description: 'Approved or Refused', required: true, sample: 'Approved' },
+      { key: 'reviewedBy', name: 'Reviewed By', description: 'Reviewer name', required: true, sample: 'Nasif Kamal (Supervisor)' },
+      { key: 'reviewedAt', name: 'Reviewed At', description: 'Decision timestamp', required: true, sample: '04-Sep-2026 11:45 AM' },
+      { key: 'refusalReason', name: 'Refusal Reason / Remarks', description: 'Supervisor notes or refusal reason', required: true, sample: 'Approved as requested' },
+      { key: 'portalUrl', name: 'Portal URL', description: 'Leave dashboard URL', required: true, sample: 'https://hub.jaago.com.bd/leaves' },
+    ],
+    isActive: true,
+    version: 1,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
 ];
 
 const defaultEncrypted = encryptCredential(process.env.SMTP_PASSWORD || 'default_smtp_password_key_2026');
@@ -460,47 +621,30 @@ class EmailSubsystemStore {
 
       // 2. Sync templates
       const { data: tmplRows } = await supabase.from('email_templates').select('*');
-      if (tmplRows && tmplRows.length > 0) {
-        this.templates = tmplRows.map((r: any) => ({
-          id: r.id,
-          templateKey: r.template_key,
-          name: r.name,
-          module: r.module,
-          subject: r.subject,
-          bodyHtml: r.body_html,
-          bodyText: r.body_text || '',
-          variablesSchema: r.variables_schema || [],
-          isActive: r.is_active ?? true,
-          version: r.version ?? 1,
-          createdAt: r.created_at || new Date().toISOString(),
-          updatedAt: r.updated_at || new Date().toISOString(),
-        }));
+      const dbTemplates = (tmplRows || []).map((r: any) => ({
+        id: r.id,
+        templateKey: r.template_key,
+        name: r.name,
+        module: r.module,
+        subject: r.subject,
+        bodyHtml: r.body_html,
+        bodyText: r.body_text || '',
+        variablesSchema: r.variables_schema || [],
+        isActive: r.is_active ?? true,
+        version: r.version ?? 1,
+        createdAt: r.created_at || new Date().toISOString(),
+        updatedAt: r.updated_at || new Date().toISOString(),
+      }));
 
-        // Upgrade pnc.employee_welcome if existing record lacks tempPassword
-        const welcomeInitial = INITIAL_EMAIL_TEMPLATES.find((t) => t.templateKey === 'pnc.employee_welcome');
-        const welcomeExisting = this.templates.find((t) => t.templateKey === 'pnc.employee_welcome');
-        if (welcomeInitial && welcomeExisting && (!welcomeExisting.bodyHtml.includes('tempPassword') || welcomeExisting.version < 2)) {
-          welcomeExisting.name = welcomeInitial.name;
-          welcomeExisting.subject = welcomeInitial.subject;
-          welcomeExisting.bodyHtml = welcomeInitial.bodyHtml;
-          welcomeExisting.bodyText = welcomeInitial.bodyText;
-          welcomeExisting.variablesSchema = welcomeInitial.variablesSchema;
-          welcomeExisting.version = 2;
-          welcomeExisting.updatedAt = new Date().toISOString();
+      // Merge INITIAL_EMAIL_TEMPLATES with dbTemplates so all built-in templates are always available
+      const templateMap = new Map<string, EmailTemplateItem>();
+      INITIAL_EMAIL_TEMPLATES.forEach((t) => templateMap.set(t.templateKey, t));
+      dbTemplates.forEach((t) => templateMap.set(t.templateKey, t));
+      this.templates = Array.from(templateMap.values());
 
-          await supabase.from('email_templates').update({
-            name: welcomeInitial.name,
-            subject: welcomeInitial.subject,
-            body_html: welcomeInitial.bodyHtml,
-            body_text: welcomeInitial.bodyText,
-            variables_schema: welcomeInitial.variablesSchema,
-            version: 2,
-            updated_at: new Date().toISOString(),
-          }).eq('template_key', 'pnc.employee_welcome');
-        }
-      } else {
-        // Seed initial templates to Supabase
-        for (const t of this.templates) {
+      // Upsert any missing initial templates to Supabase
+      for (const t of INITIAL_EMAIL_TEMPLATES) {
+        if (!dbTemplates.some((d) => d.templateKey === t.templateKey)) {
           await supabase.from('email_templates').upsert({
             id: t.id,
             template_key: t.templateKey,
@@ -817,8 +961,12 @@ class EmailSubsystemStore {
   }
 
   public async getTemplateByKey(key: string): Promise<EmailTemplateItem | undefined> {
-    await this.ensureInitialized();
-    return this.templates.find((t) => t.templateKey === key && t.isActive);
+    try {
+      await this.ensureInitialized();
+    } catch {}
+    const found = this.templates.find((t) => t.templateKey === key && (t.isActive ?? true));
+    if (found) return found;
+    return INITIAL_EMAIL_TEMPLATES.find((t) => t.templateKey === key);
   }
 
   public async createTemplate(data: Partial<EmailTemplateItem>): Promise<EmailTemplateItem> {
@@ -1421,3 +1569,109 @@ export async function retryEmailLog(logId: string): Promise<{ success: boolean; 
 
   return { success: false, log, message: 'Template key missing from log record' };
 }
+
+/**
+ * Dispatches an automated email to the assigned supervisor upon leave submission
+ */
+export async function notifySupervisorOnLeaveSubmit(params: {
+  supervisorName: string;
+  supervisorEmail: string;
+  employeeName: string;
+  employeeCode: string;
+  designation?: string;
+  department?: string;
+  leaveType: string;
+  fromDate: string;
+  toDate: string;
+  totalDays: number | string;
+  reason: string;
+  attachmentName?: string;
+  requestId: string;
+}): Promise<{ success: boolean; logId?: string; error?: string }> {
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hub.jaago.com.bd';
+    const actionUrl = `${origin}/workflows?requestId=${encodeURIComponent(params.requestId)}`;
+
+    const res = await sendEmail({
+      templateKey: 'time_off.leave_submitted_supervisor',
+      to: params.supervisorEmail,
+      variables: {
+        supervisorName: params.supervisorName,
+        employeeName: params.employeeName,
+        employeeCode: params.employeeCode,
+        designation: params.designation || 'Staff',
+        department: params.department || "Founder's Office",
+        leaveType: params.leaveType,
+        fromDate: params.fromDate,
+        toDate: params.toDate,
+        totalDays: String(params.totalDays),
+        reason: params.reason || 'General leave application',
+        attachmentName: params.attachmentName || 'None Attached',
+        actionUrl,
+      },
+      module: 'time_off',
+      relatedEntity: { type: 'leave_request', id: params.requestId },
+    });
+    const returnObj: { success: boolean; logId?: string; error?: string } = {
+      success: res.success,
+    };
+    if (res.logId) returnObj.logId = res.logId;
+    if (res.errorReason) returnObj.error = res.errorReason;
+    return returnObj;
+  } catch (err: any) {
+    console.warn('Failed to dispatch supervisor leave notification email:', err);
+    return { success: false, ...(err?.message ? { error: err.message } : {}) };
+  }
+}
+
+/**
+ * Dispatches an automated email to the employee when their leave request is Approved or Refused
+ */
+export async function notifyEmployeeOnLeaveDecision(params: {
+  employeeName: string;
+  employeeEmail: string;
+  leaveType: string;
+  fromDate: string;
+  toDate: string;
+  totalDays: number | string;
+  decisionStatus: 'Approved' | 'Refused' | 'Rejected';
+  reviewedBy: string;
+  refusalReason?: string;
+  requestId: string;
+}): Promise<{ success: boolean; logId?: string; error?: string }> {
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hub.jaago.com.bd';
+    const portalUrl = `${origin}/leaves`;
+    const nowStr = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+    const isRefused = params.decisionStatus === 'Refused' || params.decisionStatus === 'Rejected';
+
+    const res = await sendEmail({
+      templateKey: 'time_off.leave_decision_employee',
+      to: params.employeeEmail,
+      variables: {
+        employeeName: params.employeeName,
+        leaveType: params.leaveType,
+        fromDate: params.fromDate,
+        toDate: params.toDate,
+        totalDays: String(params.totalDays),
+        decisionStatus: isRefused ? 'REFUSED' : 'APPROVED',
+        reviewedBy: params.reviewedBy,
+        reviewedAt: nowStr,
+        refusalReason: isRefused ? (params.refusalReason || 'Request refused by supervisor.') : (params.refusalReason || 'Approved as requested.'),
+        portalUrl,
+      },
+      module: 'time_off',
+      relatedEntity: { type: 'leave_request', id: params.requestId },
+    });
+    const returnObj: { success: boolean; logId?: string; error?: string } = {
+      success: res.success,
+    };
+    if (res.logId) returnObj.logId = res.logId;
+    if (res.errorReason) returnObj.error = res.errorReason;
+    return returnObj;
+  } catch (err: any) {
+    console.warn('Failed to dispatch employee leave decision email:', err);
+    return { success: false, ...(err?.message ? { error: err.message } : {}) };
+  }
+}
+
