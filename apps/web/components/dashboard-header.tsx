@@ -13,6 +13,7 @@ import {
   LogOut,
   ChevronDown,
   Check,
+  X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -22,6 +23,7 @@ import {
   fetchUserNotificationsAsync,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  dismissNotification,
   AppNotification,
 } from '@/lib/notifications';
 
@@ -387,13 +389,16 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
                   <span className="text-xs font-bold text-foreground">Notifications</span>
                   {notifications.filter((n) => !n.isRead).length > 0 && (
                     <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[10px]">
-                      {notifications.filter((n) => !n.isRead).length} new
+                      {notifications.filter((n) => !n.isRead).length} pending
                     </span>
                   )}
                 </div>
                 {notifications.length > 0 && (
                   <button
-                    onClick={() => markAllNotificationsAsRead()}
+                    onClick={() => {
+                      markAllNotificationsAsRead();
+                      setNotifications([]);
+                    }}
                     className="text-[10px] text-primary hover:underline font-semibold cursor-pointer"
                   >
                     Mark all as read
@@ -404,8 +409,8 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
               <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                 {notifications.length === 0 ? (
                   <div className="py-6 text-center text-xs text-muted-foreground">
-                    <Check className="h-5 w-5 mx-auto mb-1 text-muted-foreground/60" />
-                    <span>All caught up! No notifications right now.</span>
+                    <Check className="h-5 w-5 mx-auto mb-1 text-emerald-500" />
+                    <span>All caught up! No action pending notifications.</span>
                   </div>
                 ) : (
                   notifications.map((notif) => (
@@ -413,29 +418,51 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
                       key={notif.id}
                       onClick={() => {
                         markNotificationAsRead(notif.id);
+                        setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
                         setShowNotifMenu(false);
                         router.push(notif.actionUrl || '/workflows');
                       }}
-                      className={`p-2.5 rounded-xl border cursor-pointer transition space-y-1 ${
+                      className={`group relative p-2.5 rounded-xl border cursor-pointer transition space-y-1.5 ${
                         !notif.isRead
                           ? 'bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/30'
                           : 'bg-surface/70 hover:bg-surface border-border/80 opacity-80'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span
-                          className={`text-[9px] font-black uppercase tracking-wider ${
-                            notif.category === 'approvals' ? 'text-amber-400' : 'text-primary'
-                          }`}
-                        >
-                          {notif.category.replace(/_/g, ' ')}
-                        </span>
-                        <span className="text-[9px] font-mono text-muted-foreground">
-                          {new Date(notif.createdAt).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
+                        <div className="flex items-center space-x-1.5">
+                          <span
+                            className={`text-[9px] font-black uppercase tracking-wider ${
+                              notif.category === 'approvals' ? 'text-amber-400' : 'text-primary'
+                            }`}
+                          >
+                            {notif.category.replace(/_/g, ' ')}
+                          </span>
+                          {notif.category === 'approvals' && (
+                            <span className="text-[8px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300">
+                              Action Required
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <span className="text-[9px] font-mono text-muted-foreground">
+                            {new Date(notif.createdAt).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              dismissNotification(notif.id);
+                              setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+                            }}
+                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface/60 transition cursor-pointer"
+                            title="Dismiss notification"
+                            aria-label="Dismiss notification"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
                       <div className="text-xs font-bold text-foreground leading-snug">{notif.title}</div>
                       <div className="text-[11px] text-muted-foreground leading-relaxed">{notif.message}</div>

@@ -25,7 +25,7 @@ const STORAGE_KEY_NOTIFICATIONS = 'jaago_user_notifications_v2';
 const STORAGE_KEY_READ_IDS = 'jaago_read_notification_ids_v1';
 
 /**
- * Fetch list of IDs marked as read by the user
+ * Fetch list of IDs marked as read or dismissed by the user
  */
 export function getReadNotificationIds(): Set<string> {
   if (typeof window === 'undefined') return new Set();
@@ -77,20 +77,21 @@ function generateDynamicLeaveNotifications(
 
   const dynamicNotifs: AppNotification[] = [];
   const userCode = session.employeeCode?.trim().toLowerCase();
-  const userName = session.fullName?.trim() || 'Supervisor';
-  const userEmail = (session.email || '').trim().toLowerCase();
-  const isSuperAdmin =
-    (session.roles || []).includes('super_admin') ||
-    userEmail.includes('nasif.kamal') ||
-    userName.toLowerCase().includes('nasif kamal');
+  const userName = (session.fullName || '').trim().toLowerCase();
 
   for (const req of leaveRequests) {
-    const isSelfRequest = Boolean(userCode && req.employeeCode?.trim().toLowerCase() === userCode);
+    const reqCode = (req.employeeCode || '').trim().toLowerCase();
+    const reqName = (req.employeeName || '').trim().toLowerCase();
+    const isSelfRequest = Boolean(
+      (userCode && reqCode === userCode) ||
+      (userName && reqName && (reqName === userName || reqName.includes(userName) || userName.includes(reqName)))
+    );
 
     // 1. Pending Approvals for Supervisors / Managers / Super Admin (EXCLUDING self-requests!)
     if (req.status === 'Pending' && !isSelfRequest) {
       const notifId = `notif-leave-pending-${req.id}`;
-      const isRead = readIds.has(notifId);
+      // If already dismissed/actioned, skip
+      if (readIds.has(notifId)) continue;
 
       dynamicNotifs.push({
         id: notifId,
@@ -98,33 +99,34 @@ function generateDynamicLeaveNotifications(
         message: `${req.employeeName} (${req.employeeCode}) requested ${req.totalDays} Day(s) of ${req.leaveType} from ${req.fromDate} to ${req.toDate}.${req.reason ? ` Reason: "${req.reason}"` : ''}`,
         category: 'approvals',
         channel: 'in_app',
-        isRead,
+        isRead: false,
         actionUrl: `/workflows?requestId=${encodeURIComponent(req.id)}`,
         createdAt: req.appliedAt || new Date().toISOString(),
-        targetSupervisorName: userName,
+        targetSupervisorName: session.fullName || 'Supervisor',
         targetEmployeeCode: userCode || undefined,
         relatedEntity: { type: 'leave_request', id: req.id },
       });
     }
 
-    // 2. Decision Status Notifications for the Requester and Super Admin
-    if ((isSelfRequest || isSuperAdmin) && (req.status === 'Approved' || req.status === 'Rejected' || (req.status as string) === 'Refused')) {
+    // 2. Decision Status Notifications ONLY for the Requester (NOT broadcasted to Super Admin)
+    if (isSelfRequest && (req.status === 'Approved' || req.status === 'Rejected' || (req.status as string) === 'Refused')) {
       const isApproved = req.status === 'Approved';
       const notifId = `notif-leave-decision-${req.id}-${req.status}`;
-      const isRead = readIds.has(notifId);
+      // If already read/dismissed by the user, don't show on refresh/login
+      if (readIds.has(notifId)) continue;
 
       dynamicNotifs.push({
         id: notifId,
         title: `Leave Request ${isApproved ? 'Approved' : 'Refused'}: ${req.employeeName} - ${req.leaveType}`,
         message: isApproved
-          ? `Leave request for ${req.employeeName} (${req.totalDays} Day(s) of ${req.leaveType}, ${req.fromDate} to ${req.toDate}) has been approved by ${req.approvedBy || 'Supervisor'}.`
-          : `Leave request for ${req.employeeName} (${req.totalDays} Day(s) of ${req.leaveType}) was refused by ${req.approvedBy || 'Supervisor'}.${req.rejectionReason ? ` Note: "${req.rejectionReason}"` : ''}`,
+          ? `Your leave request for ${req.totalDays} Day(s) of ${req.leaveType} (${req.fromDate} to ${req.toDate}) has been approved by ${req.approvedBy || 'Supervisor'}.`
+          : `Your leave request for ${req.totalDays} Day(s) of ${req.leaveType} was refused by ${req.approvedBy || 'Supervisor'}.${req.rejectionReason ? ` Note: "${req.rejectionReason}"` : ''}`,
         category: 'time_off',
         channel: 'in_app',
-        isRead,
+        isRead: false,
         actionUrl: `/leaves`,
         createdAt: req.approvedAt || req.appliedAt || new Date().toISOString(),
-        targetEmployeeCode: isSelfRequest ? userCode : req.employeeCode,
+        targetEmployeeCode: userCode,
         relatedEntity: { type: 'leave_request', id: req.id },
       });
     }
@@ -171,7 +173,8 @@ function generateDynamicRegularizationNotifications(
     // 1. Pending Approvals for Supervisors & Super Admin (EXCLUDING self-requests!)
     if (reg.status === 'Pending' && !isSelfRequest && isSupervisorOrAdmin) {
       const notifId = `notif-reg-pending-${reg.id}`;
-      const isRead = readIds.has(notifId);
+      // If already dismissed/actioned, skip
+      if (readIds.has(notifId)) continue;
 
       dynamicNotifs.push({
         id: notifId,
@@ -179,7 +182,7 @@ function generateDynamicRegularizationNotifications(
         message: `${reg.employeeName} (${reg.employeeCode}) requested attendance correction for ${reg.date} (${reg.adjustedCheckIn} - ${reg.adjustedCheckOut}). Reason: "${reg.reason}"`,
         category: 'approvals',
         channel: 'in_app',
-        isRead,
+        isRead: false,
         actionUrl: `/workflows?requestId=${encodeURIComponent(reg.id)}`,
         createdAt: reg.appliedAt || reg.createdAt || new Date().toISOString(),
         targetSupervisorName: reg.supervisorName || session.fullName || 'Supervisor',
@@ -188,24 +191,25 @@ function generateDynamicRegularizationNotifications(
       });
     }
 
-    // 2. Decision Status Notifications for the Requester & Super Admin
-    if ((isSelfRequest || isSuperAdmin) && (reg.status === 'Approved' || reg.status === 'Refused' || reg.status === 'Rejected')) {
+    // 2. Decision Status Notifications ONLY for the Requester (NOT broadcasted to Super Admin)
+    if (isSelfRequest && (reg.status === 'Approved' || reg.status === 'Refused' || reg.status === 'Rejected')) {
       const isApproved = reg.status === 'Approved';
       const notifId = `notif-reg-decision-${reg.id}-${reg.status}`;
-      const isRead = readIds.has(notifId);
+      // If already read/dismissed by the user, don't show on refresh/login
+      if (readIds.has(notifId)) continue;
 
       dynamicNotifs.push({
         id: notifId,
         title: `Regularization ${isApproved ? 'Approved' : 'Refused'}: ${reg.employeeName} (${reg.date})`,
         message: isApproved
-          ? `Attendance regularization for ${reg.employeeName} on ${reg.date} (${reg.adjustedCheckIn} - ${reg.adjustedCheckOut}) has been approved by ${reg.approvedBy || 'Supervisor'}.`
-          : `Attendance regularization for ${reg.employeeName} on ${reg.date} was refused by ${reg.approvedBy || 'Supervisor'}.${reg.refusalNote ? ` Note: "${reg.refusalNote}"` : ''}`,
+          ? `Your attendance regularization for ${reg.date} (${reg.adjustedCheckIn} - ${reg.adjustedCheckOut}) has been approved by ${reg.approvedBy || 'Supervisor'}.`
+          : `Your attendance regularization for ${reg.date} was refused by ${reg.approvedBy || 'Supervisor'}.${reg.refusalNote ? ` Note: "${reg.refusalNote}"` : ''}`,
         category: 'time_off',
         channel: 'in_app',
-        isRead,
+        isRead: false,
         actionUrl: `/attendance`,
         createdAt: reg.approvedAt || reg.updatedAt || reg.appliedAt || new Date().toISOString(),
-        targetEmployeeCode: isSelfRequest ? userCode : reg.employeeCode,
+        targetEmployeeCode: userCode,
         relatedEntity: { type: 'attendance_regularization', id: reg.id },
       });
     }
@@ -246,15 +250,25 @@ export function fetchUserNotifications(sessionUser?: UserSessionData | null): Ap
     (userEmail || '').includes('nasif.kamal');
 
   const filteredStored = stored.filter((n) => {
-    if (readIds.has(n.id)) n.isRead = true;
+    // If dismissed/read, skip showing on refresh/login
+    if (readIds.has(n.id)) return false;
+
     if (n.targetEmployeeCode && userCode && n.targetEmployeeCode.toLowerCase() === userCode) return true;
     if (n.targetEmail && userEmail && n.targetEmail.toLowerCase() === userEmail) return true;
-    if (n.targetSupervisorName && userName && (n.targetSupervisorName.toLowerCase() === userName || n.targetSupervisorName.toLowerCase().includes(userName) || userName.includes(n.targetSupervisorName.toLowerCase()))) return true;
+    if (
+      n.targetSupervisorName &&
+      userName &&
+      (n.targetSupervisorName.toLowerCase() === userName ||
+        n.targetSupervisorName.toLowerCase().includes(userName) ||
+        userName.includes(n.targetSupervisorName.toLowerCase()))
+    )
+      return true;
     if (n.userId && session?.id && n.userId === session.id) return true;
     if (n.targetEmployeeCode === '*' || (!n.targetEmployeeCode && !n.targetEmail && !n.targetSupervisorName)) {
       return true;
     }
-    if (isSuperAdmin && (n.category === 'approvals' || n.category === 'time_off')) {
+    // Super admin ONLY sees approvals pending review, NEVER personal decision notices of other staff!
+    if (isSuperAdmin && n.category === 'approvals') {
       return true;
     }
     return false;
@@ -265,10 +279,7 @@ export function fetchUserNotifications(sessionUser?: UserSessionData | null): Ap
   dynamicLeaves.forEach((n) => map.set(n.id, n));
   dynamicRegs.forEach((n) => map.set(n.id, n));
   filteredStored.forEach((n) => {
-    if (map.has(n.id)) {
-      const existing = map.get(n.id)!;
-      existing.isRead = existing.isRead || n.isRead;
-    } else {
+    if (!map.has(n.id)) {
       map.set(n.id, n);
     }
   });
@@ -320,15 +331,25 @@ export async function fetchUserNotificationsAsync(
     (userEmail || '').includes('nasif.kamal');
 
   const filteredStored = stored.filter((n) => {
-    if (readIds.has(n.id)) n.isRead = true;
+    // If dismissed/read, skip showing on refresh/login
+    if (readIds.has(n.id)) return false;
+
     if (n.targetEmployeeCode && userCode && n.targetEmployeeCode.toLowerCase() === userCode) return true;
     if (n.targetEmail && userEmail && n.targetEmail.toLowerCase() === userEmail) return true;
-    if (n.targetSupervisorName && userName && (n.targetSupervisorName.toLowerCase() === userName || n.targetSupervisorName.toLowerCase().includes(userName) || userName.includes(n.targetSupervisorName.toLowerCase()))) return true;
+    if (
+      n.targetSupervisorName &&
+      userName &&
+      (n.targetSupervisorName.toLowerCase() === userName ||
+        n.targetSupervisorName.toLowerCase().includes(userName) ||
+        userName.includes(n.targetSupervisorName.toLowerCase()))
+    )
+      return true;
     if (n.userId && session?.id && n.userId === session.id) return true;
     if (n.targetEmployeeCode === '*' || (!n.targetEmployeeCode && !n.targetEmail && !n.targetSupervisorName)) {
       return true;
     }
-    if (isSuperAdmin && (n.category === 'approvals' || n.category === 'time_off')) {
+    // Super admin ONLY sees approvals pending review, NEVER personal decision notices of other staff!
+    if (isSuperAdmin && n.category === 'approvals') {
       return true;
     }
     return false;
@@ -338,10 +359,7 @@ export async function fetchUserNotificationsAsync(
   dynamicLeaves.forEach((n) => map.set(n.id, n));
   dynamicRegs.forEach((n) => map.set(n.id, n));
   filteredStored.forEach((n) => {
-    if (map.has(n.id)) {
-      const existing = map.get(n.id)!;
-      existing.isRead = existing.isRead || n.isRead;
-    } else {
+    if (!map.has(n.id)) {
       map.set(n.id, n);
     }
   });
@@ -382,7 +400,7 @@ export function createNotification(
 }
 
 /**
- * Mark a single notification as read
+ * Mark a single notification as read / dismissed
  */
 export function markNotificationAsRead(id: string): void {
   if (typeof window === 'undefined') return;
@@ -392,7 +410,7 @@ export function markNotificationAsRead(id: string): void {
     saveReadNotificationIds(readIds);
 
     const all = getAllStoredNotifications();
-    const updated = all.map((n) => (n.id === id ? { ...n, isRead: true } : n));
+    const updated = all.filter((n) => n.id !== id);
     localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(updated));
 
     window.dispatchEvent(
@@ -400,7 +418,73 @@ export function markNotificationAsRead(id: string): void {
         detail: { readId: id, all: updated },
       })
     );
+
+    fetch('/api/v1/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'mark_read', notificationId: id }),
+    }).catch(() => {});
   } catch {}
+}
+
+/**
+ * Dismiss a single notification permanently
+ */
+export function dismissNotification(id: string): void {
+  markNotificationAsRead(id);
+}
+
+/**
+ * Dismiss all notifications associated with an entity (e.g. after approval/rejection action taken)
+ */
+export function dismissNotificationForEntity(entityType: string, entityId: string): void {
+  if (typeof window === 'undefined' || !entityId) return;
+  try {
+    const readIds = getReadNotificationIds();
+    const possibleIds = [
+      `notif-leave-pending-${entityId}`,
+      `notif-reg-pending-${entityId}`,
+      `notif-leave-decision-${entityId}-Approved`,
+      `notif-leave-decision-${entityId}-Rejected`,
+      `notif-leave-decision-${entityId}-Refused`,
+      `notif-reg-decision-${entityId}-Approved`,
+      `notif-reg-decision-${entityId}-Refused`,
+      `notif-reg-decision-${entityId}-Rejected`,
+    ];
+    possibleIds.forEach((id) => readIds.add(id));
+
+    // Also remove from stored notifications
+    const stored = getAllStoredNotifications();
+    const updatedStored: AppNotification[] = [];
+    stored.forEach((n) => {
+      if (
+        n.relatedEntity?.id === entityId ||
+        n.id.includes(entityId) ||
+        (n.actionUrl && n.actionUrl.includes(encodeURIComponent(entityId)))
+      ) {
+        readIds.add(n.id);
+      } else {
+        updatedStored.push(n);
+      }
+    });
+
+    saveReadNotificationIds(readIds);
+    localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(updatedStored));
+
+    window.dispatchEvent(
+      new CustomEvent('jaago_notifications_updated', {
+        detail: { dismissedEntity: { entityType, entityId } },
+      })
+    );
+
+    fetch('/api/v1/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'dismiss_entity', entityType, entityId }),
+    }).catch(() => {});
+  } catch (e) {
+    console.error('Error dismissing notification for entity:', e);
+  }
 }
 
 /**
@@ -415,7 +499,7 @@ export function markAllNotificationsAsRead(sessionUser?: UserSessionData | null)
     saveReadNotificationIds(readIds);
 
     const all = getAllStoredNotifications();
-    const updated = all.map((n) => (readIds.has(n.id) ? { ...n, isRead: true } : n));
+    const updated = all.filter((n) => !readIds.has(n.id));
     localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(updated));
 
     window.dispatchEvent(
@@ -423,6 +507,13 @@ export function markAllNotificationsAsRead(sessionUser?: UserSessionData | null)
         detail: { all: updated },
       })
     );
+
+    const session = sessionUser || getCurrentUserSession();
+    fetch('/api/v1/notifications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'mark_all_read', userEmail: session?.email }),
+    }).catch(() => {});
   } catch {}
 }
 

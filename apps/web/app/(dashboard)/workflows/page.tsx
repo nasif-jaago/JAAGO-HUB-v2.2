@@ -27,6 +27,7 @@ import {
   refuseAttendanceRegularization,
   getLocalRegularizations,
 } from '@/lib/supabase-regularization';
+import { dismissNotificationForEntity } from '@/lib/notifications';
 
 interface WorkflowInstance {
   id: string;
@@ -253,6 +254,12 @@ function WorkflowsContent() {
         }
       }
 
+      // Automatically clean up the exact pending notification
+      dismissNotificationForEntity(isReg ? 'attendance_regularization' : 'leave_request', instance.id);
+      if (instance.entityId) {
+        dismissNotificationForEntity(isReg ? 'attendance_regularization' : 'leave_request', instance.entityId);
+      }
+
       showToastMsg(
         isReg
           ? `Attendance regularization for ${instance.metadata.requesterName} approved and attendance log updated!`
@@ -319,6 +326,18 @@ function WorkflowsContent() {
           showToastMsg(resData.error || 'Failed to refuse request', 'error');
           return;
         }
+      }
+
+      // Automatically clean up the exact pending notification
+      dismissNotificationForEntity(
+        isReg ? 'attendance_regularization' : 'leave_request',
+        refusalModalInstance.id
+      );
+      if (refusalModalInstance.entityId) {
+        dismissNotificationForEntity(
+          isReg ? 'attendance_regularization' : 'leave_request',
+          refusalModalInstance.entityId
+        );
       }
 
       showToastMsg(

@@ -33,7 +33,7 @@ import {
   matchesSelectedDept,
   isDspDepartment,
 } from '@/lib/use-organization-scope';
-import { createNotification } from '@/lib/notifications';
+import { createNotification, dismissNotificationForEntity } from '@/lib/notifications';
 import { getCurrentUserSession } from '@/lib/user-profile-sync';
 
 const LEAVE_TYPES: LeaveType[] = [
@@ -243,6 +243,9 @@ export default function LeaveRequestsPage() {
       } catch {}
     }
 
+    // Automatically clean up the exact pending notification
+    dismissNotificationForEntity('leave_request', req.id);
+
     // In-app notification
     createNotification({
       targetEmployeeCode: req.employeeCode,
@@ -320,6 +323,9 @@ export default function LeaveRequestsPage() {
         }).catch((e) => console.warn('Decision email warning:', e));
       } catch {}
     }
+
+    // Automatically clean up the exact pending notification
+    dismissNotificationForEntity('leave_request', refusalModalReq.id);
 
     // In-app notification
     createNotification({

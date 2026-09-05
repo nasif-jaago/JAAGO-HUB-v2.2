@@ -1,7 +1,7 @@
 'use client';
 
 import { getLocalAttendanceLogs, saveLocalAttendanceLogs } from './supabase-attendance';
-import { createNotification } from './notifications';
+import { createNotification, dismissNotificationForEntity } from './notifications';
 
 export interface AttendanceRegularizationItem {
   id: string;
@@ -486,6 +486,12 @@ export async function approveAttendanceRegularization(
       }),
     }).catch((err) => console.warn('Server approve sync warning:', err));
 
+    // Automatically clean up the exact pending notification
+    dismissNotificationForEntity('attendance_regularization', target.id);
+    if (target.attendanceLogId) {
+      dismissNotificationForEntity('attendance_regularization', target.attendanceLogId);
+    }
+
     // 4. Send Bell Notification to the Employee
     createNotification({
       title: `Attendance Regularization Approved: ${target.date}`,
@@ -533,6 +539,12 @@ export async function refuseAttendanceRegularization(
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('jaago_attendance_regularization_updated'));
+
+    // Automatically clean up the exact pending notification
+    dismissNotificationForEntity('attendance_regularization', target.id);
+    if (target.attendanceLogId) {
+      dismissNotificationForEntity('attendance_regularization', target.attendanceLogId);
+    }
 
     // Sync refusal to server API
     fetch('/api/v1/attendance/regularization', {
