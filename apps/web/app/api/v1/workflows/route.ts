@@ -3,6 +3,11 @@ import { getSupabase } from '@/lib/supabase-auth';
 import {
   notifyEmployeeOnLeaveDecision,
 } from '@/lib/email-service';
+import {
+  getServerRegularizations,
+  approveServerRegularization,
+  refuseServerRegularization,
+} from '@/lib/server-regularization';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,30 +29,42 @@ export interface UnifiedWorkflowInstance {
   entityType: string;
   entityId: string;
   requesterId: string;
-  requesterEmail?: string;
-  organizationId?: string;
+  requesterEmail?: string | undefined;
+  organizationId?: string | undefined;
   currentState: 'pending_approval' | 'approved' | 'rejected';
   currentTier: number;
   totalTiers: number;
   metadata: {
-    requesterName?: string;
-    employeeCode?: string;
-    department?: string;
-    designation?: string;
-    supervisorName?: string;
-    supervisorEmail?: string;
-    leaveType?: string;
-    startDate?: string;
-    endDate?: string;
-    totalDays?: number | string;
-    reason?: string;
-    rejectionReason?: string;
-    attachmentName?: string;
-    approvedBy?: string;
-    approvedAt?: string;
-    amount?: string;
-    vendor?: string;
-    location?: string;
+    requesterName?: string | undefined;
+    employeeCode?: string | undefined;
+    department?: string | undefined;
+    designation?: string | undefined;
+    supervisorName?: string | undefined;
+    supervisorEmail?: string | undefined;
+    leaveType?: string | undefined;
+    startDate?: string | undefined;
+    endDate?: string | undefined;
+    totalDays?: number | string | undefined;
+    reason?: string | undefined;
+    rejectionReason?: string | undefined;
+    attachmentName?: string | undefined;
+    attachmentUrl?: string | undefined;
+    approvedBy?: string | undefined;
+    approvedAt?: string | undefined;
+    amount?: string | undefined;
+    vendor?: string | undefined;
+    location?: string | undefined;
+    // Regularization specific fields
+    date?: string | undefined;
+    originalCheckIn?: string | undefined;
+    originalCheckOut?: string | undefined;
+    originalStatus?: string | undefined;
+    originalLateByMin?: number | undefined;
+    adjustedCheckIn?: string | undefined;
+    adjustedCheckOut?: string | undefined;
+    adjustedStatus?: string | undefined;
+    workingSchedule?: string | undefined;
+    calculatedHours?: string | undefined;
   };
   createdAt: string;
   updatedAt: string;
@@ -88,7 +105,7 @@ export async function GET(request: NextRequest) {
     });
 
     // 3. Build Workflow instances from leave requests
-    const instances: UnifiedWorkflowInstance[] = (leaveRows || []).map((row: any) => {
+    const leaveInstances: UnifiedWorkflowInstance[] = (leaveRows || []).map((row: any) => {
       const emp = empMap.get(row.employee_code) || empMap.get(row.employee_id) || {};
       const empName = row.employee_name || emp.name || 'Employee';
       const supervisorName = emp.supervisor || "Founder's Office";
@@ -172,7 +189,7 @@ export async function GET(request: NextRequest) {
         requesterId: row.employee_code,
         requesterEmail: emp.work_email || emp.personal_email || '',
         currentState,
-        currentTier: isApproved ? 1 : 1,
+        currentTier: 1,
         totalTiers: 1,
         metadata: {
           requesterName: empName,
@@ -198,7 +215,95 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // 4. Role-based & Team-based Scoping
+    // 4. Fetch Regularization requests and map them
+    const regList = await getServerRegularizations();
+    const regInstances: UnifiedWorkflowInstance[] = regList.map((reg) => {
+      const isApproved = reg.status === 'Approved';
+      const isRejected = reg.status === 'Refused' || reg.status === 'Rejected';
+      const currentState: UnifiedWorkflowInstance['currentState'] = isApproved
+        ? 'approved'
+        : isRejected
+        ? 'rejected'
+        : 'pending_approval';
+
+      const history: WorkflowHistoryItem[] = [
+        {
+          fromState: 'draft',
+          toState: 'pending_approval',
+          actorId: `${reg.employeeName} (${reg.employeeCode})`,
+          action: 'submit',
+          timestamp: reg.appliedAt || reg.createdAt || new Date().toISOString(),
+        },
+      ];
+
+      if (isApproved) {
+        history.push({
+          fromState: 'pending_approval',
+          toState: 'approved',
+          actorId: reg.approvedBy || reg.supervisorName || 'Supervisor',
+          tier: 1,
+          action: 'approve',
+          comment: `Approved: Adjusted to ${reg.adjustedCheckIn} - ${reg.adjustedCheckOut}`,
+          timestamp: reg.approvedAt || reg.updatedAt || new Date().toISOString(),
+        });
+      } else if (isRejected) {
+        history.push({
+          fromState: 'pending_approval',
+          toState: 'rejected',
+          actorId: reg.approvedBy || reg.supervisorName || 'Supervisor',
+          tier: 1,
+          action: 'reject',
+          comment: reg.refusalNote || 'Regularization Refused',
+          timestamp: reg.approvedAt || reg.updatedAt || new Date().toISOString(),
+        });
+      }
+
+      return {
+        id: reg.id,
+        definitionKey: 'attendance_regularization',
+        title: `Attendance Regularization (${reg.date}) - ${reg.employeeName}`,
+        entityType: 'attendance_regularization',
+        entityId: reg.id,
+        requesterId: reg.employeeCode,
+        requesterEmail: 'staff@jaago.com.bd',
+        currentState,
+        currentTier: 1,
+        totalTiers: 1,
+        metadata: {
+          requesterName: reg.employeeName,
+          employeeCode: reg.employeeCode,
+          department: reg.department,
+          designation: reg.designation,
+          supervisorName: reg.supervisorName,
+          supervisorEmail: reg.supervisorEmail,
+          leaveType: 'Attendance Regularization',
+          startDate: reg.date,
+          endDate: reg.date,
+          totalDays: '1 Day',
+          reason: reg.reason,
+          rejectionReason: reg.refusalNote,
+          date: reg.date,
+          originalCheckIn: reg.originalCheckIn,
+          originalCheckOut: reg.originalCheckOut,
+          originalStatus: reg.originalStatus,
+          originalLateByMin: reg.originalLateByMin,
+          adjustedCheckIn: reg.adjustedCheckIn,
+          adjustedCheckOut: reg.adjustedCheckOut,
+          adjustedStatus: reg.adjustedStatus || 'Present',
+          workingSchedule: reg.workingSchedule,
+          calculatedHours: reg.calculatedHours,
+          approvedBy: reg.approvedBy || '',
+          approvedAt: reg.approvedAt || '',
+        },
+        createdAt: reg.appliedAt || reg.createdAt || new Date().toISOString(),
+        updatedAt: reg.updatedAt || reg.createdAt || new Date().toISOString(),
+        history,
+      };
+    });
+
+    const instances = [...leaveInstances, ...regInstances];
+
+    // 5. Role-based & Team-based Scoping
     const isSuperAdmin =
       userRole === 'super_admin' ||
       userEmail.includes('nasif.kamal') ||
@@ -268,9 +373,35 @@ export async function POST(request: NextRequest) {
 
     if (action === 'reject' && !comment?.trim() && !rejectionReason?.trim()) {
       return NextResponse.json(
-        { success: false, error: 'Mandatory Refusal Note is required when refusing a leave request.' },
+        { success: false, error: 'Mandatory Refusal Note is required when refusing a request.' },
         { status: 400 }
       );
+    }
+
+    // Check if this is an Attendance Regularization instance
+    if (instanceId.startsWith('reg-')) {
+      if (action === 'approve') {
+        const res = await approveServerRegularization(instanceId, reviewerName || 'Supervisor', reviewerCode);
+        if (!res.success) {
+          return NextResponse.json({ success: false, error: res.error }, { status: 400 });
+        }
+        return NextResponse.json({
+          success: true,
+          message: 'Attendance regularization approved and attendance record adjusted successfully.',
+          data: res.item,
+        });
+      } else if (action === 'reject' || action === 'refuse') {
+        const note = (comment || rejectionReason || '').trim();
+        const res = await refuseServerRegularization(instanceId, note, reviewerName || 'Supervisor', reviewerCode);
+        if (!res.success) {
+          return NextResponse.json({ success: false, error: res.error }, { status: 400 });
+        }
+        return NextResponse.json({
+          success: true,
+          message: 'Attendance regularization refused with mandatory note.',
+          data: res.item,
+        });
+      }
     }
 
     const supabase = getSupabase();

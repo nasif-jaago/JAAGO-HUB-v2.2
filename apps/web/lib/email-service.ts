@@ -499,6 +499,247 @@ Remarks: {{refusalReason}}`,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
+  {
+    id: 'a0000000-0000-0000-0000-000000000006',
+    templateKey: 'attendance.regularization_supervisor',
+    name: 'Attendance Regularization Supervisor Notification',
+    module: 'attendance',
+    subject: 'Action Required: Attendance Regularization Request - {{employeeName}} ({{date}})',
+    bodyHtml: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Attendance Regularization — JAAGO HUB</title>
+</head>
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#f8fafc;color:#1e293b;-webkit-font-smoothing:antialiased;">
+  <div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:32px 28px 26px;text-align:center;border-bottom:4px solid #f59e0b;">
+      <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:4px 14px;border-radius:20px;text-transform:uppercase;margin-bottom:12px;">JAAGO FOUNDATION TRUST</span>
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:-0.5px;">Attendance Regularization Request</h1>
+      <p style="margin:6px 0 0;color:#cbd5e1;font-size:13px;font-weight:500;">Supervisor Review &bull; Shift Attendance Adjustment Authorization</p>
+    </div>
+
+    <!-- Content -->
+    <div style="padding:28px 28px 24px;color:#334155;font-size:14px;line-height:1.6;">
+      <p style="margin-top:0;font-size:15px;">Hello <strong>{{supervisorName}}</strong>,</p>
+      <p style="margin-bottom:20px;">A team member under your direct supervision has submitted an <strong>Attendance Regularization Request</strong> for <strong>{{date}}</strong> awaiting your review and authorization:</p>
+
+      <!-- Requester Summary Box -->
+      <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:20px;font-size:13px;">
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;width:34%;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Applicant Name:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{employeeName}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Employee ID:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;"><span style="font-family:monospace;background:#e2e8f0;padding:2px 6px;border-radius:4px;">{{employeeCode}}</span></td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Designation / Dept:</td><td style="padding:10px 14px;font-weight:600;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{designation}} &bull; {{department}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Regularization Date:</td><td style="padding:10px 14px;font-weight:800;color:#0f172a;border-bottom:1px solid #e2e8f0;font-family:monospace;">{{date}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;">Assigned Shift / Schedule:</td><td style="padding:10px 14px;color:#d97706;font-weight:700;">{{workingSchedule}}</td></tr>
+      </table>
+
+      <!-- 2-Column Comparison Table -->
+      <div style="margin:22px 0 20px;">
+        <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;color:#475569;margin-bottom:8px;">
+          ⏱️ Attendance Punch Correction Breakdown
+        </div>
+        <table style="width:100%;border-collapse:collapse;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #cbd5e1;font-size:13px;">
+          <thead>
+            <tr style="background:#0f172a;color:#ffffff;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
+              <th style="padding:10px 12px;width:28%;">Record Field</th>
+              <th style="padding:10px 12px;width:36%;color:#fca5a5;">Original Punch</th>
+              <th style="padding:10px 12px;width:36%;color:#86efac;">Requested Adjustment</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 12px;font-weight:700;color:#475569;background:#f8fafc;">Check-In Time</td>
+              <td style="padding:10px 12px;font-family:monospace;font-weight:700;color:#dc2626;">{{originalCheckIn}}</td>
+              <td style="padding:10px 12px;font-family:monospace;font-weight:700;color:#16a34a;background:#f0fdf4;">
+                {{adjustedCheckIn}} <span style="font-size:10px;background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;font-family:sans-serif;font-weight:800;">ON TIME</span>
+              </td>
+            </tr>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 12px;font-weight:700;color:#475569;background:#f8fafc;">Check-Out Time</td>
+              <td style="padding:10px 12px;font-family:monospace;color:#64748b;">{{originalCheckOut}}</td>
+              <td style="padding:10px 12px;font-family:monospace;font-weight:700;color:#16a34a;background:#f0fdf4;">{{adjustedCheckOut}}</td>
+            </tr>
+            <tr style="border-bottom:1px solid #e2e8f0;">
+              <td style="padding:10px 12px;font-weight:700;color:#475569;background:#f8fafc;">Attendance Status</td>
+              <td style="padding:10px 12px;">
+                <span style="display:inline-block;background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">{{originalStatus}}</span>
+              </td>
+              <td style="padding:10px 12px;background:#f0fdf4;">
+                <span style="display:inline-block;background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">Present (Regularized)</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 12px;font-weight:700;color:#475569;background:#f8fafc;">Calculated Duration</td>
+              <td style="padding:10px 12px;color:#94a3b8;font-family:monospace;">&mdash;</td>
+              <td style="padding:10px 12px;font-family:monospace;font-weight:800;color:#0f172a;background:#f0fdf4;">{{calculatedHours}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Purpose & Reason Box -->
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #f59e0b;padding:14px 16px;border-radius:0 12px 12px 0;margin:20px 0;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#b45309;letter-spacing:0.5px;margin-bottom:4px;">
+          Applicant Reason &amp; Justification:
+        </div>
+        <div style="color:#78350f;font-size:13.5px;font-style:italic;line-height:1.5;">
+          &ldquo;{{reason}}&rdquo;
+        </div>
+      </div>
+
+      <!-- Action Callout Button -->
+      <div style="text-align:center;margin:30px 0 16px;">
+        <a href="{{actionUrl}}" style="background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:#0f172a !important;text-decoration:none;font-weight:900;font-size:14px;letter-spacing:0.4px;padding:15px 36px;border-radius:12px;display:inline-block;box-shadow:0 8px 20px rgba(245,158,11,0.35);text-transform:uppercase;">
+          Review &bull; Approve or Refuse in JAAGO HUB &rarr;
+        </a>
+      </div>
+      <p style="text-align:center;font-size:11.5px;color:#64748b;margin-bottom:0;">
+        Clicking the button will open the request directly in your Approvals &amp; Workflows management console where you can approve or refuse.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f8fafc;padding:18px 28px;border-top:1px solid #e2e8f0;font-size:11px;color:#64748b;text-align:center;">
+      JAAGO Foundation Trust &bull; People &amp; Culture Attendance Regularization System
+    </div>
+  </div>
+</body>
+</html>`,
+    bodyText: `================================================================================
+JAAGO HUB — ATTENDANCE REGULARIZATION REQUEST
+JAAGO Foundation Trust | People & Culture Department
+================================================================================
+
+Hello {{supervisorName}},
+
+A team member under your direct supervision has submitted an Attendance Regularization Request for {{date}} awaiting your authorization.
+
+--------------------------------------------------------------------------------
+EMPLOYEE DETAILS & WORKING SCHEDULE
+--------------------------------------------------------------------------------
+• Employee Name    : {{employeeName}}
+• Employee ID      : {{employeeCode}}
+• Designation/Dept : {{designation}} • {{department}}
+• Regularization Date: {{date}}
+• Assigned Shift   : {{workingSchedule}}
+--------------------------------------------------------------------------------
+
+ATTENDANCE PUNCH CORRECTION BREAKDOWN:
+• Original Punch   : In: {{originalCheckIn}} | Out: {{originalCheckOut}} | Status: {{originalStatus}}
+• Requested Adjust : In: {{adjustedCheckIn}} (On Time) | Out: {{adjustedCheckOut}} | Status: Present (Regularized)
+• Net Duration     : {{calculatedHours}}
+
+REASON / JUSTIFICATION:
+"{{reason}}"
+
+--------------------------------------------------------------------------------
+REVIEW & AUTHORIZE URL:
+{{actionUrl}}
+================================================================================`,
+    variablesSchema: [
+      { key: 'supervisorName', name: 'Supervisor Name', description: 'Name of the supervisor', required: true, sample: 'Nasif Kamal' },
+      { key: 'employeeName', name: 'Employee Name', description: 'Staff member applying', required: true, sample: 'S M Nayeem Rahman' },
+      { key: 'employeeCode', name: 'Employee Code', description: 'Staff ID', required: true, sample: 'FO072408021002' },
+      { key: 'designation', name: 'Designation', description: 'Staff Role', required: true, sample: 'Team Lead' },
+      { key: 'department', name: 'Department', description: 'Department Name', required: true, sample: "Founder's Office (JF)" },
+      { key: 'date', name: 'Attendance Date', description: 'Date being regularized', required: true, sample: '2026-09-03' },
+      { key: 'workingSchedule', name: 'Shift Schedule', description: 'Working shift timing', required: true, sample: 'JAAGO HQ (10:00 AM - 06:00 PM)' },
+      { key: 'originalCheckIn', name: 'Original Check-In', description: 'Actual check-in time recorded', required: true, sample: '01:33 PM' },
+      { key: 'originalCheckOut', name: 'Original Check-Out', description: 'Actual check-out time recorded', required: true, sample: '11:22 PM' },
+      { key: 'originalStatus', name: 'Original Status', description: 'Original attendance status (Late/Absent/etc)', required: true, sample: 'Late' },
+      { key: 'adjustedCheckIn', name: 'Adjusted Check-In', description: 'Proposed on-time check-in', required: true, sample: '10:00 AM' },
+      { key: 'adjustedCheckOut', name: 'Adjusted Check-Out', description: 'Proposed check-out time', required: true, sample: '06:00 PM' },
+      { key: 'calculatedHours', name: 'Calculated Hours', description: 'Net working hours after adjustment', required: true, sample: '8h 00m' },
+      { key: 'reason', name: 'Reason', description: 'Employee justification for regularization', required: true, sample: 'Late Entry Due to Official Field Work / Traffic' },
+      { key: 'actionUrl', name: 'Action URL', description: 'Direct approval workflow link', required: true, sample: 'https://hub.jaago.com.bd/workflows' },
+    ],
+    isActive: true,
+    version: 4,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'a0000000-0000-0000-0000-000000000007',
+    templateKey: 'attendance.regularization_decision_employee',
+    name: 'Attendance Regularization Employee Decision Notice',
+    module: 'attendance',
+    subject: 'Attendance Regularization Request {{decisionStatus}}: {{date}} ({{employeeName}})',
+    bodyHtml: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Regularization Decision — JAAGO HUB</title>
+</head>
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background-color:#f8fafc;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:32px 28px 24px;text-align:center;border-bottom:4px solid #f59e0b;">
+      <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:4px 12px;border-radius:20px;text-transform:uppercase;margin-bottom:10px;">JAAGO FOUNDATION TRUST</span>
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:800;letter-spacing:-0.5px;">Attendance Regularization Status Update</h1>
+      <p style="margin:6px 0 0;color:#cbd5e1;font-size:13px;font-weight:500;">Official Decision Notice</p>
+    </div>
+
+    <!-- Content -->
+    <div style="padding:28px 28px 24px;color:#334155;font-size:14px;line-height:1.6;">
+      <p style="margin-top:0;font-size:15px;">Hello <strong>{{employeeName}}</strong>,</p>
+      <p>Your attendance regularization request for <strong>{{date}}</strong> has been reviewed by your supervisor/administration. The official status is outlined below:</p>
+
+      <!-- Decision Status Banner -->
+      <div style="background:#f8fafc;border-left:5px solid #f59e0b;padding:16px;border-radius:8px;margin:18px 0;">
+        <div style="font-size:12px;font-weight:800;text-transform:uppercase;color:#64748b;">Decision Status</div>
+        <div style="font-size:18px;font-weight:900;color:#0f172a;margin-top:2px;">
+          {{decisionStatus}}
+        </div>
+      </div>
+
+      <!-- Details Table -->
+      <table style="width:100%;border-collapse:collapse;background:#f8fafc;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin:20px 0;font-size:13px;">
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;width:36%;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Attendance Date:</td><td style="padding:10px 14px;font-weight:800;color:#0f172a;border-bottom:1px solid #e2e8f0;font-family:monospace;">{{date}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Regularized Punch:</td><td style="padding:10px 14px;font-weight:700;color:#16a34a;border-bottom:1px solid #e2e8f0;font-family:monospace;">{{adjustedCheckIn}} &bull; {{adjustedCheckOut}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Reviewed By:</td><td style="padding:10px 14px;font-weight:700;color:#0f172a;border-bottom:1px solid #e2e8f0;">{{reviewedBy}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;border-bottom:1px solid #e2e8f0;">Review Timestamp:</td><td style="padding:10px 14px;color:#64748b;border-bottom:1px solid #e2e8f0;">{{reviewedAt}}</td></tr>
+        <tr><td style="padding:10px 14px;color:#64748b;font-weight:600;background:#f1f5f9;">Remarks / Note:</td><td style="padding:10px 14px;color:#1e293b;font-weight:600;">{{refusalReason}}</td></tr>
+      </table>
+
+      <!-- Action Link -->
+      <div style="text-align:center;margin:24px 0 10px;">
+        <a href="{{portalUrl}}" style="background:#0f172a;color:#ffffff !important;text-decoration:none;font-weight:700;font-size:13px;padding:12px 28px;border-radius:10px;display:inline-block;">
+          View My Attendance Log &rarr;
+        </a>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#f8fafc;padding:18px 28px;border-top:1px solid #e2e8f0;font-size:11px;color:#64748b;text-align:center;">
+      JAAGO Foundation &bull; People &amp; Culture Attendance System
+    </div>
+  </div>
+</body>
+</html>`,
+    bodyText: `Your Attendance Regularization request for {{date}} has been {{decisionStatus}}.
+Regularized Timing: {{adjustedCheckIn}} - {{adjustedCheckOut}}
+Reviewed by: {{reviewedBy}} at {{reviewedAt}}
+Remarks: {{refusalReason}}
+Log URL: {{portalUrl}}`,
+    variablesSchema: [
+      { key: 'employeeName', name: 'Employee Name', description: 'Staff member name', required: true, sample: 'S M Nayeem Rahman' },
+      { key: 'date', name: 'Attendance Date', description: 'Date of regularization', required: true, sample: '2026-09-03' },
+      { key: 'decisionStatus', name: 'Decision Status', description: 'Approved or Refused', required: true, sample: 'Approved' },
+      { key: 'reviewedBy', name: 'Reviewed By', description: 'Reviewer name', required: true, sample: 'Nasif Kamal' },
+      { key: 'reviewedAt', name: 'Reviewed At', description: 'Decision timestamp', required: true, sample: '05-Sep-2026 03:15 PM' },
+      { key: 'adjustedCheckIn', name: 'Adjusted Check In', description: 'Adjusted In time', required: true, sample: '10:00 AM' },
+      { key: 'adjustedCheckOut', name: 'Adjusted Check Out', description: 'Adjusted Out time', required: true, sample: '06:00 PM' },
+      { key: 'refusalReason', name: 'Remarks / Refusal Note', description: 'Remarks or refusal reason', required: true, sample: 'Approved as requested' },
+      { key: 'portalUrl', name: 'Portal URL', description: 'Link to attendance module', required: true, sample: 'https://hub.jaago.com.bd/attendance' },
+    ],
+    isActive: true,
+    version: 4,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
 ];
 
 const defaultEncrypted = encryptCredential(process.env.SMTP_PASSWORD || 'default_smtp_password_key_2026');
@@ -1286,7 +1527,10 @@ export function createTransporterForServer(server: EmailServerItem): nodemailer.
     tls: {
       rejectUnauthorized: true,
     },
-  });
+    connectionTimeout: 2500,
+    greetingTimeout: 2000,
+    socketTimeout: 3000,
+  } as any);
 }
 
 export async function verifyServerConnection(serverId: string): Promise<{ success: boolean; message: string }> {
@@ -1665,4 +1909,117 @@ export async function notifyEmployeeOnLeaveDecision(params: {
     return { success: false, ...(err?.message ? { error: err.message } : {}) };
   }
 }
+
+/**
+ * Dispatches an automated email to the assigned supervisor upon attendance regularization submission
+ */
+export async function notifySupervisorOnRegularizationSubmit(params: {
+  supervisorName: string;
+  supervisorEmail: string;
+  employeeName: string;
+  employeeCode: string;
+  department?: string;
+  designation?: string;
+  date: string;
+  originalCheckIn: string;
+  originalCheckOut: string;
+  originalStatus: string;
+  adjustedCheckIn: string;
+  adjustedCheckOut: string;
+  workingSchedule?: string;
+  calculatedHours?: string;
+  reason: string;
+  requestId: string;
+}): Promise<{ success: boolean; logId?: string; error?: string }> {
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hub.jaago.com.bd';
+    const actionUrl = `${origin}/workflows?requestId=${encodeURIComponent(params.requestId)}`;
+
+    const res = await sendEmail({
+      templateKey: 'attendance.regularization_supervisor',
+      to: params.supervisorEmail,
+      variables: {
+        supervisorName: params.supervisorName,
+        employeeName: params.employeeName,
+        employeeCode: params.employeeCode,
+        designation: params.designation || 'Staff',
+        department: params.department || "Founder's Office",
+        date: params.date,
+        workingSchedule: params.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
+        originalCheckIn: params.originalCheckIn || '--:--',
+        originalCheckOut: params.originalCheckOut || '--:--',
+        originalStatus: params.originalStatus || 'Late',
+        adjustedCheckIn: params.adjustedCheckIn || '10:00 AM',
+        adjustedCheckOut: params.adjustedCheckOut || '06:00 PM',
+        calculatedHours: params.calculatedHours || '8.0h',
+        reason: params.reason || 'Late entry / shift adjustment',
+        actionUrl,
+      },
+      module: 'attendance',
+      relatedEntity: { type: 'attendance_regularization', id: params.requestId },
+    });
+    const returnObj: { success: boolean; logId?: string; error?: string } = {
+      success: res.success,
+    };
+    if (res.logId) returnObj.logId = res.logId;
+    if (res.errorReason) returnObj.error = res.errorReason;
+    return returnObj;
+  } catch (err: any) {
+    console.warn('Failed to dispatch supervisor regularization email:', err);
+    return { success: false, ...(err?.message ? { error: err.message } : {}) };
+  }
+}
+
+/**
+ * Dispatches an automated email to the employee when their attendance regularization is Approved or Refused
+ */
+export async function notifyEmployeeOnRegularizationDecision(params: {
+  employeeName: string;
+  employeeEmail: string;
+  date: string;
+  decisionStatus: 'Approved' | 'Refused' | 'Rejected';
+  reviewedBy: string;
+  adjustedCheckIn?: string;
+  adjustedCheckOut?: string;
+  refusalNote?: string;
+  requestId: string;
+}): Promise<{ success: boolean; logId?: string; error?: string }> {
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hub.jaago.com.bd';
+    const portalUrl = `${origin}/attendance`;
+    const nowStr = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+    const isRefused = params.decisionStatus === 'Refused' || params.decisionStatus === 'Rejected';
+
+    const res = await sendEmail({
+      templateKey: 'attendance.regularization_decision_employee',
+      to: params.employeeEmail,
+      variables: {
+        employeeName: params.employeeName,
+        date: params.date,
+        decisionStatus: isRefused ? 'REFUSED' : 'APPROVED',
+        reviewedBy: params.reviewedBy,
+        reviewedAt: nowStr,
+        adjustedCheckIn: params.adjustedCheckIn || '--:--',
+        adjustedCheckOut: params.adjustedCheckOut || '--:--',
+        refusalReason: isRefused
+          ? (params.refusalNote || 'Regularization request refused by supervisor.')
+          : `Approved on-time adjustment: ${params.adjustedCheckIn || '10:00 AM'} - ${params.adjustedCheckOut || '06:00 PM'}`,
+        portalUrl,
+      },
+      module: 'attendance',
+      relatedEntity: { type: 'attendance_regularization', id: params.requestId },
+    });
+    const returnObj: { success: boolean; logId?: string; error?: string } = {
+      success: res.success,
+    };
+    if (res.logId) returnObj.logId = res.logId;
+    if (res.errorReason) returnObj.error = res.errorReason;
+    return returnObj;
+  } catch (err: any) {
+    console.warn('Failed to dispatch employee regularization decision email:', err);
+    return { success: false, ...(err?.message ? { error: err.message } : {}) };
+  }
+}
+
+
 

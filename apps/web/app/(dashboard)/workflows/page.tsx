@@ -22,6 +22,11 @@ import { EnterpriseTable, ColumnDef } from '@jaago/ui';
 import { getCurrentUserSession, UserSessionData } from '@/lib/user-profile-sync';
 import { downloadAttachment } from '@/lib/attachment-helper';
 import { isDspOnlyScoped, isDspDepartment } from '@/lib/rbac-guard';
+import {
+  approveAttendanceRegularization,
+  refuseAttendanceRegularization,
+  getLocalRegularizations,
+} from '@/lib/supabase-regularization';
 
 interface WorkflowInstance {
   id: string;
@@ -30,29 +35,40 @@ interface WorkflowInstance {
   entityType: string;
   entityId: string;
   requesterId: string;
-  requesterEmail?: string;
+  requesterEmail?: string | undefined;
   currentState: 'pending_approval' | 'approved' | 'rejected';
   currentTier: number;
   totalTiers: number;
   metadata: {
-    requesterName?: string;
-    employeeCode?: string;
-    department?: string;
-    designation?: string;
-    supervisorName?: string;
-    supervisorEmail?: string;
-    leaveType?: string;
-    startDate?: string;
-    endDate?: string;
-    totalDays?: number | string;
-    reason?: string;
-    rejectionReason?: string;
-    attachmentName?: string;
-    approvedBy?: string;
-    approvedAt?: string;
-    amount?: string;
-    vendor?: string;
-    location?: string;
+    requesterName?: string | undefined;
+    employeeCode?: string | undefined;
+    department?: string | undefined;
+    designation?: string | undefined;
+    supervisorName?: string | undefined;
+    supervisorEmail?: string | undefined;
+    leaveType?: string | undefined;
+    startDate?: string | undefined;
+    endDate?: string | undefined;
+    totalDays?: number | string | undefined;
+    reason?: string | undefined;
+    rejectionReason?: string | undefined;
+    attachmentName?: string | undefined;
+    approvedBy?: string | undefined;
+    approvedAt?: string | undefined;
+    amount?: string | undefined;
+    vendor?: string | undefined;
+    location?: string | undefined;
+    // Regularization specific fields
+    date?: string | undefined;
+    originalCheckIn?: string | undefined;
+    originalCheckOut?: string | undefined;
+    originalStatus?: string | undefined;
+    originalLateByMin?: number | undefined;
+    adjustedCheckIn?: string | undefined;
+    adjustedCheckOut?: string | undefined;
+    adjustedStatus?: string | undefined;
+    workingSchedule?: string | undefined;
+    calculatedHours?: string | undefined;
   };
   createdAt: string;
   updatedAt: string;
@@ -60,9 +76,9 @@ interface WorkflowInstance {
     fromState: string;
     toState: string;
     actorId: string;
-    tier?: number;
+    tier?: number | undefined;
     action: string;
-    comment?: string;
+    comment?: string | undefined;
     timestamp: string;
   }>;
 }
@@ -105,17 +121,78 @@ function WorkflowsContent() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
-      if (data.data) {
-        setInstances(data.data);
+      let combined: WorkflowInstance[] = data.data || [];
 
-        // Auto-select request if requestId param is present
-        if (urlRequestId) {
-          const match = data.data.find(
-            (i: WorkflowInstance) => i.id === urlRequestId || i.entityId === urlRequestId
-          );
-          if (match) {
-            setSelectedInstance(match);
+      // Also ensure local regularizations are merged for instant UI responsiveness
+      if (typeof window !== 'undefined') {
+        const localRegs = getLocalRegularizations();
+        const existingIds = new Set(combined.map((i) => i.id));
+        localRegs.forEach((reg) => {
+          if (!existingIds.has(reg.id)) {
+            const isApproved = reg.status === 'Approved';
+            const isRejected = reg.status === 'Refused' || reg.status === 'Rejected';
+            combined.unshift({
+              id: reg.id,
+              definitionKey: 'attendance_regularization',
+              title: `Attendance Regularization (${reg.date}) - ${reg.employeeName}`,
+              entityType: 'attendance_regularization',
+              entityId: reg.id,
+              requesterId: reg.employeeCode,
+              requesterEmail: 'staff@jaago.com.bd',
+              currentState: isApproved ? 'approved' : isRejected ? 'rejected' : 'pending_approval',
+              currentTier: 1,
+              totalTiers: 1,
+              metadata: {
+                requesterName: reg.employeeName,
+                employeeCode: reg.employeeCode,
+                department: reg.department,
+                designation: reg.designation,
+                supervisorName: reg.supervisorName,
+                supervisorEmail: reg.supervisorEmail,
+                leaveType: 'Attendance Regularization',
+                startDate: reg.date,
+                endDate: reg.date,
+                totalDays: '1 Day',
+                reason: reg.reason,
+                rejectionReason: reg.refusalNote,
+                date: reg.date,
+                originalCheckIn: reg.originalCheckIn,
+                originalCheckOut: reg.originalCheckOut,
+                originalStatus: reg.originalStatus,
+                originalLateByMin: reg.originalLateByMin,
+                adjustedCheckIn: reg.adjustedCheckIn,
+                adjustedCheckOut: reg.adjustedCheckOut,
+                adjustedStatus: reg.adjustedStatus || 'Present',
+                workingSchedule: reg.workingSchedule,
+                calculatedHours: reg.calculatedHours,
+                approvedBy: reg.approvedBy || '',
+                approvedAt: reg.approvedAt || '',
+              },
+              createdAt: reg.appliedAt || reg.createdAt,
+              updatedAt: reg.updatedAt || reg.createdAt,
+              history: [
+                {
+                  fromState: 'draft',
+                  toState: 'pending_approval',
+                  actorId: `${reg.employeeName} (${reg.employeeCode})`,
+                  action: 'submit',
+                  timestamp: reg.appliedAt,
+                },
+              ],
+            });
           }
+        });
+      }
+
+      setInstances(combined);
+
+      // Auto-select request if requestId param is present
+      if (urlRequestId) {
+        const match = combined.find(
+          (i: WorkflowInstance) => i.id === urlRequestId || i.entityId === urlRequestId
+        );
+        if (match) {
+          setSelectedInstance(match);
         }
       }
     } catch (err) {
@@ -130,10 +207,12 @@ function WorkflowsContent() {
 
     const handleReqUpdate = () => loadWorkflows();
     window.addEventListener('jaago_leave_request_updated', handleReqUpdate);
+    window.addEventListener('jaago_attendance_regularization_updated', handleReqUpdate);
     window.addEventListener('jaago_notifications_updated', handleReqUpdate);
 
     return () => {
       window.removeEventListener('jaago_leave_request_updated', handleReqUpdate);
+      window.removeEventListener('jaago_attendance_regularization_updated', handleReqUpdate);
       window.removeEventListener('jaago_notifications_updated', handleReqUpdate);
     };
   }, [urlRequestId]);
@@ -145,33 +224,47 @@ function WorkflowsContent() {
       const reviewerCode = session?.employeeCode || '';
       const reviewerEmail = session?.email || 'nasif.kamal@jaago.com.bd';
 
-      const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
-      const res = await fetch('/api/v1/workflows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          action: 'approve',
-          instanceId: instance.id,
-          reviewerName,
-          reviewerCode,
-          reviewerEmail,
-        }),
-      });
+      const isReg =
+        instance.definitionKey === 'attendance_regularization' || instance.id.startsWith('reg-');
 
-      const resData = await res.json();
-      if (resData.success) {
-        showToastMsg(`Leave request for ${instance.metadata.requesterName} has been approved!`);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('jaago_leave_request_updated'));
-        }
-        await loadWorkflows();
-        setSelectedInstance(null);
+      if (isReg) {
+        await approveAttendanceRegularization(instance.id, reviewerName, reviewerCode);
       } else {
-        showToastMsg(resData.error || 'Failed to approve request', 'error');
+        const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
+        const res = await fetch('/api/v1/workflows', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            action: 'approve',
+            instanceId: instance.id,
+            reviewerName,
+            reviewerCode,
+            reviewerEmail,
+          }),
+        });
+
+        const resData = await res.json();
+        if (!resData.success) {
+          showToastMsg(resData.error || 'Failed to approve request', 'error');
+          return;
+        }
       }
+
+      showToastMsg(
+        isReg
+          ? `Attendance regularization for ${instance.metadata.requesterName} approved and attendance log updated!`
+          : `Leave request for ${instance.metadata.requesterName} has been approved!`
+      );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jaago_leave_request_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_attendance_regularization_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_attendance_updated'));
+      }
+      await loadWorkflows();
+      setSelectedInstance(null);
     } catch (err: any) {
       showToastMsg(err?.message || 'Approval action failed', 'error');
     } finally {
@@ -182,7 +275,7 @@ function WorkflowsContent() {
   const handleRefusalSubmit = async () => {
     if (!refusalModalInstance) return;
     if (!refusalNote.trim()) {
-      showToastMsg('Mandatory Refusal Note is required before refusing a leave request.', 'error');
+      showToastMsg('Mandatory Refusal Note is required before refusing a request.', 'error');
       return;
     }
 
@@ -192,37 +285,54 @@ function WorkflowsContent() {
       const reviewerCode = session?.employeeCode || '';
       const reviewerEmail = session?.email || 'nasif.kamal@jaago.com.bd';
 
-      const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
-      const res = await fetch('/api/v1/workflows', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          action: 'reject',
-          instanceId: refusalModalInstance.id,
-          comment: refusalNote.trim(),
-          reviewerName,
-          reviewerCode,
-          reviewerEmail,
-        }),
-      });
+      const isReg =
+        refusalModalInstance.definitionKey === 'attendance_regularization' ||
+        refusalModalInstance.id.startsWith('reg-');
 
-      const resData = await res.json();
-      if (resData.success) {
-        showToastMsg(`Leave request for ${refusalModalInstance.metadata.requesterName} refused with note.`);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('jaago_leave_request_updated'));
-        }
-        await loadWorkflows();
-        setRefusalModalInstance(null);
-        setRefusalNote('');
-        if (selectedInstance?.id === refusalModalInstance.id) {
-          setSelectedInstance(null);
-        }
+      if (isReg) {
+        await refuseAttendanceRegularization(
+          refusalModalInstance.id,
+          refusalNote.trim(),
+          reviewerName,
+          reviewerCode
+        );
       } else {
-        showToastMsg(resData.error || 'Failed to refuse request', 'error');
+        const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
+        const res = await fetch('/api/v1/workflows', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            action: 'reject',
+            instanceId: refusalModalInstance.id,
+            comment: refusalNote.trim(),
+            reviewerName,
+            reviewerCode,
+            reviewerEmail,
+          }),
+        });
+
+        const resData = await res.json();
+        if (!resData.success) {
+          showToastMsg(resData.error || 'Failed to refuse request', 'error');
+          return;
+        }
+      }
+
+      showToastMsg(
+        `Request for ${refusalModalInstance.metadata.requesterName} refused with note.`
+      );
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jaago_leave_request_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_attendance_regularization_updated'));
+      }
+      await loadWorkflows();
+      setRefusalModalInstance(null);
+      setRefusalNote('');
+      if (selectedInstance?.id === refusalModalInstance.id) {
+        setSelectedInstance(null);
       }
     } catch (err: any) {
       showToastMsg(err?.message || 'Refusal action failed', 'error');
@@ -309,24 +419,38 @@ function WorkflowsContent() {
     {
       key: 'title',
       header: 'Workflow Request',
-      accessor: (row) => (
-        <div>
-          <div className="font-bold text-foreground hover:text-primary transition">{row.title}</div>
-          <div className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
-            <span className="font-mono">ID: {row.entityId}</span>
-            <span>&bull;</span>
-            <span className="capitalize">{row.metadata.leaveType || row.definitionKey.replace(/_/g, ' ')}</span>
-            <span>&bull;</span>
-            <span>{row.metadata.totalDays} Day(s)</span>
-            {row.metadata.attachmentName && (
-              <span className="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 font-bold text-[10px]">
-                <Paperclip className="h-3 w-3" />
-                <span className="truncate max-w-[140px]">{row.metadata.attachmentName}</span>
-              </span>
-            )}
+      accessor: (row) => {
+        const isReg = row.definitionKey === 'attendance_regularization';
+        return (
+          <div>
+            <div className="font-bold text-foreground hover:text-primary transition">{row.title}</div>
+            <div className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
+              <span className="font-mono">ID: {row.entityId}</span>
+              <span>&bull;</span>
+              {isReg ? (
+                <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/20">
+                  Regularization
+                </span>
+              ) : (
+                <span className="capitalize">{row.metadata.leaveType || row.definitionKey.replace(/_/g, ' ')}</span>
+              )}
+              <span>&bull;</span>
+              <span>{isReg ? `Date: ${row.metadata.date}` : `${row.metadata.totalDays} Day(s)`}</span>
+              {isReg && row.metadata.adjustedCheckIn && (
+                <span className="text-emerald-500 font-mono font-bold">
+                  ({row.metadata.adjustedCheckIn} - {row.metadata.adjustedCheckOut})
+                </span>
+              )}
+              {row.metadata.attachmentName && (
+                <span className="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 font-bold text-[10px]">
+                  <Paperclip className="h-3 w-3" />
+                  <span className="truncate max-w-[140px]">{row.metadata.attachmentName}</span>
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'requesterName',
@@ -343,18 +467,37 @@ function WorkflowsContent() {
     },
     {
       key: 'dates',
-      header: 'Leave Duration',
-      accessor: (row) => (
-        <div className="text-xs font-mono text-muted-foreground">
-          {row.metadata.startDate} &rarr; {row.metadata.endDate}
-        </div>
-      ),
+      header: 'Date / Duration',
+      accessor: (row) => {
+        const isReg = row.definitionKey === 'attendance_regularization';
+        if (isReg) {
+          return (
+            <div className="text-xs font-mono text-muted-foreground space-y-0.5">
+              <div className="font-bold text-foreground">{row.metadata.date}</div>
+              <div className="text-[10px] text-amber-500 font-semibold">1 Day Regularization</div>
+            </div>
+          );
+        }
+        return (
+          <div className="text-xs font-mono text-muted-foreground">
+            {row.metadata.startDate} &rarr; {row.metadata.endDate}
+          </div>
+        );
+      },
     },
     {
       key: 'attachment',
       header: 'Supporting Document',
-      accessor: (row) =>
-        row.metadata.attachmentName ? (
+      accessor: (row) => {
+        const isReg = row.definitionKey === 'attendance_regularization';
+        if (isReg) {
+          return (
+            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-[10px] font-bold border border-amber-500/20">
+              Shift Timesheet
+            </span>
+          );
+        }
+        return row.metadata.attachmentName ? (
           <button
             type="button"
             onClick={(e) => {
@@ -382,7 +525,8 @@ function WorkflowsContent() {
           </button>
         ) : (
           <span className="text-[11px] text-muted-foreground/60 italic">No Document</span>
-        ),
+        );
+      },
     },
     {
       key: 'currentState',
@@ -456,7 +600,7 @@ function WorkflowsContent() {
               Workflows &amp; Approvals Engine
             </h1>
             <p className="text-xs text-muted-foreground">
-              Team Leave Approvals &bull; Role-Based Scoping &bull; Mandatory Refusal Audit Trails
+              Team Leave &amp; Regularization Approvals &bull; Role-Based Scoping &bull; Mandatory Refusal Audit Trails
             </p>
           </div>
         </div>
@@ -609,7 +753,7 @@ function WorkflowsContent() {
               <div>
                 <h3 className="text-base font-bold text-foreground">Workflow Decisions &amp; Audit Logs</h3>
                 <p className="text-xs text-muted-foreground">
-                  Complete chronological history of submissions, supervisor approvals, and refusals with justification notes
+                  Complete chronological history of leave submissions, regularizations, supervisor approvals, and refusals
                 </p>
               </div>
             </div>
@@ -622,50 +766,60 @@ function WorkflowsContent() {
                 No workflow requests or decision history found.
               </div>
             ) : (
-              instances.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-4 rounded-2xl bg-surface/60 border border-border/70 hover:border-primary/40 transition flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-extrabold text-foreground">{item.metadata.requesterName}</span>
-                      <span className="font-mono text-muted-foreground text-[10px]">({item.metadata.employeeCode})</span>
-                      <span className="text-muted-foreground">&bull;</span>
-                      <span className="font-medium text-foreground">{item.metadata.leaveType}</span>
-                      <span className="text-muted-foreground">&bull;</span>
-                      <span className="font-mono text-muted-foreground">{item.metadata.totalDays} Day(s)</span>
-                    </div>
-                    <div className="text-muted-foreground text-[11px]">
-                      Duration: {item.metadata.startDate} &rarr; {item.metadata.endDate} &bull; Dept:{' '}
-                      {item.metadata.department}
-                    </div>
-                    {item.metadata.reason && (
-                      <div className="text-muted-foreground italic text-[11px]">
-                        Requester Reason: &ldquo;{item.metadata.reason}&rdquo;
+              instances.map((item) => {
+                const isReg = item.definitionKey === 'attendance_regularization';
+                return (
+                  <div
+                    key={item.id}
+                    className="p-4 rounded-2xl bg-surface/60 border border-border/70 hover:border-primary/40 transition flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-extrabold text-foreground">{item.metadata.requesterName}</span>
+                        <span className="font-mono text-muted-foreground text-[10px]">({item.metadata.employeeCode})</span>
+                        <span className="text-muted-foreground">&bull;</span>
+                        <span className="font-medium text-foreground">{item.metadata.leaveType}</span>
+                        <span className="text-muted-foreground">&bull;</span>
+                        <span className="font-mono text-muted-foreground">{isReg ? item.metadata.date : `${item.metadata.totalDays} Day(s)`}</span>
                       </div>
-                    )}
-                    {item.metadata.rejectionReason && (
-                      <div className="text-destructive font-bold text-[11px] bg-destructive/10 p-2 rounded-xl border border-destructive/20 mt-1">
-                        Mandatory Refusal Note: &ldquo;{item.metadata.rejectionReason}&rdquo;
+                      <div className="text-muted-foreground text-[11px]">
+                        {isReg ? (
+                          <span>
+                            Adjusted Punch: <strong className="text-emerald-500 font-mono">{item.metadata.adjustedCheckIn} - {item.metadata.adjustedCheckOut}</strong> (Schedule: {item.metadata.workingSchedule})
+                          </span>
+                        ) : (
+                          <span>
+                            Duration: {item.metadata.startDate} &rarr; {item.metadata.endDate} &bull; Dept: {item.metadata.department}
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
+                      {item.metadata.reason && (
+                        <div className="text-muted-foreground italic text-[11px]">
+                          Reason: &ldquo;{item.metadata.reason}&rdquo;
+                        </div>
+                      )}
+                      {item.metadata.rejectionReason && (
+                        <div className="text-destructive font-bold text-[11px] bg-destructive/10 p-2 rounded-xl border border-destructive/20 mt-1">
+                          Mandatory Refusal Note: &ldquo;{item.metadata.rejectionReason}&rdquo;
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="text-right flex-shrink-0 space-y-1">
-                    <div>{getStatusBadge(item.currentState)}</div>
-                    <div className="text-[10px] font-mono text-muted-foreground">
-                      {item.metadata.approvedBy ? `Reviewed By: ${item.metadata.approvedBy}` : 'Pending Supervisor Action'}
-                    </div>
-                    <div className="text-[9px] font-mono text-muted-foreground">
-                      {new Date(item.updatedAt).toLocaleString('en-US', {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })}
+                    <div className="text-right flex-shrink-0 space-y-1">
+                      <div>{getStatusBadge(item.currentState)}</div>
+                      <div className="text-[10px] font-mono text-muted-foreground">
+                        {item.metadata.approvedBy ? `Reviewed By: ${item.metadata.approvedBy}` : 'Pending Supervisor Action'}
+                      </div>
+                      <div className="text-[9px] font-mono text-muted-foreground">
+                        {new Date(item.updatedAt).toLocaleString('en-US', {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -739,76 +893,151 @@ function WorkflowsContent() {
                     {selectedInstance.metadata.department || "Founder's Office"}
                   </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Leave Dates:</span>
-                  <div className="font-bold text-foreground">
-                    {selectedInstance.metadata.startDate} &rarr; {selectedInstance.metadata.endDate}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Total Duration:</span>
-                  <div className="font-bold text-primary font-mono">
-                    {selectedInstance.metadata.totalDays} Day(s) ({selectedInstance.metadata.leaveType})
-                  </div>
-                </div>
-                {/* 2-Column Grid Row for Applicant Reason (Left) & Attached Document (Right) */}
-                <div>
-                  <span className="text-muted-foreground">Applicant Reason:</span>
-                  <div className="text-foreground mt-1 bg-card/70 p-2.5 rounded-xl border border-border italic text-[11px] min-h-[42px] flex items-center">
-                    &ldquo;{selectedInstance.metadata.reason || 'General leave application'}&rdquo;
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span>Attached Document / Evidence:</span>
-                    {selectedInstance.metadata.attachmentName && (
-                      <span className="text-[10px] text-emerald-500 font-bold flex items-center space-x-1">
-                        <Download className="h-3 w-3" />
-                        <span>Click to download</span>
-                      </span>
-                    )}
-                  </div>
-                  {selectedInstance.metadata.attachmentName ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        downloadAttachment(selectedInstance.metadata.attachmentName!, {
-                          requesterName: selectedInstance.metadata.requesterName,
-                          employeeCode: selectedInstance.metadata.employeeCode,
-                          department: selectedInstance.metadata.department,
-                          leaveType: selectedInstance.metadata.leaveType,
-                          startDate: selectedInstance.metadata.startDate,
-                          endDate: selectedInstance.metadata.endDate,
-                          reason: selectedInstance.metadata.reason,
-                          requestId: selectedInstance.id,
-                          attachmentUrl: (selectedInstance.metadata as any).attachmentUrl,
-                        })
-                      }
-                      className="w-full mt-1 flex items-center justify-between space-x-2 p-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500 text-emerald-600 dark:text-emerald-400 font-medium min-h-[42px] transition group cursor-pointer shadow-sm text-left"
-                      title={`Click to download "${selectedInstance.metadata.attachmentName}"`}
-                    >
-                      <div className="flex items-center space-x-2 truncate">
-                        <Paperclip className="h-4 w-4 text-emerald-500 shrink-0 group-hover:scale-110 transition" />
-                        <span className="font-bold truncate text-[11px] underline decoration-emerald-500/30 underline-offset-2">
-                          {selectedInstance.metadata.attachmentName}
-                        </span>
+
+                {selectedInstance.definitionKey === 'attendance_regularization' ? (
+                  // Attendance Regularization Details
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">Attendance Date:</span>
+                      <div className="font-bold text-foreground font-mono">
+                        {selectedInstance.metadata.date}
                       </div>
-                      <div className="flex items-center space-x-1.5 shrink-0 ml-2">
-                        <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-[9px] font-black uppercase tracking-wider">
-                          Attached
-                        </span>
-                        <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition">
-                          <Download className="h-3.5 w-3.5" />
-                        </div>
-                      </div>
-                    </button>
-                  ) : (
-                    <div className="mt-1 flex items-center space-x-2 p-2 rounded-xl bg-card/40 border border-border/60 text-muted-foreground text-[11px] min-h-[42px]">
-                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                      <span className="italic">No document attached</span>
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <span className="text-muted-foreground">Assigned Shift Schedule:</span>
+                      <div className="font-bold text-primary">
+                        {selectedInstance.metadata.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)'}
+                      </div>
+                    </div>
+
+                    {/* 2-Column Comparison Table for Regularization */}
+                    <div className="col-span-2 space-y-2 pt-2 border-t border-border">
+                      <span className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground block">
+                        Attendance Time Correction Table:
+                      </span>
+
+                      <div className="rounded-xl border border-border overflow-hidden bg-card/60">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-surface/80 border-b border-border text-[10px] font-bold uppercase text-muted-foreground">
+                              <th className="py-2.5 px-3">Field</th>
+                              <th className="py-2.5 px-3">Original Record</th>
+                              <th className="py-2.5 px-3 text-emerald-500">Proposed Adjusted Record</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/40 font-mono">
+                            <tr>
+                              <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Check In</td>
+                              <td className="py-2.5 px-3 text-rose-500 font-bold">{selectedInstance.metadata.originalCheckIn || '--:--'}</td>
+                              <td className="py-2.5 px-3 text-emerald-500 font-bold flex items-center space-x-1.5">
+                                <span>{selectedInstance.metadata.adjustedCheckIn}</span>
+                                <span className="text-[9px] font-sans font-black bg-emerald-500/10 text-emerald-500 px-1.5 py-0.2 rounded">On Time</span>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Check Out</td>
+                              <td className="py-2.5 px-3 text-muted-foreground">{selectedInstance.metadata.originalCheckOut || '--:--'}</td>
+                              <td className="py-2.5 px-3 text-emerald-500 font-bold">{selectedInstance.metadata.adjustedCheckOut}</td>
+                            </tr>
+                            <tr>
+                              <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Status</td>
+                              <td className="py-2.5 px-3">
+                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/15 text-amber-500 font-bold font-sans">
+                                  {selectedInstance.metadata.originalStatus || 'Late'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/15 text-emerald-500 font-bold font-sans">
+                                  Present (Regularized)
+                                </span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Regularization Reason &amp; Remarks:</span>
+                      <div className="text-foreground mt-1 bg-card/70 p-2.5 rounded-xl border border-border italic text-[11px]">
+                        &ldquo;{selectedInstance.metadata.reason}&rdquo;
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // Standard Leave Request Details
+                  <>
+                    <div>
+                      <span className="text-muted-foreground">Leave Dates:</span>
+                      <div className="font-bold text-foreground">
+                        {selectedInstance.metadata.startDate} &rarr; {selectedInstance.metadata.endDate}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total Duration:</span>
+                      <div className="font-bold text-primary font-mono">
+                        {selectedInstance.metadata.totalDays} Day(s) ({selectedInstance.metadata.leaveType})
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Applicant Reason:</span>
+                      <div className="text-foreground mt-1 bg-card/70 p-2.5 rounded-xl border border-border italic text-[11px] min-h-[42px] flex items-center">
+                        &ldquo;{selectedInstance.metadata.reason || 'General leave application'}&rdquo;
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between text-muted-foreground">
+                        <span>Attached Document / Evidence:</span>
+                        {selectedInstance.metadata.attachmentName && (
+                          <span className="text-[10px] text-emerald-500 font-bold flex items-center space-x-1">
+                            <Download className="h-3 w-3" />
+                            <span>Click to download</span>
+                          </span>
+                        )}
+                      </div>
+                      {selectedInstance.metadata.attachmentName ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            downloadAttachment(selectedInstance.metadata.attachmentName!, {
+                              requesterName: selectedInstance.metadata.requesterName,
+                              employeeCode: selectedInstance.metadata.employeeCode,
+                              department: selectedInstance.metadata.department,
+                              leaveType: selectedInstance.metadata.leaveType,
+                              startDate: selectedInstance.metadata.startDate,
+                              endDate: selectedInstance.metadata.endDate,
+                              reason: selectedInstance.metadata.reason,
+                              requestId: selectedInstance.id,
+                              attachmentUrl: (selectedInstance.metadata as any).attachmentUrl,
+                            })
+                          }
+                          className="w-full mt-1 flex items-center justify-between space-x-2 p-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500 text-emerald-600 dark:text-emerald-400 font-medium min-h-[42px] transition group cursor-pointer shadow-sm text-left"
+                          title={`Click to download "${selectedInstance.metadata.attachmentName}"`}
+                        >
+                          <div className="flex items-center space-x-2 truncate">
+                            <Paperclip className="h-4 w-4 text-emerald-500 shrink-0 group-hover:scale-110 transition" />
+                            <span className="font-bold truncate text-[11px] underline decoration-emerald-500/30 underline-offset-2">
+                              {selectedInstance.metadata.attachmentName}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1.5 shrink-0 ml-2">
+                            <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-[9px] font-black uppercase tracking-wider">
+                              Attached
+                            </span>
+                            <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition">
+                              <Download className="h-3.5 w-3.5" />
+                            </div>
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="mt-1 flex items-center space-x-2 p-2 rounded-xl bg-card/40 border border-border/60 text-muted-foreground text-[11px] min-h-[42px]">
+                          <Paperclip className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                          <span className="italic">No document attached</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
 
                 {selectedInstance.metadata.rejectionReason && (
                   <div className="col-span-2 bg-destructive/10 p-3 rounded-xl border border-destructive/20 text-destructive">
@@ -863,8 +1092,9 @@ function WorkflowsContent() {
                   </h4>
 
                   <p className="text-muted-foreground text-xs">
-                    Approving will immediately grant the leave and update attendance logs. Refusing requires a mandatory
-                    justification note sent back to the employee.
+                    {selectedInstance.definitionKey === 'attendance_regularization'
+                      ? 'Approving will immediately adjust the employee attendance record across all logs, reports, and monthly summary metrics. Refusing requires a mandatory refusal note.'
+                      : 'Approving will immediately grant the leave and update attendance logs. Refusing requires a mandatory justification note sent back to the employee.'}
                   </p>
 
                   <div className="flex items-center justify-end space-x-2 pt-2">
@@ -877,7 +1107,7 @@ function WorkflowsContent() {
                       className="px-4 py-2.5 rounded-xl bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive hover:text-white text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
                     >
                       <Ban className="h-3.5 w-3.5" />
-                      <span>Refuse Leave</span>
+                      <span>Refuse Request</span>
                     </button>
 
                     <button
@@ -906,7 +1136,9 @@ function WorkflowsContent() {
                   <Ban className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-foreground">Refuse Leave Request</h3>
+                  <h3 className="text-base font-bold text-foreground">
+                    Refuse {refusalModalInstance.definitionKey === 'attendance_regularization' ? 'Regularization' : 'Leave'} Request
+                  </h3>
                   <p className="text-xs text-muted-foreground">
                     Mandatory refusal note required for employee decision notification
                   </p>
@@ -926,8 +1158,9 @@ function WorkflowsContent() {
                 {refusalModalInstance.metadata.requesterName} ({refusalModalInstance.metadata.employeeCode})
               </div>
               <div className="text-muted-foreground">
-                {refusalModalInstance.metadata.leaveType} &bull; {refusalModalInstance.metadata.totalDays} Days (
-                {refusalModalInstance.metadata.startDate} to {refusalModalInstance.metadata.endDate})
+                {refusalModalInstance.definitionKey === 'attendance_regularization'
+                  ? `Attendance Regularization for ${refusalModalInstance.metadata.date} (Adjusted: ${refusalModalInstance.metadata.adjustedCheckIn} - ${refusalModalInstance.metadata.adjustedCheckOut})`
+                  : `${refusalModalInstance.metadata.leaveType} • ${refusalModalInstance.metadata.totalDays} Days (${refusalModalInstance.metadata.startDate} to ${refusalModalInstance.metadata.endDate})`}
               </div>
             </div>
 
@@ -939,7 +1172,7 @@ function WorkflowsContent() {
                 rows={3}
                 value={refusalNote}
                 onChange={(e) => setRefusalNote(e.target.value)}
-                placeholder="Explain the reason for refusing this leave application (this will be sent to the employee via email)..."
+                placeholder="Explain the reason for refusing this request (this will be sent to the employee via email and notification)..."
                 className="w-full p-3 rounded-2xl bg-surface border border-destructive/30 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-destructive shadow-sm placeholder:text-muted-foreground/60"
               />
             </div>
@@ -958,7 +1191,7 @@ function WorkflowsContent() {
                 disabled={!refusalNote.trim() || isSubmitting}
                 className="px-5 py-2.5 rounded-xl bg-destructive text-white text-xs font-black uppercase tracking-wider hover:bg-destructive/90 transition shadow-lg disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
-                Confirm &amp; Refuse Leave
+                Confirm &amp; Refuse Request
               </button>
             </div>
           </div>

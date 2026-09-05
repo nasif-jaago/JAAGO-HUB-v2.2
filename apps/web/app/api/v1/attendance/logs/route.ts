@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@jaago/auth';
+import { getServerRegularizations } from '@/lib/server-regularization';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,7 @@ export async function GET(request: Request) {
       if (g.id && !locMap.has(g.id)) locMap.set(g.id, g.name || g.branch_office || 'Designated Office');
     });
 
-    const enriched = (rawRecords || []).map((r) => {
+    let enriched = (rawRecords || []).map((r) => {
       const emp = empMap.get(r.employee_id);
       const inFormatted = r.check_in_at
         ? new Date(r.check_in_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -199,6 +200,93 @@ export async function GET(request: Request) {
           existingKeys.add(matchKey);
         }
       }
+    }
+
+    // Merge approved regularizations to ensure attendance logs are immediately updated to Present and adjusted times
+    try {
+      const serverRegs = await getServerRegularizations();
+      serverRegs.forEach((reg) => {
+        if (reg.status !== 'Approved') return;
+        const regCode = (reg.employeeCode || '').trim().toLowerCase();
+        const regName = (reg.employeeName || '').trim().toLowerCase();
+        const regDate = reg.date;
+
+        // Find ALL matching logs for this employee on this date
+        const matchingIndices: number[] = [];
+        enriched.forEach((l, idx) => {
+          const isIdMatch = reg.attendanceLogId && l.id === reg.attendanceLogId;
+          const isDateAndEmpMatch =
+            l.date === regDate &&
+            (
+              (regCode && (l.employeeCode || '').trim().toLowerCase() === regCode) ||
+              (regName && (l.employeeName || '').trim().toLowerCase() === regName) ||
+              (reg.employeeId && l.employeeId === reg.employeeId)
+            );
+          if (isIdMatch || isDateAndEmpMatch) {
+            matchingIndices.push(idx);
+          }
+        });
+
+        if (matchingIndices.length > 0) {
+          const primaryIdx = matchingIndices[0]!;
+          const targetLog = enriched[primaryIdx]!;
+
+          targetLog.checkInTime = reg.adjustedCheckIn || '10:00 AM';
+          targetLog.checkOutTime = reg.adjustedCheckOut || '06:00 PM';
+          targetLog.status = 'Present';
+          targetLog.lateByMin = 0;
+          targetLog.earlyOutByMin = 0;
+          targetLog.isAutoCheckout = false;
+          targetLog.workedMinutes = 480;
+          targetLog.notes = `Regularized (Approved by ${reg.approvedBy || 'Supervisor'}): ${reg.reason}`;
+          targetLog.updatedAt = reg.approvedAt || reg.updatedAt || new Date().toISOString();
+
+          // Remove any leftover duplicate punches on that date
+          if (matchingIndices.length > 1) {
+            const extraIndices = new Set(matchingIndices.slice(1));
+            enriched = enriched.filter((_, i) => !extraIndices.has(i));
+          }
+        } else {
+          // Check if it matches filters before adding
+          if (date && regDate !== date) return;
+          if (startDate && endDate && (regDate < startDate || regDate > endDate)) return;
+          if (month && !regDate.startsWith(month)) return;
+          if (employeeId && reg.employeeId !== employeeId && regCode !== employeeId.toLowerCase()) return;
+
+          const emp = empMap.get(reg.employeeId) || empMap.get(reg.employeeCode);
+          enriched.push({
+            id: reg.attendanceLogId || `att-reg-${reg.employeeCode}-${regDate}`,
+            employeeId: reg.employeeId || emp?.id || `emp-${reg.employeeCode}`,
+            employeeCode: reg.employeeCode || emp?.code || 'EMP',
+            employeeName: reg.employeeName || emp?.name || 'Staff Member',
+            designation: reg.designation || emp?.designation || 'Staff',
+            department: reg.department || emp?.department || "Founder's Office",
+            branch: 'JAAGO HQ (Banani)',
+            avatarUrl: emp?.avatar_url || '',
+            status: 'Present',
+            device: 'Web Portal',
+            date: regDate,
+            checkInTime: reg.adjustedCheckIn || '10:00 AM',
+            checkOutTime: reg.adjustedCheckOut || '06:00 PM',
+            lateByMin: 0,
+            earlyOutByMin: 0,
+            locationName: 'JAAGO HQ (Banani)',
+            checkInLat: 23.7937,
+            checkInLng: 90.4066,
+            checkOutLat: 23.7937,
+            checkOutLng: 90.4066,
+            isAutoCheckout: false,
+            workedMinutes: 480,
+            createdBy: reg.approvedBy || 'Supervisor',
+            createdAt: reg.createdAt || new Date().toLocaleString(),
+            updatedAt: reg.approvedAt || new Date().toLocaleString(),
+            timestamp: `${regDate} ${reg.adjustedCheckIn || '10:00 AM'}`,
+            notes: `Regularized (Approved by ${reg.approvedBy || 'Supervisor'}): ${reg.reason}`,
+          });
+        }
+      });
+    } catch (regErr) {
+      console.warn('Error merging server regularizations in attendance logs API:', regErr);
     }
 
     enriched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

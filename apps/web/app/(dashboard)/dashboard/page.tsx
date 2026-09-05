@@ -112,6 +112,27 @@ export default function DashboardPage() {
         }));
       }
     };
+    // Refresh Monthly Attendance Summary Metrics dynamically from attendance logs
+    const refreshMonthlyMetrics = () => {
+      try {
+        const sess = getCurrentUserSession();
+        const codeOrId = (sess?.employeeCode || user.employeeCode || 'FO032507061190').trim();
+        const stats = getEmployeeMonthlyAttendanceStats(codeOrId, '2026-08');
+
+        setMonthlyMetrics({
+          presentDays: stats.presentDays,
+          targetDays: stats.targetDays,
+          lateDays: stats.lateDays,
+          autoCheckouts: stats.autoCheckouts,
+          onTimePerformancePct: stats.onTimePerformancePct,
+          latePenaltyPct: stats.latePenaltyPct,
+          autoCheckoutRatePct: stats.autoCheckoutRatePct,
+        });
+      } catch (err) {
+        console.warn('Error refreshing dashboard monthly metrics:', err);
+      }
+    };
+
     window.addEventListener('jaago_user_updated', handleUserUpdated);
 
     try {
@@ -260,15 +281,19 @@ export default function DashboardPage() {
           setPendingApprovalsCount(pending);
         } catch {}
       };
+
       refreshPendingApprovals();
       refreshLeaveBalance();
       refreshOnDutyPending();
+      refreshMonthlyMetrics();
 
       window.addEventListener('jaago_leave_request_updated', refreshPendingApprovals);
       window.addEventListener('jaago_leave_request_updated', () => refreshLeaveBalance());
       window.addEventListener('jaago_leave_allocation_updated', () => refreshLeaveBalance());
       window.addEventListener('jaago_employees_updated', () => refreshLeaveBalance());
       window.addEventListener('jaago_onduty_request_updated', refreshOnDutyPending);
+      window.addEventListener('jaago_attendance_updated', refreshMonthlyMetrics);
+      window.addEventListener('jaago_attendance_regularization_updated', refreshMonthlyMetrics);
 
       // Daily Session & Rollover Hydration
       const todayStr = new Date().toISOString().slice(0, 10);
@@ -376,6 +401,7 @@ export default function DashboardPage() {
           });
         }
       });
+      refreshMonthlyMetrics();
     };
     window.addEventListener('focus', handleStorageRefresh);
     window.addEventListener('storage', handleStorageRefresh);
@@ -384,6 +410,8 @@ export default function DashboardPage() {
       window.removeEventListener('jaago_view_mode_change', handleViewModeChange);
       window.removeEventListener('jaago_user_updated', handleUserUpdated);
       window.removeEventListener('jaago_public_holidays_updated', handleHolidaysUpdate);
+      window.removeEventListener('jaago_attendance_updated', refreshMonthlyMetrics);
+      window.removeEventListener('jaago_attendance_regularization_updated', refreshMonthlyMetrics);
       window.removeEventListener('focus', handleStorageRefresh);
       window.removeEventListener('storage', handleStorageRefresh);
     };

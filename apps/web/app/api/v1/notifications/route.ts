@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabase } from '@/lib/supabase-auth';
+import { getServerRegularizations } from '@/lib/server-regularization';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -113,8 +114,75 @@ export async function GET(request: NextRequest) {
           }
         }
       }
-    } catch (dbErr) {
-      console.warn('Notifications route Supabase sync error:', dbErr);
+    } catch (leaveErr) {
+      console.warn('Notifications route Leave sync error:', leaveErr);
+    }
+
+    // 1.5 Synthesize real-time notifications from Attendance Regularizations
+    try {
+      const regRows = await getServerRegularizations();
+      if (Array.isArray(regRows)) {
+        for (const reg of regRows) {
+          const reqCode = (reg.employeeCode || '').toLowerCase().trim();
+          const reqName = (reg.employeeName || '').toLowerCase().trim();
+          const supName = (reg.supervisorName || '').toLowerCase().trim();
+          const supEmail = (reg.supervisorEmail || '').toLowerCase().trim();
+
+          const isSelfRequest = Boolean(
+            (userCode && reqCode === userCode) ||
+            (userName && reqName && (reqName === userName || reqName.includes(userName) || userName.includes(reqName)))
+          );
+
+          const isSupervisorOrAdmin =
+            isSuperAdmin ||
+            (userName && (supName.includes(userName) || userName.includes(supName))) ||
+            (userEmail && supEmail === userEmail);
+
+          // A. Pending Regularization for Supervisor / Super Admin (EXCLUDING self-requests!)
+          if (reg.status === 'Pending' && !isSelfRequest && isSupervisorOrAdmin) {
+            const notifId = `notif-reg-pending-${reg.id}`;
+            const isRead = readNotificationIds.has(notifId);
+
+            dynamicNotifs.push({
+              id: notifId,
+              title: `Regularization Required: ${reg.employeeName} (${reg.date})`,
+              message: `${reg.employeeName} (${reg.employeeCode}) requested attendance correction for ${reg.date} (${reg.adjustedCheckIn} - ${reg.adjustedCheckOut}). Reason: "${reg.reason}"`,
+              category: 'approvals',
+              channel: 'in_app',
+              isRead,
+              actionUrl: `/workflows?requestId=${encodeURIComponent(reg.id)}`,
+              createdAt: reg.appliedAt || reg.createdAt || new Date().toISOString(),
+              targetSupervisorName: reg.supervisorName || userName || 'Supervisor',
+              targetEmployeeCode: userCode,
+              relatedEntity: { type: 'attendance_regularization', id: reg.id },
+            });
+          }
+
+          // B. Decision Status Notifications for Requester & Super Admin
+          if ((isSelfRequest || isSuperAdmin) && (reg.status === 'Approved' || reg.status === 'Refused' || reg.status === 'Rejected')) {
+            const isApproved = reg.status === 'Approved';
+            const notifId = `notif-reg-decision-${reg.id}-${reg.status}`;
+            const isRead = readNotificationIds.has(notifId);
+
+            dynamicNotifs.push({
+              id: notifId,
+              title: `Regularization ${isApproved ? 'Approved' : 'Refused'}: ${reg.employeeName} (${reg.date})`,
+              message: isApproved
+                ? `Attendance regularization for ${reg.employeeName} on ${reg.date} (${reg.adjustedCheckIn} - ${reg.adjustedCheckOut}) has been approved by ${reg.approvedBy || 'Supervisor'}.`
+                : `Attendance regularization for ${reg.employeeName} on ${reg.date} was refused by ${reg.approvedBy || 'Supervisor'}.${reg.refusalNote ? ` Note: "${reg.refusalNote}"` : ''}`,
+              category: 'time_off',
+              channel: 'in_app',
+              isRead,
+              actionUrl: `/attendance`,
+              createdAt: reg.approvedAt || reg.updatedAt || reg.appliedAt || new Date().toISOString(),
+              targetEmployeeCode: isSelfRequest ? userCode : reg.employeeCode,
+              relatedEntity: { type: 'attendance_regularization', id: reg.id },
+            });
+          }
+        }
+      }
+    } catch (regErr) {
+      console.warn('Notifications route Regularization sync error:', regErr);
     }
 
     // 2. Filter live manual notifications

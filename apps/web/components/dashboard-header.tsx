@@ -75,6 +75,8 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
 
     window.addEventListener('jaago_notifications_updated', handleNotifUpdate);
     window.addEventListener('jaago_leave_request_updated', handleNotifUpdate);
+    window.addEventListener('jaago_attendance_regularization_updated', handleNotifUpdate);
+    window.addEventListener('jaago_attendance_updated', handleNotifUpdate);
     window.addEventListener('storage', handleNotifUpdate);
 
     // Periodic live sync every 15 seconds
@@ -83,6 +85,8 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
     return () => {
       window.removeEventListener('jaago_notifications_updated', handleNotifUpdate);
       window.removeEventListener('jaago_leave_request_updated', handleNotifUpdate);
+      window.removeEventListener('jaago_attendance_regularization_updated', handleNotifUpdate);
+      window.removeEventListener('jaago_attendance_updated', handleNotifUpdate);
       window.removeEventListener('storage', handleNotifUpdate);
       clearInterval(interval);
     };

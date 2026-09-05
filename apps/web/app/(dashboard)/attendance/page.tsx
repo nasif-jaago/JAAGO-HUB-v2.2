@@ -3,21 +3,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Clock,
-  Flag,
   Calendar,
   Radio,
-  Zap,
   CheckCircle2,
+  XCircle,
   MapPin,
   Search,
   Trash2,
   Pencil,
   X,
-  ChevronLeft,
-  ChevronRight,
-  AlertTriangle,
   Globe,
-  ShieldCheck,
+  Send,
 } from 'lucide-react';
 import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
 import {
@@ -25,16 +21,13 @@ import {
   getLocalAttendanceLogs,
   recordLocalAttendanceLog,
   fetchAttendanceLogsFromSupabase,
-  getEmployeeAttendanceLogs,
   calculateWorkingHoursString,
   deleteLocalAttendanceLog,
   deleteMultipleLocalAttendanceLogs,
 } from '@/lib/supabase-attendance';
 import {
   GPSLocationItem,
-  getLocalGPSLocations,
   fetchGPSLocationsFromSupabase,
-  evaluateGpsMatch,
 } from '@/lib/supabase-gps';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
 import {
@@ -42,6 +35,13 @@ import {
   getLocalOnDutyRequests,
   fetchOnDutyRequestsFromSupabase,
 } from '@/lib/supabase-onduty';
+import {
+  AttendanceRegularizationItem,
+  getLocalRegularizations,
+  saveLocalRegularizations,
+  submitAttendanceRegularization,
+  calculateShiftStandardTimes,
+} from '@/lib/supabase-regularization';
 
 export default function AttendancePage() {
   const [, setMounted] = useState(false);
@@ -59,62 +59,25 @@ export default function AttendancePage() {
 
   // Punch session state
   const [isCheckedIn, setIsCheckedIn] = useState(false);
-  const [checkInTime, setCheckInTime] = useState<string | null>(null);
-  const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [firstCheckInTimestamp, setFirstCheckInTimestamp] = useState<number | null>(null);
   const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
-  const [isPunching, setIsPunching] = useState(false);
 
   // GPS state
-  const [gpsLocations, setGpsLocations] = useState<GPSLocationItem[]>([]);
-  const [gpsTracker, setGpsTracker] = useState<{
-    status: 'idle' | 'checking' | 'inside' | 'outside' | 'error';
-    locationName: string | null;
-    distanceMeters: number | null;
-    allowedRadiusMeters: number;
-    latitude: number | null;
-    longitude: number | null;
-    accuracy: number | null;
-    errorMsg: string | null;
-  }>({
-    status: 'idle',
-    locationName: 'JAAGO HQ (Banani)',
-    distanceMeters: 0,
-    allowedRadiusMeters: 100,
-    latitude: 23.7937,
-    longitude: 90.4066,
-    accuracy: 10,
-    errorMsg: null,
-  });
+  const [, setGpsLocations] = useState<GPSLocationItem[]>([]);
 
-  // Geofence Blocking Alert Modal
-  const [geofenceAlert, setGeofenceAlert] = useState<{
-    isOpen: boolean;
-    action: 'CHECK_IN' | 'CHECK_OUT';
-    locationName: string;
-    distanceMeters: number;
-    allowedRadiusMeters: number;
-    latitude: number;
-    longitude: number;
-    errorMsg?: string;
-  } | null>(null);
-
-  // Selected Month for Summary and Logs filtering (Default current month)
-  const currentMonthStr = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
-
-  // Attendance Logs & Employees
+  // Attendance Logs & Employees & Regularizations
   const [allLogs, setAllLogs] = useState<AttendanceLogItem[]>([]);
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
   const [onDutyRequests, setOnDutyRequests] = useState<OnDutyRequestItem[]>([]);
+  const [regularizations, setRegularizations] = useState<AttendanceRegularizationItem[]>([]);
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'this-week' | 'this-month' | 'last-month'>('this-month');
+  const [datePreset, setDatePreset] = useState<'today' | 'this-week' | 'this-month' | 'last-month' | 'all'>('this-month');
   const [viewGrouping, setViewGrouping] = useState<'flat' | 'month-grouped' | 'cards'>('flat');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -137,6 +100,17 @@ export default function AttendancePage() {
     ids: [],
     names: '',
   });
+
+  // Regularization Modal State
+  const [regModal, setRegModal] = useState<{
+    isOpen: boolean;
+    log: AttendanceLogItem | null;
+    adjustedCheckIn: string;
+    adjustedCheckOut: string;
+    reason: string;
+    notes: string;
+    isSubmitting: boolean;
+  } | null>(null);
 
   // Log Form State
   const [formData, setFormData] = useState<{
@@ -287,13 +261,32 @@ export default function AttendancePage() {
       if (data && data.length > 0) setOnDutyRequests(data);
     });
 
+    // Load regularizations and sync from live server API
+    const syncLiveRegularizations = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
+        const res = await fetch('/api/v1/attendance/regularization', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          saveLocalRegularizations(json.data);
+          setRegularizations(json.data);
+          setAllLogs(getLocalAttendanceLogs());
+        }
+      } catch {}
+    };
+
+    setRegularizations(getLocalRegularizations());
+    syncLiveRegularizations();
+
     // Initial logs load
     const localLogs = getLocalAttendanceLogs();
     setAllLogs(localLogs);
 
     fetchAttendanceLogsFromSupabase().then((supaLogs) => {
       if (supaLogs && supaLogs.length > 0) {
-        setAllLogs(supaLogs);
+        setAllLogs(getLocalAttendanceLogs());
       }
     });
 
@@ -303,6 +296,8 @@ export default function AttendancePage() {
     // Event listeners
     const handleAttUpdated = () => {
       setAllLogs(getLocalAttendanceLogs());
+      setRegularizations(getLocalRegularizations());
+      syncLiveRegularizations();
       refreshTodaySession();
     };
 
@@ -314,7 +309,14 @@ export default function AttendancePage() {
       setOnDutyRequests(getLocalOnDutyRequests());
     };
 
+    const handleRegUpdated = () => {
+      setRegularizations(getLocalRegularizations());
+      setAllLogs(getLocalAttendanceLogs());
+      syncLiveRegularizations();
+    };
+
     window.addEventListener('jaago_attendance_updated', handleAttUpdated);
+    window.addEventListener('jaago_attendance_regularization_updated', handleRegUpdated);
     window.addEventListener('jaago_leave_request_updated', handleAttUpdated);
     window.addEventListener('jaago_leave_allocation_updated', handleAttUpdated);
     window.addEventListener('jaago_user_updated', handleUserUpdated);
@@ -322,14 +324,19 @@ export default function AttendancePage() {
     window.addEventListener('storage', handleAttUpdated);
     window.addEventListener('storage', handleUserUpdated);
 
+    // Live background polling for regularizations every 8 seconds
+    const regInterval = setInterval(syncLiveRegularizations, 8000);
+
     return () => {
       window.removeEventListener('jaago_attendance_updated', handleAttUpdated);
+      window.removeEventListener('jaago_attendance_regularization_updated', handleRegUpdated);
       window.removeEventListener('jaago_leave_request_updated', handleAttUpdated);
       window.removeEventListener('jaago_leave_allocation_updated', handleAttUpdated);
       window.removeEventListener('jaago_user_updated', handleUserUpdated);
       window.removeEventListener('jaago_onduty_updated', handleODUpdated);
       window.removeEventListener('storage', handleAttUpdated);
       window.removeEventListener('storage', handleUserUpdated);
+      clearInterval(regInterval);
     };
   }, []);
 
@@ -359,7 +366,7 @@ export default function AttendancePage() {
       const res = await fetch(`/api/v1/attendance/me/today?employeeId=${encodeURIComponent(empCodeOrId)}`);
       const json = await res.json();
       if (json.success && json.data) {
-        const { state, first_check_in_at, last_check_out_at, worked_seconds, server_now } = json.data;
+        const { state, first_check_in_at, worked_seconds, server_now } = json.data;
         const checkedIn = state === 'CHECKED_IN';
         setIsCheckedIn(checkedIn);
 
@@ -372,12 +379,6 @@ export default function AttendancePage() {
         if (first_check_in_at) {
           const inTs = new Date(first_check_in_at).getTime();
           setFirstCheckInTimestamp(inTs);
-          const inTime = new Date(first_check_in_at).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          });
-          setCheckInTime(inTime);
 
           if (checkedIn) {
             const nowServer = Date.now() + offset;
@@ -387,19 +388,7 @@ export default function AttendancePage() {
           }
         } else {
           setFirstCheckInTimestamp(null);
-          setCheckInTime('--:--');
           setElapsedSeconds(worked_seconds || 0);
-        }
-
-        if (last_check_out_at) {
-          const outTime = new Date(last_check_out_at).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          });
-          setCheckOutTime(outTime);
-        } else {
-          setCheckOutTime('--:--');
         }
       }
     } catch {
@@ -422,351 +411,165 @@ export default function AttendancePage() {
     ].join(':');
   };
 
-  // GPS Coordinates Acquisition
-  const getCoordinates = (): Promise<{ latitude: number; longitude: number; accuracy: number }> => {
-    return new Promise((resolve) => {
-      if (typeof navigator !== 'undefined' && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            resolve({
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-              accuracy: pos.coords.accuracy || 10,
-            });
-          },
-          async () => {
-            try {
-              const res = await fetch('/api/v1/attendance/geofence/ip-locate');
-              const json = await res.json();
-              if (json.success && json.data) {
-                resolve({
-                  latitude: json.data.latitude,
-                  longitude: json.data.longitude,
-                  accuracy: json.data.accuracy || 50,
-                });
-                return;
-              }
-            } catch {}
-            resolve({ latitude: 23.7937, longitude: 90.4066, accuracy: 10 });
-          },
-          { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
-        );
-      } else {
-        resolve({ latitude: 23.7937, longitude: 90.4066, accuracy: 10 });
+
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // ── REGULARIZATION HELPERS ───────────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════════════
+
+  const isRowEligibleForRegularization = (log: AttendanceLogItem): boolean => {
+    if (!log) return false;
+
+    const statusLower = (log.status || '').toLowerCase().trim();
+    const locLower = (log.locationName || '').toLowerCase().trim();
+    const notesLower = (log.notes || '').toLowerCase().trim();
+
+    // 0. If already approved, definitely not eligible to apply again!
+    const existing = getExistingRegularization(log);
+    if (existing?.status === 'Approved') return false;
+
+    // 1. Strict Exclusions: Leave, On Leave, Holiday, Weekend
+    if (
+      statusLower === 'leave' ||
+      statusLower === 'on leave' ||
+      statusLower === 'holiday' ||
+      statusLower === 'weekend' ||
+      locLower === 'on leave' ||
+      notesLower.includes('approved leave') ||
+      notesLower.includes('leave request') ||
+      notesLower.includes('on leave')
+    ) {
+      return false;
+    }
+
+    // 2. Eligible statuses that require correction
+    if (log.status === 'Late' || log.status === 'Absent' || log.status === 'Auto Check Out') return true;
+    if (log.isAutoCheckout) return true;
+    if (log.lateByMin !== undefined && log.lateByMin > 0) return true;
+
+    // 3. Unresolved punches (only if NOT on leave, NOT present/normal)
+    if (log.status !== 'Present' && (!log.checkOutTime || log.checkOutTime === '--:--' || log.checkOutTime === 'N/A')) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const getExistingRegularization = (log: AttendanceLogItem): AttendanceRegularizationItem | undefined => {
+    const logId = (log.id || '').trim();
+    const logDate = (log.date || '').trim();
+    const logCode = (log.employeeCode || '').trim().toLowerCase();
+    const logName = (log.employeeName || '').trim().toLowerCase();
+    const logEmpId = (log.employeeId || '').trim().toLowerCase();
+
+    return regularizations.find((r) => {
+      // Direct ID match
+      if (logId && r.attendanceLogId && r.attendanceLogId === logId) return true;
+      if (logId && r.id === logId) return true;
+
+      // Match by date + employee
+      if (r.date === logDate) {
+        const rCode = (r.employeeCode || '').trim().toLowerCase();
+        const rName = (r.employeeName || '').trim().toLowerCase();
+        const rEmpId = (r.employeeId || '').trim().toLowerCase();
+        if (logCode && rCode && logCode === rCode) return true;
+        if (logName && rName && logName === rName) return true;
+        if (logEmpId && rEmpId && logEmpId === rEmpId) return true;
       }
+
+      return false;
     });
   };
 
-  // Check live geofence status
-  const checkLiveGeofence = async () => {
-    try {
-      setGpsTracker((prev) => ({ ...prev, status: 'checking' }));
-      const coords = await getCoordinates();
-      const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
-      const match = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
-
-      setGpsTracker({
-        status: match.isInside ? 'inside' : 'outside',
-        locationName: match.matchedLocation?.name || match.closestLocation?.name || 'JAAGO HQ (Banani)',
-        distanceMeters: match.distanceMeters,
-        allowedRadiusMeters: match.allowedRadiusMeters,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy,
-        errorMsg: match.isInside ? null : 'Outside designated GPS geofence perimeter',
-      });
-    } catch (err: any) {
-      setGpsTracker((prev) => ({
-        ...prev,
-        status: 'error',
-        errorMsg: err.message || 'GPS location acquisition failed',
-      }));
-    }
+  const handleOpenRegularizationModal = (log: AttendanceLogItem) => {
+    const standard = calculateShiftStandardTimes(user.workingSchedule);
+    setRegModal({
+      isOpen: true,
+      log,
+      adjustedCheckIn: standard.checkIn,
+      adjustedCheckOut: standard.checkOut,
+      reason: 'Late Entry Due to Official Field Work / Traffic',
+      notes: '',
+      isSubmitting: false,
+    });
   };
 
-  useEffect(() => {
-    checkLiveGeofence();
-  }, [gpsLocations]);
+  const handleSubmitRegularization = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regModal || !regModal.log) return;
 
-  // Check-In Action
-  const handleCheckInAction = async () => {
-    if (isPunching) return;
-    setIsPunching(true);
-
+    setRegModal((prev) => (prev ? { ...prev, isSubmitting: true } : null));
     try {
-      const coords = await getCoordinates();
+      const log = regModal.log;
+      // Extract employee details from the log record first
+      const reqEmpCode = log.employeeCode || user.employeeCode || 'FO072408021002';
+      const reqEmpName = log.employeeName || user.fullName || 'S M Nayeem Rahman';
+      const reqEmpId = log.employeeId || user.id || 'emp-nayeem';
+      const reqDept = log.department || user.department || "Founder's Office (JF)";
+      const reqDesig = log.designation || user.jobTitle || 'Team Lead';
 
-      const res = await fetch('/api/v1/attendance/check-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          employeeId: user.employeeCode || user.id || '71a38594-d803-4e6d-b6e9-79767a16c4c6',
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          deviceInfo: 'Web Portal',
-        }),
-      });
-      const json = await res.json();
+      // Determine Supervisor dynamically for ALL users across the organization:
+      const matchedEmp = employees.find(
+        (e) =>
+          (reqEmpCode && e.code?.toLowerCase() === reqEmpCode.toLowerCase()) ||
+          (reqEmpId && e.id === reqEmpId) ||
+          (reqEmpName && e.name?.toLowerCase() === reqEmpName.toLowerCase())
+      );
 
-      if (!res.ok || !json.success) {
-        const errorMsg = json.error || 'Attendance check-in blocked.';
-        const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
-        const localMatch = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
+      const isNasif =
+        reqEmpCode.toUpperCase() === 'FO032507061190' ||
+        reqEmpName.toLowerCase().includes('nasif');
 
-        const distanceMeters = json.distance_m ?? localMatch.distanceMeters;
-        const allowedRadiusMeters = json.allowed_radius_m ?? localMatch.allowedRadiusMeters;
-        const targetSite = json.nearest_site || localMatch.matchedLocation?.name || localMatch.closestLocation?.name || 'Designated Office';
+      let supervisorName = isNasif
+        ? 'Korvi Rakshand (Founder & ED)'
+        : (matchedEmp?.supervisor || user.manager || 'Nasif Kamal');
+      let supervisorEmail = isNasif
+        ? 'korvi@jaago.com.bd'
+        : 'nasif.kamal@jaago.com.bd';
 
-        setGpsTracker({
-          status: 'outside',
-          locationName: targetSite,
-          distanceMeters,
-          allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          errorMsg,
-        });
-
-        setGeofenceAlert({
-          isOpen: true,
-          action: 'CHECK_IN',
-          locationName: targetSite,
-          distanceMeters,
-          allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          errorMsg,
-        });
-
-        showToast(errorMsg, 'error');
-        return;
-      }
-
-      // Success
-      const now = new Date();
-      const record = json.data;
-      const matchedSite = json.message?.includes('at ')
-        ? json.message.split('at ')[1]?.split(' (')[0] || 'JAAGO HQ (Banani)'
-        : 'JAAGO HQ (Banani)';
-
-      const firstIn = record?.first_check_in_at || record?.check_in_at || now.toISOString();
-      const inTs = new Date(firstIn).getTime();
-      setFirstCheckInTimestamp(inTs);
-      setIsCheckedIn(true);
-      setCheckInTime(new Date(firstIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
-
-      const currentServerNow = Date.now() + serverTimeOffset;
-      setElapsedSeconds(Math.max(0, Math.floor((currentServerNow - inTs) / 1000)));
-
-      setGpsTracker({
-        status: 'inside',
-        locationName: matchedSite,
-        distanceMeters: 0,
-        allowedRadiusMeters: 100,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy,
-        errorMsg: null,
-      });
-
-      // Update local logs
-      recordLocalAttendanceLog({
-        employeeId: user.id,
-        employeeCode: user.employeeCode || 'FO032507061190',
-        employeeName: user.fullName || 'Nasif Kamal',
-        designation: user.jobTitle,
-        department: user.department,
-        branch: matchedSite,
-        date: new Date().toISOString().slice(0, 10),
-        checkInTime: new Date(firstIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-        status: json.derived?.isLate ? 'Late' : 'Present',
-        device: 'Web Portal',
-        locationName: matchedSite,
-        checkInLat: coords.latitude,
-        checkInLng: coords.longitude,
-        notes: 'GPS Geofence Verified',
-      });
-
-      setAllLogs(getLocalAttendanceLogs());
-      showToast(json.message || `Checked in successfully at ${matchedSite}!`, 'success');
-      await refreshTodaySession();
-    } catch {
-      showToast('Check-in failed. Please verify GPS permissions.', 'error');
-    } finally {
-      setIsPunching(false);
-    }
-  };
-
-  // Check-Out Action
-  const handleCheckOutAction = async () => {
-    if (isPunching) return;
-    setIsPunching(true);
-
-    try {
-      const coords = await getCoordinates();
-
-      const res = await fetch('/api/v1/attendance/check-out', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          employeeId: user.employeeCode || user.id || '71a38594-d803-4e6d-b6e9-79767a16c4c6',
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          deviceInfo: 'Web Portal',
-        }),
-      });
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        const errorMsg = json.error || 'Attendance check-out blocked.';
-        const currentLocs = gpsLocations.length > 0 ? gpsLocations : getLocalGPSLocations();
-        const localMatch = evaluateGpsMatch(coords.latitude, coords.longitude, currentLocs);
-
-        const distanceMeters = json.distance_m ?? localMatch.distanceMeters;
-        const allowedRadiusMeters = json.allowed_radius_m ?? localMatch.allowedRadiusMeters;
-        const targetSite = json.nearest_site || localMatch.matchedLocation?.name || 'Designated Office';
-
-        setGpsTracker({
-          status: 'outside',
-          locationName: targetSite,
-          distanceMeters,
-          allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          errorMsg,
-        });
-
-        setGeofenceAlert({
-          isOpen: true,
-          action: 'CHECK_OUT',
-          locationName: targetSite,
-          distanceMeters,
-          allowedRadiusMeters,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          errorMsg,
-        });
-
-        showToast(errorMsg, 'error');
-        return;
-      }
-
-      // Success
-      const now = new Date();
-      const record = json.data;
-
-      setIsCheckedIn(false);
-      setFirstCheckInTimestamp(null);
-      const outFormatted = record?.last_check_out_at
-        ? new Date(record.last_check_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-      setCheckOutTime(outFormatted);
-
-      if (record?.worked_seconds !== undefined) {
-        setElapsedSeconds(record.worked_seconds);
-      }
-
-      // Update local logs
-      recordLocalAttendanceLog({
-        employeeId: user.id,
-        employeeCode: user.employeeCode || 'FO032507061190',
-        employeeName: user.fullName || 'Nasif Kamal',
-        designation: user.jobTitle,
-        department: user.department,
-        branch: gpsTracker.locationName || 'JAAGO HQ (Banani)',
-        date: new Date().toISOString().slice(0, 10),
-        checkInTime: checkInTime || '09:00 AM',
-        checkOutTime: outFormatted,
-        status: 'Present',
-        device: 'Web Portal',
-        locationName: gpsTracker.locationName || 'JAAGO HQ (Banani)',
-        checkOutLat: coords.latitude,
-        checkOutLng: coords.longitude,
-        notes: 'GPS Geofence Verified',
-      });
-
-      setAllLogs(getLocalAttendanceLogs());
-      showToast(json.message || `Checked out successfully! Total working time: ${json.derived?.workedDisplay || '0h 00m'}.`, 'success');
-      await refreshTodaySession();
-    } catch {
-      showToast('Check-out failed. Please try again.', 'error');
-    } finally {
-      setIsPunching(false);
-    }
-  };
-
-  // ═════════════════════════════════════════════════════════════════════════
-  // ── MONTHLY ATTENDANCE SUMMARY CALCULATION (Connected to Logs) ───────────
-  // ═════════════════════════════════════════════════════════════════════════
-
-  const monthlySummary = useMemo(() => {
-    const userLogs = getEmployeeAttendanceLogs(user.employeeCode || user.id);
-    const monthLogs = userLogs.filter((l) => l.date && l.date.startsWith(selectedMonth));
-
-    const presentDays = monthLogs.filter((l) => l.status === 'Present' || l.status === 'Late' || l.status === 'Auto Check Out').length;
-    const lateDays = monthLogs.filter((l) => l.status === 'Late' || (l.lateByMin !== undefined && l.lateByMin > 0)).length;
-    const autoCheckouts = monthLogs.filter((l) => l.status === 'Auto Check Out' || l.isAutoCheckout).length;
-    const absentDays = monthLogs.filter((l) => l.status === 'Absent').length;
-    const targetDays = 22;
-
-    const effectivePresent = presentDays > 0 ? presentDays : (selectedMonth === '2026-08' ? 14 : 0);
-    const effectiveLate = presentDays > 0 ? lateDays : (selectedMonth === '2026-08' ? 6 : 0);
-    const effectiveAuto = presentDays > 0 ? autoCheckouts : (selectedMonth === '2026-08' ? 8 : 0);
-    const effectiveAbsent = absentDays > 0 ? absentDays : (selectedMonth === '2026-08' ? 1 : 0);
-
-    const onTimeDays = Math.max(0, effectivePresent - effectiveLate);
-    const onTimePerformancePct = effectivePresent > 0 ? Math.round((onTimeDays / effectivePresent) * 1000) / 10 : (selectedMonth === '2026-08' ? 57.1 : 100);
-    const latePenaltyPct = effectivePresent > 0 ? Math.round((effectiveLate / effectivePresent) * 1000) / 10 : (selectedMonth === '2026-08' ? 42.9 : 0);
-    const autoCheckoutRatePct = effectivePresent > 0 ? Math.round((effectiveAuto / effectivePresent) * 1000) / 10 : (selectedMonth === '2026-08' ? 57.1 : 0);
-
-    let totalMinutes = 0;
-    monthLogs.forEach((l) => {
-      if (l.workedMinutes) {
-        totalMinutes += l.workedMinutes;
-      } else if (l.checkInTime && l.checkOutTime) {
-        const dur = calculateWorkingHoursString(l.checkInTime, l.checkOutTime);
-        const match = dur.match(/(\d+)h\s*(\d+)m/);
-        if (match && match[1] && match[2]) {
-          totalMinutes += parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+      if (!isNasif && matchedEmp?.supervisor) {
+        const supProfile = employees.find(
+          (e) =>
+            e.name?.toLowerCase() === matchedEmp.supervisor?.toLowerCase() ||
+            e.code?.toLowerCase() === matchedEmp.supervisor?.toLowerCase()
+        );
+        if (supProfile?.workEmail || supProfile?.personalEmail) {
+          supervisorEmail = supProfile.workEmail || supProfile.personalEmail || supervisorEmail;
         }
       }
-    });
 
-    const totalWorkedHours = totalMinutes > 0 ? (totalMinutes / 60).toFixed(1) : (selectedMonth === '2026-08' ? '153.6' : '0.0');
-    const avgHoursPerDay = effectivePresent > 0 && totalMinutes > 0 ? (totalMinutes / (effectivePresent * 60)).toFixed(1) : (selectedMonth === '2026-08' ? '11.0' : '0.0');
+      await submitAttendanceRegularization({
+        attendanceLogId: log.id,
+        employeeId: reqEmpId,
+        employeeCode: reqEmpCode,
+        employeeName: reqEmpName,
+        department: reqDept,
+        designation: reqDesig,
+        date: log.date,
+        originalCheckIn: log.checkInTime || '--:--',
+        originalCheckOut: log.checkOutTime || '--:--',
+        originalStatus: log.status || 'Late',
+        originalLateByMin: log.lateByMin,
+        adjustedCheckIn: regModal.adjustedCheckIn,
+        adjustedCheckOut: regModal.adjustedCheckOut,
+        workingSchedule: user.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
+        calculatedHours: '8.0h',
+        reason: regModal.reason,
+        notes: regModal.notes,
+        supervisorName,
+        supervisorEmail,
+      });
 
-    let performanceLabel = 'EXCELLENT';
-    let badgeClass = 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30';
-    if (onTimePerformancePct < 60 || autoCheckoutRatePct > 50) {
-      performanceLabel = 'NEEDS IMPROVEMENT';
-      badgeClass = 'text-rose-500 bg-rose-500/10 border-rose-400/30';
-    } else if (onTimePerformancePct < 85) {
-      performanceLabel = 'ON TRACK';
-      badgeClass = 'text-amber-500 bg-amber-500/10 border-amber-400/30';
+      setRegularizations(getLocalRegularizations());
+      showToast(`Attendance regularization for ${log.date} submitted to supervisor!`, 'success');
+      setRegModal(null);
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to submit regularization request', 'error');
+      setRegModal((prev) => (prev ? { ...prev, isSubmitting: false } : null));
     }
+  };
 
-    return {
-      monthStr: selectedMonth,
-      presentDays: effectivePresent,
-      targetDays,
-      lateDays: effectiveLate,
-      autoCheckouts: effectiveAuto,
-      absentDays: effectiveAbsent,
-      onTimePerformancePct,
-      latePenaltyPct,
-      autoCheckoutRatePct,
-      totalWorkedHours,
-      avgHoursPerDay,
-      performanceLabel,
-      badgeClass,
-      monthLogs,
-    };
-  }, [allLogs, selectedMonth, user.employeeCode, user.id]);
+
 
   // ═════════════════════════════════════════════════════════════════════════
   // ── FILTERED ATTENDANCE LOGS COMPUTATION ─────────────────────────────────
@@ -790,14 +593,12 @@ export default function AttendancePage() {
       const ym = todayStr.substring(0, 7);
       setStartDate(`${ym}-01`);
       setEndDate(`${ym}-31`);
-      setSelectedMonth(ym);
     } else if (preset === 'last-month') {
       const prev = new Date();
       prev.setMonth(prev.getMonth() - 1);
       const ym = prev.toISOString().substring(0, 7);
       setStartDate(`${ym}-01`);
       setEndDate(`${ym}-31`);
-      setSelectedMonth(ym);
     } else {
       setStartDate('');
       setEndDate('');
@@ -841,25 +642,7 @@ export default function AttendancePage() {
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [filteredLogs]);
 
-  // Month navigation helper
-  const navigateMonth = (delta: number) => {
-    const [yStr, mStr] = selectedMonth.split('-');
-    let y = parseInt(yStr || '2026', 10);
-    let m = parseInt(mStr || '8', 10);
-    m += delta;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    } else if (m < 1) {
-      m = 12;
-      y -= 1;
-    }
-    const newMonthStr = `${y}-${String(m).padStart(2, '0')}`;
-    setSelectedMonth(newMonthStr);
-    setStartDate(`${newMonthStr}-01`);
-    setEndDate(`${newMonthStr}-31`);
-    setDatePreset('this-month');
-  };
+
 
   const formatMonthTitle = (ym: string) => {
     try {
@@ -873,7 +656,7 @@ export default function AttendancePage() {
 
   // ═════════════════════════════════════════════════════════════════════════
   // ── RECORD ACTIONS (EDIT / DELETE) ───────────────────────────────────────
-  // ═════════════════════════════════════════════════════════════════════
+  // ═════════════════════════════════════════════════════════════════════════
 
   const handleOpenEditModal = (log: AttendanceLogItem) => {
     setEditingLog(log);
@@ -1018,369 +801,7 @@ export default function AttendancePage() {
       </div>
 
       {/* ═════════════════════════════════════════════════════════════════════ */}
-      {/* ── 2. HERO: LIVE WORKING HOURS & GPS GEO-PUNCH CARD (COMPACT) ────── */}
-      {/* ═════════════════════════════════════════════════════════════════════ */}
-      <div className="p-4 sm:p-4.5 rounded-2xl bg-card border border-border/80 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3.5 relative overflow-hidden">
-        {/* Left Side: Live Digital Clock & User Shift */}
-        <div className="flex items-center space-x-3.5">
-          <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col items-center justify-center text-amber-500 shadow-xs flex-shrink-0">
-            <Zap className="h-5 w-5 fill-amber-500" />
-            <span className="text-[8px] font-black uppercase tracking-wider mt-0.5">LIVE</span>
-          </div>
-
-          <div className="space-y-0.5">
-            <div className="flex items-center space-x-2">
-              <span className="text-[11px] font-semibold text-muted-foreground">
-                Working Hours Today
-              </span>
-              {isCheckedIn && (
-                <span className="inline-flex items-center space-x-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded-full border border-emerald-500/20 animate-pulse">
-                  <span className="h-1 w-1 rounded-full bg-emerald-500" />
-                  <span>Checked In</span>
-                </span>
-              )}
-            </div>
-
-            <div
-              className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-foreground leading-none"
-              aria-live="polite"
-            >
-              {formatTime(elapsedSeconds)}
-            </div>
-
-            <div className="text-[11px] text-muted-foreground">
-              Schedule: <strong className="text-foreground font-semibold">{user.workingSchedule}</strong>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Side: Live GPS Geofence & Check-In / Check-Out Capsule Buttons */}
-        <div className="flex flex-col items-start lg:items-end space-y-2 w-full lg:w-auto">
-          {/* Action Buttons */}
-          <div className="flex items-center space-x-2.5 w-full lg:w-auto justify-start lg:justify-end">
-            {/* GPS Radar Indicator */}
-            <div
-              onClick={checkLiveGeofence}
-              className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shadow-xs flex-shrink-0 cursor-pointer hover:bg-emerald-500/20 transition"
-              title="Click to refresh live GPS position"
-            >
-              <Radio className={`h-4 w-4 ${isPunching ? 'animate-spin text-amber-500' : 'animate-pulse'}`} />
-            </div>
-
-            {/* Check In Button */}
-            <button
-              onClick={handleCheckInAction}
-              disabled={isPunching || isCheckedIn}
-              aria-disabled={isPunching || isCheckedIn}
-              className={`px-3.5 py-2 rounded-xl border transition-all duration-200 text-left flex items-center space-x-2.5 shadow-xs ${
-                isCheckedIn
-                  ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
-                  : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60 cursor-pointer shadow-xs'
-              }`}
-            >
-              <div
-                className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  isCheckedIn
-                    ? 'bg-muted text-muted-foreground'
-                    : 'bg-emerald-500/20 dark:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
-                }`}
-              >
-                <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
-              </div>
-              <div>
-                <div
-                  className={`text-[9px] font-extrabold uppercase tracking-wider ${
-                    isCheckedIn ? 'text-muted-foreground' : 'text-emerald-700/90 dark:text-emerald-300/90'
-                  }`}
-                >
-                  CHECK IN
-                </div>
-                <div
-                  className={`text-xs font-black font-mono ${
-                    isCheckedIn ? 'text-muted-foreground' : 'text-emerald-950 dark:text-emerald-100'
-                  }`}
-                >
-                  {checkInTime || '--:--'}
-                </div>
-              </div>
-            </button>
-
-            {/* Check Out Button */}
-            <button
-              onClick={handleCheckOutAction}
-              disabled={isPunching || !isCheckedIn}
-              aria-disabled={isPunching || !isCheckedIn}
-              className={`px-3.5 py-2 rounded-xl border transition-all duration-200 text-left flex items-center space-x-2.5 shadow-xs ${
-                !isCheckedIn
-                  ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
-                  : 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60 cursor-pointer shadow-xs'
-              }`}
-            >
-              <div
-                className={`h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  !isCheckedIn
-                    ? 'bg-muted text-muted-foreground'
-                    : 'bg-rose-500/20 dark:bg-rose-500/25 text-rose-700 dark:text-rose-300'
-                }`}
-              >
-                <Flag className="h-3.5 w-3.5 stroke-[2.5]" />
-              </div>
-              <div>
-                <div
-                  className={`text-[9px] font-extrabold uppercase tracking-wider ${
-                    !isCheckedIn ? 'text-muted-foreground' : 'text-rose-700/90 dark:text-rose-300/90'
-                  }`}
-                >
-                  CHECK OUT
-                </div>
-                <div
-                  className={`text-xs font-black font-mono ${
-                    !isCheckedIn ? 'text-muted-foreground' : 'text-rose-950 dark:text-rose-100'
-                  }`}
-                >
-                  {checkOutTime || '--:--'}
-                </div>
-              </div>
-            </button>
-          </div>
-
-          {/* GPS Live Geofence Location Status Bar */}
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold">
-            <div className="flex items-center space-x-1.5 bg-surface/60 border border-border px-2.5 py-0.5 rounded-lg text-muted-foreground">
-              <MapPin className="h-3 w-3 text-amber-500" />
-              <span className="font-bold text-foreground">
-                {gpsTracker.locationName || 'JAAGO HQ (Banani)'}
-              </span>
-              {gpsTracker.latitude && (
-                <span className="font-mono text-[10px] text-muted-foreground">
-                  ({gpsTracker.latitude.toFixed(4)}, {gpsTracker.longitude?.toFixed(4)})
-                </span>
-              )}
-            </div>
-
-            {gpsTracker.status === 'outside' ? (
-              <span className="px-2 py-0.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-500 font-bold text-[10px] flex items-center space-x-1">
-                <AlertTriangle className="h-3 w-3" />
-                <span>Outside ({gpsTracker.distanceMeters}m away)</span>
-              </span>
-            ) : (
-              <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 font-bold text-[10px] flex items-center space-x-1">
-                <ShieldCheck className="h-3 w-3" />
-                <span>Within Geofence</span>
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ═════════════════════════════════════════════════════════════════════ */}
-      {/* ── 3. MONTHLY ATTENDANCE SUMMARY (COMPACT & CONNECTED) ────────────── */}
-      {/* ═════════════════════════════════════════════════════════════════════ */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-card border border-border/80 shadow-xs space-y-4">
-        {/* Month Selector Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/70">
-          <div className="flex items-center space-x-2.5">
-            <div className="h-8 w-8 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center">
-              <Calendar className="h-4 w-4" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-base sm:text-lg font-black text-foreground tracking-tight">
-                  Monthly Attendance Summary
-                </h2>
-                <span className={`px-2 py-0.2 rounded-full text-[9px] font-black uppercase tracking-wider border ${monthlySummary.badgeClass}`}>
-                  {monthlySummary.performanceLabel}
-                </span>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Authoritative breakdown synchronized with verified logs for {formatMonthTitle(selectedMonth)}
-              </p>
-            </div>
-          </div>
-
-          {/* Month Selector Buttons */}
-          <div className="flex items-center space-x-1.5 bg-surface/70 border border-border p-0.5 rounded-xl shadow-xs">
-            <button
-              onClick={() => navigateMonth(-1)}
-              className="p-1 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
-              title="Previous Month"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </button>
-
-            <select
-              value={selectedMonth}
-              onChange={(e) => {
-                setSelectedMonth(e.target.value);
-                setStartDate(`${e.target.value}-01`);
-                setEndDate(`${e.target.value}-31`);
-                setDatePreset('this-month');
-              }}
-              className="bg-transparent text-xs font-bold text-foreground px-2 py-0.5 rounded-md focus:outline-none cursor-pointer"
-            >
-              <option value="2026-08">August 2026</option>
-              <option value="2026-07">July 2026</option>
-              <option value="2026-06">June 2026</option>
-              <option value="2026-05">May 2026</option>
-              <option value="2026-04">April 2026</option>
-              <option value="2026-03">March 2026</option>
-              <option value="2026-02">February 2026</option>
-              <option value="2026-01">January 2026</option>
-            </select>
-
-            <button
-              onClick={() => navigateMonth(1)}
-              className="p-1 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
-              title="Next Month"
-            >
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* 4-KPI Metric Cards Grid (Compact) */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
-          {/* Card 1: Working Days */}
-          <div className="p-3 sm:p-3.5 rounded-xl bg-surface/40 border border-border/70 space-y-0.5">
-            <div className="text-[11px] font-semibold text-muted-foreground">Working Days</div>
-            <div className="text-xl sm:text-2xl font-black text-foreground">
-              {monthlySummary.presentDays} <span className="text-xs font-semibold text-muted-foreground">/ {monthlySummary.targetDays}</span>
-            </div>
-            <div className="text-[9px] font-black uppercase tracking-wider text-emerald-500">
-              PRESENT / TARGET
-            </div>
-          </div>
-
-          {/* Card 2: Late Days */}
-          <div className="p-3 sm:p-3.5 rounded-xl bg-surface/40 border border-border/70 space-y-0.5">
-            <div className="text-[11px] font-semibold text-muted-foreground">Late Days</div>
-            <div className="text-xl sm:text-2xl font-black text-rose-500">
-              {monthlySummary.lateDays}
-            </div>
-            <div className="text-[9px] font-black uppercase tracking-wider text-rose-500">
-              LATE ENTRIES
-            </div>
-          </div>
-
-          {/* Card 3: Auto Checkouts */}
-          <div className="p-3 sm:p-3.5 rounded-xl bg-surface/40 border border-border/70 space-y-0.5">
-            <div className="text-[11px] font-semibold text-muted-foreground">Auto Check-outs</div>
-            <div className="text-xl sm:text-2xl font-black text-amber-500">
-              {monthlySummary.autoCheckouts}
-            </div>
-            <div className="text-[9px] font-black uppercase tracking-wider text-amber-500">
-              AUTO 11:30 PM
-            </div>
-          </div>
-
-          {/* Card 4: Absent Days */}
-          <div className="p-3 sm:p-3.5 rounded-xl bg-surface/40 border border-border/70 space-y-0.5">
-            <div className="text-[11px] font-semibold text-muted-foreground">Absent Days</div>
-            <div className="text-xl sm:text-2xl font-black text-foreground">
-              {monthlySummary.absentDays}
-            </div>
-            <div className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">
-              UNEXCUSED ABSENCES
-            </div>
-          </div>
-        </div>
-
-        {/* Progress Bars & Trend Chart (Compact) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pt-1">
-          {/* Progress Bars Column */}
-          <div className="space-y-2.5 justify-center flex flex-col">
-            {/* On-Time Performance */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-foreground">On-Time Performance</span>
-                <span className="text-emerald-500 font-black">{monthlySummary.onTimePerformancePct}%</span>
-              </div>
-              <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(0, monthlySummary.onTimePerformancePct))}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Late Penalty Rate */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-foreground">Late Penalty Rate</span>
-                <span className="text-rose-500 font-black">{monthlySummary.latePenaltyPct}%</span>
-              </div>
-              <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
-                <div
-                  className="h-full bg-rose-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(0, monthlySummary.latePenaltyPct))}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Auto Check-out Rate */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs font-bold">
-                <span className="text-foreground">Auto Check-out Rate</span>
-                <span className="text-amber-500 font-black">{monthlySummary.autoCheckoutRatePct}%</span>
-              </div>
-              <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
-                <div
-                  className="h-full bg-amber-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(0, monthlySummary.autoCheckoutRatePct))}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Daily Trend Curve */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] font-bold text-muted-foreground">
-              <span>Daily Attendance Punctuality Trend</span>
-              <span className="font-mono text-foreground font-black">Total: {monthlySummary.totalWorkedHours}h</span>
-            </div>
-
-            <div className="h-20 w-full relative bg-surface/30 rounded-xl p-1.5 border border-border/40">
-              <svg className="w-full h-full overflow-visible" viewBox="0 0 400 80">
-                <defs>
-                  <linearGradient id="attendanceTrendGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.35" />
-                    <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-
-                <path
-                  d="M 20 30 Q 60 28, 100 60 T 160 30 T 220 52 T 280 32 T 340 28 T 390 35 L 390 80 L 20 80 Z"
-                  fill="url(#attendanceTrendGrad)"
-                />
-                <path
-                  d="M 20 30 Q 60 28, 100 60 T 160 30 T 220 52 T 280 32 T 340 28 T 390 35"
-                  fill="none"
-                  stroke="#10B981"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-
-                <circle cx="20" cy="30" r="3" fill="#10B981" />
-                <circle cx="60" cy="28" r="3" fill="#10B981" />
-                <circle cx="100" cy="60" r="3" fill="#EF4444" />
-                <circle cx="160" cy="30" r="3" fill="#EF4444" />
-                <circle cx="220" cy="52" r="3" fill="#10B981" />
-                <circle cx="280" cy="32" r="3" fill="#10B981" />
-                <circle cx="340" cy="28" r="3" fill="#10B981" />
-                <circle cx="390" cy="35" r="3" fill="#EF4444" />
-              </svg>
-            </div>
-
-            <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground px-0.5">
-              <span>Avg Working Hours: <strong className="text-blue-500 font-mono">{monthlySummary.avgHoursPerDay}h/day</strong></span>
-              <span>Total Month Hours: <strong className="text-amber-500 font-mono">{monthlySummary.totalWorkedHours}h</strong></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ═════════════════════════════════════════════════════════════════════ */}
-      {/* ── 4. FILTER TOOLBAR (DATE RANGE, STATUS, MONTH-WISE) ─────────────── */}
+      {/* ── 2. FILTER TOOLBAR (DATE RANGE, STATUS, MONTH-WISE) ─────────────── */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
       <div className="bg-card border border-border/80 rounded-3xl p-4 sm:p-5 shadow-sm space-y-4">
         {/* Top Filter Controls */}
@@ -1527,7 +948,7 @@ export default function AttendancePage() {
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════ */}
-      {/* ── 5. ATTENDANCE LOGS TABLE (WITH GPS COORDINATES & LOCATIONS) ───── */}
+      {/* ── 5. ATTENDANCE LOGS TABLE (WITH GPS COORDINATES & REGULARIZATION) ─ */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
       <div className="bg-card border border-border/80 rounded-3xl overflow-hidden shadow-md">
         {viewGrouping === 'month-grouped' ? (
@@ -1567,6 +988,7 @@ export default function AttendancePage() {
                           <th className="py-3 px-3">Working Hours</th>
                           <th className="py-3 px-3">Status</th>
                           <th className="py-3 px-3">Notes / Verification</th>
+                          <th className="py-3 px-3 text-center">Regularization</th>
                           <th className="py-3 px-3 text-right">Actions</th>
                         </tr>
                       </thead>
@@ -1577,6 +999,9 @@ export default function AttendancePage() {
                             log={log}
                             isSuperAdmin={isSuperAdmin}
                             isOnDuty={isOnDutyRecord(log)}
+                            isEligibleForReg={isRowEligibleForRegularization(log)}
+                            existingReg={getExistingRegularization(log)}
+                            onRegularize={handleOpenRegularizationModal}
                             onEdit={handleOpenEditModal}
                             onDelete={handleDeleteRecord}
                             onViewGps={(l) => setGpsDetailModal({ isOpen: true, log: l })}
@@ -1623,6 +1048,7 @@ export default function AttendancePage() {
                   <th className="py-4 px-3">Working Hours</th>
                   <th className="py-4 px-3">Status</th>
                   <th className="py-4 px-4">Notes / Verification</th>
+                  <th className="py-4 px-4 text-center">Regularization</th>
                   <th className="py-4 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -1634,6 +1060,8 @@ export default function AttendancePage() {
                     const locName = log.locationName || log.branch || 'JAAGO HQ (Banani)';
                     const lat = log.checkInLat ?? 23.7937;
                     const lng = log.checkInLng ?? 90.4066;
+                    const eligibleForReg = isRowEligibleForRegularization(log);
+                    const existingReg = getExistingRegularization(log);
 
                     return (
                       <tr
@@ -1777,6 +1205,65 @@ export default function AttendancePage() {
                           )}
                         </td>
 
+                        {/* ── REGULARIZATION COLUMN ── */}
+                        <td className="py-4 px-4 text-center">
+                          {(() => {
+                            if (existingReg?.status === 'Approved') {
+                              return (
+                                <span
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[11px] font-black tracking-wide shadow-xs"
+                                  title={`Regularized (Approved by ${existingReg.approvedBy || 'Supervisor'}): ${existingReg.reason}`}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-0.5 text-emerald-500" />
+                                  <span>R.Approved</span>
+                                </span>
+                              );
+                            }
+
+                            if (existingReg?.status === 'Pending') {
+                              return (
+                                <span
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[11px] font-black tracking-wide shadow-xs"
+                                  title="Regularization request submitted and pending supervisor review"
+                                >
+                                  <Clock className="h-3.5 w-3.5 mr-0.5 animate-spin text-amber-500" />
+                                  <span>Pending</span>
+                                </span>
+                              );
+                            }
+
+                            if (existingReg?.status === 'Refused' || existingReg?.status === 'Rejected') {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenRegularizationModal(log)}
+                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[10px] font-black transition cursor-pointer active:scale-95 shadow-xs"
+                                  title={`Refused by ${existingReg.approvedBy || 'Supervisor'}${existingReg.refusalNote ? `: "${existingReg.refusalNote}"` : ''} - Click to re-apply`}
+                                >
+                                  <XCircle className="h-3.5 w-3.5 mr-0.5 text-rose-500 group-hover:text-white" />
+                                  <span>R.Refused</span>
+                                </button>
+                              );
+                            }
+
+                            if (!eligibleForReg) {
+                              return <span className="text-muted-foreground/30 font-bold">--</span>;
+                            }
+
+                            // If eligible and not regularized yet: Show Regularize button
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRegularizationModal(log)}
+                                className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[11px] font-black tracking-wide shadow-xs transition duration-150 cursor-pointer inline-flex items-center space-x-1.5 active:scale-95"
+                                title="Click to regularize check-in/out times based on shift"
+                              >
+                                <span>Regularize</span>
+                              </button>
+                            );
+                          })()}
+                        </td>
+
                         {/* Actions Column */}
                         <td className="py-4 px-4 text-right">
                           <div className="flex items-center justify-end space-x-1">
@@ -1818,7 +1305,7 @@ export default function AttendancePage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={isSuperAdmin ? 9 : 8} className="py-14 text-center text-muted-foreground">
+                    <td colSpan={isSuperAdmin ? 10 : 9} className="py-14 text-center text-muted-foreground">
                       <Clock className="h-9 w-9 mx-auto mb-2 text-muted-foreground/40" />
                       <p className="font-bold text-sm">No attendance records found</p>
                       <p className="text-xs text-muted-foreground/70 mt-0.5">
@@ -1832,6 +1319,190 @@ export default function AttendancePage() {
           </div>
         )}
       </div>
+
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {/* ── MODAL 0: COMPACT ATTENDANCE REGULARIZATION MODAL ──────────────── */}
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {regModal && regModal.isOpen && regModal.log && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-card border border-amber-500/30 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 space-y-4 p-5 sm:p-6">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-border/70">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center shadow-xs">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-foreground">Attendance Regularization</h3>
+                  <p className="text-[11px] text-muted-foreground">Shift-based auto correction &amp; supervisor approval</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRegModal(null)}
+                className="p-1.5 rounded-xl hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Date & Shift Info Badge */}
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-surface/70 border border-border text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Date</span>
+                <span className="font-mono font-bold text-foreground">{regModal.log.date}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Assigned Shift</span>
+                <span className="font-bold text-amber-500">{user.workingSchedule}</span>
+              </div>
+            </div>
+
+            {/* 2-Column Comparison Table */}
+            <div className="rounded-2xl border border-border/80 overflow-hidden bg-card/60">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-surface/80 border-b border-border text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <th className="py-2.5 px-3">Metric</th>
+                    <th className="py-2.5 px-3">Original Record</th>
+                    <th className="py-2.5 px-3 text-amber-500">Adjusted (Editable)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40 font-mono">
+                  {/* Row 1: Check In */}
+                  <tr>
+                    <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Check In</td>
+                    <td className="py-2.5 px-3 text-rose-500 font-bold">
+                      {regModal.log.checkInTime || '--:--'}
+                      {regModal.log.lateByMin ? ` (+${regModal.log.lateByMin}m)` : ''}
+                    </td>
+                    <td className="py-2 px-3">
+                      <input
+                        type="text"
+                        value={regModal.adjustedCheckIn}
+                        onChange={(e) =>
+                          setRegModal((prev) => (prev ? { ...prev, adjustedCheckIn: e.target.value } : null))
+                        }
+                        className="w-28 px-2.5 py-1 rounded-lg bg-surface border border-amber-500/40 text-xs font-bold text-emerald-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="10:00 AM"
+                      />
+                    </td>
+                  </tr>
+
+                  {/* Row 2: Check Out */}
+                  <tr>
+                    <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Check Out</td>
+                    <td className="py-2.5 px-3 text-muted-foreground">
+                      {regModal.log.checkOutTime || (regModal.log.status === 'Auto Check Out' ? 'Auto 11:30 PM' : '--:--')}
+                    </td>
+                    <td className="py-2 px-3">
+                      <input
+                        type="text"
+                        value={regModal.adjustedCheckOut}
+                        onChange={(e) =>
+                          setRegModal((prev) => (prev ? { ...prev, adjustedCheckOut: e.target.value } : null))
+                        }
+                        className="w-28 px-2.5 py-1 rounded-lg bg-surface border border-amber-500/40 text-xs font-bold text-emerald-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="06:00 PM"
+                      />
+                    </td>
+                  </tr>
+
+                  {/* Row 3: Status */}
+                  <tr>
+                    <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Status</td>
+                    <td className="py-2.5 px-3">
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-sans font-black bg-rose-500/15 text-rose-500">
+                        {regModal.log.status || 'Late'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-sans font-black bg-emerald-500/15 text-emerald-500">
+                        Present (On Time)
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Form Inputs: Reason & Justification */}
+            <form onSubmit={handleSubmitRegularization} className="space-y-3 pt-1">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Regularization Reason <span className="text-amber-500">*</span>
+                </label>
+                <select
+                  value={regModal.reason}
+                  onChange={(e) =>
+                    setRegModal((prev) => (prev ? { ...prev, reason: e.target.value } : null))
+                  }
+                  className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-xs"
+                >
+                  <option value="Late Entry Due to Official Field Work / Traffic">
+                    Late Entry Due to Official Field Work / Traffic
+                  </option>
+                  <option value="Biometric Device / Scanner Sync Delay">
+                    Biometric Device / Scanner Sync Delay
+                  </option>
+                  <option value="System Auto Check-Out Override (Work from Home / Field)">
+                    System Auto Check-Out Override (Work from Home / Field)
+                  </option>
+                  <option value="Forgot to Check In / Out">
+                    Forgot to Check In / Out
+                  </option>
+                  <option value="Duty Reschedule / Off-Site Meeting">
+                    Duty Reschedule / Off-Site Meeting
+                  </option>
+                  <option value="Other / Manual Justification">
+                    Other / Manual Justification
+                  </option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Detailed Explanation / Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={regModal.notes}
+                  onChange={(e) =>
+                    setRegModal((prev) => (prev ? { ...prev, notes: e.target.value } : null))
+                  }
+                  placeholder="Provide context for your supervisor..."
+                  className="w-full p-2.5 rounded-xl bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-xs placeholder:text-muted-foreground/60"
+                />
+              </div>
+
+              {/* Assigned Supervisor Info */}
+              <div className="p-2.5 rounded-xl bg-surface/50 border border-border/80 text-[11px] text-muted-foreground flex items-center justify-between">
+                <span>Direct Supervisor:</span>
+                <strong className="text-foreground">{user.manager || 'Founder & Executive Director'}</strong>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-border/70">
+                <button
+                  type="button"
+                  onClick={() => setRegModal(null)}
+                  className="px-4 py-2 rounded-xl border border-border text-xs font-bold text-muted-foreground hover:bg-surface hover:text-foreground transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={regModal.isSubmitting}
+                  className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md shadow-amber-500/20 transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>{regModal.isSubmitting ? 'Submitting...' : 'Submit Request'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* ── MODAL 1: GPS MAP & LOCATION AUDIT MODAL ───────────────────────── */}
@@ -1911,63 +1582,7 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* ═════════════════════════════════════════════════════════════════════ */}
-      {/* ── MODAL 2: GEOFENCE BLOCKING ALERT MODAL ───────────────────────── */}
-      {/* ═════════════════════════════════════════════════════════════════════ */}
-      {geofenceAlert && geofenceAlert.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-card border border-border/80 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-border/60">
-              <div className="flex items-center space-x-2.5 text-rose-500">
-                <div className="h-9 w-9 rounded-2xl bg-rose-500/15 flex items-center justify-center">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <h3 className="text-base font-black text-foreground">Attendance Blocked</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGeofenceAlert(null)}
-                className="p-1.5 rounded-xl hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
 
-            <div className="space-y-2 text-xs text-foreground/90">
-              <p className="leading-relaxed">
-                You are currently <strong className="text-rose-500 font-bold">{geofenceAlert.distanceMeters} meters</strong> away from <strong className="text-foreground font-bold">&quot;{geofenceAlert.locationName}&quot;</strong>.
-              </p>
-              <p className="text-muted-foreground">
-                Per JAAGO Enterprise policy, you must be within <strong className="text-foreground">{geofenceAlert.allowedRadiusMeters} meters</strong> of the designated GPS boundary to record attendance.
-              </p>
-            </div>
-
-            <div className="p-3 rounded-2xl bg-surface/70 border border-border font-mono text-[11px] text-muted-foreground">
-              Lat: {geofenceAlert.latitude.toFixed(5)}, Lng: {geofenceAlert.longitude.toFixed(5)}
-            </div>
-
-            <div className="flex items-center justify-end space-x-2 pt-2 border-t border-border/60">
-              <button
-                type="button"
-                onClick={() => setGeofenceAlert(null)}
-                className="px-5 py-2.5 rounded-xl bg-surface hover:bg-surface/80 border border-border text-xs font-bold text-foreground transition cursor-pointer"
-              >
-                Dismiss
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setGeofenceAlert(null);
-                  checkLiveGeofence();
-                }}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md transition cursor-pointer"
-              >
-                Retry GPS
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* ── MODAL 3: MANUAL ENTRY / EDIT ATTENDANCE RECORD MODAL ──────────── */}
@@ -2197,13 +1812,19 @@ function AttendanceLogRow({
   log,
   isSuperAdmin = false,
   isOnDuty = false,
+  isEligibleForReg = false,
+  existingReg,
+  onRegularize,
   onEdit,
   onDelete,
   onViewGps,
 }: {
   log: AttendanceLogItem;
-  isSuperAdmin?: boolean;
-  isOnDuty?: boolean;
+  isSuperAdmin?: boolean | undefined;
+  isOnDuty?: boolean | undefined;
+  isEligibleForReg?: boolean | undefined;
+  existingReg?: AttendanceRegularizationItem | undefined;
+  onRegularize: (log: AttendanceLogItem) => void;
   onEdit: (log: AttendanceLogItem) => void;
   onDelete: (id: string, name: string) => void;
   onViewGps: (log: AttendanceLogItem) => void;
@@ -2274,6 +1895,65 @@ function AttendanceLogRow({
           </span>
         )}
       </td>
+
+      {/* Regularization Column */}
+      <td className="py-3.5 px-3 text-center">
+        {(() => {
+          if (existingReg?.status === 'Approved') {
+            return (
+              <span
+                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black"
+                title={`Regularized (Approved by ${existingReg.approvedBy || 'Supervisor'}): ${existingReg.reason}`}
+              >
+                <CheckCircle2 className="h-2.5 w-2.5" />
+                <span>R.Approved</span>
+              </span>
+            );
+          }
+
+          if (existingReg?.status === 'Pending') {
+            return (
+              <span
+                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black"
+                title="Regularization request submitted and pending supervisor review"
+              >
+                <Clock className="h-2.5 w-2.5 animate-spin" />
+                <span>Pending</span>
+              </span>
+            );
+          }
+
+          if (existingReg?.status === 'Refused' || existingReg?.status === 'Rejected') {
+            return (
+              <button
+                type="button"
+                onClick={() => onRegularize(log)}
+                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[9px] font-black transition cursor-pointer"
+                title={`Refused by ${existingReg.approvedBy || 'Supervisor'}${existingReg.refusalNote ? `: "${existingReg.refusalNote}"` : ''} - Click to re-apply`}
+              >
+                <XCircle className="h-2.5 w-2.5 mr-0.5 text-rose-500" />
+                <span>R.Refused</span>
+              </button>
+            );
+          }
+
+          if (!isEligibleForReg) {
+            return <span className="text-muted-foreground/30 font-bold">--</span>;
+          }
+
+          return (
+            <button
+              type="button"
+              onClick={() => onRegularize(log)}
+              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-xs transition cursor-pointer inline-flex items-center space-x-1 active:scale-95"
+            >
+              <span>Regularize</span>
+            </button>
+          );
+        })()}
+      </td>
+
+      {/* Actions */}
       <td className="py-3.5 px-3 text-right">
         <div className="flex items-center justify-end space-x-1">
           {/* View GPS Details - Available to all */}

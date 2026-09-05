@@ -325,7 +325,7 @@ export function DashboardSidebar({
                         { label: 'Sign Request', icon: PenTool, href: '/workflows' },
                         { label: 'Tax & NOC Request...', icon: DollarSign, href: '/workflows' },
                         { label: 'Payment Voucher...', icon: Receipt, href: '/workflows' },
-                        { label: 'Meeting Rooms', icon: Calendar, href: '/workflows' },
+                        { label: 'Meeting Rooms', icon: Calendar, href: '/meeting-rooms' },
                         { label: 'Volunteering Program...', icon: Award, href: '/workflows' },
                       ].map((item, idx) => (
                         <Link

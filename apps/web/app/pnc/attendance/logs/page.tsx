@@ -122,10 +122,12 @@ export default function AttendanceLogsPage() {
       setLogs(getLocalAttendanceLogs());
     };
     window.addEventListener('jaago_attendance_updated', handleUpdate);
+    window.addEventListener('jaago_attendance_regularization_updated', handleUpdate);
     window.addEventListener('jaago_leave_request_updated', handleUpdate);
     window.addEventListener('jaago_leave_allocation_updated', handleUpdate);
     return () => {
       window.removeEventListener('jaago_attendance_updated', handleUpdate);
+      window.removeEventListener('jaago_attendance_regularization_updated', handleUpdate);
       window.removeEventListener('jaago_leave_request_updated', handleUpdate);
       window.removeEventListener('jaago_leave_allocation_updated', handleUpdate);
     };

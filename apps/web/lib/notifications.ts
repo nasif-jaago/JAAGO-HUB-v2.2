@@ -1,5 +1,6 @@
 import { getCurrentUserSession, UserSessionData } from './user-profile-sync';
 import { fetchLeaveRequests, LeaveRequestItem } from './supabase-time-off';
+import { getLocalRegularizations, AttendanceRegularizationItem } from './supabase-regularization';
 
 export interface AppNotification {
   id: string;
@@ -77,6 +78,11 @@ function generateDynamicLeaveNotifications(
   const dynamicNotifs: AppNotification[] = [];
   const userCode = session.employeeCode?.trim().toLowerCase();
   const userName = session.fullName?.trim() || 'Supervisor';
+  const userEmail = (session.email || '').trim().toLowerCase();
+  const isSuperAdmin =
+    (session.roles || []).includes('super_admin') ||
+    userEmail.includes('nasif.kamal') ||
+    userName.toLowerCase().includes('nasif kamal');
 
   for (const req of leaveRequests) {
     const isSelfRequest = Boolean(userCode && req.employeeCode?.trim().toLowerCase() === userCode);
@@ -101,25 +107,106 @@ function generateDynamicLeaveNotifications(
       });
     }
 
-    // 2. Decision Status Notifications for the Requester
-    if (isSelfRequest && (req.status === 'Approved' || req.status === 'Rejected' || (req.status as string) === 'Refused')) {
+    // 2. Decision Status Notifications for the Requester and Super Admin
+    if ((isSelfRequest || isSuperAdmin) && (req.status === 'Approved' || req.status === 'Rejected' || (req.status as string) === 'Refused')) {
       const isApproved = req.status === 'Approved';
       const notifId = `notif-leave-decision-${req.id}-${req.status}`;
       const isRead = readIds.has(notifId);
 
       dynamicNotifs.push({
         id: notifId,
-        title: `Leave Request ${isApproved ? 'Approved' : 'Refused'}: ${req.leaveType}`,
+        title: `Leave Request ${isApproved ? 'Approved' : 'Refused'}: ${req.employeeName} - ${req.leaveType}`,
         message: isApproved
-          ? `Your leave request for ${req.totalDays} Day(s) of ${req.leaveType} (${req.fromDate} to ${req.toDate}) has been approved by ${req.approvedBy || 'Supervisor'}.`
-          : `Your leave request for ${req.totalDays} Day(s) of ${req.leaveType} was refused by ${req.approvedBy || 'Supervisor'}.${req.rejectionReason ? ` Note: "${req.rejectionReason}"` : ''}`,
+          ? `Leave request for ${req.employeeName} (${req.totalDays} Day(s) of ${req.leaveType}, ${req.fromDate} to ${req.toDate}) has been approved by ${req.approvedBy || 'Supervisor'}.`
+          : `Leave request for ${req.employeeName} (${req.totalDays} Day(s) of ${req.leaveType}) was refused by ${req.approvedBy || 'Supervisor'}.${req.rejectionReason ? ` Note: "${req.rejectionReason}"` : ''}`,
         category: 'time_off',
         channel: 'in_app',
         isRead,
         actionUrl: `/leaves`,
         createdAt: req.approvedAt || req.appliedAt || new Date().toISOString(),
-        targetEmployeeCode: userCode || undefined,
+        targetEmployeeCode: isSelfRequest ? userCode : req.employeeCode,
         relatedEntity: { type: 'leave_request', id: req.id },
+      });
+    }
+  }
+
+  return dynamicNotifs;
+}
+
+/**
+ * Helper to generate dynamic notifications from attendance regularization requests for the given user session
+ */
+function generateDynamicRegularizationNotifications(
+  regList: AttendanceRegularizationItem[],
+  session: UserSessionData | null,
+  readIds: Set<string>
+): AppNotification[] {
+  if (!session) return [];
+
+  const dynamicNotifs: AppNotification[] = [];
+  const userCode = session.employeeCode?.trim().toLowerCase();
+  const userName = (session.fullName || '').trim().toLowerCase();
+  const userEmail = (session.email || '').trim().toLowerCase();
+  const isSuperAdmin =
+    (session.roles || []).includes('super_admin') ||
+    userEmail.includes('nasif.kamal') ||
+    userName.includes('nasif kamal');
+
+  for (const reg of regList) {
+    const itemRequesterCode = (reg.employeeCode || '').trim().toLowerCase();
+    const itemRequesterName = (reg.employeeName || '').trim().toLowerCase();
+    const itemSupervisorName = (reg.supervisorName || '').trim().toLowerCase();
+    const itemSupervisorEmail = (reg.supervisorEmail || '').trim().toLowerCase();
+
+    const isSelfRequest = Boolean(
+      (userCode && itemRequesterCode === userCode) ||
+      (userName && itemRequesterName && (itemRequesterName === userName || itemRequesterName.includes(userName) || userName.includes(itemRequesterName)))
+    );
+
+    const isSupervisorOrAdmin =
+      isSuperAdmin ||
+      (userName && (itemSupervisorName.includes(userName) || userName.includes(itemSupervisorName))) ||
+      (userEmail && itemSupervisorEmail === userEmail);
+
+    // 1. Pending Approvals for Supervisors & Super Admin (EXCLUDING self-requests!)
+    if (reg.status === 'Pending' && !isSelfRequest && isSupervisorOrAdmin) {
+      const notifId = `notif-reg-pending-${reg.id}`;
+      const isRead = readIds.has(notifId);
+
+      dynamicNotifs.push({
+        id: notifId,
+        title: `Regularization Required: ${reg.employeeName} (${reg.date})`,
+        message: `${reg.employeeName} (${reg.employeeCode}) requested attendance correction for ${reg.date} (${reg.adjustedCheckIn} - ${reg.adjustedCheckOut}). Reason: "${reg.reason}"`,
+        category: 'approvals',
+        channel: 'in_app',
+        isRead,
+        actionUrl: `/workflows?requestId=${encodeURIComponent(reg.id)}`,
+        createdAt: reg.appliedAt || reg.createdAt || new Date().toISOString(),
+        targetSupervisorName: reg.supervisorName || session.fullName || 'Supervisor',
+        targetEmployeeCode: userCode || undefined,
+        relatedEntity: { type: 'attendance_regularization', id: reg.id },
+      });
+    }
+
+    // 2. Decision Status Notifications for the Requester & Super Admin
+    if ((isSelfRequest || isSuperAdmin) && (reg.status === 'Approved' || reg.status === 'Refused' || reg.status === 'Rejected')) {
+      const isApproved = reg.status === 'Approved';
+      const notifId = `notif-reg-decision-${reg.id}-${reg.status}`;
+      const isRead = readIds.has(notifId);
+
+      dynamicNotifs.push({
+        id: notifId,
+        title: `Regularization ${isApproved ? 'Approved' : 'Refused'}: ${reg.employeeName} (${reg.date})`,
+        message: isApproved
+          ? `Attendance regularization for ${reg.employeeName} on ${reg.date} (${reg.adjustedCheckIn} - ${reg.adjustedCheckOut}) has been approved by ${reg.approvedBy || 'Supervisor'}.`
+          : `Attendance regularization for ${reg.employeeName} on ${reg.date} was refused by ${reg.approvedBy || 'Supervisor'}.${reg.refusalNote ? ` Note: "${reg.refusalNote}"` : ''}`,
+        category: 'time_off',
+        channel: 'in_app',
+        isRead,
+        actionUrl: `/attendance`,
+        createdAt: reg.approvedAt || reg.updatedAt || reg.appliedAt || new Date().toISOString(),
+        targetEmployeeCode: isSelfRequest ? userCode : reg.employeeCode,
+        relatedEntity: { type: 'attendance_regularization', id: reg.id },
       });
     }
   }
@@ -137,14 +224,19 @@ export function fetchUserNotifications(sessionUser?: UserSessionData | null): Ap
 
   // Read cached leave requests if available
   let cachedRequests: LeaveRequestItem[] = [];
+  let cachedRegs: AttendanceRegularizationItem[] = [];
   if (typeof window !== 'undefined') {
     try {
       const cached = localStorage.getItem('jaago_pnc_leave_requests_v3');
       if (cached) cachedRequests = JSON.parse(cached);
     } catch {}
+    try {
+      cachedRegs = getLocalRegularizations();
+    } catch {}
   }
 
-  const dynamic = generateDynamicLeaveNotifications(cachedRequests, session, readIds);
+  const dynamicLeaves = generateDynamicLeaveNotifications(cachedRequests, session, readIds);
+  const dynamicRegs = generateDynamicRegularizationNotifications(cachedRegs, session, readIds);
 
   const userCode = session?.employeeCode?.trim().toLowerCase();
   const userEmail = session?.email?.trim().toLowerCase();
@@ -157,12 +249,12 @@ export function fetchUserNotifications(sessionUser?: UserSessionData | null): Ap
     if (readIds.has(n.id)) n.isRead = true;
     if (n.targetEmployeeCode && userCode && n.targetEmployeeCode.toLowerCase() === userCode) return true;
     if (n.targetEmail && userEmail && n.targetEmail.toLowerCase() === userEmail) return true;
-    if (n.targetSupervisorName && userName && n.targetSupervisorName.toLowerCase() === userName) return true;
+    if (n.targetSupervisorName && userName && (n.targetSupervisorName.toLowerCase() === userName || n.targetSupervisorName.toLowerCase().includes(userName) || userName.includes(n.targetSupervisorName.toLowerCase()))) return true;
     if (n.userId && session?.id && n.userId === session.id) return true;
     if (n.targetEmployeeCode === '*' || (!n.targetEmployeeCode && !n.targetEmail && !n.targetSupervisorName)) {
       return true;
     }
-    if (isSuperAdmin && n.category === 'approvals') {
+    if (isSuperAdmin && (n.category === 'approvals' || n.category === 'time_off')) {
       return true;
     }
     return false;
@@ -170,8 +262,16 @@ export function fetchUserNotifications(sessionUser?: UserSessionData | null): Ap
 
   // Combine and deduplicate by id
   const map = new Map<string, AppNotification>();
-  dynamic.forEach((n) => map.set(n.id, n));
-  filteredStored.forEach((n) => map.set(n.id, n));
+  dynamicLeaves.forEach((n) => map.set(n.id, n));
+  dynamicRegs.forEach((n) => map.set(n.id, n));
+  filteredStored.forEach((n) => {
+    if (map.has(n.id)) {
+      const existing = map.get(n.id)!;
+      existing.isRead = existing.isRead || n.isRead;
+    } else {
+      map.set(n.id, n);
+    }
+  });
 
   return Array.from(map.values()).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -189,11 +289,28 @@ export async function fetchUserNotificationsAsync(
   const readIds = getReadNotificationIds();
 
   let liveRequests: LeaveRequestItem[] = [];
+  let liveRegs: AttendanceRegularizationItem[] = [];
   try {
     liveRequests = await fetchLeaveRequests();
   } catch {}
 
-  const dynamic = generateDynamicLeaveNotifications(liveRequests, session, readIds);
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
+    const regRes = await fetch('/api/v1/attendance/regularization', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const regData = await regRes.json();
+    if (regData.success && Array.isArray(regData.data)) {
+      liveRegs = regData.data;
+    } else {
+      liveRegs = getLocalRegularizations();
+    }
+  } catch {
+    liveRegs = getLocalRegularizations();
+  }
+
+  const dynamicLeaves = generateDynamicLeaveNotifications(liveRequests, session, readIds);
+  const dynamicRegs = generateDynamicRegularizationNotifications(liveRegs, session, readIds);
 
   const userCode = session?.employeeCode?.trim().toLowerCase();
   const userEmail = session?.email?.trim().toLowerCase();
@@ -206,20 +323,28 @@ export async function fetchUserNotificationsAsync(
     if (readIds.has(n.id)) n.isRead = true;
     if (n.targetEmployeeCode && userCode && n.targetEmployeeCode.toLowerCase() === userCode) return true;
     if (n.targetEmail && userEmail && n.targetEmail.toLowerCase() === userEmail) return true;
-    if (n.targetSupervisorName && userName && n.targetSupervisorName.toLowerCase() === userName) return true;
+    if (n.targetSupervisorName && userName && (n.targetSupervisorName.toLowerCase() === userName || n.targetSupervisorName.toLowerCase().includes(userName) || userName.includes(n.targetSupervisorName.toLowerCase()))) return true;
     if (n.userId && session?.id && n.userId === session.id) return true;
     if (n.targetEmployeeCode === '*' || (!n.targetEmployeeCode && !n.targetEmail && !n.targetSupervisorName)) {
       return true;
     }
-    if (isSuperAdmin && n.category === 'approvals') {
+    if (isSuperAdmin && (n.category === 'approvals' || n.category === 'time_off')) {
       return true;
     }
     return false;
   });
 
   const map = new Map<string, AppNotification>();
-  dynamic.forEach((n) => map.set(n.id, n));
-  filteredStored.forEach((n) => map.set(n.id, n));
+  dynamicLeaves.forEach((n) => map.set(n.id, n));
+  dynamicRegs.forEach((n) => map.set(n.id, n));
+  filteredStored.forEach((n) => {
+    if (map.has(n.id)) {
+      const existing = map.get(n.id)!;
+      existing.isRead = existing.isRead || n.isRead;
+    } else {
+      map.set(n.id, n);
+    }
+  });
 
   return Array.from(map.values()).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -230,11 +355,11 @@ export async function fetchUserNotificationsAsync(
  * Create and broadcast a new real-time notification
  */
 export function createNotification(
-  notification: Omit<AppNotification, 'id' | 'createdAt' | 'isRead'>
+  notification: Omit<AppNotification, 'id' | 'createdAt' | 'isRead'> & { id?: string }
 ): AppNotification {
   const newNotif: AppNotification = {
-    id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     ...notification,
+    id: notification.id || `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     isRead: false,
     createdAt: new Date().toISOString(),
   };
@@ -242,7 +367,7 @@ export function createNotification(
   if (typeof window !== 'undefined') {
     try {
       const current = getAllStoredNotifications();
-      const updated = [newNotif, ...current].slice(0, 100);
+      const updated = [newNotif, ...current.filter((n) => n.id !== newNotif.id)].slice(0, 100);
       localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(updated));
 
       window.dispatchEvent(

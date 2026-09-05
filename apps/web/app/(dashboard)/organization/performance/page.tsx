@@ -157,7 +157,7 @@ export default function PerformanceAppraisalPage() {
 
     saveLocalKPI(payload);
     setShowKpiModal(false);
-    showToast(editingKpi ? 'KPI Objective updated successfully' : 'New Standard KPI added to your appraisal set');
+    showToast(editingKpi ? 'KPI Objective updated successfully' : 'New KPI added to your appraisal set');
   };
 
   const handleSubmitKpiForReview = (kpi: PerformanceKPI) => {
@@ -338,7 +338,7 @@ export default function PerformanceAppraisalPage() {
             <span className="text-foreground font-bold">Performance &amp; Appraisal</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground flex items-center space-x-3 mt-1">
-            <span>Standard KPI Set &amp; Task Logs</span>
+            <span>KPI Set &amp; Task Logs</span>
             <span className="px-3 py-1 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 text-xs font-mono font-bold">
               Q3 2026 Appraisal Cycle
             </span>
@@ -361,7 +361,7 @@ export default function PerformanceAppraisalPage() {
               }`}
             >
               <Award className="h-4 w-4" />
-              <span>Standard KPIs ({kpis.length})</span>
+              <span>KPIs ({kpis.length})</span>
             </button>
             <button
               type="button"
@@ -443,7 +443,7 @@ export default function PerformanceAppraisalPage() {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* ── TAB 1: STANDARD KPIS & APPROVALS VIEW ────────────────── */}
+      {/* ── TAB 1: KPIS & APPROVALS VIEW ────────────────── */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {activeTab === 'KPIS' && (
         <div className="space-y-4">
@@ -577,7 +577,7 @@ export default function PerformanceAppraisalPage() {
             <div className="p-12 text-center rounded-3xl bg-card border border-border text-muted-foreground">
               <Award className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
               <h3 className="font-bold text-foreground text-sm">No KPIs configured for this appraisal cycle</h3>
-              <p className="text-xs mt-1">Click &quot;+ ADD KPI&quot; above to set your standard performance goals.</p>
+              <p className="text-xs mt-1">Click &quot;+ ADD KPI&quot; above to set your performance goals.</p>
             </div>
           )}
         </div>
@@ -716,7 +716,7 @@ export default function PerformanceAppraisalPage() {
           <div className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-3xl bg-card border border-border shadow-2xl p-6 sm:p-8 space-y-5">
             <div className="flex items-center justify-between border-b border-border/70 pb-3">
               <h3 className="text-lg font-black text-foreground">
-                {editingKpi ? 'Edit KPI Objective' : 'Add Standard KPI Objective'}
+                {editingKpi ? 'Edit KPI Objective' : 'Add KPI Objective'}
               </h3>
               <button
                 type="button"
@@ -987,7 +987,7 @@ export default function PerformanceAppraisalPage() {
 
               <div className="space-y-1">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Aligned Standard KPI (Optional)
+                  Aligned KPI (Optional)
                 </label>
                 <select
                   value={taskFormData.kpiId || ''}
