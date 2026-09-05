@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@jaago/auth';
 import { getCurrentBusinessDate, resolveCanonicalEmployeeId } from '@/lib/server-attendance';
+import { getEffectiveDailyAttendance } from '@/lib/server-effective-attendance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,24 +18,15 @@ export async function GET(request: Request) {
       );
     }
 
-    const supabase = getSupabaseAdminClient();
     const canonicalEmpId = await resolveCanonicalEmployeeId(employeeId);
-    const startDate = `${month}-01`;
-    const endDate = `${month}-31`;
 
-    const { data: records, error } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .eq('employee_id', canonicalEmpId)
-      .gte('business_date', startDate)
-      .lte('business_date', endDate)
-      .order('business_date', { ascending: true });
+    // 1. Fetch effective daily attendance records for the month
+    const effectiveRecords = await getEffectiveDailyAttendance({
+      employeeId: canonicalEmpId,
+      month,
+      limit: 100,
+    });
 
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 });
-    }
-
-    const items = records || [];
     let presentCount = 0;
     let lateCount = 0;
     let autoCheckoutCount = 0;
@@ -43,32 +34,32 @@ export async function GET(request: Request) {
     let onLeaveCount = 0;
     let totalWorkedMinutes = 0;
 
-    for (const r of items) {
-      if (r.status === 'present' || r.status === 'late') {
+    for (const r of effectiveRecords) {
+      if (r.status === 'Present' || r.status === 'Late' || r.status === 'Auto Check Out') {
         presentCount++;
       }
-      if (r.is_late || r.status === 'late') {
+      if (r.isLate || r.status === 'Late') {
         lateCount++;
       }
-      if (r.is_auto_checkout) {
+      if (r.isAutoCheckout || r.status === 'Auto Check Out') {
         autoCheckoutCount++;
       }
-      if (r.status === 'absent') {
+      if (r.status === 'Absent') {
         absentCount++;
       }
-      if (r.status === 'on_leave') {
+      if (r.status === 'Leave' || r.status === 'Half Day' || r.status === 'On Duty') {
         onLeaveCount++;
       }
-      if (r.worked_minutes) {
-        totalWorkedMinutes += r.worked_minutes;
+      if (r.workedSeconds) {
+        totalWorkedMinutes += Math.floor(r.workedSeconds / 60);
       }
     }
 
     const targetWorkingDays = 22; // Standard monthly target
     const onTimeCount = Math.max(0, presentCount - lateCount);
-    const onTimeRate = presentCount > 0 ? Math.round((onTimeCount / presentCount) * 100) : 100;
-    const lateRate = presentCount > 0 ? Math.round((lateCount / presentCount) * 100) : 0;
-    const autoCheckoutRate = presentCount > 0 ? Math.round((autoCheckoutCount / presentCount) * 100) : 0;
+    const onTimeRate = presentCount > 0 ? Math.round((onTimeCount / presentCount) * 1000) / 10 : 100.0;
+    const lateRate = presentCount > 0 ? Math.round((lateCount / presentCount) * 1000) / 10 : 0.0;
+    const autoCheckoutRate = presentCount > 0 ? Math.round((autoCheckoutCount / presentCount) * 1000) / 10 : 0.0;
 
     return NextResponse.json({
       success: true,
@@ -85,7 +76,7 @@ export async function GET(request: Request) {
         onTimePerformancePct: onTimeRate,
         latePenaltyPct: lateRate,
         autoCheckoutRatePct: autoCheckoutRate,
-        dailyRecords: items,
+        dailyRecords: effectiveRecords,
       },
     });
   } catch (err: any) {

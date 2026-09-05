@@ -7,6 +7,7 @@ import {
 } from '@/lib/biotime-data';
 import { getSupabaseAdminClient } from '@jaago/auth';
 import { logger } from '@jaago/logger';
+import { syncBioTimePunchesToSupabase } from '@/lib/server-effective-attendance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,28 +17,27 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const { forceAll } = body;
 
-    // Fetch live terminals and transactions directly from ZKTeco BioTime server
-    const [liveDevices, paginatedLogs] = await Promise.all([
+    // 1. Fetch live terminals and transactions directly from ZKTeco BioTime server
+    const [liveDevices, paginatedLogs, syncStats] = await Promise.all([
       fetchLiveBioTimeDevices(),
       fetchLiveBioTimeTransactions(1, 100),
+      syncBioTimePunchesToSupabase({ pageSize: 200, forceAll: Boolean(forceAll) }),
     ]);
 
     const liveLogs = paginatedLogs.logs;
     const supabaseAdmin = getSupabaseAdminClient();
-    let reconciledCount = 0;
+    let reconciledCount = syncStats.syncedCount || 0;
 
     if (supabaseAdmin && liveLogs.length > 0) {
       // Pull employees for mapping
       const { data: emps } = await supabaseAdmin
         .from('employees')
-        .select('id, employee_id, full_name, department, branch');
+        .select('id, employee_id, code, name, department, branch');
 
       const empMap = new Map<string, any>();
       (emps || []).forEach((e) => {
+        if (e.code) empMap.set(String(e.code).trim(), e);
         if (e.employee_id) empMap.set(String(e.employee_id).trim(), e);
-        if (e.employee_id && !isNaN(Number(e.employee_id))) {
-          empMap.set(String(Number(e.employee_id)), e);
-        }
       });
 
       for (const punch of liveLogs) {
@@ -85,6 +85,7 @@ export async function POST(request: Request) {
         livePunchesPulled: liveLogs.length,
         devicesCount: liveDevices.length,
         reconciledToSupabase: reconciledCount,
+        unmatchedEmployees: syncStats.unmatchedCount,
         forceAll: Boolean(forceAll),
       },
     });
@@ -95,10 +96,11 @@ export async function POST(request: Request) {
         syncedPunchesCount: liveLogs.length,
         devicesProcessed: liveDevices.length,
         reconciledCount,
+        unmatchedEmployeesCount: syncStats.unmatchedCount,
         lastSyncTime: updatedConfig.lastSyncTime,
         latestPunches: liveLogs.slice(0, 5),
       },
-      message: `✓ Live BioTime Sync Complete! Pulled ${liveLogs.length} real punches across ${liveDevices.length} live terminals.`,
+      message: `✓ Live BioTime Sync Complete! Pulled ${liveLogs.length} real punches across ${liveDevices.length} live terminals (${syncStats.syncedCount} normalized into att_biotime_events).`,
     });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message || 'BioTime sync failed' }, { status: 500 });

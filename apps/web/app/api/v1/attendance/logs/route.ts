@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@jaago/auth';
-import { getServerRegularizations } from '@/lib/server-regularization';
+import { getEffectiveDailyAttendance } from '@/lib/server-effective-attendance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,290 +8,74 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const date = searchParams.get('date');
-    const month = searchParams.get('month'); // e.g. '2026-08'
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
-    const employeeId = searchParams.get('employeeId');
-    const status = searchParams.get('status');
-    const limit = parseInt(searchParams.get('limit') || '100', 10);
+    const date = searchParams.get('date') || undefined;
+    const month = searchParams.get('month') || undefined;
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
+    const employeeId = searchParams.get('employeeId') || undefined;
+    const status = searchParams.get('status') || undefined;
+    const limit = parseInt(searchParams.get('limit') || '200', 10);
 
-    const supabase = getSupabaseAdminClient();
+    // Call unified single source of truth layer
+    const effectiveDays = await getEffectiveDailyAttendance({
+      employeeId,
+      date,
+      month,
+      startDate,
+      endDate,
+      status,
+      limit,
+    });
 
-    let query = supabase
-      .from('attendance_records')
-      .select('*')
-      .order('business_date', { ascending: false })
-      .limit(limit);
-
-    if (date) {
-      query = query.eq('business_date', date);
-    } else if (startDate && endDate) {
-      query = query.gte('business_date', startDate).lte('business_date', endDate);
-    } else if (month) {
-      query = query.gte('business_date', `${month}-01`).lte('business_date', `${month}-31`);
-    }
-
-    if (employeeId) {
-      query = query.eq('employee_id', employeeId);
-    }
-    if (status && status !== 'ALL' && status !== 'All Status') {
-      if (status.toLowerCase() === 'auto check out' || status.toLowerCase() === 'auto_check_out') {
-        query = query.eq('is_auto_checkout', true);
-      } else {
-        query = query.eq('status', status.toLowerCase());
+    const mapped = effectiveDays.map((d) => {
+      let deviceBadge: 'Web Portal' | 'Device Login' | 'RFID Scanner' | 'Manual In/Out' = 'Web Portal';
+      if (d.primarySource === 'BioTime Terminal') {
+        deviceBadge = 'Device Login';
+      } else if (d.primarySource === 'Merged (GPS + BioTime)') {
+        deviceBadge = 'RFID Scanner';
+      } else if (d.primarySource === 'Manual') {
+        deviceBadge = 'Manual In/Out';
       }
-    }
-
-    const [
-      { data: rawRecords, error: rawErr },
-      { data: emps },
-      { data: gpsLocs },
-      { data: geoLocs },
-      { data: approvedLeaves },
-    ] = await Promise.all([
-      query,
-      supabase.from('employees').select('id, name, code, designation, department, branch, avatar_url'),
-      supabase.from('gps_locations').select('id, name, branch_office, latitude, longitude'),
-      supabase.from('geofence_locations').select('id, name, branch_office, latitude, longitude'),
-      supabase.from('leave_requests').select('*').eq('status', 'Approved'),
-    ]);
-
-    if (rawErr) {
-      return NextResponse.json({ success: false, error: rawErr.message }, { status: 500 });
-    }
-
-    const empMap = new Map((emps || []).map((e) => [e.id, e]));
-    (emps || []).forEach((e) => {
-      if (e.code) empMap.set(e.code, e);
-    });
-
-    const locMap = new Map<string, string>();
-    (gpsLocs || []).forEach((g) => {
-      if (g.id) locMap.set(g.id, g.name || g.branch_office || 'Designated Office');
-    });
-    (geoLocs || []).forEach((g) => {
-      if (g.id && !locMap.has(g.id)) locMap.set(g.id, g.name || g.branch_office || 'Designated Office');
-    });
-
-    let enriched = (rawRecords || []).map((r) => {
-      const emp = empMap.get(r.employee_id);
-      const inFormatted = r.check_in_at
-        ? new Date(r.check_in_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : '09:00 AM';
-      const outFormatted = r.check_out_at
-        ? new Date(r.check_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
-        : undefined;
-
-      let derivedStatus = 'Present';
-      if (r.is_auto_checkout) derivedStatus = 'Auto Check Out';
-      else if (r.status === 'late' || r.is_late) derivedStatus = 'Late';
-      else if (r.status === 'absent') derivedStatus = 'Absent';
-      else if (r.status === 'half_day') derivedStatus = 'Half Day';
-      else if (r.status === 'on_leave') derivedStatus = 'Leave';
-
-      const resolvedLocName =
-        (r.check_in_location_id && locMap.get(r.check_in_location_id)) ||
-        (r.check_out_location_id && locMap.get(r.check_out_location_id)) ||
-        'JAAGO HQ (Banani)';
 
       return {
-        id: String(r.id),
-        employeeId: r.employee_id,
-        employeeCode: emp?.code || r.employee_id,
-        employeeName: emp?.name || 'Staff Member',
-        designation: emp?.designation || 'Staff',
-        department: emp?.department || "Founder's Office",
-        branch: emp?.branch || 'Head Office (Banani)',
-        avatarUrl: emp?.avatar_url || '',
-        status: derivedStatus,
-        device: r.check_in_source === 'gps' ? 'Web Portal' : 'Device Login',
-        date: r.business_date,
-        checkInTime: inFormatted,
-        checkOutTime: outFormatted,
-        lateByMin: r.late_by_minutes || 0,
+        id: `att-${d.employeeId}-${d.businessDate}`,
+        employeeId: d.employeeId,
+        employeeCode: d.employeeCode || d.employeeId,
+        employeeName: d.employeeName || 'Staff Member',
+        designation: d.designation || 'Staff',
+        department: d.department || "Founder's Office",
+        branch: d.branch || 'Head Office (Banani)',
+        avatarUrl: d.avatarUrl || '',
+        status: d.status,
+        device: deviceBadge,
+        date: d.businessDate,
+        checkInTime: d.countedCheckInTimeLocal,
+        checkOutTime: d.countedCheckOutTimeLocal !== '--:--' ? d.countedCheckOutTimeLocal : undefined,
+        lateByMin: d.lateByMinutes,
         earlyOutByMin: 0,
-        locationName: resolvedLocName,
-        checkInLat: r.check_in_lat !== null ? Number(r.check_in_lat) : 23.7937,
-        checkInLng: r.check_in_lng !== null ? Number(r.check_in_lng) : 90.4066,
-        checkOutLat: r.check_out_lat !== null ? Number(r.check_out_lat) : 23.7937,
-        checkOutLng: r.check_out_lng !== null ? Number(r.check_out_lng) : 90.4066,
-        isAutoCheckout: Boolean(r.is_auto_checkout),
-        workedMinutes: r.worked_minutes,
-        createdBy: emp?.name ? `${emp.name} - (${emp.code})` : r.employee_id,
-        createdAt: r.created_at ? new Date(r.created_at).toLocaleString() : new Date().toLocaleString(),
-        updatedAt: r.updated_at ? new Date(r.updated_at).toLocaleString() : new Date().toLocaleString(),
-        timestamp: r.check_in_at ? new Date(r.check_in_at).toLocaleString() : new Date().toLocaleString(),
-        notes: r.notes || (r.status === 'On Duty' ? 'On Duty' : r.is_auto_checkout ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified'),
+        locationName: d.branch || 'JAAGO HQ (Banani)',
+        checkInLat: 23.7937,
+        checkInLng: 90.4066,
+        checkOutLat: 23.7937,
+        checkOutLng: 90.4066,
+        isAutoCheckout: d.isAutoCheckout,
+        workedMinutes: d.workedSeconds ? Math.floor(d.workedSeconds / 60) : undefined,
+        workedSeconds: d.workedSeconds,
+        workedDisplay: d.workedDisplay,
+        createdBy: d.employeeName ? `${d.employeeName} - (${d.employeeCode})` : d.employeeId,
+        createdAt: d.countedCheckInAt ? new Date(d.countedCheckInAt).toLocaleString() : new Date().toLocaleString(),
+        updatedAt: d.countedCheckOutAt ? new Date(d.countedCheckOutAt).toLocaleString() : new Date().toLocaleString(),
+        timestamp: d.countedCheckInAt ? new Date(d.countedCheckInAt).toLocaleString() : `${d.businessDate} 09:00 AM`,
+        primarySource: d.primarySource,
+        checkInSource: d.checkInSource,
+        checkOutSource: d.checkOutSource,
+        sourceBreakdown: d.sourceBreakdown,
+        allPunches: d.allPunches,
+        notes: d.notes || (d.primarySource === 'Merged (GPS + BioTime)' ? 'Counted from earliest BioTime/GPS check-in & latest check-out' : d.isAutoCheckout ? 'Auto check-out generated after 11:30 PM' : 'Attendance verified'),
       };
     });
 
-    // Expand and merge approved leave requests into attendance logs
-    const existingKeys = new Set(enriched.map((e) => `${(e.employeeCode || '').toLowerCase().trim()}_${e.date}`));
-
-    if (Array.isArray(approvedLeaves)) {
-      for (const lv of approvedLeaves) {
-        const lvCode = (lv.employee_code || '').trim();
-        const lvId = (lv.employee_id || '').trim();
-        const emp = empMap.get(lvId) || empMap.get(lvCode);
-
-        // Check if employeeId filter matches
-        if (employeeId && lvId !== employeeId && lvCode !== employeeId && emp?.code !== employeeId && emp?.id !== employeeId) {
-          continue;
-        }
-
-        // Check if status filter excludes Leave
-        if (status && status !== 'ALL' && status !== 'All Status' && status.toLowerCase() !== 'leave' && status.toLowerCase() !== 'half day') {
-          continue;
-        }
-
-        const start = new Date(lv.from_date);
-        const end = new Date(lv.to_date);
-        if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
-
-        const current = new Date(start);
-        while (current <= end) {
-          const dateStr = current.toISOString().split('T')[0]!;
-          current.setDate(current.getDate() + 1);
-
-          // Apply date filters
-          if (date && dateStr !== date) continue;
-          if (startDate && endDate && (dateStr < startDate || dateStr > endDate)) continue;
-          if (month && !dateStr.startsWith(month)) continue;
-
-          const matchKey = `${(lvCode || emp?.code || '').toLowerCase().trim()}_${dateStr}`;
-          if (existingKeys.has(matchKey)) continue;
-
-          const rawReason = lv.reason || '';
-          const cleanReason = rawReason
-            .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
-            .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
-            .trim();
-
-          enriched.push({
-            id: `att-leave-${lvCode || lvId}-${dateStr}`,
-            employeeId: lvId || emp?.id || `emp-${lvCode}`,
-            employeeCode: lvCode || emp?.code || 'EMP',
-            employeeName: emp?.name || lv.employee_name || 'Staff Member',
-            designation: emp?.designation || 'Staff',
-            department: emp?.department || "Founder's Office",
-            branch: emp?.branch || 'Head Office (Banani)',
-            avatarUrl: emp?.avatar_url || '',
-            status: 'Leave',
-            device: 'Web Portal',
-            date: dateStr,
-            checkInTime: 'N/A',
-            checkOutTime: 'N/A',
-            lateByMin: 0,
-            earlyOutByMin: 0,
-            locationName: 'On Leave',
-            checkInLat: 23.7937,
-            checkInLng: 90.4066,
-            checkOutLat: 23.7937,
-            checkOutLng: 90.4066,
-            isAutoCheckout: false,
-            workedMinutes: 0,
-            createdBy: lv.approved_by || `${lv.employee_name} (${lvCode})`,
-            createdAt: lv.created_at ? new Date(lv.created_at).toLocaleString() : new Date().toLocaleString(),
-            updatedAt: lv.updated_at ? new Date(lv.updated_at).toLocaleString() : new Date().toLocaleString(),
-            timestamp: `${dateStr} 09:00 AM`,
-            notes: `Approved Leave: ${lv.leave_type}${cleanReason ? ` - ${cleanReason}` : ''}`,
-          });
-          existingKeys.add(matchKey);
-        }
-      }
-    }
-
-    // Merge approved regularizations to ensure attendance logs are immediately updated to Present and adjusted times
-    try {
-      const serverRegs = await getServerRegularizations();
-      serverRegs.forEach((reg) => {
-        if (reg.status !== 'Approved') return;
-        const regCode = (reg.employeeCode || '').trim().toLowerCase();
-        const regName = (reg.employeeName || '').trim().toLowerCase();
-        const regDate = reg.date;
-
-        // Find ALL matching logs for this employee on this date
-        const matchingIndices: number[] = [];
-        enriched.forEach((l, idx) => {
-          const isIdMatch = reg.attendanceLogId && l.id === reg.attendanceLogId;
-          const isDateAndEmpMatch =
-            l.date === regDate &&
-            (
-              (regCode && (l.employeeCode || '').trim().toLowerCase() === regCode) ||
-              (regName && (l.employeeName || '').trim().toLowerCase() === regName) ||
-              (reg.employeeId && l.employeeId === reg.employeeId)
-            );
-          if (isIdMatch || isDateAndEmpMatch) {
-            matchingIndices.push(idx);
-          }
-        });
-
-        if (matchingIndices.length > 0) {
-          const primaryIdx = matchingIndices[0]!;
-          const targetLog = enriched[primaryIdx]!;
-
-          targetLog.checkInTime = reg.adjustedCheckIn || '10:00 AM';
-          targetLog.checkOutTime = reg.adjustedCheckOut || '06:00 PM';
-          targetLog.status = 'Present';
-          targetLog.lateByMin = 0;
-          targetLog.earlyOutByMin = 0;
-          targetLog.isAutoCheckout = false;
-          targetLog.workedMinutes = 480;
-          targetLog.notes = `Regularized (Approved by ${reg.approvedBy || 'Supervisor'}): ${reg.reason}`;
-          targetLog.updatedAt = reg.approvedAt || reg.updatedAt || new Date().toISOString();
-
-          // Remove any leftover duplicate punches on that date
-          if (matchingIndices.length > 1) {
-            const extraIndices = new Set(matchingIndices.slice(1));
-            enriched = enriched.filter((_, i) => !extraIndices.has(i));
-          }
-        } else {
-          // Check if it matches filters before adding
-          if (date && regDate !== date) return;
-          if (startDate && endDate && (regDate < startDate || regDate > endDate)) return;
-          if (month && !regDate.startsWith(month)) return;
-          if (employeeId && reg.employeeId !== employeeId && regCode !== employeeId.toLowerCase()) return;
-
-          const emp = empMap.get(reg.employeeId) || empMap.get(reg.employeeCode);
-          enriched.push({
-            id: reg.attendanceLogId || `att-reg-${reg.employeeCode}-${regDate}`,
-            employeeId: reg.employeeId || emp?.id || `emp-${reg.employeeCode}`,
-            employeeCode: reg.employeeCode || emp?.code || 'EMP',
-            employeeName: reg.employeeName || emp?.name || 'Staff Member',
-            designation: reg.designation || emp?.designation || 'Staff',
-            department: reg.department || emp?.department || "Founder's Office",
-            branch: 'JAAGO HQ (Banani)',
-            avatarUrl: emp?.avatar_url || '',
-            status: 'Present',
-            device: 'Web Portal',
-            date: regDate,
-            checkInTime: reg.adjustedCheckIn || '10:00 AM',
-            checkOutTime: reg.adjustedCheckOut || '06:00 PM',
-            lateByMin: 0,
-            earlyOutByMin: 0,
-            locationName: 'JAAGO HQ (Banani)',
-            checkInLat: 23.7937,
-            checkInLng: 90.4066,
-            checkOutLat: 23.7937,
-            checkOutLng: 90.4066,
-            isAutoCheckout: false,
-            workedMinutes: 480,
-            createdBy: reg.approvedBy || 'Supervisor',
-            createdAt: reg.createdAt || new Date().toLocaleString(),
-            updatedAt: reg.approvedAt || new Date().toLocaleString(),
-            timestamp: `${regDate} ${reg.adjustedCheckIn || '10:00 AM'}`,
-            notes: `Regularized (Approved by ${reg.approvedBy || 'Supervisor'}): ${reg.reason}`,
-          });
-        }
-      });
-    } catch (regErr) {
-      console.warn('Error merging server regularizations in attendance logs API:', regErr);
-    }
-
-    enriched.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    return NextResponse.json({ success: true, data: enriched });
+    return NextResponse.json({ success: true, data: mapped });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || 'Failed to fetch attendance logs' },
@@ -319,6 +103,9 @@ export async function POST(request: Request) {
     } = body;
 
     const supabase = getSupabaseAdminClient();
+    if (!supabase) {
+      return NextResponse.json({ success: false, error: 'Supabase client unavailable' }, { status: 500 });
+    }
 
     // Resolve employee id
     let resolvedEmployeeId = employeeId;
@@ -372,6 +159,8 @@ export async function POST(request: Request) {
       business_date: businessDate,
       check_in_at: checkInAt,
       check_out_at: checkOutAt,
+      first_check_in_at: checkInAt,
+      last_check_out_at: checkOutAt,
       check_in_source: device === 'Web Portal' ? 'gps' : 'manual',
       check_out_source: checkOutAt ? (device === 'Web Portal' ? 'gps' : 'manual') : null,
       check_in_lat: checkInLat !== undefined ? checkInLat : 23.7937,
@@ -413,6 +202,9 @@ export async function DELETE(request: Request) {
     const body = await request.json();
     const { id, ids, employeeCode, date } = body;
     const supabase = getSupabaseAdminClient();
+    if (!supabase) {
+      return NextResponse.json({ success: false, error: 'Supabase client unavailable' }, { status: 500 });
+    }
 
     const targetIds: string[] = [];
     if (id) targetIds.push(String(id));

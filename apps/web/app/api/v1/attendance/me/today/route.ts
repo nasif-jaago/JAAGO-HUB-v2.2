@@ -6,6 +6,7 @@ import {
   resolveEmployeeShiftSnapshot,
   resolveCanonicalEmployeeId,
 } from '@/lib/server-attendance';
+import { getEffectiveDailyAttendance } from '@/lib/server-effective-attendance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +39,15 @@ export async function GET(request: Request) {
     const businessDate = getCurrentBusinessDate('Asia/Dhaka', cutoffLocal);
     const nowUtc = new Date().toISOString();
 
-    // 1. Fetch today's canonical record
+    // 1. Fetch today's effective merged record
+    const effectiveList = await getEffectiveDailyAttendance({
+      employeeId: canonicalEmpId,
+      date: businessDate,
+      limit: 1,
+    });
+    const effectiveToday = effectiveList[0] || null;
+
+    // 2. Fetch raw GPS record for button state machine
     const { data: record } = await supabase
       .from('attendance_records')
       .select('*')
@@ -46,45 +55,45 @@ export async function GET(request: Request) {
       .eq('business_date', businessDate)
       .maybeSingle();
 
-    // 2. Resolve shift snapshot
+    // 3. Resolve shift snapshot
     const shift = await resolveEmployeeShiftSnapshot(canonicalEmpId, businessDate);
 
-    // 3. Derive state machine status and button enablement
+    // 4. Derive state machine status and button enablement
     const isCheckedIn = Boolean(record && record.check_in_at && !record.check_out_at);
     const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' = isCheckedIn ? 'CHECKED_IN' : 'NOT_CHECKED_IN';
 
-    // 4. Compute live worked seconds & canonical display
-    const firstCheckIn = record?.first_check_in_at || record?.check_in_at || null;
-    const lastCheckOut = record?.last_check_out_at || record?.check_out_at || null;
+    // 5. Compute counted First-In and Last-Out
+    const firstCheckIn = effectiveToday?.countedCheckInAt || record?.first_check_in_at || record?.check_in_at || null;
+    const lastCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
 
-    let workedSeconds = record?.worked_seconds ?? (record?.worked_minutes ? record.worked_minutes * 60 : 0);
-    let workedDisplay = record?.worked_display || formatWorkingHours(workedSeconds);
+    let workedSeconds = effectiveToday?.workedSeconds ?? (record?.worked_seconds ?? (record?.worked_minutes ? record.worked_minutes * 60 : 0));
+    let workedDisplay = effectiveToday?.workedDisplay || record?.worked_display || formatWorkingHours(workedSeconds);
 
     if (isCheckedIn && firstCheckIn) {
       const facts = {
         employeeId: canonicalEmpId,
         businessDate,
         firstCheckInAt: firstCheckIn,
-        checkInAt: record.check_in_at,
+        checkInAt: record?.check_in_at || firstCheckIn,
         lastCheckOutAt: lastCheckOut,
         calcMethod,
         nowServer: nowUtc,
       };
       workedSeconds = calculateWorkedSeconds(facts, calcMethod, nowUtc);
       workedDisplay = formatWorkingHours(workedSeconds);
-    } else if (record && record.check_in_at && record.check_out_at) {
+    } else if (firstCheckIn && lastCheckOut) {
       const facts = {
         employeeId: canonicalEmpId,
         businessDate,
         firstCheckInAt: firstCheckIn,
         lastCheckOutAt: lastCheckOut,
-        checkInAt: record.check_in_at,
-        checkOutAt: record.check_out_at,
+        checkInAt: record?.check_in_at || firstCheckIn,
+        checkOutAt: record?.check_out_at || lastCheckOut,
         calcMethod,
       };
       workedSeconds = calculateWorkedSeconds(facts, calcMethod);
       workedDisplay = formatWorkingHours(workedSeconds);
-    } else if (!record) {
+    } else if (!record && !effectiveToday) {
       workedSeconds = 0;
       workedDisplay = '0h 00m';
     }
@@ -93,11 +102,17 @@ export async function GET(request: Request) {
       success: true,
       data: {
         state,
-        first_check_in_at: record?.first_check_in_at || record?.check_in_at || null,
-        last_check_out_at: record?.last_check_out_at || record?.check_out_at || null,
+        first_check_in_at: firstCheckIn,
+        last_check_out_at: lastCheckOut,
+        check_in_time_local: effectiveToday?.countedCheckInTimeLocal || (firstCheckIn ? new Date(firstCheckIn).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'),
+        check_out_time_local: effectiveToday?.countedCheckOutTimeLocal || (lastCheckOut ? new Date(lastCheckOut).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'),
+        check_in_source: effectiveToday?.checkInSource || record?.check_in_source || 'gps',
+        check_out_source: effectiveToday?.checkOutSource || record?.check_out_source || 'gps',
+        primary_source: effectiveToday?.primarySource || (record?.check_in_source === 'gps' ? 'Web Portal (GPS)' : 'BioTime Terminal'),
+        source_breakdown: effectiveToday?.sourceBreakdown || null,
         worked_seconds: workedSeconds,
         worked_display: workedDisplay,
-        status: record?.status || (shift.isScheduledWorkingDay ? 'absent' : 'weekly_off'),
+        status: effectiveToday?.status || record?.status || (shift.isScheduledWorkingDay ? 'absent' : 'weekly_off'),
         needs_review: Boolean(record?.needs_review || record?.is_auto_checkout),
         is_auto_checkout: Boolean(record?.is_auto_checkout),
         buttons: {
@@ -107,6 +122,7 @@ export async function GET(request: Request) {
         server_now: nowUtc,
         businessDate,
         record: record || null,
+        effectiveRecord: effectiveToday || null,
         shift,
       },
     });

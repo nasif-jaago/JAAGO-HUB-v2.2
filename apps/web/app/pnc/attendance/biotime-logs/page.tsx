@@ -19,8 +19,12 @@ import {
   Building2,
   Calendar,
   X,
+  AlertTriangle,
+  UserCheck,
+  Link2,
 } from 'lucide-react';
 import { BioTimeDevice } from '@/lib/biotime-data';
+import { FullEmployeeProfile, fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 
 export interface BioTimeReconciledRow {
   id: string;
@@ -37,9 +41,32 @@ export interface BioTimeReconciledRow {
   punchesCount: number;
 }
 
+export interface BioTimeMappingItem {
+  id: string;
+  biotimeEmpCode: string;
+  biotimeName?: string;
+  biotimeDepartment?: string;
+  hubEmployeeId?: string;
+  hubEmployeeCode?: string;
+  hubEmployeeName?: string;
+  hubDesignation?: string;
+  hubDepartment?: string;
+  hubBranch?: string;
+  unmatched: boolean;
+  notes?: string;
+}
+
 export default function BioTimeLogsPage() {
   const [rows, setRows] = useState<BioTimeReconciledRow[]>([]);
   const [devices, setDevices] = useState<BioTimeDevice[]>([]);
+  const [mappings, setMappings] = useState<BioTimeMappingItem[]>([]);
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
+  const [unmatchedCount, setUnmatchedCount] = useState(0);
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [mappingSearch, setMappingSearch] = useState('');
+  const [mappingFilter, setMappingFilter] = useState<'ALL' | 'UNMATCHED'>('UNMATCHED');
+  const [savingMappingCode, setSavingMappingCode] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRowsLoading, setIsRowsLoading] = useState(false);
@@ -95,6 +122,20 @@ export default function BioTimeLogsPage() {
     }
   };
 
+  // Fetch mappings
+  const fetchMappings = async () => {
+    try {
+      const res = await fetch('/api/v1/biotime/mapping');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setMappings(data.data);
+        setUnmatchedCount(data.metrics?.unmatchedCount || 0);
+      }
+    } catch (e) {
+      console.error('Error fetching mappings:', e);
+    }
+  };
+
   // Fetch Reconciled BioTime Rows from API
   const fetchReconciledLogs = async (targetPage: number, targetSize?: number) => {
     const size = targetSize || pageSize;
@@ -128,9 +169,14 @@ export default function BioTimeLogsPage() {
   // Initial Data Load
   const loadInitial = async () => {
     try {
-      const devRes = await fetch('/api/v1/biotime/devices');
+      const [devRes, emps] = await Promise.all([
+        fetch('/api/v1/biotime/devices'),
+        fetchEmployeesFromSupabase(),
+        fetchMappings(),
+      ]);
       const devData = await devRes.json();
       if (devData.success && devData.data) setDevices(devData.data);
+      if (emps && emps.length > 0) setEmployees(emps);
       await fetchReconciledLogs(1, pageSize);
     } catch (e) {
       console.error('Error loading initial data:', e);
@@ -163,7 +209,7 @@ export default function BioTimeLogsPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         showToast(data.message || '✓ Synchronized live punches with Supabase attendance!');
-        await fetchReconciledLogs(1, pageSize);
+        await Promise.all([fetchReconciledLogs(1, pageSize), fetchMappings()]);
       } else {
         showToast(data.error || 'Failed to sync punches', 'error');
       }
@@ -171,6 +217,35 @@ export default function BioTimeLogsPage() {
       showToast('Network error during sync', 'error');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Save manual employee mapping
+  const handleSaveMapping = async (biotimeEmpCode: string, hubEmployeeCode: string) => {
+    setSavingMappingCode(biotimeEmpCode);
+    try {
+      const matchedEmp = employees.find((e) => e.code === hubEmployeeCode);
+      const res = await fetch('/api/v1/biotime/mapping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          biotimeEmpCode,
+          hubEmployeeId: matchedEmp?.id,
+          hubEmployeeCode: hubEmployeeCode || null,
+          notes: hubEmployeeCode ? `Mapped to ${matchedEmp?.name || hubEmployeeCode}` : 'Unmatched',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(`✓ BioTime ID ${biotimeEmpCode} successfully mapped to ${matchedEmp?.name || hubEmployeeCode}`);
+        await Promise.all([fetchMappings(), fetchReconciledLogs(page, pageSize)]);
+      } else {
+        showToast(data.error || 'Failed to update mapping', 'error');
+      }
+    } catch {
+      showToast('Network error updating mapping', 'error');
+    } finally {
+      setSavingMappingCode(null);
     }
   };
 
@@ -228,12 +303,25 @@ export default function BioTimeLogsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMappingModal(true)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 transition-all flex items-center gap-1.5 shadow-2xs"
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Identity Mappings</span>
+            {unmatchedCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-500 text-white">
+                {unmatchedCount}
+              </span>
+            )}
+          </button>
+
           <Link
             href="/pnc/settings/biotime"
             className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-card hover:bg-accent transition-all flex items-center gap-1.5 text-foreground shadow-2xs"
           >
             <Radio className="w-3.5 h-3.5 text-cyan-600" />
-            <span>Terminal Control Center</span>
+            <span>Terminal Control</span>
             <ExternalLink className="w-3 h-3 text-muted-foreground ml-0.5" />
           </Link>
 
@@ -247,6 +335,33 @@ export default function BioTimeLogsPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Unmatched Employees Warning Banner ── */}
+      {unmatchedCount > 0 && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-foreground">
+                {unmatchedCount} BioTime Device IDs are unlinked to HUB Employee Profiles
+              </span>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Punches from unlinked IDs are quarantined safely without data loss. Map them once to count their biometric punches in daily attendance and payroll automatically.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setMappingFilter('UNMATCHED');
+              setShowMappingModal(true);
+            }}
+            className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs uppercase tracking-wider shadow-xs transition flex items-center gap-1.5 shrink-0 self-start sm:self-auto cursor-pointer"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            <span>Map Unlinked ({unmatchedCount})</span>
+          </button>
+        </div>
+      )}
 
       {/* ── KPI Metric Cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -619,6 +734,215 @@ export default function BioTimeLogsPage() {
           </div>
         </div>
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── IDENTITY MAPPING MANAGEMENT MODAL ──────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {showMappingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-card border border-border/80 rounded-3xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-border/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-foreground">
+                    BioTime Device &amp; HUB Employee Identity Mapping
+                  </h2>
+                  <p className="text-[11px] text-muted-foreground">
+                    Link physical biometric IDs &amp; RFIDs to People &amp; Culture employee profiles.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMappingModal(false)}
+                className="p-1.5 rounded-xl hover:bg-accent text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Toolbar */}
+            <div className="p-3.5 bg-muted/30 border-b border-border flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search by BioTime ID, Name, or HUB Code..."
+                    value={mappingSearch}
+                    onChange={(e) => setMappingSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-background border border-border text-xs focus:outline-none focus:ring-1 focus:ring-cyan-500 shadow-2xs"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1 bg-background p-0.5 rounded-lg border border-border">
+                  <button
+                    onClick={() => setMappingFilter('UNMATCHED')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                      mappingFilter === 'UNMATCHED'
+                        ? 'bg-amber-500 text-slate-950 shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Unmatched ({unmatchedCount})
+                  </button>
+                  <button
+                    onClick={() => setMappingFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                      mappingFilter === 'ALL'
+                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    All ({mappings.length})
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-muted-foreground">
+                Showing{' '}
+                <strong className="text-foreground">
+                  {
+                    mappings
+                      .filter((m) => (mappingFilter === 'UNMATCHED' ? m.unmatched : true))
+                      .filter(
+                        (m) =>
+                          !mappingSearch.trim() ||
+                          m.biotimeEmpCode.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+                          m.biotimeName?.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+                          m.hubEmployeeName?.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+                          m.hubEmployeeCode?.toLowerCase().includes(mappingSearch.toLowerCase())
+                      ).length
+                  }
+                </strong>{' '}
+                mappings
+              </div>
+            </div>
+
+            {/* Modal Table Body */}
+            <div className="overflow-y-auto flex-1 p-0">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-muted/60 sticky top-0 z-10 border-b border-border text-[10px] uppercase font-bold text-muted-foreground">
+                  <tr>
+                    <th className="p-3">BioTime ID / RFID</th>
+                    <th className="p-3">BioTime Device Name</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3">Mapped HUB Employee</th>
+                    <th className="p-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {(() => {
+                    const filtered = mappings
+                      .filter((m) => (mappingFilter === 'UNMATCHED' ? m.unmatched : true))
+                      .filter(
+                        (m) =>
+                          !mappingSearch.trim() ||
+                          m.biotimeEmpCode.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+                          m.biotimeName?.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+                          m.hubEmployeeName?.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+                          m.hubEmployeeCode?.toLowerCase().includes(mappingSearch.toLowerCase())
+                      );
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={5} className="p-10 text-center text-muted-foreground">
+                            <UserCheck className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                            <p className="font-bold text-xs text-foreground">No mapping records found</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {mappingFilter === 'UNMATCHED'
+                                ? 'All BioTime device IDs are currently mapped to HUB employees!'
+                                : 'Try changing your search term.'}
+                            </p>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filtered.map((m) => {
+                      const isSaving = savingMappingCode === m.biotimeEmpCode;
+                      return (
+                        <tr key={m.id} className="hover:bg-accent/20 transition-all text-[11px]">
+                          <td className="p-3 font-mono font-bold text-cyan-700 dark:text-cyan-300">
+                            {m.biotimeEmpCode}
+                          </td>
+                          <td className="p-3 font-semibold text-foreground">
+                            {m.biotimeName || 'Device Employee'}
+                            {m.biotimeDepartment && (
+                              <div className="text-[10px] text-muted-foreground font-normal">
+                                {m.biotimeDepartment}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {m.unmatched ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                <AlertTriangle className="w-3 h-3" />
+                                Unmatched
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Linked
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <select
+                              value={m.hubEmployeeCode || ''}
+                              disabled={isSaving}
+                              onChange={(e) => handleSaveMapping(m.biotimeEmpCode, e.target.value)}
+                              className="w-full max-w-sm px-2.5 py-1 rounded-lg bg-background border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-cyan-500 shadow-2xs"
+                            >
+                              <option value="">-- Unlinked / Quarantined --</option>
+                              {employees.map((emp) => (
+                                <option key={emp.id} value={emp.code}>
+                                  {emp.name} ({emp.code}) &bull; {emp.designation}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="p-3 text-right">
+                            {isSaving ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-cyan-600 font-bold">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Saving...
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                Auto-saved
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 bg-muted/30 border-t border-border flex items-center justify-between text-xs">
+              <span className="text-[11px] text-muted-foreground">
+                Changes to identity mapping take effect immediately in daily calculations.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowMappingModal(false)}
+                className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-xs transition"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

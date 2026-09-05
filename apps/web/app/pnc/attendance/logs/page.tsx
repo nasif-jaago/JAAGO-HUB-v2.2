@@ -12,6 +12,8 @@ import {
   Smartphone,
   Clock,
   Calendar,
+  Fingerprint,
+  Layers,
 } from 'lucide-react';
 import {
   AttendanceLogItem,
@@ -59,6 +61,13 @@ export default function AttendanceLogsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingLog, setEditingLog] = useState<AttendanceLogItem | null>(null);
+  const [punchAuditModal, setPunchAuditModal] = useState<{
+    isOpen: boolean;
+    log: AttendanceLogItem | null;
+  }>({
+    isOpen: false,
+    log: null,
+  });
   const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean;
     ids: string[];
@@ -578,6 +587,16 @@ export default function AttendanceLogsPage() {
                           <Calendar className="h-3 w-3" />
                           <span>Leave Portal</span>
                         </span>
+                      ) : log.primarySource === 'BioTime Terminal' || (log.device as string) === 'BioTime Terminal' ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 text-[11px] font-bold">
+                          <Fingerprint className="h-3 w-3" />
+                          <span>BioTime Biometric</span>
+                        </span>
+                      ) : log.primarySource === 'Merged (GPS + BioTime)' ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-bold">
+                          <Layers className="h-3 w-3" />
+                          <span>Merged (GPS+BioTime)</span>
+                        </span>
                       ) : (
                         <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[11px] font-bold">
                           <Smartphone className="h-3 w-3" />
@@ -630,6 +649,16 @@ export default function AttendanceLogsPage() {
                     {/* Actions */}
                     <td className="py-4 px-4 text-right">
                       <div className="flex items-center justify-end space-x-1">
+                        {/* Multi-Source Punch Audit */}
+                        <button
+                          type="button"
+                          onClick={() => setPunchAuditModal({ isOpen: true, log })}
+                          className="p-1.5 rounded-lg hover:bg-cyan-500/10 text-muted-foreground hover:text-cyan-600 transition cursor-pointer"
+                          title="View Biometric & GPS Punch Audit"
+                        >
+                          <Fingerprint className="h-3.5 w-3.5" />
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => handleOpenEditModal(log)}
@@ -853,6 +882,174 @@ export default function AttendanceLogsPage() {
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 <span>Delete Now</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {/* ── MULTI-SOURCE PUNCH AUDIT & RAW PUNCH BREAKDOWN MODAL ───────────── */}
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {punchAuditModal.isOpen && punchAuditModal.log && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-card border border-border/80 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl space-y-4 p-6 animate-in zoom-in-95 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-border/70">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 flex items-center justify-center">
+                  <Fingerprint className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-foreground">Multi-Source Punch Audit</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Chronological physical punches &amp; First-In / Last-Out resolution
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPunchAuditModal({ isOpen: false, log: null })}
+                className="p-1.5 rounded-xl hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+              <div className="p-3 rounded-xl bg-surface/60 border border-border">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase">Employee</div>
+                <div className="font-bold text-foreground pt-0.5 truncate">{punchAuditModal.log.employeeName}</div>
+                <div className="font-mono text-[10px] text-muted-foreground">{punchAuditModal.log.employeeCode}</div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-surface/60 border border-border">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase">Effective Check-In</div>
+                <div className="font-mono font-bold text-emerald-500 pt-0.5 text-xs sm:text-sm">
+                  {punchAuditModal.log.checkInTime || '--:--'}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  First Punch (MIN rule)
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-surface/60 border border-border">
+                <div className="text-[10px] font-bold text-muted-foreground uppercase">Effective Check-Out</div>
+                <div className="font-mono font-bold text-rose-500 pt-0.5 text-xs sm:text-sm">
+                  {punchAuditModal.log.checkOutTime || '--:--'}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  Last Punch (MAX rule)
+                </div>
+              </div>
+            </div>
+
+            {/* Raw Punch Table */}
+            <div className="flex-1 overflow-y-auto border border-border rounded-xl">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="bg-muted/60 sticky top-0 border-b border-border text-[10px] uppercase font-bold text-muted-foreground">
+                  <tr>
+                    <th className="p-2.5">Time</th>
+                    <th className="p-2.5">Punch Source</th>
+                    <th className="p-2.5">Device / Location</th>
+                    <th className="p-2.5">Direction</th>
+                    <th className="p-2.5 text-right">Counted Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40 font-mono text-[11px]">
+                  {punchAuditModal.log.allPunches && punchAuditModal.log.allPunches.length > 0 ? (
+                    punchAuditModal.log.allPunches.map((p, idx) => {
+                      const displayTime =
+                        p.time ||
+                        (p.punchAt
+                          ? new Date(p.punchAt).toLocaleTimeString('en-US', {
+                              timeZone: 'Asia/Dhaka',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true,
+                            })
+                          : '--:--');
+                      const isCountedIn = p.isCountedCheckIn || displayTime === punchAuditModal.log?.checkInTime;
+                      const isCountedOut = p.isCountedCheckOut || (punchAuditModal.log?.checkOutTime && displayTime === punchAuditModal.log.checkOutTime);
+                      const isBio = String(p.source).toLowerCase() === 'biotime';
+
+                      return (
+                        <tr
+                          key={idx}
+                          className={
+                            isCountedIn
+                              ? 'bg-emerald-500/10'
+                              : isCountedOut
+                              ? 'bg-cyan-500/10'
+                              : 'hover:bg-surface/50'
+                          }
+                        >
+                          <td className="p-2.5 font-bold text-foreground">
+                            {displayTime}
+                          </td>
+                          <td className="p-2.5">
+                            {isBio ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 font-sans">
+                                <Fingerprint className="w-3 h-3" />
+                                BioTime Biometric
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-sans">
+                                <Smartphone className="w-3 h-3" />
+                                GPS Geofence
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-muted-foreground font-sans text-xs">
+                            {p.terminalName || p.terminalSn || (isBio ? 'Banani HQ Terminal' : punchAuditModal.log?.branch || 'GPS Location')}
+                          </td>
+                          <td className="p-2.5 font-sans">
+                            {String(p.punchType).toLowerCase() === 'check_in' ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold">Check-In</span>
+                            ) : (
+                              <span className="text-rose-600 dark:text-rose-400 font-bold">Check-Out</span>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right font-sans">
+                            {isCountedIn ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-slate-950">
+                                ✓ Counted In (MIN)
+                              </span>
+                            ) : isCountedOut ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-cyan-600 text-white">
+                                ✓ Counted Out (MAX)
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-[10px]">
+                                Intermediate Punch
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="p-6 text-center text-muted-foreground font-sans">
+                        Single recorded punch pair for this business date.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-2 border-t border-border/70 text-xs">
+              <span className="text-[11px] text-muted-foreground font-sans">
+                Rule: Pool(GPS + BioTime) &rarr; Counted In = MIN(In), Counted Out = MAX(Out)
+              </span>
+              <button
+                type="button"
+                onClick={() => setPunchAuditModal({ isOpen: false, log: null })}
+                className="px-5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs uppercase tracking-wider transition cursor-pointer"
+              >
+                Close Audit
               </button>
             </div>
           </div>

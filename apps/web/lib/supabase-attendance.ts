@@ -31,7 +31,7 @@ export interface AttendanceLogItem {
   branch: string;
   avatarUrl?: string | undefined;
   status: 'Present' | 'Late' | 'Absent' | 'Half Day' | 'On Duty' | 'Leave' | 'Auto Check Out' | 'N/A';
-  device: 'Device Login' | 'RFID Scanner' | 'Web Portal' | 'Mobile App' | 'Manual In/Out';
+  device: 'Device Login' | 'RFID Scanner' | 'Web Portal' | 'Mobile App' | 'Manual In/Out' | 'BioTime Terminal' | string;
   timestamp: string; // e.g. '26 Aug 2026 8:53 pm'
   date: string; // YYYY-MM-DD
   checkInTime?: string | undefined;
@@ -45,6 +45,35 @@ export interface AttendanceLogItem {
   checkOutLng?: number | undefined;
   isAutoCheckout?: boolean | undefined;
   workedMinutes?: number | undefined;
+  workedSeconds?: number | undefined;
+  workedDisplay?: string | undefined;
+  primarySource?: 'Web Portal (GPS)' | 'BioTime Terminal' | 'Merged (GPS + BioTime)' | 'Manual' | 'None' | undefined;
+  checkInSource?: string | undefined;
+  checkOutSource?: string | undefined;
+  sourceBreakdown?: {
+    gpsCheckIn?: string | null;
+    gpsCheckOut?: string | null;
+    biotimeCheckIn?: string | null;
+    biotimeCheckOut?: string | null;
+    biotimePunchCount?: number;
+    gpsPunchCount?: number;
+    countedCheckInSource?: string;
+    countedCheckOutSource?: string;
+  } | undefined;
+  allPunches?: Array<{
+    id: string;
+    punchAt: string;
+    time?: string | undefined;
+    punchType: 'check_in' | 'check_out' | 'unknown' | string;
+    source: 'gps' | 'biotime' | 'manual' | 'admin' | 'auto' | string;
+    deviceInfo?: string | undefined;
+    terminalName?: string | undefined;
+    terminalSn?: string | undefined;
+    locationName?: string | undefined;
+    verifyType?: string | undefined;
+    isCountedCheckIn?: boolean | undefined;
+    isCountedCheckOut?: boolean | undefined;
+  }> | undefined;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -868,6 +897,13 @@ export async function fetchAttendanceLogsFromSupabase(forceRefresh: boolean = fa
               checkOutLng: r.checkOutLng !== undefined ? Number(r.checkOutLng) : r.check_out_lng !== undefined ? Number(r.check_out_lng) : undefined,
               isAutoCheckout: Boolean(r.isAutoCheckout || r.is_auto_checkout),
               workedMinutes: r.workedMinutes ?? r.worked_minutes,
+              workedSeconds: r.workedSeconds,
+              workedDisplay: r.workedDisplay,
+              primarySource: r.primarySource,
+              checkInSource: r.checkInSource,
+              checkOutSource: r.checkOutSource,
+              sourceBreakdown: r.sourceBreakdown,
+              allPunches: r.allPunches,
               createdBy: r.createdBy || r.employeeName,
               createdAt: r.createdAt || new Date().toLocaleString(),
               updatedAt: r.updatedAt || new Date().toLocaleString(),
