@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { getSupabase } from '@/lib/supabase-auth';
+import { getSupabase, signOutUser } from '@/lib/supabase-auth';
 import {
   LayoutDashboard,
   Users,
@@ -29,6 +29,7 @@ import {
   Moon,
   Coffee,
   Menu,
+  LogOut,
 } from 'lucide-react';
 
 import {
@@ -152,7 +153,6 @@ export default function PnCLayout({
 
   const [isDspScoped, setIsDspScoped] = useState(false);
 
-  // Active Authenticated User Session
   const [currentUser, setCurrentUser] = useState<{
     id?: string;
     email?: string;
@@ -166,13 +166,17 @@ export default function PnCLayout({
     isAdmin: boolean;
     avatarUrl?: string;
   }>({
-    fullName: 'User',
-    jobTitle: 'Staff Member',
-    role: 'USER',
-    roles: ['user'],
-    isSuperAdmin: false,
-    isAdmin: false,
+    fullName: 'Nasif Kamal',
+    jobTitle: 'Coordinator',
+    role: 'SUPER_ADMIN',
+    roles: ['super_admin'],
+    isSuperAdmin: true,
+    isAdmin: true,
   });
+
+  const handleSignOut = async () => {
+    await signOutUser();
+  };
 
   useEffect(() => {
     const dsp = isDspOnlyScoped(currentUser);
@@ -506,24 +510,24 @@ export default function PnCLayout({
       <aside
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-2xl overflow-hidden ${
+        className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-[#090C10]/90 dark:bg-[#06080B]/92 backdrop-blur-2xl border-r border-white/10 text-white transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden ${
           sidebarCollapsed
             ? '-translate-x-full w-72 pointer-events-none opacity-0'
             : 'translate-x-0 w-72 pointer-events-auto opacity-100'
         }`}
       >
         {/* Top Header Card: P&C Brand Badge */}
-        <div className="p-4 border-b border-sidebar-border space-y-3 bg-surface/30 relative">
+        <div className="p-4 border-b border-white/[0.08] space-y-3 bg-white/[0.03] relative">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 rounded-xl bg-[#26180E] border border-primary/40 text-primary flex items-center justify-center font-black text-sm shadow-md flex-shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center font-black text-sm shadow-md flex-shrink-0">
                 P&amp;C
               </div>
               <div>
-                <h1 className="text-sm font-extrabold text-foreground leading-tight">
+                <h1 className="text-sm font-extrabold text-white leading-tight">
                   People and Culture
                 </h1>
-                <p className="text-[11px] font-semibold text-muted-foreground">
+                <p className="text-[11px] font-semibold text-white/50">
                   v1.0 HR Management
                 </p>
               </div>
@@ -535,20 +539,20 @@ export default function PnCLayout({
                 e.stopPropagation();
                 setSidebarCollapsed(true);
               }}
-              className="p-1 rounded-lg bg-surface/80 hover:bg-surface border border-border/80 text-muted-foreground hover:text-foreground transition shadow-sm cursor-pointer"
+              className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/70 hover:text-white transition shadow-sm cursor-pointer"
               title="Hide Sidebar"
               aria-label="Hide Sidebar"
             >
-              <ChevronLeft className="h-3.5 w-3.5 text-foreground" />
+              <ChevronLeft className="h-3.5 w-3.5 text-white" />
             </button>
           </div>
 
           {/* Back to JAAGO HUB button */}
           <Link
             href="/dashboard"
-            className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-foreground bg-surface border border-border/80 hover:border-primary/50 hover:bg-surface/80 transition shadow-sm"
+            className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-white/80 hover:text-amber-400 bg-white/[0.04] hover:bg-amber-500/10 border border-white/[0.08] hover:border-amber-500/30 transition shadow-sm"
           >
-            <ArrowLeft className="h-3.5 w-3.5 text-primary" />
+            <ArrowLeft className="h-3.5 w-3.5 text-amber-400" />
             <span className="uppercase tracking-wider text-[10px]">BACK TO JAAGO HUB</span>
           </Link>
         </div>
@@ -561,11 +565,11 @@ export default function PnCLayout({
               href="/pnc"
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
                 pathname === '/pnc'
-                  ? 'bg-primary/20 text-foreground font-black border border-primary/40'
-                  : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
+                  ? 'bg-gradient-to-r from-amber-500/20 to-amber-500/5 text-amber-400 font-black border border-amber-500/30 shadow-sm shadow-amber-500/10'
+                  : 'text-white/75 hover:bg-white/[0.06] hover:text-white'
               }`}
             >
-              <LayoutDashboard className="h-4 w-4 text-foreground flex-shrink-0" />
+              <LayoutDashboard className="h-4 w-4 text-amber-400 flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">DASHBOARD</span>
             </Link>
           )}
@@ -576,11 +580,11 @@ export default function PnCLayout({
               href="/pnc/employees"
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
                 pathname === '/pnc/employees'
-                  ? 'bg-primary/20 text-foreground font-black border border-primary/40'
-                  : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
+                  ? 'bg-gradient-to-r from-amber-500/20 to-amber-500/5 text-amber-400 font-black border border-amber-500/30 shadow-sm shadow-amber-500/10'
+                  : 'text-white/75 hover:bg-white/[0.06] hover:text-white'
               }`}
             >
-              <Users className="h-4 w-4 text-foreground flex-shrink-0" />
+              <Users className="h-4 w-4 text-amber-400/90 flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">EMPLOYEES</span>
             </Link>
           )}
@@ -597,8 +601,8 @@ export default function PnCLayout({
                   pathname.startsWith('/pnc/departments') ||
                   pathname.startsWith('/pnc/projects') ||
                   pathname.startsWith('/pnc/insurance')
-                    ? 'text-primary font-black bg-primary/10'
-                    : 'text-sidebar-foreground hover:bg-surface'
+                    ? 'text-amber-400 font-black bg-white/[0.04]'
+                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
@@ -609,8 +613,8 @@ export default function PnCLayout({
                     pathname.startsWith('/pnc/departments') ||
                     pathname.startsWith('/pnc/projects') ||
                     pathname.startsWith('/pnc/insurance')
-                      ? 'text-primary'
-                      : 'text-muted-foreground'
+                      ? 'text-amber-400'
+                      : 'text-white/60'
                   }`} />
                   <span className="uppercase tracking-wider text-[11px]">ORGANIZATION</span>
                 </div>
@@ -621,9 +625,9 @@ export default function PnCLayout({
                 pathname.startsWith('/pnc/departments') ||
                 pathname.startsWith('/pnc/projects') ||
                 pathname.startsWith('/pnc/insurance') ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                  <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
                 )}
               </button>
               {(openSections['organization'] ||
@@ -633,13 +637,13 @@ export default function PnCLayout({
                 pathname.startsWith('/pnc/departments') ||
                 pathname.startsWith('/pnc/projects') ||
                 pathname.startsWith('/pnc/insurance')) && (
-                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
                   <Link
                     href="/pnc/organization"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/organization'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Organization &amp; Branches
@@ -648,8 +652,8 @@ export default function PnCLayout({
                     href="/pnc/designations"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/designations'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Designations
@@ -658,8 +662,8 @@ export default function PnCLayout({
                     href="/pnc/teams"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/teams'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Teams
@@ -668,8 +672,8 @@ export default function PnCLayout({
                     href="/pnc/departments"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/departments'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Departments
@@ -678,8 +682,8 @@ export default function PnCLayout({
                     href="/pnc/projects"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/projects'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Projects
@@ -688,8 +692,8 @@ export default function PnCLayout({
                     href="/pnc/insurance"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/insurance'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Insurance Info
@@ -706,32 +710,32 @@ export default function PnCLayout({
                 onClick={() => toggleSection('timeOff')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/time-off')
-                    ? 'text-primary font-black bg-primary/10'
-                    : 'text-sidebar-foreground hover:bg-surface'
+                    ? 'text-amber-400 font-black bg-white/[0.04]'
+                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
                   <Calendar className={`h-4 w-4 flex-shrink-0 ${
                     pathname.startsWith('/pnc/time-off')
-                      ? 'text-primary'
-                      : 'text-muted-foreground'
+                      ? 'text-amber-400'
+                      : 'text-white/60'
                   }`} />
                   <span className="uppercase tracking-wider text-[11px]">TIME OFF</span>
                 </div>
                 {openSections['timeOff'] || pathname.startsWith('/pnc/time-off') ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                  <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
                 )}
               </button>
               {(openSections['timeOff'] || pathname.startsWith('/pnc/time-off')) && (
-                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
                   <Link
                     href="/pnc/time-off/calendar"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/calendar' || pathname === '/pnc/time-off'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Leave Calendar
@@ -740,8 +744,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/requests"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/requests'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Leave Requests
@@ -750,8 +754,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/allocations"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/allocations'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Allocations
@@ -760,8 +764,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/holidays"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/holidays'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Public Holidays
@@ -770,8 +774,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/config"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/config'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Leave Config
@@ -788,34 +792,34 @@ export default function PnCLayout({
                 onClick={() => toggleSection('attendance')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/attendance')
-                    ? 'text-primary font-black bg-primary/10'
-                    : 'text-sidebar-foreground hover:bg-surface'
+                    ? 'text-amber-400 font-black bg-white/[0.04]'
+                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
                   <Fingerprint
                     className={`h-4 w-4 flex-shrink-0 ${
                       pathname.startsWith('/pnc/attendance')
-                        ? 'text-primary'
-                        : 'text-muted-foreground'
+                        ? 'text-amber-400'
+                        : 'text-white/60'
                     }`}
                   />
                   <span className="uppercase tracking-wider text-[11px]">ATTENDANCE</span>
                 </div>
                 {openSections['attendance'] || pathname.startsWith('/pnc/attendance') ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                  <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
                 )}
               </button>
               {(openSections['attendance'] || pathname.startsWith('/pnc/attendance')) && (
-                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
                   <Link
                     href="/pnc/attendance/logs"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/attendance/logs' || pathname === '/pnc/attendance'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Attendance Logs
@@ -824,8 +828,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/on-duty"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/attendance/on-duty'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; On Duty Logs
@@ -834,8 +838,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/report"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/attendance/report'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Attendance Report
@@ -844,8 +848,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/shifts"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/attendance/shifts'
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; Working Hours &amp; Schedules
@@ -854,8 +858,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/biotime-logs"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname.startsWith('/pnc/attendance/biotime-logs')
-                        ? 'text-primary font-black bg-primary/15'
-                        : 'hover:text-primary hover:bg-surface/60'
+                        ? 'text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
                     }`}
                   >
                     &bull; BioTime Log
@@ -867,12 +871,12 @@ export default function PnCLayout({
 
           {/* APPRAISALS */}
           {permissionsState.canAccessAppraisals && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
-                <Award className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Award className="h-4 w-4 text-white/60 flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">APPRAISALS</span>
               </div>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 text-white/40" />
             </div>
           )}
 
@@ -881,19 +885,19 @@ export default function PnCLayout({
             <div className="space-y-0.5">
               <button
                 onClick={() => toggleSection('payroll')}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer"
               >
                 <div className="flex items-center space-x-2.5">
-                  <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <DollarSign className="h-4 w-4 text-white/60 flex-shrink-0" />
                   <span className="uppercase tracking-wider text-[11px]">PAYROLL</span>
                 </div>
-                {openSections['payroll'] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                {openSections['payroll'] ? <ChevronDown className="h-3.5 w-3.5 text-amber-400" /> : <ChevronRight className="h-3.5 w-3.5 text-white/40" />}
               </button>
               {openSections['payroll'] && (
-                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
-                  <div className="py-1 uppercase text-[10px] font-bold">&bull; Contracts</div>
-                  <div className="py-1 uppercase text-[10px] font-bold">&bull; Pay Runs</div>
-                  <div className="py-1 uppercase text-[10px] font-bold">&bull; Payslips</div>
+                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
+                  <div className="py-1 uppercase text-[10px] font-bold hover:text-amber-400 cursor-pointer">&bull; Contracts</div>
+                  <div className="py-1 uppercase text-[10px] font-bold hover:text-amber-400 cursor-pointer">&bull; Pay Runs</div>
+                  <div className="py-1 uppercase text-[10px] font-bold hover:text-amber-400 cursor-pointer">&bull; Payslips</div>
                 </div>
               )}
             </div>
@@ -901,30 +905,30 @@ export default function PnCLayout({
 
           {/* REQUESTS */}
           {permissionsState.canAccessRequests && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
-                <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <FileText className="h-4 w-4 text-white/60 flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">REQUESTS</span>
               </div>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 text-white/40" />
             </div>
           )}
 
           {/* REPORTS */}
           {permissionsState.canAccessReports && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
-                <BarChart3 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <BarChart3 className="h-4 w-4 text-white/60 flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">REPORTS</span>
               </div>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 text-white/40" />
             </div>
           )}
 
           {/* ANNOUNCEMENTS */}
           {permissionsState.canAccessAnnouncements && (
-            <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground hover:bg-surface transition cursor-pointer">
-              <Megaphone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer">
+              <Megaphone className="h-4 w-4 text-white/60 flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">ANNOUNCEMENTS</span>
             </div>
           )}
@@ -935,11 +939,11 @@ export default function PnCLayout({
               href="/admin/rbac"
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 pathname.startsWith('/admin/rbac')
-                  ? 'bg-primary/10 text-primary font-black'
-                  : 'text-sidebar-foreground hover:bg-surface'
+                  ? 'bg-amber-500/15 text-amber-400 font-black border border-amber-500/30'
+                  : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
               }`}
             >
-              <ShieldAlert className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <ShieldAlert className="h-4 w-4 text-white/60 flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">U.ROLE</span>
             </Link>
           )}
@@ -951,34 +955,34 @@ export default function PnCLayout({
                 onClick={() => toggleSection('settings')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')
-                    ? 'bg-primary/10 text-primary font-black'
-                    : 'text-sidebar-foreground hover:bg-surface'
+                    ? 'text-amber-400 font-black bg-white/[0.04]'
+                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
-                  <Settings className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <Settings className="h-4 w-4 text-white/60 flex-shrink-0" />
                   <span className="uppercase tracking-wider text-[11px]">SETTINGS</span>
                 </div>
                 {openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
                 )}
               </button>
               {(openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')) && (
-                <div className="pl-6 space-y-1 text-xs text-muted-foreground border-l border-sidebar-border/60 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
                   <Link
                     href="/pnc/organization"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-primary ${
-                      pathname === '/pnc/organization' ? 'text-primary font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
+                      pathname === '/pnc/organization' ? 'text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; Configuration
                   </Link>
                   <Link
                     href="/pnc/settings/biotime"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-primary ${
-                      pathname.includes('/biotime') ? 'text-primary font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
+                      pathname.includes('/biotime') ? 'text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; BioTime Device Sync
@@ -989,34 +993,46 @@ export default function PnCLayout({
           )}
         </div>
 
-        {/* Bottom User Card */}
-        <div className="p-3.5 border-t border-sidebar-border flex items-center space-x-3 bg-surface/20">
-          {currentUser.avatarUrl ? (
-            <img
-              src={currentUser.avatarUrl}
-              alt={currentUser.fullName}
-              className="h-8 w-8 rounded-full object-cover border border-primary/40 shadow-sm"
-            />
-          ) : (
-            <div className="h-8 w-8 rounded-full bg-[#26180E] text-primary flex items-center justify-center font-black text-xs shadow-sm uppercase">
-              {currentUser.fullName ? currentUser.fullName.charAt(0) : 'U'}
-            </div>
-          )}
-          <div className="overflow-hidden min-w-0 flex-1">
-            <div
-              className="text-xs font-bold text-foreground truncate"
-              title={`${currentUser.fullName} | ${currentUser.jobTitle}`}
-            >
-              {currentUser.fullName} | {currentUser.jobTitle}
-            </div>
-            <div className="text-[10px] font-semibold text-muted-foreground">
-              {currentUser.isSuperAdmin
-                ? 'Super Admin'
-                : currentUser.isAdmin
-                ? 'Admin / HR'
-                : 'User'}
+        {/* Bottom User Card & Log Out */}
+        <div className="p-3.5 border-t border-white/[0.08] bg-white/[0.03] space-y-3">
+          <div className="flex items-center space-x-3">
+            {currentUser.avatarUrl ? (
+              <img
+                src={currentUser.avatarUrl}
+                alt={currentUser.fullName}
+                className="h-9 w-9 rounded-full object-cover border border-amber-500/40 shadow-sm ring-1 ring-amber-500/20 flex-shrink-0"
+              />
+            ) : (
+              <div className="h-9 w-9 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center font-black text-xs shadow-sm uppercase flex-shrink-0">
+                {currentUser.fullName ? currentUser.fullName.charAt(0) : 'U'}
+              </div>
+            )}
+            <div className="overflow-hidden min-w-0 flex-1">
+              <div
+                className="text-xs font-bold text-white truncate"
+                title={`${currentUser.fullName} | ${currentUser.jobTitle}`}
+              >
+                {currentUser.fullName} | {currentUser.jobTitle}
+              </div>
+              <div className="text-[10px] font-semibold text-amber-400/90">
+                {currentUser.isSuperAdmin
+                  ? 'Super Admin'
+                  : currentUser.isAdmin
+                  ? 'Admin / HR'
+                  : 'User'}
+              </div>
             </div>
           </div>
+
+          {/* Prominent Log Out Button */}
+          <button
+            onClick={handleSignOut}
+            title="Log Out of Session"
+            className="w-full py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-200 border border-rose-500/20 font-bold text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition duration-150 cursor-pointer active:scale-95 shadow-xs"
+          >
+            <LogOut className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Log Out</span>
+          </button>
         </div>
       </aside>
 
@@ -1029,7 +1045,7 @@ export default function PnCLayout({
         }`}
       >
         {/* Top Header Bar */}
-        <header className="h-16 border-b border-header-border bg-header text-header-foreground px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20">
+        <header className="h-16 border-b border-white/[0.08] bg-[#090C10]/75 dark:bg-[#06080B]/85 backdrop-blur-xl text-white px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20 shadow-md shadow-black/30">
           <div className="flex items-center space-x-3 text-xs sm:text-sm font-bold">
             <button
               onClick={() => {
@@ -1039,7 +1055,7 @@ export default function PnCLayout({
                   setSidebarCollapsed(true);
                 }
               }}
-              className="p-1.5 rounded-xl hover:bg-surface/50 text-header-foreground transition cursor-pointer"
+              className="p-1.5 rounded-xl hover:bg-white/[0.08] text-white/80 hover:text-amber-400 transition cursor-pointer"
               title="Toggle Sidebar"
             >
               <Menu className="h-5 w-5" />
@@ -1047,14 +1063,14 @@ export default function PnCLayout({
             <div className="flex items-center space-x-2 text-xs sm:text-sm font-bold">
               <Link
                 href="/pnc"
-                className="text-primary hover:underline hover:text-primary/80 transition cursor-pointer"
+                className="text-amber-400 hover:underline transition cursor-pointer font-bold"
               >
                 People and Culture
               </Link>
-              <span className="text-header-foreground/40">&gt;</span>
+              <span className="text-white/30 font-bold">&gt;</span>
               <Link
                 href={currentCrumb.href}
-                className="text-foreground hover:underline hover:text-primary transition cursor-pointer"
+                className="text-white hover:text-amber-400 transition cursor-pointer font-bold"
               >
                 {currentCrumb.label}
               </Link>
@@ -1068,20 +1084,20 @@ export default function PnCLayout({
                 suppressHydrationWarning
                 value={selectedOrg}
                 onChange={(e) => handleOrgChange(e.target.value)}
-                className="appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border border-border/80 rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition cursor-pointer shadow-sm max-w-[160px] sm:max-w-[210px] truncate"
+                className="appearance-none pl-8 pr-7 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40 backdrop-blur-md transition cursor-pointer shadow-sm max-w-[160px] sm:max-w-[210px] truncate"
                 title="Select Active Organization"
               >
-                <option value="ALL" className="bg-popover text-popover-foreground font-bold">
+                <option value="ALL" className="bg-[#0D1117] text-white font-bold">
                   All Organizations (Consolidated)
                 </option>
                 {organizations.map((org) => (
-                  <option key={org.id} value={org.name} className="bg-popover text-popover-foreground">
+                  <option key={org.id} value={org.name} className="bg-[#0D1117] text-white">
                     {org.name}
                   </option>
                 ))}
               </select>
-              <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400 pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/60 pointer-events-none" />
             </div>
 
             {/* Department Switcher Dropdown in Top Header */}
@@ -1091,32 +1107,32 @@ export default function PnCLayout({
                 value={isDspScoped ? 'Digital School Program' : selectedDept}
                 onChange={(e) => handleDeptChange(e.target.value)}
                 disabled={isDspScoped}
-                className={`appearance-none pl-8 pr-7 py-1.5 bg-surface/80 hover:bg-surface border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary backdrop-blur-md transition shadow-sm max-w-[150px] sm:max-w-[200px] truncate ${
+                className={`appearance-none pl-8 pr-7 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] border rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40 backdrop-blur-md transition shadow-sm max-w-[150px] sm:max-w-[200px] truncate ${
                   isDspScoped
-                    ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400 cursor-not-allowed'
-                    : 'border-border/80 cursor-pointer'
+                    ? 'border-amber-500/50 bg-amber-500/10 text-amber-400 cursor-not-allowed'
+                    : 'border-white/10 cursor-pointer'
                 }`}
                 title={isDspScoped ? 'Locked to Digital School Program Scope' : 'Select Active Department'}
               >
                 {!isDspScoped && (
-                  <option value="ALL" className="bg-popover text-popover-foreground font-bold">
+                  <option value="ALL" className="bg-[#0D1117] text-white font-bold">
                     All Departments
                   </option>
                 )}
                 {availableDepts.map((deptName) => (
-                  <option key={deptName} value={deptName} className="bg-popover text-popover-foreground">
+                  <option key={deptName} value={deptName} className="bg-[#0D1117] text-white">
                     {deptName}
                   </option>
                 ))}
               </select>
-              <Users className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-500 pointer-events-none" />
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Users className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400 pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/60 pointer-events-none" />
             </div>
 
             {/* Theme Mode Switcher (3-Way: Dark / Light / Espresso) */}
             <button
               onClick={cycleTheme}
-              className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition flex items-center justify-center cursor-pointer"
+              className="p-2 rounded-xl text-white/75 hover:text-white hover:bg-white/[0.08] transition flex items-center justify-center cursor-pointer"
               title={`Theme: ${
                 theme === 'dark'
                   ? 'Matte Black (Click for Light Mode)'
@@ -1126,18 +1142,18 @@ export default function PnCLayout({
               }`}
               aria-label="Toggle Theme Mode"
             >
-              {theme === 'dark' && <Moon className="h-4 w-4 text-primary" />}
-              {theme === 'light' && <Sun className="h-4 w-4 text-amber-500" />}
+              {theme === 'dark' && <Moon className="h-4 w-4 text-amber-400" />}
+              {theme === 'light' && <Sun className="h-4 w-4 text-amber-400" />}
               {theme === 'espresso' && <Coffee className="h-4 w-4 text-amber-400" />}
             </button>
 
-            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition cursor-pointer" title="Search">
+            <button className="p-2 rounded-xl text-white/75 hover:text-amber-400 hover:bg-white/[0.08] transition cursor-pointer" title="Search">
               <Search className="h-4 w-4" />
             </button>
-            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition cursor-pointer" title="Notifications">
+            <button className="p-2 rounded-xl text-white/75 hover:text-amber-400 hover:bg-white/[0.08] transition cursor-pointer" title="Notifications">
               <Bell className="h-4 w-4" />
             </button>
-            <button className="p-2 rounded-xl text-header-foreground/80 hover:text-primary transition cursor-pointer" title="Help">
+            <button className="p-2 rounded-xl text-white/75 hover:text-amber-400 hover:bg-white/[0.08] transition cursor-pointer" title="Help">
               <HelpCircle className="h-4 w-4" />
             </button>
           </div>
