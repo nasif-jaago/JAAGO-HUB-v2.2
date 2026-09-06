@@ -282,11 +282,8 @@ export function renderEmployeeWelcomeEmail(params: EmployeeWelcomeEmailParams): 
 
       <div class="btn-container">
         <a href="${params.loginUrl}" class="btn-primary" target="_blank" rel="noopener noreferrer">
-          Access JAAGO HUB Portal &rarr;
+          Accept Invitation &amp; Set Password &rarr;
         </a>
-        <div style="font-size: 11px; color: #64748b; margin-top: 10px;">
-          Direct Portal URL: <a href="${params.loginUrl}" style="color: #0284c7; text-decoration: underline;">${params.loginUrl}</a>
-        </div>
       </div>
 
       <div class="section-title">Getting Started &bull; Login Instructions</div>
