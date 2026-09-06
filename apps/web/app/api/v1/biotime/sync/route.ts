@@ -40,6 +40,7 @@ export async function POST(request: Request) {
         if (e.employee_id) empMap.set(String(e.employee_id).trim(), e);
       });
 
+      const logsToUpsert: any[] = [];
       for (const punch of liveLogs) {
         const matchedEmp = empMap.get(punch.employeeCode.trim());
         const punchDateObj = new Date(punch.punchTime);
@@ -50,23 +51,28 @@ export async function POST(request: Request) {
 
         const logId = `zk-${punch.employeeCode}-${todayDate}-${punchHour < 14 ? 'in' : 'out'}`;
 
-        try {
-          await supabaseAdmin.from('attendance_logs').upsert({
-            id: logId,
-            employee_id: matchedEmp?.id || null,
-            date: todayDate,
-            check_in_time: punchHour < 14 ? punchDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : undefined,
-            check_out_time: punchHour >= 14 ? punchDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : undefined,
-            status: isLate ? 'Late' : 'Present',
-            device: 'Device Login',
-            location_name: punch.locationBranch || 'JAAGO Foundation HQ',
-            notes: `Synced from ZKTeco BioTime Terminal (${punch.deviceSn}) via ${punch.verifyType}`,
-            created_at: punch.createdAt,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
-          reconciledCount++;
-        } catch (dbErr) {
-          // Continue reconciling next
+        logsToUpsert.push({
+          id: logId,
+          employee_id: matchedEmp?.id || null,
+          date: todayDate,
+          check_in_time: punchHour < 14 ? punchDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : undefined,
+          check_out_time: punchHour >= 14 ? punchDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : undefined,
+          status: isLate ? 'Late' : 'Present',
+          device: 'Device Login',
+          location_name: punch.locationBranch || 'JAAGO Foundation HQ',
+          notes: `Synced from ZKTeco BioTime Terminal (${punch.deviceSn}) via ${punch.verifyType}`,
+          created_at: punch.createdAt,
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      if (logsToUpsert.length > 0) {
+        for (let i = 0; i < logsToUpsert.length; i += 50) {
+          const chunk = logsToUpsert.slice(i, i + 50);
+          const { error } = await supabaseAdmin.from('attendance_logs').upsert(chunk, { onConflict: 'id' });
+          if (!error) {
+            reconciledCount += chunk.length;
+          }
         }
       }
     }

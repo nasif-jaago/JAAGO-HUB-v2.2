@@ -201,6 +201,9 @@ export async function syncBioTimePunchesToSupabase(options?: {
   };
 }
 
+let lastAutoBioTimeSyncTime = 0;
+const BIO_SYNC_THROTTLE_MS = 15_000; // 15 seconds throttle
+
 /**
  * Fetch unified effective daily attendance records for any employee, date range, or department
  */
@@ -217,6 +220,17 @@ export async function getEffectiveDailyAttendance(options?: {
   const supabase = getSupabaseAdminClient();
   if (!supabase) return [];
 
+  // 0. Real-time Auto Sync: Ingest latest BioTime biometric punches (throttled)
+  const nowMs = Date.now();
+  if (nowMs - lastAutoBioTimeSyncTime > BIO_SYNC_THROTTLE_MS) {
+    lastAutoBioTimeSyncTime = nowMs;
+    try {
+      await syncBioTimePunchesToSupabase({ pageSize: 100 });
+    } catch (syncErr) {
+      console.warn('Auto BioTime sync notice:', syncErr);
+    }
+  }
+
   const limit = options?.limit || 200;
   let resolvedEmpId = options?.employeeId;
 
@@ -226,7 +240,7 @@ export async function getEffectiveDailyAttendance(options?: {
     resolvedEmpId = await resolveCanonicalEmployeeId(resolvedEmpId);
   }
 
-  // 1. Unified Merger: Query raw GPS attendance_records + att_biotime_events
+  // 1. Unified Merger: Query raw GPS attendance_records + att_biotime_events + attendance_events
   let gpsQuery = supabase
     .from('attendance_records')
     .select('*')
@@ -239,20 +253,34 @@ export async function getEffectiveDailyAttendance(options?: {
     .order('punch_time', { ascending: true })
     .limit(1000);
 
+  let gpsEventsQuery = supabase
+    .from('attendance_events')
+    .select('*')
+    .eq('result', 'accepted')
+    .order('attempted_at', { ascending: true })
+    .limit(1000);
+
   if (resolvedEmpId) {
     gpsQuery = gpsQuery.eq('employee_id', resolvedEmpId);
     bioEventsQuery = bioEventsQuery.eq('hub_employee_id', resolvedEmpId);
+    gpsEventsQuery = gpsEventsQuery.eq('employee_id', resolvedEmpId);
   }
   if (options?.date) {
     gpsQuery = gpsQuery.eq('business_date', options.date);
     bioEventsQuery = bioEventsQuery
       .gte('punch_time', `${options.date}T00:00:00+06:00`)
       .lte('punch_time', `${options.date}T23:59:59+06:00`);
+    gpsEventsQuery = gpsEventsQuery
+      .gte('attempted_at', `${options.date}T00:00:00+06:00`)
+      .lte('attempted_at', `${options.date}T23:59:59+06:00`);
   } else if (options?.startDate && options?.endDate) {
     gpsQuery = gpsQuery.gte('business_date', options.startDate).lte('business_date', options.endDate);
     bioEventsQuery = bioEventsQuery
       .gte('punch_time', `${options.startDate}T00:00:00+06:00`)
       .lte('punch_time', `${options.endDate}T23:59:59+06:00`);
+    gpsEventsQuery = gpsEventsQuery
+      .gte('attempted_at', `${options.startDate}T00:00:00+06:00`)
+      .lte('attempted_at', `${options.endDate}T23:59:59+06:00`);
   } else if (options?.month) {
     const [yStr, mStr] = options.month.split('-');
     const y = parseInt(yStr || '2026', 10);
@@ -264,17 +292,22 @@ export async function getEffectiveDailyAttendance(options?: {
     bioEventsQuery = bioEventsQuery
       .gte('punch_time', `${monthStart}T00:00:00+06:00`)
       .lte('punch_time', `${monthEnd}T23:59:59+06:00`);
+    gpsEventsQuery = gpsEventsQuery
+      .gte('attempted_at', `${monthStart}T00:00:00+06:00`)
+      .lte('attempted_at', `${monthEnd}T23:59:59+06:00`);
   }
 
   const [
     { data: gpsRecords },
     { data: bioEvents },
+    { data: gpsEvents },
     { data: emps },
     { data: approvedLeaves },
     serverRegs,
   ] = await Promise.all([
     gpsQuery,
     bioEventsQuery,
+    gpsEventsQuery,
     supabase.from('employees').select('id, code, name, designation, department, branch, avatar_url'),
     supabase.from('leave_requests').select('*').eq('status', 'Approved'),
     getServerRegularizations().catch(() => []),
@@ -305,10 +338,30 @@ export async function getEffectiveDailyAttendance(options?: {
     });
   });
 
+  // Group GPS events by (employee_id + businessDate in Asia/Dhaka)
+  const gpsEventsByEmpDate = new Map<string, RawPunchEvent[]>();
+  (gpsEvents || []).forEach((ge) => {
+    if (!ge.employee_id) return;
+    const d = new Date(ge.attempted_at || ge.captured_at);
+    if (isNaN(d.getTime())) return;
+    const dateStr = d.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+    const key = `${ge.employee_id}__${dateStr}`;
+    if (!gpsEventsByEmpDate.has(key)) gpsEventsByEmpDate.set(key, []);
+    gpsEventsByEmpDate.get(key)!.push({
+      id: ge.id,
+      punchAt: ge.attempted_at || ge.captured_at,
+      punchType: ge.punch_type || ge.event_type || 'check_in',
+      source: 'gps',
+      deviceInfo: ge.device_info || 'Web Portal / GPS',
+      locationName: ge.matched_location_id || 'Designated Office',
+    });
+  });
+
   // Collect all unique (empId, date) keys
   const dayKeys = new Set<string>();
   (gpsRecords || []).forEach((g) => dayKeys.add(`${g.employee_id}__${g.business_date}`));
   bioByEmpDate.forEach((_, key) => dayKeys.add(key));
+  gpsEventsByEmpDate.forEach((_, key) => dayKeys.add(key));
 
   const effectiveDays: EffectiveAttendanceDay[] = [];
   const nowUtc = new Date().toISOString();
@@ -323,6 +376,7 @@ export async function getEffectiveDailyAttendance(options?: {
 
     const gpsRec = (gpsRecords || []).find((g) => g.employee_id === empId && g.business_date === dateStr);
     const bioPunches = bioByEmpDate.get(key) || [];
+    const gpsPunches = gpsEventsByEmpDate.get(key) || [];
     const emp = empMap.get(empId);
 
     const eff = computeEffectiveAttendanceDay({
@@ -336,6 +390,7 @@ export async function getEffectiveDailyAttendance(options?: {
       businessDate: dateStr,
       gpsCheckInAt: gpsRec?.first_check_in_at || gpsRec?.check_in_at || null,
       gpsCheckOutAt: gpsRec?.last_check_out_at || gpsRec?.check_out_at || null,
+      gpsPunches,
       biotimePunches: bioPunches,
       shiftStartLocal: gpsRec?.shift_start_local || '10:00',
       shiftBufferMinutes: gpsRec?.shift_buffer_minutes ?? 30,

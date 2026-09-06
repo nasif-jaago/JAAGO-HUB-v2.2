@@ -83,6 +83,7 @@ export async function fetchLiveBioTimeDevices(): Promise<BioTimeDevice[]> {
     const res = await fetch(`${serverUrl}/iclock/api/terminals/`, {
       headers: { 'Authorization': `Token ${apiToken}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(4000),
     });
 
     if (res.ok) {
@@ -136,6 +137,7 @@ export async function fetchLiveBioTimeTransactions(
     const res = await fetch(url, {
       headers: { 'Authorization': `Token ${apiToken}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(4000),
     });
 
     if (res.ok) {

@@ -378,6 +378,16 @@ export default function AttendancePage() {
     // Live background polling for regularizations every 8 seconds
     const regInterval = setInterval(syncLiveRegularizations, 8000);
 
+    // Live background polling for biometric & GPS attendance status every 25 seconds
+    const autoPollInterval = setInterval(() => {
+      const sess = getCurrentUserSession();
+      const codeOrId = sess?.employeeCode || user.employeeCode || user.id;
+      if (codeOrId) {
+        loadUserLogs(codeOrId);
+        refreshTodaySession(codeOrId);
+      }
+    }, 25000);
+
     return () => {
       window.removeEventListener('jaago_attendance_updated', handleAttUpdated);
       window.removeEventListener('jaago_attendance_regularization_updated', handleRegUpdated);
@@ -388,6 +398,7 @@ export default function AttendancePage() {
       window.removeEventListener('storage', handleAttUpdated);
       window.removeEventListener('storage', handleUserUpdated);
       clearInterval(regInterval);
+      clearInterval(autoPollInterval);
     };
   }, []);
 
@@ -444,7 +455,7 @@ export default function AttendancePage() {
       const res = await fetch(`/api/v1/attendance/me/today?employeeId=${encodeURIComponent(empCodeOrId)}`);
       const json = await res.json();
       if (json.success && json.data) {
-        const { state, first_check_in_at, worked_seconds, server_now } = json.data;
+        const { state, first_check_in_at, last_check_out_at, worked_seconds, server_now } = json.data;
         const checkedIn = state === 'CHECKED_IN';
         setIsCheckedIn(checkedIn);
 
@@ -467,6 +478,27 @@ export default function AttendancePage() {
         } else {
           setFirstCheckInTimestamp(null);
           setElapsedSeconds(worked_seconds || 0);
+        }
+
+        if (typeof window !== 'undefined') {
+          if (checkedIn) {
+            localStorage.setItem('jaago_is_checked_in', 'true');
+            if (first_check_in_at) {
+              localStorage.setItem('jaago_checkin_timestamp', String(new Date(first_check_in_at).getTime()));
+              localStorage.setItem('jaago_first_checkin_time', json.data.check_in_time_local || '10:14 AM');
+            }
+            localStorage.removeItem('jaago_last_checkout_time');
+          } else {
+            localStorage.setItem('jaago_is_checked_in', 'false');
+            localStorage.removeItem('jaago_checkin_timestamp');
+            if (first_check_in_at) {
+              localStorage.setItem('jaago_first_checkin_time', json.data.check_in_time_local || '10:14 AM');
+            }
+            if (last_check_out_at) {
+              localStorage.setItem('jaago_last_checkout_time', json.data.check_out_time_local || '05:36 PM');
+            }
+            localStorage.setItem('jaago_worked_seconds', String(worked_seconds || 0));
+          }
         }
       }
     } catch {

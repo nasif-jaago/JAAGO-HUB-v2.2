@@ -425,12 +425,22 @@ export default function DashboardPage() {
             workingSchedule: emp.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
             employeeCode: emp.code || 'FO032507061190',
           });
+          refreshCanonicalAttendance(emp.id || emp.code || 'FO032507061190');
         }
       });
       refreshMonthlyMetrics();
     };
     window.addEventListener('focus', handleStorageRefresh);
     window.addEventListener('storage', handleStorageRefresh);
+
+    // Live background polling for biometric & GPS attendance status every 25 seconds
+    const autoPollInterval = setInterval(() => {
+      const sess = getCurrentUserSession();
+      const codeOrId = sess?.employeeCode || user.employeeCode || user.id;
+      if (codeOrId) {
+        refreshCanonicalAttendance(codeOrId);
+      }
+    }, 25000);
 
     return () => {
       window.removeEventListener('jaago_view_mode_change', handleViewModeChange);
@@ -440,6 +450,7 @@ export default function DashboardPage() {
       window.removeEventListener('jaago_attendance_regularization_updated', refreshMonthlyMetrics);
       window.removeEventListener('focus', handleStorageRefresh);
       window.removeEventListener('storage', handleStorageRefresh);
+      clearInterval(autoPollInterval);
     };
   }, []);
 
@@ -771,15 +782,38 @@ export default function DashboardPage() {
           setElapsedSeconds(worked_seconds || 0);
         }
 
+        let resolvedOutTime = '--:--';
         if (last_check_out_at) {
-          const outTime = todayJson.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
+          resolvedOutTime = todayJson.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
           });
-          setCheckOutTime(outTime);
+          setCheckOutTime(resolvedOutTime);
         } else {
           setCheckOutTime('--:--');
+        }
+
+        // Synchronize client localStorage with canonical server status
+        if (typeof window !== 'undefined') {
+          if (isNowCheckedIn) {
+            localStorage.setItem('jaago_is_checked_in', 'true');
+            if (first_check_in_at) {
+              localStorage.setItem('jaago_checkin_timestamp', String(new Date(first_check_in_at).getTime()));
+              localStorage.setItem('jaago_first_checkin_time', todayJson.data.check_in_time_local || '10:14 AM');
+            }
+            localStorage.removeItem('jaago_last_checkout_time');
+          } else {
+            localStorage.setItem('jaago_is_checked_in', 'false');
+            localStorage.removeItem('jaago_checkin_timestamp');
+            if (first_check_in_at) {
+              localStorage.setItem('jaago_first_checkin_time', todayJson.data.check_in_time_local || '10:14 AM');
+            }
+            if (last_check_out_at) {
+              localStorage.setItem('jaago_last_checkout_time', resolvedOutTime);
+            }
+            localStorage.setItem('jaago_worked_seconds', String(worked_seconds || 0));
+          }
         }
 
         // Merge today session into myAttendanceLogs

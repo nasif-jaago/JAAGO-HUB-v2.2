@@ -8,6 +8,7 @@ import {
   resolveCanonicalEmployeeId,
   GPSPayload,
 } from '@/lib/server-attendance';
+import { getEffectiveDailyAttendance } from '@/lib/server-effective-attendance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,21 +52,46 @@ export async function POST(request: Request) {
     const businessDate = getCurrentBusinessDate('Asia/Dhaka', cutoffLocal);
     const nowUtc = new Date().toISOString();
 
-    // 1. Fetch existing record for this attendance day
-    const { data: existingRecord } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .eq('employee_id', canonicalEmpId)
-      .eq('business_date', businessDate)
-      .maybeSingle();
+    // 1. Fetch effective record and existing attendance record
+    const [effectiveList, { data: existingRecord }] = await Promise.all([
+      getEffectiveDailyAttendance({
+        employeeId: canonicalEmpId,
+        date: businessDate,
+        limit: 1,
+      }),
+      supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', canonicalEmpId)
+        .eq('business_date', businessDate)
+        .maybeSingle(),
+    ]);
+    const effectiveToday = effectiveList[0] || null;
 
-    // 2. State Machine Check: If already CHECKED_IN (i.e. check_in_at exists and check_out_at is null), return idempotent response
-    const isCurrentlyCheckedIn = Boolean(existingRecord?.check_in_at && !existingRecord?.check_out_at);
-    if (isCurrentlyCheckedIn && !body.forceNew) {
+    // Determine if currently checked in based on chronological latest punch
+    let isCurrentlyCheckedIn = false;
+    let latestPunchTime = 0;
+    if (effectiveToday?.allPunches && effectiveToday.allPunches.length > 0) {
+      const sorted = [...effectiveToday.allPunches].sort(
+        (a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime()
+      );
+      const latest = sorted[sorted.length - 1];
+      if (latest) {
+        isCurrentlyCheckedIn = latest.punchType === 'check_in';
+        latestPunchTime = new Date(latest.punchAt).getTime();
+      }
+    } else if (existingRecord?.check_in_at && !existingRecord?.check_out_at) {
+      isCurrentlyCheckedIn = true;
+      latestPunchTime = new Date(existingRecord.check_in_at).getTime();
+    }
+
+    // Anti-double-click guard: only return idempotent response if identical check-in happened in last 30 seconds
+    const isRecentDuplicate = isCurrentlyCheckedIn && Math.abs(Date.now() - latestPunchTime) < 30_000;
+    if (isRecentDuplicate && !body.forceNew) {
       return NextResponse.json({
         success: true,
         code: 'ALREADY_CHECKED_IN',
-        message: 'Employee is already checked in.',
+        message: 'Check-in already recorded.',
         state: 'CHECKED_IN',
         buttons: {
           check_in_enabled: false,
@@ -147,16 +173,31 @@ export async function POST(request: Request) {
     // 5. Shift Snapshot Resolution (Invariant I7)
     const shiftSnapshot = await resolveEmployeeShiftSnapshot(canonicalEmpId, businessDate);
 
-    // 6. Anchor First Check-In (Set ONCE on first check-in of the day, never mutated afterward)
-    const firstCheckInAt = existingRecord?.first_check_in_at || existingRecord?.check_in_at || nowUtc;
-    const currentCheckInAt = nowUtc;
+    // 6. Anchor First Check-In (Set ONCE on earliest check-in of the day, never mutated afterward)
+    const candidateCheckIns = [
+      existingRecord?.first_check_in_at,
+      existingRecord?.check_in_at,
+      effectiveToday?.countedCheckInAt,
+      ...(effectiveToday?.allPunches || [])
+        .filter((p) => p.punchType === 'check_in')
+        .map((p) => p.punchAt),
+      nowUtc,
+    ].filter(Boolean) as string[];
+
+    const validCheckInTimes = candidateCheckIns
+      .map((iso) => new Date(iso).getTime())
+      .filter((ts) => !isNaN(ts) && ts > 0);
+
+    const earliestCheckInTs = Math.min(...validCheckInTimes);
+    const firstCheckInAt = new Date(earliestCheckInTs).toISOString();
     const firstCheckInLocationId = existingRecord?.check_in_location_id || geoResult.matchedLocationId;
+    const previousLastCheckOut = existingRecord?.last_check_out_at || effectiveToday?.countedCheckOutAt || null;
 
     const facts = {
       employeeId: canonicalEmpId,
       businessDate,
       firstCheckInAt,
-      checkInAt: currentCheckInAt,
+      checkInAt: firstCheckInAt,
       checkInSource: 'gps' as const,
       calcMethod,
       nowServer: nowUtc,
@@ -169,7 +210,9 @@ export async function POST(request: Request) {
       id: existingRecord?.id || `att-${canonicalEmpId}-${businessDate}`,
       employee_id: canonicalEmpId,
       business_date: businessDate,
+      first_check_in_at: firstCheckInAt,
       check_in_at: firstCheckInAt,
+      last_check_out_at: previousLastCheckOut,
       check_out_at: null, // open session
       check_in_source: 'gps',
       check_out_source: null,
@@ -215,6 +258,13 @@ export async function POST(request: Request) {
       needs_review: false,
     };
 
+    const isReCheckIn = firstCheckInAt !== nowUtc && (Date.now() - new Date(firstCheckInAt).getTime() > 60_000);
+    const toastMessage = isReCheckIn
+      ? `Re-checked in successfully at ${geoResult.matchedLocationName || 'Designated Office'}!`
+      : derived.isLate
+        ? `Checked in at ${geoResult.matchedLocationName || 'Designated Office'} (Late by ${derived.lateByMinutes} min)`
+        : `Checked in at ${geoResult.matchedLocationName || 'Designated Office'} on time!`;
+
     return NextResponse.json({
       success: true,
       state: 'CHECKED_IN',
@@ -224,9 +274,7 @@ export async function POST(request: Request) {
         check_in_enabled: false,
         check_out_enabled: true,
       },
-      message: derived.isLate
-        ? `Checked in at ${geoResult.matchedLocationName || 'Store'} (Late by ${derived.lateByMinutes} min)`
-        : `Checked in at ${geoResult.matchedLocationName || 'Store'} on time!`,
+      message: toastMessage,
     });
   } catch (err: any) {
     return NextResponse.json(

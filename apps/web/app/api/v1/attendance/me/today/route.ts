@@ -59,14 +59,36 @@ export async function GET(request: Request) {
     const shift = await resolveEmployeeShiftSnapshot(canonicalEmpId, businessDate);
 
     // 4. Compute counted First-In and Last-Out across 2-Way Sources (BioTime & GPS)
-    const firstCheckIn = effectiveToday?.countedCheckInAt || record?.first_check_in_at || record?.check_in_at || null;
-    const lastCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
+    const candidateCheckIns = [
+      effectiveToday?.countedCheckInAt,
+      record?.first_check_in_at,
+      record?.check_in_at,
+      ...(effectiveToday?.allPunches || [])
+        .filter((p) => p.punchType === 'check_in')
+        .map((p) => p.punchAt),
+    ].filter(Boolean) as string[];
 
-    // 5. Derive state machine status and button enablement
-    const hasCheckedIn = Boolean(firstCheckIn);
-    const hasCheckedOut = Boolean(lastCheckOut);
-    const isCheckedIn = hasCheckedIn && !hasCheckedOut;
+    const validCheckInTimes = candidateCheckIns
+      .map((iso) => new Date(iso).getTime())
+      .filter((ts) => !isNaN(ts) && ts > 0);
+
+    const firstCheckIn = validCheckInTimes.length > 0 ? new Date(Math.min(...validCheckInTimes)).toISOString() : null;
+
+    // 5. Derive state machine status and button enablement based on latest chronological punch
+    let isCheckedIn = false;
+    if (effectiveToday?.allPunches && effectiveToday.allPunches.length > 0) {
+      const sorted = [...effectiveToday.allPunches].sort(
+        (a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime()
+      );
+      const latest = sorted[sorted.length - 1];
+      isCheckedIn = latest ? latest.punchType === 'check_in' : false;
+    } else if (record?.check_in_at && !record?.check_out_at) {
+      isCheckedIn = true;
+    } else {
+      isCheckedIn = Boolean(firstCheckIn && !record?.last_check_out_at);
+    }
     const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' = isCheckedIn ? 'CHECKED_IN' : 'NOT_CHECKED_IN';
+    const lastCheckOut = isCheckedIn ? null : (effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null);
 
     // 6. Compute Working Hours Today (Live vs Final)
     let workedSeconds = 0;
@@ -119,8 +141,8 @@ export async function GET(request: Request) {
         needs_review: Boolean(record?.needs_review || record?.is_auto_checkout),
         is_auto_checkout: Boolean(record?.is_auto_checkout),
         buttons: {
-          check_in_enabled: state === 'NOT_CHECKED_IN' && !hasCheckedIn,
-          check_out_enabled: state === 'CHECKED_IN',
+          check_in_enabled: !isCheckedIn,
+          check_out_enabled: isCheckedIn,
         },
         server_now: nowUtc,
         businessDate,

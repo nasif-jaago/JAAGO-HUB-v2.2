@@ -7,6 +7,7 @@ import {
   resolveCanonicalEmployeeId,
   GPSPayload,
 } from '@/lib/server-attendance';
+import { getEffectiveDailyAttendance } from '@/lib/server-effective-attendance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -50,17 +51,39 @@ export async function POST(request: Request) {
     const businessDate = getCurrentBusinessDate('Asia/Dhaka', cutoffLocal);
     const nowUtc = new Date().toISOString();
 
-    // 1. Fetch existing record for this attendance day
-    const { data: record } = await supabase
-      .from('attendance_records')
-      .select('*')
-      .eq('employee_id', canonicalEmpId)
-      .eq('business_date', businessDate)
-      .maybeSingle();
+    // 1. Fetch effective attendance and existing record
+    const [effectiveList, { data: record }] = await Promise.all([
+      getEffectiveDailyAttendance({
+        employeeId: canonicalEmpId,
+        date: businessDate,
+        limit: 1,
+      }),
+      supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('employee_id', canonicalEmpId)
+        .eq('business_date', businessDate)
+        .maybeSingle(),
+    ]);
+    const effectiveToday = effectiveList[0] || null;
 
-    // 2. State Guard: Check-out requires an open check-in session
-    const isOpenSession = Boolean(record && record.check_in_at && !record.check_out_at);
-    if (!isOpenSession) {
+    // Check if an existing check-in exists across any source today
+    const candidateCheckIns = [
+      record?.first_check_in_at,
+      record?.check_in_at,
+      effectiveToday?.countedCheckInAt,
+      ...(effectiveToday?.allPunches || [])
+        .filter((p) => p.punchType === 'check_in')
+        .map((p) => p.punchAt),
+    ].filter(Boolean) as string[];
+
+    const validCheckInTimes = candidateCheckIns
+      .map((iso) => new Date(iso).getTime())
+      .filter((ts) => !isNaN(ts) && ts > 0);
+
+    const firstCheckInAt = validCheckInTimes.length > 0 ? new Date(Math.min(...validCheckInTimes)).toISOString() : null;
+
+    if (!firstCheckInAt) {
       await supabase.from('attendance_events').insert({
         employee_id: canonicalEmpId,
         event_type: 'check_out',
@@ -173,7 +196,6 @@ export async function POST(request: Request) {
     };
 
     // 6. Anchor first_check_in and update last_check_out_at
-    const firstCheckInAt = record.first_check_in_at || record.check_in_at;
     const lastCheckOutAt = nowUtc;
 
     // Fetch all punches today if sessions method is active
@@ -201,9 +223,9 @@ export async function POST(request: Request) {
       businessDate,
       firstCheckInAt,
       lastCheckOutAt,
-      checkInAt: record.check_in_at,
+      checkInAt: record?.check_in_at || firstCheckInAt,
       checkOutAt: nowUtc,
-      checkInSource: record.check_in_source,
+      checkInSource: record?.check_in_source || 'gps',
       checkOutSource: 'gps' as const,
       calcMethod,
       punches: punchesList || [],
@@ -213,7 +235,13 @@ export async function POST(request: Request) {
 
     // 7. Atomic Write to canonical attendance_records (Closing current session, state -> NOT_CHECKED_IN)
     const updatePayload = {
+      id: record?.id || `att-${canonicalEmpId}-${businessDate}`,
+      employee_id: canonicalEmpId,
+      business_date: businessDate,
+      first_check_in_at: firstCheckInAt,
+      check_in_at: firstCheckInAt,
       check_out_at: nowUtc,
+      last_check_out_at: nowUtc,
       check_out_source: 'gps',
       check_out_location_id: geoResult.matchedLocationId,
       check_out_lat: latitude,
@@ -227,8 +255,7 @@ export async function POST(request: Request) {
 
     const { data: updatedRecord, error: updateErr } = await supabase
       .from('attendance_records')
-      .update(updatePayload)
-      .eq('id', record.id)
+      .upsert(updatePayload, { onConflict: 'employee_id,business_date' })
       .select()
       .single();
 
