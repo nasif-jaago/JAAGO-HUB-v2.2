@@ -13,6 +13,10 @@ import {
   CreditCard,
   X,
   Users,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import {
   fetchEmployeesFromSupabase,
@@ -57,6 +61,8 @@ export default function PayRunsPage() {
   // Search & Filter within active pay run
   const [itemSearch, setItemSearch] = useState('');
   const [itemDeptFilter, setItemDeptFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -284,6 +290,37 @@ export default function PayRunsPage() {
       return true;
     });
   }, [activeRun, itemSearch, itemDeptFilter]);
+
+  // Reset pagination when search, dept filter, active run, or page size changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemSearch, itemDeptFilter, selectedRunId, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [filteredItems, currentPage, pageSize]);
+
+  const startItem = filteredItems.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, filteredItems.length);
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 4) {
+        pages.push(1, 2, 3, 4, 5, '...', totalPages);
+      } else if (currentPage >= totalPages - 3) {
+        pages.push(1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
+      } else {
+        pages.push(1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages);
+      }
+    }
+    return pages;
+  };
 
   const departmentsInRun = useMemo(() => {
     if (!activeRun) return [];
@@ -533,47 +570,163 @@ export default function PayRunsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EFE8DC] dark:divide-stone-800">
-                  {filteredItems.map((item) => (
-                    <tr key={item.id} className="hover:bg-[#FAF7F2] dark:hover:bg-stone-800/40 transition">
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-stone-900 dark:text-stone-100">{item.employeeName}</div>
-                        <div className="text-[10px] text-[#8C7866] dark:text-stone-400 font-mono">
-                          {item.employeeCode} &bull; {item.designation}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-stone-700 dark:text-stone-300 font-medium">
-                        {item.department}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-stone-900 dark:text-stone-100">
-                        ৳{item.grossWage.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-amber-700 dark:text-amber-400 font-semibold">
-                        ৳{item.basicWage.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-rose-600 dark:text-rose-400 font-semibold">
-                        ৳{item.employeePF.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-purple-600 dark:text-purple-400 font-semibold">
-                        ৳{item.taxTDS.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono text-rose-600 dark:text-rose-400 font-semibold">
-                        ৳{item.attendanceDeduction.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4 text-right font-mono font-black text-emerald-700 dark:text-emerald-400 text-sm">
-                        ৳{item.netWage.toLocaleString()}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <Link
-                          href={`/pnc/payroll/payslips?search=${item.employeeCode}`}
-                          className="px-2.5 py-1 rounded-md bg-[#FAF7F2] dark:bg-stone-800 hover:bg-amber-100 text-[#524439] dark:text-stone-200 border border-[#DDD5C9] transition text-[10px] font-bold"
-                        >
-                          View Slip
-                        </Link>
+                  {paginatedItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-12 text-center text-stone-500 dark:text-stone-400 text-xs">
+                        No staff records found matching your filters.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    paginatedItems.map((item) => (
+                      <tr key={item.id} className="hover:bg-[#FAF7F2] dark:hover:bg-stone-800/40 transition">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-stone-900 dark:text-stone-100">{item.employeeName}</div>
+                          <div className="text-[10px] text-[#8C7866] dark:text-stone-400 font-mono">
+                            {item.employeeCode} &bull; {item.designation}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-stone-700 dark:text-stone-300 font-medium">
+                          {item.department}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-stone-900 dark:text-stone-100">
+                          ৳{item.grossWage.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-amber-700 dark:text-amber-400 font-semibold">
+                          ৳{item.basicWage.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-rose-600 dark:text-rose-400 font-semibold">
+                          ৳{item.employeePF.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-purple-600 dark:text-purple-400 font-semibold">
+                          ৳{item.taxTDS.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-rose-600 dark:text-rose-400 font-semibold">
+                          ৳{item.attendanceDeduction.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-black text-emerald-700 dark:text-emerald-400 text-sm">
+                          ৳{item.netWage.toLocaleString()}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <Link
+                            href={`/pnc/payroll/payslips?search=${item.employeeCode}`}
+                            className="px-2.5 py-1 rounded-md bg-[#FAF7F2] dark:bg-stone-800 hover:bg-amber-100 text-[#524439] dark:text-stone-200 border border-[#DDD5C9] transition text-[10px] font-bold"
+                          >
+                            View Slip
+                          </Link>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Standard Pagination Controls Footer */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-[#E8E1D5] dark:border-stone-800 text-xs">
+              {/* Left: Counts & Rows Per Page */}
+              <div className="flex flex-wrap items-center gap-3 text-[#6B5B4D] dark:text-stone-400">
+                <div>
+                  Showing <span className="font-bold text-stone-900 dark:text-stone-100">{startItem}</span> to{' '}
+                  <span className="font-bold text-stone-900 dark:text-stone-100">{endItem}</span> of{' '}
+                  <span className="font-bold text-stone-900 dark:text-stone-100">{filteredItems.length}</span> staff members
+                </div>
+
+                <div className="flex items-center space-x-1.5 pl-3 border-l border-[#DDD5C9] dark:border-stone-700">
+                  <span className="text-[11px] font-semibold">Rows per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="px-2 py-1 rounded-lg bg-[#FAF7F2] dark:bg-stone-800 border border-[#DDD5C9] dark:border-stone-700 text-[#524439] dark:text-stone-200 text-xs font-bold focus:outline-none cursor-pointer"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Right: Pagination Navigation Buttons */}
+              <div className="flex items-center space-x-1.5 select-none">
+                {/* First Page */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  title="First Page"
+                  className="p-2 rounded-xl border border-[#DDD5C9] dark:border-stone-700 bg-[#FAF7F2] dark:bg-stone-800 hover:bg-[#EFE8DC] dark:hover:bg-stone-700 text-[#524439] dark:text-stone-200 disabled:opacity-35 disabled:cursor-not-allowed transition cursor-pointer flex items-center justify-center"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </button>
+
+                {/* Previous Page */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  title="Previous Page"
+                  className="flex items-center space-x-1 px-3 py-2 rounded-xl border border-[#DDD5C9] dark:border-stone-700 bg-[#FAF7F2] dark:bg-stone-800 hover:bg-[#EFE8DC] dark:hover:bg-stone-700 text-[#524439] dark:text-stone-200 disabled:opacity-35 disabled:cursor-not-allowed transition cursor-pointer font-bold text-xs"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">Previous</span>
+                </button>
+
+                {/* Numbered Page Buttons */}
+                <div className="flex items-center space-x-1">
+                  {getPageNumbers().map((p, idx) => {
+                    if (p === '...') {
+                      return (
+                        <span
+                          key={`ellipsis-${idx}`}
+                          className="px-2 py-1 text-stone-400 dark:text-stone-500 font-bold select-none"
+                        >
+                          &hellip;
+                        </span>
+                      );
+                    }
+
+                    const isCurrent = p === currentPage;
+                    return (
+                      <button
+                        key={`page-${p}`}
+                        type="button"
+                        onClick={() => setCurrentPage(p as number)}
+                        className={`min-w-[34px] h-9 px-2 rounded-xl border text-xs font-bold transition cursor-pointer flex items-center justify-center ${
+                          isCurrent
+                            ? 'bg-[#2A231C] dark:bg-amber-400 text-[#FAF7F2] dark:text-stone-950 border-[#2A231C] dark:border-amber-400 shadow-sm'
+                            : 'bg-[#FAF7F2] dark:bg-stone-800 text-[#524439] dark:text-stone-200 border-[#DDD5C9] dark:border-stone-700 hover:bg-[#EFE8DC] dark:hover:bg-stone-700'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Next Page */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  title="Next Page"
+                  className="flex items-center space-x-1 px-3 py-2 rounded-xl border border-[#DDD5C9] dark:border-stone-700 bg-[#FAF7F2] dark:bg-stone-800 hover:bg-[#EFE8DC] dark:hover:bg-stone-700 text-[#524439] dark:text-stone-200 disabled:opacity-35 disabled:cursor-not-allowed transition cursor-pointer font-bold text-xs"
+                >
+                  <span className="hidden sm:inline">Next</span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+
+                {/* Last Page */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage >= totalPages}
+                  title="Last Page"
+                  className="p-2 rounded-xl border border-[#DDD5C9] dark:border-stone-700 bg-[#FAF7F2] dark:bg-stone-800 hover:bg-[#EFE8DC] dark:hover:bg-stone-700 text-[#524439] dark:text-stone-200 disabled:opacity-35 disabled:cursor-not-allowed transition cursor-pointer flex items-center justify-center"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
