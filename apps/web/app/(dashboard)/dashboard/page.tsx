@@ -676,7 +676,7 @@ export default function DashboardPage() {
         if (first_check_in_at) {
           const inTs = new Date(first_check_in_at).getTime();
           setFirstCheckInTimestamp(inTs);
-          const inTime = new Date(first_check_in_at).toLocaleTimeString('en-US', {
+          const inTime = todayJson.data.check_in_time_local || new Date(first_check_in_at).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -697,7 +697,7 @@ export default function DashboardPage() {
         }
 
         if (last_check_out_at) {
-          const outTime = new Date(last_check_out_at).toLocaleTimeString('en-US', {
+          const outTime = todayJson.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -710,41 +710,57 @@ export default function DashboardPage() {
         // Merge today session into myAttendanceLogs
         if (first_check_in_at) {
           const todayDateStr = todayJson.data.businessDate || new Date().toISOString().slice(0, 10);
-          const inTime = new Date(first_check_in_at).toLocaleTimeString('en-US', {
+          const inTime = todayJson.data.check_in_time_local || new Date(first_check_in_at).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
           });
           const outTime = last_check_out_at
-            ? new Date(last_check_out_at).toLocaleTimeString('en-US', {
+            ? todayJson.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: true,
               })
             : undefined;
 
+          let deviceBadge: 'Web Portal' | 'Device Login' | 'RFID Scanner' = 'Web Portal';
+          if (todayJson.data.primary_source === 'BioTime Terminal') {
+            deviceBadge = 'Device Login';
+          } else if (todayJson.data.primary_source === 'Merged (GPS + BioTime)') {
+            deviceBadge = 'RFID Scanner';
+          }
+
+          const isLateStatus = String(todayJson.data.status).toLowerCase() === 'late';
+
+          const todayItem: AttendanceLogItem = {
+            id: `att-today-${todayDateStr}`,
+            employeeId: empId,
+            employeeCode: user.employeeCode || 'FO032507061190',
+            employeeName: user.fullName || 'Nasif Kamal',
+            designation: user.jobTitle,
+            department: user.department,
+            branch: gpsTracker.locationName || 'Head Office (Banani)',
+            date: todayDateStr,
+            checkInTime: inTime,
+            checkOutTime: outTime,
+            status: (isLateStatus ? 'Late' : 'Present') as any,
+            device: deviceBadge,
+            primarySource: todayJson.data.primary_source,
+            checkInSource: todayJson.data.check_in_source,
+            checkOutSource: todayJson.data.check_out_source,
+            sourceBreakdown: todayJson.data.source_breakdown,
+            allPunches: todayJson.data.effectiveRecord?.allPunches || [],
+            timestamp: new Date(first_check_in_at).toLocaleString(),
+            createdBy: user.fullName || 'Nasif Kamal',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            notes: todayJson.data.primary_source === 'Merged (GPS + BioTime)'
+              ? 'Counted from earliest BioTime/GPS check-in & latest check-out'
+              : 'Attendance verified',
+          };
+
           setMyAttendanceLogs((prev) => {
             const exists = prev.some((l) => l.date === todayDateStr);
-            const todayItem: AttendanceLogItem = {
-              id: `att-today-${todayDateStr}`,
-              employeeId: empId,
-              employeeCode: user.employeeCode || 'FO032507061190',
-              employeeName: user.fullName || 'Nasif Kamal',
-              designation: user.jobTitle,
-              department: user.department,
-              branch: gpsTracker.locationName || 'Nasif Home (Workstation)',
-              date: todayDateStr,
-              checkInTime: inTime,
-              checkOutTime: outTime,
-              status: (todayJson.data.status === 'late' ? 'Late' : 'Present') as any,
-              device: 'Web Portal',
-              timestamp: new Date(first_check_in_at).toLocaleString(),
-              createdBy: user.fullName || 'Nasif Kamal',
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              notes: 'GPS Geofence Verified',
-            };
-
             if (exists) {
               return prev.map((l) => (l.date === todayDateStr ? { ...l, ...todayItem } : l));
             }

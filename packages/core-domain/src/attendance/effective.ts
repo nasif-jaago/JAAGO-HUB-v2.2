@@ -93,6 +93,7 @@ export function computeEffectiveAttendanceDay(params: {
   isAutoCheckout?: boolean;
   leaveStatus?: 'Leave' | 'Half Day' | 'On Duty' | null;
   notes?: string;
+  nowUtc?: string;
 }): EffectiveAttendanceDay {
   const {
     employeeId,
@@ -112,6 +113,7 @@ export function computeEffectiveAttendanceDay(params: {
     isAutoCheckout = false,
     leaveStatus,
     notes,
+    nowUtc,
   } = params;
 
   // 1. Gather all check-in candidates across sources
@@ -153,7 +155,7 @@ export function computeEffectiveAttendanceDay(params: {
     const firstBio = sortedBio[0];
     const lastBio = sortedBio[sortedBio.length - 1];
 
-    // Earliest punch is check-in candidate
+    // Earliest punch is always check-in candidate
     if (firstBio) {
       const d = new Date(firstBio.punchAt);
       if (!isNaN(d.getTime())) {
@@ -161,26 +163,33 @@ export function computeEffectiveAttendanceDay(params: {
       }
     }
 
-    // Latest punch is check-out candidate if distinct from earliest
+    // Check-out candidates from BioTime:
+    // 1. Explicit CHECK_OUT punches
+    for (const bp of sortedBio) {
+      if (bp.punchType === 'check_out' || String((bp as any).punch_state).toUpperCase() === 'CHECK_OUT') {
+        const d = new Date(bp.punchAt);
+        if (!isNaN(d.getTime())) {
+          checkOutCandidates.push({ time: d, iso: bp.punchAt, source: 'biotime', punchId: bp.id });
+        }
+      }
+    }
+
+    // 2. If distinct punch occurs in afternoon (>= 14:00 Dhaka time) or after shift hours, candidate for Last-Out
     if (lastBio && sortedBio.length > 1 && firstBio && firstBio.punchAt !== lastBio.punchAt) {
       const d = new Date(lastBio.punchAt);
       if (!isNaN(d.getTime())) {
-        checkOutCandidates.push({ time: d, iso: lastBio.punchAt, source: 'biotime', punchId: lastBio.id });
-      }
-    } else {
-      // Check if explicit CHECK_OUT punch exists
-      for (const bp of sortedBio) {
-        if (bp.punchType === 'check_out') {
-          const d = new Date(bp.punchAt);
-          if (!isNaN(d.getTime())) {
-            checkOutCandidates.push({ time: d, iso: bp.punchAt, source: 'biotime', punchId: bp.id });
-          }
+        const dhakaHour = parseInt(
+          d.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', hour12: false }),
+          10
+        );
+        if (dhakaHour >= 14 || lastBio.punchType === 'check_out') {
+          checkOutCandidates.push({ time: d, iso: lastBio.punchAt, source: 'biotime', punchId: lastBio.id });
         }
       }
     }
   }
 
-  // 2. Compute Counted Check-In = MIN(all check-ins)
+  // 2. Compute Counted Check-In = MIN(all check-ins across GPS and BioTime) -> First Check-In
   let countedCheckInIso: string | null = null;
   let checkInSource: 'gps' | 'biotime' | 'manual' | 'none' = 'none';
   let winningInPunchId: string | undefined;
@@ -193,7 +202,7 @@ export function computeEffectiveAttendanceDay(params: {
     winningInPunchId = winnerIn.punchId;
   }
 
-  // 3. Compute Counted Check-Out = MAX(all check-outs)
+  // 3. Compute Counted Check-Out = MAX(all check-outs across GPS and BioTime) -> Last Check-Out
   let countedCheckOutIso: string | null = null;
   let checkOutSource: 'gps' | 'biotime' | 'manual' | 'none' = 'none';
   let winningOutPunchId: string | undefined;
@@ -225,10 +234,14 @@ export function computeEffectiveAttendanceDay(params: {
     const inMs = new Date(countedCheckInIso).getTime();
     const outMs = new Date(countedCheckOutIso).getTime();
     workedSeconds = Math.max(0, Math.floor((outMs - inMs) / 1000));
+  } else if (countedCheckInIso && nowUtc) {
+    const inMs = new Date(countedCheckInIso).getTime();
+    const nowMs = new Date(nowUtc).getTime();
+    workedSeconds = Math.max(0, Math.floor((nowMs - inMs) / 1000));
   }
   const workedDisplay = formatWorkingHours(workedSeconds);
 
-  // 6. Lateness & Status derivation
+  // 6. Lateness & Status derivation based on First Check-In
   let isLate = false;
   let lateByMinutes = 0;
   let derivedStatus: 'Present' | 'Late' | 'Absent' | 'Leave' | 'Half Day' | 'On Duty' | 'Auto Check Out' = 'Absent';

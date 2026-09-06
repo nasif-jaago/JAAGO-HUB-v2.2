@@ -861,12 +861,22 @@ export function recordLocalAttendanceLog(logData: {
 /**
  * Fetch and merge attendance logs from Supabase & localStorage with SWR caching
  */
-export async function fetchAttendanceLogsFromSupabase(forceRefresh: boolean = false): Promise<AttendanceLogItem[]> {
+export async function fetchAttendanceLogsFromSupabase(
+  forceRefresh: boolean = false,
+  employeeCodeOrId?: string
+): Promise<AttendanceLogItem[]> {
+  const cacheKey = employeeCodeOrId
+    ? `pnc_attendance_logs_${employeeCodeOrId}`
+    : 'pnc_attendance_logs_list';
+
   return fetchWithCache(
-    'pnc_attendance_logs_list',
+    cacheKey,
     async () => {
       try {
-        const res = await fetch('/api/v1/attendance/logs', { cache: 'no-store' });
+        const url = employeeCodeOrId
+          ? `/api/v1/attendance/logs?employeeId=${encodeURIComponent(employeeCodeOrId)}`
+          : '/api/v1/attendance/logs';
+        const res = await fetch(url, { cache: 'no-store' });
         const json = await res.json();
 
         if (res.ok && json.success && Array.isArray(json.data) && json.data.length > 0) {

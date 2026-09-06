@@ -288,39 +288,69 @@ export default function AttendanceLogsPage() {
     return employees;
   }, [employees, isDspScoped]);
 
+  // Strict One-Row-Per-Employee-Per-Date Deduplication
+  const uniqueLogs = useMemo(() => {
+    const dailyMap = new Map<string, AttendanceLogItem>();
+    logs.forEach((log) => {
+      const empKey = (log.employeeCode || log.employeeId || '').toLowerCase().trim();
+      const dateKey = log.date || '';
+      if (!empKey || !dateKey) return;
+      const key = `${empKey}__${dateKey}`;
+
+      if (!dailyMap.has(key)) {
+        dailyMap.set(key, log);
+      } else {
+        const existing = dailyMap.get(key)!;
+        if (
+          log.primarySource === 'Merged (GPS + BioTime)' ||
+          (log.allPunches && log.allPunches.length > (existing.allPunches?.length || 0)) ||
+          (!existing.checkOutTime && log.checkOutTime)
+        ) {
+          dailyMap.set(key, log);
+        }
+      }
+    });
+
+    return Array.from(dailyMap.values()).sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  }, [logs]);
+
   // Filter computation
-  const filteredLogs = logs.filter((log) => {
-    const emp = empCodeToProfile.get(log.employeeCode);
-    const org = emp?.organization || '';
-    const dept = emp?.department || log.department || '';
+  const filteredLogs = useMemo(() => {
+    return uniqueLogs.filter((log) => {
+      const emp = empCodeToProfile.get(log.employeeCode);
+      const org = emp?.organization || '';
+      const dept = emp?.department || log.department || '';
 
-    if (isDspScoped && !isDspDepartment(dept)) {
-      return false;
-    }
-    if (!matchesSelectedOrg(org, selectedOrg)) return false;
-    if (!matchesSelectedDept(dept, selectedDept)) return false;
+      if (isDspScoped && !isDspDepartment(dept)) {
+        return false;
+      }
+      if (!matchesSelectedOrg(org, selectedOrg)) return false;
+      if (!matchesSelectedDept(dept, selectedDept)) return false;
 
-    const q = searchQuery.toLowerCase();
-    const matchesSearch =
-      !q ||
-      log.employeeName.toLowerCase().includes(q) ||
-      log.employeeCode.toLowerCase().includes(q) ||
-      log.designation.toLowerCase().includes(q) ||
-      log.department.toLowerCase().includes(q) ||
-      log.branch.toLowerCase().includes(q);
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        log.employeeName.toLowerCase().includes(q) ||
+        log.employeeCode.toLowerCase().includes(q) ||
+        log.designation.toLowerCase().includes(q) ||
+        log.department.toLowerCase().includes(q) ||
+        log.branch.toLowerCase().includes(q);
 
-    const matchesStatus =
-      statusFilter === 'All Status' || log.status === statusFilter;
+      const matchesStatus =
+        statusFilter === 'All Status' || log.status === statusFilter;
 
-    const matchesEmployee =
-      !employeeFilter || log.employeeCode === employeeFilter;
+      const matchesEmployee =
+        !employeeFilter || log.employeeCode === employeeFilter;
 
-    const matchesDate =
-      (!startDate || log.date >= startDate) &&
-      (!endDate || log.date <= endDate);
+      const matchesDate =
+        (!startDate || log.date >= startDate) &&
+        (!endDate || log.date <= endDate);
 
-    return matchesSearch && matchesStatus && matchesEmployee && matchesDate;
-  });
+      return matchesSearch && matchesStatus && matchesEmployee && matchesDate;
+    });
+  }, [uniqueLogs, empCodeToProfile, selectedOrg, selectedDept, isDspScoped, searchQuery, statusFilter, employeeFilter, startDate, endDate]);
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">

@@ -282,7 +282,6 @@ export default function AttendancePage() {
         if (json.success && Array.isArray(json.data)) {
           saveLocalRegularizations(json.data);
           setRegularizations(json.data);
-          setAllLogs(getLocalAttendanceLogs());
         }
       } catch {}
     };
@@ -290,22 +289,24 @@ export default function AttendancePage() {
     setRegularizations(getLocalRegularizations());
     syncLiveRegularizations();
 
-    // Initial logs load
-    const localLogs = getLocalAttendanceLogs();
-    setAllLogs(localLogs);
-
-    fetchAttendanceLogsFromSupabase().then((supaLogs) => {
+    // Initial logs load for current user
+    const loadUserLogs = async () => {
+      const empCodeOrId = user.employeeCode || user.id || 'FO032507061190';
+      const supaLogs = await fetchAttendanceLogsFromSupabase(false, empCodeOrId);
       if (supaLogs && supaLogs.length > 0) {
+        setAllLogs(supaLogs);
+      } else {
         setAllLogs(getLocalAttendanceLogs());
       }
-    });
+    };
+    loadUserLogs();
 
     // Load today session
     refreshTodaySession();
 
     // Event listeners
     const handleAttUpdated = () => {
-      setAllLogs(getLocalAttendanceLogs());
+      loadUserLogs();
       setRegularizations(getLocalRegularizations());
       syncLiveRegularizations();
       refreshTodaySession();
@@ -616,7 +617,47 @@ export default function AttendancePage() {
   };
 
   const filteredLogs = useMemo(() => {
-    return allLogs.filter((log) => {
+    const normUserCode = (user.employeeCode || '').toLowerCase().trim();
+    const normUserId = (user.id || '').toLowerCase().trim();
+    const normUserName = (user.fullName || '').toLowerCase().trim();
+
+    // 1. Isolate user's personal attendance records
+    const userRecords = allLogs.filter((log) => {
+      const code = (log.employeeCode || '').toLowerCase().trim();
+      const id = (log.employeeId || '').toLowerCase().trim();
+      const name = (log.employeeName || '').toLowerCase().trim();
+      if (normUserCode && (code === normUserCode || id === normUserCode)) return true;
+      if (normUserId && (id === normUserId || code === normUserId)) return true;
+      if (normUserName && (name === normUserName || name.includes(normUserName) || normUserName.includes(name))) return true;
+      return false;
+    });
+
+    // 2. Strict One-Row-Per-Date Deduplication and Merging
+    const dailyMap = new Map<string, AttendanceLogItem>();
+    userRecords.forEach((log) => {
+      const d = log.date;
+      if (!d) return;
+      if (!dailyMap.has(d)) {
+        dailyMap.set(d, log);
+      } else {
+        const existing = dailyMap.get(d)!;
+        // Prefer Merged/RFID or the entry with richer punch data / earlier check in
+        if (
+          log.primarySource === 'Merged (GPS + BioTime)' ||
+          (log.allPunches && log.allPunches.length > (existing.allPunches?.length || 0)) ||
+          (!existing.checkOutTime && log.checkOutTime)
+        ) {
+          dailyMap.set(d, log);
+        }
+      }
+    });
+
+    const uniqueDailyLogs = Array.from(dailyMap.values()).sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    // 3. Apply search, status, and date filters
+    return uniqueDailyLogs.filter((log) => {
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -639,7 +680,7 @@ export default function AttendancePage() {
 
       return matchesSearch && matchesStatus && matchesDateRange;
     });
-  }, [allLogs, searchQuery, statusFilter, startDate, endDate]);
+  }, [allLogs, user.employeeCode, user.id, user.fullName, searchQuery, statusFilter, startDate, endDate]);
 
   // Grouped by Month for Month-wise logs table
   const monthGroupedLogs = useMemo(() => {

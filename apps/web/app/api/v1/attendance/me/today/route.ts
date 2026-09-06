@@ -58,24 +58,27 @@ export async function GET(request: Request) {
     // 3. Resolve shift snapshot
     const shift = await resolveEmployeeShiftSnapshot(canonicalEmpId, businessDate);
 
-    // 4. Derive state machine status and button enablement
-    const isCheckedIn = Boolean(record && record.check_in_at && !record.check_out_at);
-    const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' = isCheckedIn ? 'CHECKED_IN' : 'NOT_CHECKED_IN';
-
-    // 5. Compute counted First-In and Last-Out
+    // 4. Compute counted First-In and Last-Out across 2-Way Sources (BioTime & GPS)
     const firstCheckIn = effectiveToday?.countedCheckInAt || record?.first_check_in_at || record?.check_in_at || null;
     const lastCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
 
-    let workedSeconds = effectiveToday?.workedSeconds ?? (record?.worked_seconds ?? (record?.worked_minutes ? record.worked_minutes * 60 : 0));
-    let workedDisplay = effectiveToday?.workedDisplay || record?.worked_display || formatWorkingHours(workedSeconds);
+    // 5. Derive state machine status and button enablement
+    const hasCheckedIn = Boolean(firstCheckIn);
+    const hasCheckedOut = Boolean(lastCheckOut);
+    const isCheckedIn = hasCheckedIn && !hasCheckedOut;
+    const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' = isCheckedIn ? 'CHECKED_IN' : 'NOT_CHECKED_IN';
+
+    // 6. Compute Working Hours Today (Live vs Final)
+    let workedSeconds = 0;
+    let workedDisplay = '0h 00m';
 
     if (isCheckedIn && firstCheckIn) {
       const facts = {
         employeeId: canonicalEmpId,
         businessDate,
         firstCheckInAt: firstCheckIn,
-        checkInAt: record?.check_in_at || firstCheckIn,
-        lastCheckOutAt: lastCheckOut,
+        checkInAt: firstCheckIn,
+        lastCheckOutAt: null,
         calcMethod,
         nowServer: nowUtc,
       };
@@ -87,15 +90,15 @@ export async function GET(request: Request) {
         businessDate,
         firstCheckInAt: firstCheckIn,
         lastCheckOutAt: lastCheckOut,
-        checkInAt: record?.check_in_at || firstCheckIn,
-        checkOutAt: record?.check_out_at || lastCheckOut,
+        checkInAt: firstCheckIn,
+        checkOutAt: lastCheckOut,
         calcMethod,
       };
       workedSeconds = calculateWorkedSeconds(facts, calcMethod);
       workedDisplay = formatWorkingHours(workedSeconds);
-    } else if (!record && !effectiveToday) {
-      workedSeconds = 0;
-      workedDisplay = '0h 00m';
+    } else {
+      workedSeconds = effectiveToday?.workedSeconds || 0;
+      workedDisplay = effectiveToday?.workedDisplay || '0h 00m';
     }
 
     return NextResponse.json({
@@ -107,7 +110,7 @@ export async function GET(request: Request) {
         check_in_time_local: effectiveToday?.countedCheckInTimeLocal || (firstCheckIn ? new Date(firstCheckIn).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'),
         check_out_time_local: effectiveToday?.countedCheckOutTimeLocal || (lastCheckOut ? new Date(lastCheckOut).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'),
         check_in_source: effectiveToday?.checkInSource || record?.check_in_source || 'gps',
-        check_out_source: effectiveToday?.checkOutSource || record?.check_out_source || 'gps',
+        check_out_source: effectiveToday?.checkOutSource || record?.check_out_source || (lastCheckOut ? 'gps' : 'none'),
         primary_source: effectiveToday?.primarySource || (record?.check_in_source === 'gps' ? 'Web Portal (GPS)' : 'BioTime Terminal'),
         source_breakdown: effectiveToday?.sourceBreakdown || null,
         worked_seconds: workedSeconds,
@@ -116,7 +119,7 @@ export async function GET(request: Request) {
         needs_review: Boolean(record?.needs_review || record?.is_auto_checkout),
         is_auto_checkout: Boolean(record?.is_auto_checkout),
         buttons: {
-          check_in_enabled: state === 'NOT_CHECKED_IN',
+          check_in_enabled: state === 'NOT_CHECKED_IN' && !hasCheckedIn,
           check_out_enabled: state === 'CHECKED_IN',
         },
         server_now: nowUtc,

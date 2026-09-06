@@ -226,82 +226,7 @@ export async function getEffectiveDailyAttendance(options?: {
     resolvedEmpId = await resolveCanonicalEmployeeId(resolvedEmpId);
   }
 
-  // 1. First attempt querying from Supabase att_effective_daily view
-  try {
-    let viewQuery = supabase
-      .from('att_effective_daily')
-      .select('*')
-      .order('business_date', { ascending: false })
-      .limit(limit);
-
-    if (resolvedEmpId) viewQuery = viewQuery.eq('employee_id', resolvedEmpId);
-    if (options?.date) viewQuery = viewQuery.eq('business_date', options.date);
-    else if (options?.startDate && options?.endDate) {
-      viewQuery = viewQuery.gte('business_date', options.startDate).lte('business_date', options.endDate);
-    } else if (options?.month) {
-      viewQuery = viewQuery.gte('business_date', `${options.month}-01`).lte('business_date', `${options.month}-31`);
-    }
-
-    const { data: viewData, error: viewErr } = await viewQuery;
-
-    if (!viewErr && Array.isArray(viewData) && viewData.length > 0) {
-      return viewData.map((row: any) => ({
-        employeeId: row.employee_id,
-        employeeCode: row.employee_code || row.employee_id,
-        employeeName: row.employee_name || 'Staff Member',
-        department: row.department || "Founder's Office",
-        designation: row.designation || 'Staff',
-        branch: row.branch || 'Head Office (Banani)',
-        avatarUrl: row.avatar_url || '',
-        businessDate: row.business_date,
-        countedCheckInAt: row.counted_check_in,
-        countedCheckOutAt: row.counted_check_out,
-        countedCheckInTimeLocal: row.counted_check_in
-          ? new Date(row.counted_check_in).toLocaleTimeString('en-US', {
-              timeZone: 'Asia/Dhaka',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            })
-          : '--:--',
-        countedCheckOutTimeLocal: row.counted_check_out
-          ? new Date(row.counted_check_out).toLocaleTimeString('en-US', {
-              timeZone: 'Asia/Dhaka',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            })
-          : '--:--',
-        checkInSource: row.check_in_source || 'none',
-        checkOutSource: row.check_out_source || 'none',
-        primarySource:
-          row.check_in_source === 'biotime' && row.check_out_source === 'gps'
-            ? 'Merged (GPS + BioTime)'
-            : row.check_in_source === 'gps' && row.check_out_source === 'biotime'
-            ? 'Merged (GPS + BioTime)'
-            : row.check_in_source === 'biotime'
-            ? 'BioTime Terminal'
-            : 'Web Portal (GPS)',
-        workedSeconds: row.worked_seconds || 0,
-        workedDisplay: row.worked_display || '0h 00m',
-        status: row.status as any,
-        isLate: Boolean(row.is_late),
-        lateByMinutes: row.late_by_minutes || (row.is_late ? 30 : 0),
-        isAutoCheckout: Boolean(row.is_auto_checkout),
-        allPunches: [],
-        sourceBreakdown: row.source_breakdown || {
-          countedCheckInSource: row.check_in_source,
-          countedCheckOutSource: row.check_out_source,
-          biotimePunchCount: 0,
-          gpsPunchCount: 1,
-        },
-      }));
-    }
-  } catch {
-    // Fall back to pure merging query
-  }
-
-  // 2. Pure Merger: Query raw GPS attendance_records + attendance_events + att_biotime_events
+  // 1. Unified Merger: Query raw GPS attendance_records + att_biotime_events
   let gpsQuery = supabase
     .from('attendance_records')
     .select('*')
@@ -371,6 +296,7 @@ export async function getEffectiveDailyAttendance(options?: {
   bioByEmpDate.forEach((_, key) => dayKeys.add(key));
 
   const effectiveDays: EffectiveAttendanceDay[] = [];
+  const nowUtc = new Date().toISOString();
 
   dayKeys.forEach((key) => {
     const [empId, dateStr] = key.split('__');
@@ -396,6 +322,7 @@ export async function getEffectiveDailyAttendance(options?: {
       shiftBufferMinutes: gpsRec?.shift_buffer_minutes ?? 30,
       isAutoCheckout: Boolean(gpsRec?.is_auto_checkout),
       notes: gpsRec?.notes,
+      nowUtc,
     });
 
     effectiveDays.push(eff);
