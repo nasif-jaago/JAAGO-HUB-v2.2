@@ -885,19 +885,56 @@ export default function PnCLayout({
             <div className="space-y-0.5">
               <button
                 onClick={() => toggleSection('payroll')}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer"
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  pathname.startsWith('/pnc/payroll')
+                    ? 'text-amber-400 font-black bg-white/[0.04]'
+                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
+                }`}
               >
                 <div className="flex items-center space-x-2.5">
                   <DollarSign className="h-4 w-4 text-white/60 flex-shrink-0" />
                   <span className="uppercase tracking-wider text-[11px]">PAYROLL</span>
                 </div>
-                {openSections['payroll'] ? <ChevronDown className="h-3.5 w-3.5 text-amber-400" /> : <ChevronRight className="h-3.5 w-3.5 text-white/40" />}
+                {openSections['payroll'] || pathname.startsWith('/pnc/payroll') ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+                )}
               </button>
-              {openSections['payroll'] && (
+              {(openSections['payroll'] || pathname.startsWith('/pnc/payroll')) && (
                 <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
-                  <div className="py-1 uppercase text-[10px] font-bold hover:text-amber-400 cursor-pointer">&bull; Contracts</div>
-                  <div className="py-1 uppercase text-[10px] font-bold hover:text-amber-400 cursor-pointer">&bull; Pay Runs</div>
-                  <div className="py-1 uppercase text-[10px] font-bold hover:text-amber-400 cursor-pointer">&bull; Payslips</div>
+                  <Link
+                    href="/pnc/payroll"
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
+                      pathname === '/pnc/payroll' ? 'text-amber-400 font-black' : ''
+                    }`}
+                  >
+                    &bull; Overview
+                  </Link>
+                  <Link
+                    href="/pnc/payroll/contracts"
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
+                      pathname === '/pnc/payroll/contracts' ? 'text-amber-400 font-black' : ''
+                    }`}
+                  >
+                    &bull; Contracts
+                  </Link>
+                  <Link
+                    href="/pnc/payroll/pay-runs"
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
+                      pathname.startsWith('/pnc/payroll/pay-runs') ? 'text-amber-400 font-black' : ''
+                    }`}
+                  >
+                    &bull; Pay Runs
+                  </Link>
+                  <Link
+                    href="/pnc/payroll/payslips"
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
+                      pathname.startsWith('/pnc/payroll/payslips') ? 'text-amber-400 font-black' : ''
+                    }`}
+                  >
+                    &bull; Payslips
+                  </Link>
                 </div>
               )}
             </div>
@@ -954,7 +991,7 @@ export default function PnCLayout({
               <button
                 onClick={() => toggleSection('settings')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')
+                  pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') || pathname === '/pnc/organization'
                     ? 'text-amber-400 font-black bg-white/[0.04]'
                     : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
                 }`}
@@ -963,13 +1000,13 @@ export default function PnCLayout({
                   <Settings className="h-4 w-4 text-white/60 flex-shrink-0" />
                   <span className="uppercase tracking-wider text-[11px]">SETTINGS</span>
                 </div>
-                {openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') ? (
+                {openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') || pathname === '/pnc/organization' ? (
                   <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
                   <ChevronRight className="h-3.5 w-3.5 text-white/40" />
                 )}
               </button>
-              {(openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime')) && (
+              {(openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') || pathname === '/pnc/organization') && (
                 <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
                   <Link
                     href="/pnc/organization"
@@ -978,6 +1015,22 @@ export default function PnCLayout({
                     }`}
                   >
                     &bull; Configuration
+                  </Link>
+                  <Link
+                    href="/pnc/settings/payroll"
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
+                      pathname === '/pnc/settings/payroll' ? 'text-amber-400 font-black' : ''
+                    }`}
+                  >
+                    &bull; Payroll Configuration
+                  </Link>
+                  <Link
+                    href="/pnc/settings/payroll-structure"
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
+                      pathname === '/pnc/settings/payroll-structure' ? 'text-amber-400 font-black' : ''
+                    }`}
+                  >
+                    &bull; Payroll Structure
                   </Link>
                   <Link
                     href="/pnc/settings/biotime"
