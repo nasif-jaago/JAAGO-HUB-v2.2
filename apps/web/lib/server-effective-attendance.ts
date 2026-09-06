@@ -338,6 +338,19 @@ export async function getEffectiveDailyAttendance(options?: {
     });
   });
 
+  // Post-process bioByEmpDate so that when multiple punches exist, the last punch is recognized as check_out
+  bioByEmpDate.forEach((punches) => {
+    if (punches.length > 1) {
+      punches.sort((a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime());
+      const first = punches[0]!;
+      const last = punches[punches.length - 1]!;
+      const diffMs = new Date(last.punchAt).getTime() - new Date(first.punchAt).getTime();
+      if (diffMs >= 5 * 60 * 1000) {
+        last.punchType = 'check_out';
+      }
+    }
+  });
+
   // Group GPS events by (employee_id + businessDate in Asia/Dhaka)
   const gpsEventsByEmpDate = new Map<string, RawPunchEvent[]>();
   (gpsEvents || []).forEach((ge) => {

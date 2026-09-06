@@ -199,29 +199,33 @@ export function computeEffectiveAttendanceDay(params: {
     winningInPunchId = winnerIn.punchId;
   }
 
-  // 3. Determine Chronological Latest Punch of the Day across all sources
-  const allChronological = [
-    ...checkInCandidates.map((c) => ({ ...c, type: 'check_in' as const })),
-    ...checkOutCandidates.map((c) => ({ ...c, type: 'check_out' as const })),
-  ].sort((a, b) => a.time.getTime() - b.time.getTime());
-
-  const latestPunch = allChronological.length > 0 ? allChronological[allChronological.length - 1] : null;
-  const isSessionOpen = latestPunch?.type === 'check_in';
-
-  // 4. Compute Counted Check-Out = MAX(all check-outs across GPS and BioTime) -> Last Check-Out
+  // 3. Compute Counted Check-Out = MAX(all valid check-outs occurring after Check-In) -> Last Check-Out
   let countedCheckOutIso: string | null = null;
   let checkOutSource: 'gps' | 'biotime' | 'manual' | 'none' = 'none';
   let winningOutPunchId: string | undefined;
 
-  if (!isSessionOpen && checkOutCandidates.length > 0) {
-    checkOutCandidates.sort((a, b) => b.time.getTime() - a.time.getTime());
-    const winnerOut = checkOutCandidates[0]!;
-    countedCheckOutIso = winnerOut.iso;
-    checkOutSource = winnerOut.source;
-    winningOutPunchId = winnerOut.punchId;
+  const validCheckOutCandidates = checkOutCandidates.filter((c) => {
+    if (!countedCheckInIso) return true;
+    return c.time.getTime() > new Date(countedCheckInIso).getTime() + 60_000;
+  });
+
+  if (validCheckOutCandidates.length > 0) {
+    validCheckOutCandidates.sort((a, b) => b.time.getTime() - a.time.getTime());
+    const winnerOut = validCheckOutCandidates[0]!;
+
+    // Check if there was an explicit GPS re-check-in AFTER winnerOut
+    const hasLaterGpsCheckIn = gpsPunches.some(
+      (gp) => gp.punchType === 'check_in' && new Date(gp.punchAt).getTime() > winnerOut.time.getTime() + 60_000
+    ) || Boolean(gpsCheckInAt && new Date(gpsCheckInAt).getTime() > winnerOut.time.getTime() + 60_000 && !gpsCheckOutAt);
+
+    if (!hasLaterGpsCheckIn) {
+      countedCheckOutIso = winnerOut.iso;
+      checkOutSource = winnerOut.source;
+      winningOutPunchId = winnerOut.punchId;
+    }
   }
 
-  // 5. Determine Primary Source Badge
+  // 4. Determine Primary Source Badge
   let primarySource: 'Web Portal (GPS)' | 'BioTime Terminal' | 'Merged (GPS + BioTime)' | 'Manual' | 'None' = 'None';
   const hasGps = Boolean(gpsCheckInAt || gpsCheckOutAt || gpsPunches.length > 0);
   const hasBioTime = Boolean(biotimePunches.length > 0);
@@ -308,6 +312,11 @@ export function computeEffectiveAttendanceDay(params: {
   sortedAllPunches.forEach((p) => {
     p.isCountedCheckIn = Boolean(countedCheckInIso && (p.id === winningInPunchId || p.punchAt === countedCheckInIso));
     p.isCountedCheckOut = Boolean(countedCheckOutIso && (p.id === winningOutPunchId || p.punchAt === countedCheckOutIso));
+    if (p.isCountedCheckOut) {
+      p.punchType = 'check_out';
+    } else if (p.isCountedCheckIn) {
+      p.punchType = 'check_in';
+    }
   });
 
   return {

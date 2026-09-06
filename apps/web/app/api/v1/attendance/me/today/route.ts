@@ -59,36 +59,39 @@ export async function GET(request: Request) {
     const shift = await resolveEmployeeShiftSnapshot(canonicalEmpId, businessDate);
 
     // 4. Compute counted First-In and Last-Out across 2-Way Sources (BioTime & GPS)
-    const candidateCheckIns = [
-      effectiveToday?.countedCheckInAt,
-      record?.first_check_in_at,
-      record?.check_in_at,
-      ...(effectiveToday?.allPunches || [])
-        .filter((p) => p.punchType === 'check_in')
-        .map((p) => p.punchAt),
-    ].filter(Boolean) as string[];
+    const firstCheckIn = effectiveToday?.countedCheckInAt || record?.first_check_in_at || record?.check_in_at || null;
+    const countedCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
 
-    const validCheckInTimes = candidateCheckIns
-      .map((iso) => new Date(iso).getTime())
-      .filter((ts) => !isNaN(ts) && ts > 0);
-
-    const firstCheckIn = validCheckInTimes.length > 0 ? new Date(Math.min(...validCheckInTimes)).toISOString() : null;
-
-    // 5. Derive state machine status and button enablement based on latest chronological punch
+    // 5. Derive state machine status and button enablement
     let isCheckedIn = false;
-    if (effectiveToday?.allPunches && effectiveToday.allPunches.length > 0) {
-      const sorted = [...effectiveToday.allPunches].sort(
-        (a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime()
-      );
-      const latest = sorted[sorted.length - 1];
-      isCheckedIn = latest ? latest.punchType === 'check_in' : false;
-    } else if (record?.check_in_at && !record?.check_out_at) {
-      isCheckedIn = true;
+    let lastCheckOut: string | null = null;
+
+    if (firstCheckIn) {
+      if (countedCheckOut && new Date(countedCheckOut).getTime() > new Date(firstCheckIn).getTime()) {
+        // Check if there was an explicit GPS re-check-in AFTER countedCheckOut
+        const hasLaterReCheckIn = Boolean(
+          record?.check_in_at &&
+          new Date(record.check_in_at).getTime() > new Date(countedCheckOut).getTime() + 60_000 &&
+          !record?.check_out_at
+        );
+        if (hasLaterReCheckIn) {
+          isCheckedIn = true;
+          lastCheckOut = null;
+        } else {
+          isCheckedIn = false;
+          lastCheckOut = countedCheckOut;
+        }
+      } else {
+        // First check-in exists but no check-out yet -> active session
+        isCheckedIn = true;
+        lastCheckOut = null;
+      }
     } else {
-      isCheckedIn = Boolean(firstCheckIn && !record?.last_check_out_at);
+      isCheckedIn = false;
+      lastCheckOut = null;
     }
+
     const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' = isCheckedIn ? 'CHECKED_IN' : 'NOT_CHECKED_IN';
-    const lastCheckOut = isCheckedIn ? null : (effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null);
 
     // 6. Compute Working Hours Today (Live vs Final)
     let workedSeconds = 0;
@@ -107,16 +110,9 @@ export async function GET(request: Request) {
       workedSeconds = calculateWorkedSeconds(facts, calcMethod, nowUtc);
       workedDisplay = formatWorkingHours(workedSeconds);
     } else if (firstCheckIn && lastCheckOut) {
-      const facts = {
-        employeeId: canonicalEmpId,
-        businessDate,
-        firstCheckInAt: firstCheckIn,
-        lastCheckOutAt: lastCheckOut,
-        checkInAt: firstCheckIn,
-        checkOutAt: lastCheckOut,
-        calcMethod,
-      };
-      workedSeconds = calculateWorkedSeconds(facts, calcMethod);
+      const inMs = new Date(firstCheckIn).getTime();
+      const outMs = new Date(lastCheckOut).getTime();
+      workedSeconds = Math.max(0, Math.floor((outMs - inMs) / 1000));
       workedDisplay = formatWorkingHours(workedSeconds);
     } else {
       workedSeconds = effectiveToday?.workedSeconds || 0;

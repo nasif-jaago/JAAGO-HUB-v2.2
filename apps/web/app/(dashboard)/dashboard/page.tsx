@@ -800,14 +800,14 @@ export default function DashboardPage() {
             localStorage.setItem('jaago_is_checked_in', 'true');
             if (first_check_in_at) {
               localStorage.setItem('jaago_checkin_timestamp', String(new Date(first_check_in_at).getTime()));
-              localStorage.setItem('jaago_first_checkin_time', todayJson.data.check_in_time_local || '10:14 AM');
+              localStorage.setItem('jaago_first_checkin_time', todayJson.data.check_in_time_local || '--:--');
             }
             localStorage.removeItem('jaago_last_checkout_time');
           } else {
             localStorage.setItem('jaago_is_checked_in', 'false');
             localStorage.removeItem('jaago_checkin_timestamp');
             if (first_check_in_at) {
-              localStorage.setItem('jaago_first_checkin_time', todayJson.data.check_in_time_local || '10:14 AM');
+              localStorage.setItem('jaago_first_checkin_time', todayJson.data.check_in_time_local || '--:--');
             }
             if (last_check_out_at) {
               localStorage.setItem('jaago_last_checkout_time', resolvedOutTime);
