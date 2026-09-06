@@ -922,7 +922,12 @@ export async function fetchAttendanceLogsFromSupabase(
             }));
 
           if (remoteLogs.length > 0) {
-            saveLocalAttendanceLogs(remoteLogs);
+            const currentLogs = getLocalAttendanceLogs();
+            const logMap = new Map<string, AttendanceLogItem>();
+            currentLogs.forEach((l) => logMap.set(l.id || `${l.employeeCode}_${l.date}`, l));
+            remoteLogs.forEach((l) => logMap.set(l.id || `${l.employeeCode}_${l.date}`, l));
+            const merged = Array.from(logMap.values());
+            saveLocalAttendanceLogs(merged);
             return remoteLogs;
           }
         }
@@ -954,8 +959,8 @@ export function getEmployeeAttendanceLogs(employeeCodeOrId: string, employeeName
     if (normalizedKey && (code === normalizedKey || id === normalizedKey)) return true;
     
     // 2. Direct exact full name matches
-    if (normalizedName && name && name === normalizedName) return true;
-    if (normalizedKey && name && name === normalizedKey) return true;
+    if (normalizedName && name && (name === normalizedName || name.includes(normalizedName) || normalizedName.includes(name))) return true;
+    if (normalizedKey && name && (name === normalizedKey || name.includes(normalizedKey) || normalizedKey.includes(name))) return true;
 
     return false;
   });
@@ -966,9 +971,10 @@ export function getEmployeeAttendanceLogs(employeeCodeOrId: string, employeeName
 /**
  * Calculates monthly metrics for an employee
  */
-export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, monthStr = '2026-08') {
+export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, monthStr?: string) {
+  const targetMonth = monthStr || new Date().toISOString().slice(0, 7);
   const logs = getEmployeeAttendanceLogs(employeeCodeOrId);
-  const monthLogs = logs.filter((l) => l.date && l.date.startsWith(monthStr));
+  const monthLogs = logs.filter((l) => l.date && l.date.startsWith(targetMonth));
 
   const presentDays = monthLogs.filter((l) => l.status === 'Present' || l.status === 'Late' || l.status === 'Auto Check Out').length;
   const lateDays = monthLogs.filter((l) => l.status === 'Late' || (l.lateByMin !== undefined && l.lateByMin > 0)).length;
@@ -977,39 +983,67 @@ export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, mont
   const leaveDays = monthLogs.filter((l) => l.status === 'Leave' || l.status === 'On Duty' || l.status === 'Half Day').length;
   const targetDays = 22;
 
-  // If there are logs in the month, use exact counts; otherwise sensible defaults
-  const hasLogs = monthLogs.length > 0;
-  const effectivePresent = hasLogs ? presentDays : 14;
-  const effectiveLate = hasLogs ? lateDays : 6;
-  const effectiveAuto = hasLogs ? autoCheckouts : 8;
-
-  const onTimeDays = Math.max(0, effectivePresent - effectiveLate);
-  const onTimePerformancePct = effectivePresent > 0 ? Math.round((onTimeDays / effectivePresent) * 1000) / 10 : 100.0;
-  const latePenaltyPct = effectivePresent > 0 ? Math.round((effectiveLate / effectivePresent) * 1000) / 10 : 0.0;
-  const autoCheckoutRatePct = effectivePresent > 0 ? Math.round((effectiveAuto / effectivePresent) * 1000) / 10 : 0.0;
+  const onTimeDays = Math.max(0, presentDays - lateDays);
+  const onTimePerformancePct = presentDays > 0 ? Math.round((onTimeDays / presentDays) * 1000) / 10 : 100.0;
+  const latePenaltyPct = presentDays > 0 ? Math.round((lateDays / presentDays) * 1000) / 10 : 0.0;
+  const autoCheckoutRatePct = presentDays > 0 ? Math.round((autoCheckouts / presentDays) * 1000) / 10 : 0.0;
 
   // Calculate total hours
   let totalMinutes = 0;
-  monthLogs.forEach((l) => {
+  const dailyTrend: Array<{
+    date: string;
+    label: string;
+    workedHours: number;
+    isLate: boolean;
+    status: string;
+    checkInTime?: string | undefined;
+    checkOutTime?: string | undefined;
+  }> = [];
+
+  // Sort chronological for trend
+  const sortedMonthLogs = [...monthLogs].sort((a, b) => a.date.localeCompare(b.date));
+
+  sortedMonthLogs.forEach((l) => {
+    let dayMins = 0;
     if (l.workedMinutes) {
-      totalMinutes += l.workedMinutes;
+      dayMins = l.workedMinutes;
+    } else if (l.workedSeconds) {
+      dayMins = Math.floor(l.workedSeconds / 60);
     } else if (l.checkInTime && l.checkOutTime) {
       const durStr = calculateWorkingHoursString(l.checkInTime, l.checkOutTime);
       const match = durStr.match(/(\d+)h\s*(\d+)m/);
       if (match && match[1] && match[2]) {
-        totalMinutes += parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+        dayMins = parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
       }
     }
+    totalMinutes += dayMins;
+
+    const isLate = l.status === 'Late' || (l.lateByMin !== undefined && l.lateByMin > 0);
+    const dayDate = new Date(l.date);
+    const label = !isNaN(dayDate.getTime())
+      ? dayDate.toLocaleDateString('en-US', { day: '2-digit', month: 'short' })
+      : l.date.substring(5);
+
+    dailyTrend.push({
+      date: l.date,
+      label,
+      workedHours: Math.round((dayMins / 60) * 10) / 10,
+      isLate,
+      status: l.status,
+      checkInTime: l.checkInTime,
+      checkOutTime: l.checkOutTime,
+    });
   });
 
-  const totalWorkedHours = totalMinutes > 0 ? (totalMinutes / 60).toFixed(1) : '153.6';
-  const avgHoursPerDay = effectivePresent > 0 && totalMinutes > 0 ? (totalMinutes / (effectivePresent * 60)).toFixed(1) : '11.0';
+  const totalWorkedHours = (totalMinutes / 60).toFixed(1);
+  const avgHoursPerDay = presentDays > 0 && totalMinutes > 0 ? (totalMinutes / (presentDays * 60)).toFixed(1) : '0.0';
 
   return {
-    presentDays: effectivePresent,
+    month: targetMonth,
+    presentDays,
     targetDays,
-    lateDays: effectiveLate,
-    autoCheckouts: effectiveAuto,
+    lateDays,
+    autoCheckouts,
     absentDays,
     leaveDays,
     onTimePerformancePct,
@@ -1018,5 +1052,6 @@ export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, mont
     totalWorkedHours,
     avgHoursPerDay,
     monthLogs,
+    dailyTrend,
   };
 }

@@ -23,6 +23,7 @@ import {
   recordLocalAttendanceLog,
   getEmployeeAttendanceLogs,
   getEmployeeMonthlyAttendanceStats,
+  fetchAttendanceLogsFromSupabase,
   calculateWorkingHoursString,
   AttendanceLogItem,
 } from '@/lib/supabase-attendance';
@@ -89,6 +90,27 @@ export default function DashboardPage() {
     setMounted(true);
     if (typeof window === 'undefined') return;
 
+    // Safely hydrate session from localStorage after client mount
+    try {
+      const raw = localStorage.getItem('jaago_user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        setUser((prev) => ({
+          ...prev,
+          id: u.id || u.employeeId || prev.id,
+          fullName: u.fullName || u.name || prev.fullName,
+          jobTitle: u.jobTitle || u.designation || prev.jobTitle,
+          department: u.department || prev.department,
+          project: u.project || prev.project,
+          manager: u.manager || u.supervisor || prev.manager,
+          organization: u.organizationName || u.organization || prev.organization,
+          avatarUrl: u.avatarUrl || prev.avatarUrl,
+          workingSchedule: u.workingSchedule || prev.workingSchedule,
+          employeeCode: u.employeeCode || u.employeeId || prev.employeeCode,
+        }));
+      }
+    } catch {}
+
     const handleViewModeChange = (e: any) => {
       if (e.detail) {
         setViewMode(e.detail);
@@ -117,7 +139,8 @@ export default function DashboardPage() {
       try {
         const sess = getCurrentUserSession();
         const codeOrId = (sess?.employeeCode || user.employeeCode || 'FO032507061190').trim();
-        const stats = getEmployeeMonthlyAttendanceStats(codeOrId, '2026-08');
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const stats = getEmployeeMonthlyAttendanceStats(codeOrId, currentMonth);
 
         setMonthlyMetrics({
           presentDays: stats.presentDays,
@@ -127,6 +150,9 @@ export default function DashboardPage() {
           onTimePerformancePct: stats.onTimePerformancePct,
           latePenaltyPct: stats.latePenaltyPct,
           autoCheckoutRatePct: stats.autoCheckoutRatePct,
+          totalWorkedHours: stats.totalWorkedHours,
+          avgHoursPerDay: stats.avgHoursPerDay,
+          dailyTrend: stats.dailyTrend,
         });
       } catch (err) {
         console.warn('Error refreshing dashboard monthly metrics:', err);
@@ -467,14 +493,36 @@ export default function DashboardPage() {
   };
 
   // Monthly summary metrics from canonical backend
-  const [monthlyMetrics, setMonthlyMetrics] = useState({
-    presentDays: 14,
-    targetDays: 15,
-    lateDays: 6,
-    autoCheckouts: 8,
-    onTimePerformancePct: 57.1,
-    latePenaltyPct: 42.9,
-    autoCheckoutRatePct: 57.1,
+  const [monthlyMetrics, setMonthlyMetrics] = useState<{
+    presentDays: number;
+    targetDays: number;
+    lateDays: number;
+    autoCheckouts: number;
+    onTimePerformancePct: number;
+    latePenaltyPct: number;
+    autoCheckoutRatePct: number;
+    totalWorkedHours: string;
+    avgHoursPerDay: string;
+    dailyTrend: Array<{
+      date: string;
+      label: string;
+      workedHours: number;
+      isLate: boolean;
+      status: string;
+      checkInTime?: string | undefined;
+      checkOutTime?: string | undefined;
+    }>;
+  }>({
+    presentDays: 0,
+    targetDays: 22,
+    lateDays: 0,
+    autoCheckouts: 0,
+    onTimePerformancePct: 100,
+    latePenaltyPct: 0,
+    autoCheckoutRatePct: 0,
+    totalWorkedHours: '0.0',
+    avgHoursPerDay: '0.0',
+    dailyTrend: [],
   });
   const [isPunching, setIsPunching] = useState(false);
 
@@ -642,10 +690,12 @@ export default function DashboardPage() {
   };
 
   // Load canonical session and monthly summary
+  // Load canonical session and monthly summary
   const refreshCanonicalAttendance = async (empId: string) => {
     try {
+      const currentMonth = new Date().toISOString().slice(0, 7);
       // 1. Local logs calculation
-      const localStats = getEmployeeMonthlyAttendanceStats(empId || user.employeeCode || user.id);
+      const localStats = getEmployeeMonthlyAttendanceStats(empId || user.employeeCode || user.id, currentMonth);
       setMonthlyMetrics({
         presentDays: localStats.presentDays,
         targetDays: localStats.targetDays,
@@ -654,10 +704,35 @@ export default function DashboardPage() {
         onTimePerformancePct: localStats.onTimePerformancePct,
         latePenaltyPct: localStats.latePenaltyPct,
         autoCheckoutRatePct: localStats.autoCheckoutRatePct,
+        totalWorkedHours: localStats.totalWorkedHours,
+        avgHoursPerDay: localStats.avgHoursPerDay,
+        dailyTrend: localStats.dailyTrend,
       });
 
       const personalLogs = getEmployeeAttendanceLogs(empId || user.employeeCode || user.id);
       setMyAttendanceLogs(personalLogs);
+
+      // Fetch fresh remote attendance logs asynchronously
+      fetchAttendanceLogsFromSupabase(false, empId || user.employeeCode).then((remote) => {
+        if (remote && remote.length > 0) {
+          const userLogs = getEmployeeAttendanceLogs(empId || user.employeeCode || user.id);
+          setMyAttendanceLogs(userLogs);
+          const updatedStats = getEmployeeMonthlyAttendanceStats(empId || user.employeeCode || user.id, currentMonth);
+          setMonthlyMetrics((prev) => ({
+            ...prev,
+            presentDays: updatedStats.presentDays,
+            targetDays: updatedStats.targetDays,
+            lateDays: updatedStats.lateDays,
+            autoCheckouts: updatedStats.autoCheckouts,
+            onTimePerformancePct: updatedStats.onTimePerformancePct,
+            latePenaltyPct: updatedStats.latePenaltyPct,
+            autoCheckoutRatePct: updatedStats.autoCheckoutRatePct,
+            totalWorkedHours: updatedStats.totalWorkedHours,
+            avgHoursPerDay: updatedStats.avgHoursPerDay,
+            dailyTrend: updatedStats.dailyTrend,
+          }));
+        }
+      });
 
       // 2. Query today session from server API
       const todayRes = await fetch(`/api/v1/attendance/me/today?employeeId=${encodeURIComponent(empId)}`);
@@ -769,17 +844,54 @@ export default function DashboardPage() {
         }
       }
 
-      const summaryRes = await fetch(`/api/v1/attendance/me/summary?employeeId=${encodeURIComponent(empId)}`);
+      // 3. Query monthly summary from server API for current month
+      const summaryRes = await fetch(`/api/v1/attendance/me/summary?employeeId=${encodeURIComponent(empId)}&month=${currentMonth}`);
       const summaryJson = await summaryRes.json();
       if (summaryJson.success && summaryJson.data && summaryJson.data.presentDays > 0) {
+        const d = summaryJson.data;
+        const trendRecords: Array<{
+          date: string;
+          label: string;
+          workedHours: number;
+          isLate: boolean;
+          status: string;
+        }> = [];
+
+        if (Array.isArray(d.dailyRecords) && d.dailyRecords.length > 0) {
+          const sorted = [...d.dailyRecords].sort((a: any, b: any) =>
+            (a.businessDate || '').localeCompare(b.businessDate || '')
+          );
+          sorted.forEach((r: any) => {
+            const dayDate = new Date(r.businessDate);
+            const label = !isNaN(dayDate.getTime())
+              ? dayDate.toLocaleDateString('en-US', { day: '2-digit', month: 'short' })
+              : (r.businessDate || '').substring(5);
+            const hrs = r.workedSeconds ? Math.round((r.workedSeconds / 3600) * 10) / 10 : 0;
+            trendRecords.push({
+              date: r.businessDate,
+              label,
+              workedHours: hrs,
+              isLate: Boolean(r.isLate || r.status === 'Late'),
+              status: r.status,
+            });
+          });
+        }
+
+        const avg = d.presentDays > 0 && d.totalWorkedHours
+          ? (parseFloat(d.totalWorkedHours) / d.presentDays).toFixed(1)
+          : '0.0';
+
         setMonthlyMetrics({
-          presentDays: summaryJson.data.presentDays,
-          targetDays: summaryJson.data.targetDays || 22,
-          lateDays: summaryJson.data.lateDays,
-          autoCheckouts: summaryJson.data.autoCheckouts,
-          onTimePerformancePct: summaryJson.data.onTimePerformancePct ?? 100,
-          latePenaltyPct: summaryJson.data.latePenaltyPct ?? 0,
-          autoCheckoutRatePct: summaryJson.data.autoCheckoutRatePct ?? 0,
+          presentDays: d.presentDays,
+          targetDays: d.targetDays || 22,
+          lateDays: d.lateDays,
+          autoCheckouts: d.autoCheckouts,
+          onTimePerformancePct: d.onTimePerformancePct ?? 100,
+          latePenaltyPct: d.latePenaltyPct ?? 0,
+          autoCheckoutRatePct: d.autoCheckoutRatePct ?? 0,
+          totalWorkedHours: d.totalWorkedHours || '0.0',
+          avgHoursPerDay: avg,
+          dailyTrend: trendRecords.length > 0 ? trendRecords : localStats.dailyTrend,
         });
       }
     } catch {
@@ -1042,13 +1154,13 @@ export default function DashboardPage() {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <span className="text-primary font-black text-lg">
+              <span suppressHydrationWarning className="text-primary font-black text-lg">
                 {user.fullName
                   ? user.fullName
                       .split(' ')
                       .filter(Boolean)
                       .slice(0, 2)
-                      .map((n) => n[0])
+                      .map((n: string) => n[0])
                       .join('')
                       .toUpperCase()
                   : 'NK'}
@@ -1056,10 +1168,10 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="space-y-0.5 min-w-0">
-            <h1 className="text-xl font-black tracking-tight text-foreground truncate">
+            <h1 suppressHydrationWarning className="text-xl font-black tracking-tight text-foreground truncate">
               Hi, {firstName}!
             </h1>
-            <p className="text-xs font-semibold text-muted-foreground truncate">
+            <p suppressHydrationWarning className="text-xs font-semibold text-muted-foreground truncate">
               {user.jobTitle} &bull; {user.organization}
             </p>
           </div>
@@ -1164,9 +1276,24 @@ export default function DashboardPage() {
         {/* ── CARD 3: MONTHLY ATTENDANCE SUMMARY ── */}
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-5">
           {/* Header */}
-          <div className="flex items-center space-x-2 text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">
-            <Clock className="h-4 w-4" />
-            <span>MONTHLY ATTENDANCE SUMMARY</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">
+              <Clock className="h-4 w-4" />
+              <span>MONTHLY ATTENDANCE SUMMARY</span>
+            </div>
+            {monthlyMetrics.onTimePerformancePct >= 90 && monthlyMetrics.lateDays === 0 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase text-emerald-500 bg-emerald-500/10 border border-emerald-500/30">
+                EXCELLENT
+              </span>
+            ) : monthlyMetrics.onTimePerformancePct >= 75 ? (
+              <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase text-emerald-500 bg-emerald-500/10 border border-emerald-500/30">
+                GOOD STANDING
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase text-rose-500 bg-rose-500/10 border border-rose-400/30">
+                NEEDS IMPROVEMENT
+              </span>
+            )}
           </div>
 
           {/* 3-Column Top Stats */}
@@ -1223,44 +1350,78 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Smooth Daily Trend Chart */}
+          {/* Smooth Daily Trend Chart (Mobile) */}
           <div className="pt-2">
-            <div className="h-24 w-full relative">
-              <svg className="w-full h-full overflow-visible" viewBox="0 0 300 70">
-                <defs>
-                  <linearGradient id="mobileTrendGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
-                    <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
+            {(() => {
+              const trend = monthlyMetrics.dailyTrend || [];
+              const width = 300;
+              const height = 70;
+              const padX = 20;
+              const availW = width - 2 * padX;
+              const maxHours = Math.max(8, ...trend.map((t) => t.workedHours || 8));
+              const minY = 16;
+              const maxY = height - 18;
 
-                <path
-                  d="M 20 25 Q 60 55, 100 48 T 160 30 T 220 28 T 280 30 L 280 70 L 20 70 Z"
-                  fill="url(#mobileTrendGrad)"
-                />
+              const pts = trend.length > 0
+                ? trend.map((d, i) => {
+                    const x = trend.length === 1 ? width / 2 : padX + (i / (trend.length - 1)) * availW;
+                    const norm = Math.min(1, Math.max(0, (d.workedHours || 0) / maxHours));
+                    const y = maxY - norm * (maxY - minY);
+                    return { x, y, isLate: d.isLate, label: d.label, date: d.date };
+                  })
+                : [
+                    { x: padX, y: maxY, isLate: false, label: '01 Sep', date: 'd1' },
+                    { x: width - padX, y: maxY, isLate: false, label: '06 Sep', date: 'd2' },
+                  ];
 
-                <path
-                  d="M 20 25 Q 60 55, 100 48 T 160 30 T 220 28 T 280 30"
-                  fill="none"
-                  stroke="#10B981"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                />
+              let linePath = `M ${pts[0]!.x} ${pts[0]!.y}`;
+              for (let i = 0; i < pts.length - 1; i++) {
+                const p0 = pts[i]!;
+                const p1 = pts[i + 1]!;
+                const cpx1 = (p0.x + p1.x) / 2;
+                const cpy1 = p0.y;
+                const cpx2 = (p0.x + p1.x) / 2;
+                const cpy2 = p1.y;
+                linePath += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${p1.x} ${p1.y}`;
+              }
+              const areaPath = `${linePath} L ${pts[pts.length - 1]!.x} ${height} L ${pts[0]!.x} ${height} Z`;
 
-                <circle cx="20" cy="25" r="3.5" fill="#EF4444" />
-                <circle cx="100" cy="48" r="3.5" fill="#10B981" />
-                <circle cx="160" cy="30" r="3.5" fill="#EF4444" />
-                <circle cx="220" cy="28" r="3.5" fill="#10B981" />
-                <circle cx="280" cy="30" r="3.5" fill="#EF4444" />
-              </svg>
-            </div>
+              return (
+                <div className="space-y-1.5">
+                  <div className="h-20 w-full relative">
+                    <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${width} ${height}`}>
+                      <defs>
+                        <linearGradient id="mobileTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
+                          <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
 
-            <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-2">
-              <span>11 Aug</span>
-              <span>13 Aug</span>
-              <span>18 Aug</span>
-              <span>20 Aug</span>
-            </div>
+                      <path d={areaPath} fill="url(#mobileTrendGrad)" />
+                      <path d={linePath} fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" />
+
+                      {pts.map((p, idx) => (
+                        <circle
+                          key={p.date || idx}
+                          cx={p.x}
+                          cy={p.y}
+                          r="3"
+                          fill={p.isLate ? '#EF4444' : '#10B981'}
+                          stroke="var(--card)"
+                          strokeWidth="1"
+                        />
+                      ))}
+                    </svg>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-1">
+                    {pts.map((p, idx) => (
+                      <span key={p.date || idx}>{p.label}</span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="h-px bg-border/60" />
@@ -1269,16 +1430,12 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-4 text-left">
             <div>
               <div className="text-[11px] font-semibold text-muted-foreground">Avg Hours/Day</div>
-              <div className="text-base font-black text-blue-500 dark:text-blue-400 pt-0.5">11.2h</div>
+              <div className="text-base font-black text-blue-500 dark:text-blue-400 pt-0.5">{monthlyMetrics.avgHoursPerDay}h</div>
             </div>
             <div>
               <div className="text-[11px] font-semibold text-muted-foreground">Total Hours</div>
-              <div className="text-base font-black text-amber-500 pt-0.5">145.6h</div>
+              <div className="text-base font-black text-amber-500 pt-0.5">{monthlyMetrics.totalWorkedHours}h</div>
             </div>
-          </div>
-
-          <div className="w-full py-2.5 rounded-full border border-rose-400/80 bg-rose-500/10 text-rose-500 font-black text-xs uppercase tracking-wider text-center flex items-center justify-center">
-            NEEDS IMPROVEMENT
           </div>
         </div>
 
@@ -1298,7 +1455,7 @@ export default function DashboardPage() {
           <div className="space-y-2.5">
             {myAttendanceLogs.length > 0 ? (
               myAttendanceLogs.slice(0, 4).map((log) => {
-                const isToday = log.date === '2026-08-27';
+                const isToday = log.date === new Date().toISOString().slice(0, 10);
                 const duration = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
                 return (
                   <div key={log.id} className={`p-3.5 rounded-2xl border space-y-1.5 ${isToday ? 'bg-primary/5 border-primary/30' : 'bg-surface/50 border-border/70'}`}>
@@ -1369,13 +1526,13 @@ export default function DashboardPage() {
                     className="h-full w-full object-cover rounded-[22px]"
                   />
                 ) : (
-                  <div className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 rounded-[22px] flex items-center justify-center text-primary font-black text-3xl sm:text-4xl">
+                  <div suppressHydrationWarning className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 rounded-[22px] flex items-center justify-center text-primary font-black text-3xl sm:text-4xl">
                     {user.fullName
                       ? user.fullName
                           .split(' ')
                           .filter(Boolean)
                           .slice(0, 2)
-                          .map((n) => n[0])
+                          .map((n: string) => n[0])
                           .join('')
                           .toUpperCase()
                       : 'NK'}
@@ -1388,13 +1545,13 @@ export default function DashboardPage() {
 
             {/* User Credentials & Metadata */}
             <div className="space-y-1">
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              <h1 suppressHydrationWarning className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
                 {user.fullName}
               </h1>
-              <div className="text-sm font-semibold text-muted-foreground">
+              <div suppressHydrationWarning className="text-sm font-semibold text-muted-foreground">
                 {user.jobTitle}
               </div>
-              <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-500 pt-0.5">
+              <div suppressHydrationWarning className="flex items-center space-x-1.5 text-xs font-bold text-amber-500 pt-0.5">
                 <Building2 className="h-3.5 w-3.5" />
                 <span>{user.organization}</span>
               </div>
@@ -1666,9 +1823,19 @@ export default function DashboardPage() {
                   <span className="text-base font-bold text-foreground leading-tight">Summary</span>
                 </div>
               </div>
-              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase text-rose-500 bg-rose-500/10 border border-rose-400/30">
-                NEEDS IMPROVEMENT
-              </span>
+              {monthlyMetrics.onTimePerformancePct >= 90 && monthlyMetrics.lateDays === 0 ? (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase text-emerald-500 bg-emerald-500/10 border border-emerald-500/30">
+                  EXCELLENT
+                </span>
+              ) : monthlyMetrics.onTimePerformancePct >= 75 ? (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase text-emerald-500 bg-emerald-500/10 border border-emerald-500/30">
+                  GOOD STANDING
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase text-rose-500 bg-rose-500/10 border border-rose-400/30">
+                  NEEDS IMPROVEMENT
+                </span>
+              )}
             </div>
 
             {/* 3-Column Top Stats */}
@@ -1742,56 +1909,83 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Smooth Daily Trend Line Chart Matching Reference Images */}
+            {/* Smooth Daily Trend Line Chart (Desktop) */}
             <div className="pt-2">
-              <div className="h-28 w-full relative">
-                <svg className="w-full h-full overflow-visible" viewBox="0 0 400 80">
-                  <defs>
-                    <linearGradient id="desktopTrendGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10B981" stopOpacity="0.30" />
-                      <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
+              {(() => {
+                const trend = monthlyMetrics.dailyTrend || [];
+                const width = 400;
+                const height = 80;
+                const padX = 25;
+                const availW = width - 2 * padX;
+                const maxHours = Math.max(8, ...trend.map((t) => t.workedHours || 8));
+                const minY = 18;
+                const maxY = height - 20;
 
-                  {/* Shaded Area Under Curve */}
-                  <path
-                    d="M 20 30 Q 60 28, 100 60 T 160 30 T 220 52 T 280 32 T 340 28 T 390 35 L 390 80 L 20 80 Z"
-                    fill="url(#desktopTrendGrad)"
-                  />
+                const pts = trend.length > 0
+                  ? trend.map((d, i) => {
+                      const x = trend.length === 1 ? width / 2 : padX + (i / (trend.length - 1)) * availW;
+                      const norm = Math.min(1, Math.max(0, (d.workedHours || 0) / maxHours));
+                      const y = maxY - norm * (maxY - minY);
+                      return { x, y, isLate: d.isLate, label: d.label, date: d.date };
+                    })
+                  : [
+                      { x: padX, y: maxY, isLate: false, label: '01 Sep', date: 'd1' },
+                      { x: width - padX, y: maxY, isLate: false, label: '06 Sep', date: 'd2' },
+                    ];
 
-                  {/* Curved Smooth Spline */}
-                  <path
-                    d="M 20 30 Q 60 28, 100 60 T 160 30 T 220 52 T 280 32 T 340 28 T 390 35"
-                    fill="none"
-                    stroke="#10B981"
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                  />
+                let linePath = `M ${pts[0]!.x} ${pts[0]!.y}`;
+                for (let i = 0; i < pts.length - 1; i++) {
+                  const p0 = pts[i]!;
+                  const p1 = pts[i + 1]!;
+                  const cpx1 = (p0.x + p1.x) / 2;
+                  const cpy1 = p0.y;
+                  const cpx2 = (p0.x + p1.x) / 2;
+                  const cpy2 = p1.y;
+                  linePath += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${p1.x} ${p1.y}`;
+                }
+                const areaPath = `${linePath} L ${pts[pts.length - 1]!.x} ${height} L ${pts[0]!.x} ${height} Z`;
 
-                  {/* Points on Curve */}
-                  <circle cx="20" cy="30" r="3.5" fill="#10B981" />
-                  <circle cx="60" cy="28" r="3.5" fill="#10B981" />
-                  <circle cx="100" cy="60" r="3.5" fill="#EF4444" />
-                  <circle cx="160" cy="30" r="3.5" fill="#EF4444" />
-                  <circle cx="220" cy="52" r="3.5" fill="#10B981" />
-                  <circle cx="280" cy="32" r="3.5" fill="#10B981" />
-                  <circle cx="340" cy="28" r="3.5" fill="#10B981" />
-                  <circle cx="390" cy="35" r="3.5" fill="#EF4444" />
-                </svg>
-              </div>
+                return (
+                  <div className="space-y-1.5">
+                    <div className="h-28 w-full relative">
+                      <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${width} ${height}`}>
+                        <defs>
+                          <linearGradient id="desktopTrendGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#10B981" stopOpacity="0.30" />
+                            <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
 
-              {/* X-Axis Dates */}
-              <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-1">
-                <span>06 Aug</span>
-                <span>09 Aug</span>
-                <span>10 Aug</span>
-                <span>11 Aug</span>
-                <span>12 Aug</span>
-                <span>13 Aug</span>
-                <span>17 Aug</span>
-                <span>18 Aug</span>
-                <span>20 Aug</span>
-              </div>
+                        {/* Shaded Area Under Curve */}
+                        <path d={areaPath} fill="url(#desktopTrendGrad)" />
+
+                        {/* Curved Smooth Spline */}
+                        <path d={linePath} fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" />
+
+                        {/* Points on Curve */}
+                        {pts.map((p, idx) => (
+                          <circle
+                            key={p.date || idx}
+                            cx={p.x}
+                            cy={p.y}
+                            r="3.5"
+                            fill={p.isLate ? '#EF4444' : '#10B981'}
+                            stroke="var(--card)"
+                            strokeWidth="1.5"
+                          />
+                        ))}
+                      </svg>
+                    </div>
+
+                    {/* X-Axis Dates */}
+                    <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-1">
+                      {pts.map((p, idx) => (
+                        <span key={p.date || idx}>{p.label}</span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="h-px bg-border/60" />
@@ -1799,10 +1993,10 @@ export default function DashboardPage() {
             {/* Bottom Row Summary */}
             <div className="flex items-center justify-between text-xs font-bold">
               <div className="text-foreground">
-                Avg Hours: <span className="text-blue-500 font-mono font-black">11.0h</span>
+                Avg Hours: <span className="text-blue-500 font-mono font-black">{monthlyMetrics.avgHoursPerDay}h</span>
               </div>
               <div className="text-foreground">
-                Total Worked: <span className="text-amber-500 font-mono font-black">153.6h</span>
+                Total Worked: <span className="text-amber-500 font-mono font-black">{monthlyMetrics.totalWorkedHours}h</span>
               </div>
             </div>
           </div>

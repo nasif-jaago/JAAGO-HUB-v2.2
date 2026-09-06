@@ -18,7 +18,7 @@ import {
   Layers,
   Smartphone,
 } from 'lucide-react';
-import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
+import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
 import {
   AttendanceLogItem,
   getLocalAttendanceLogs,
@@ -78,8 +78,16 @@ export default function AttendancePage() {
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All Status');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => {
+    const ym = new Date().toISOString().substring(0, 7);
+    return `${ym}-01`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const ym = new Date().toISOString().substring(0, 7);
+    const [y, m] = ym.split('-').map(Number);
+    const lastDay = new Date(y!, m!, 0).getDate();
+    return `${ym}-${String(lastDay).padStart(2, '0')}`;
+  });
   const [datePreset, setDatePreset] = useState<'today' | 'this-week' | 'this-month' | 'last-month' | 'all'>('this-month');
   const [viewGrouping, setViewGrouping] = useState<'flat' | 'month-grouped' | 'cards'>('flat');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -234,23 +242,46 @@ export default function AttendancePage() {
     setMounted(true);
     if (typeof window === 'undefined') return;
 
+    // Safely hydrate session from localStorage after client mount
+    try {
+      const raw = localStorage.getItem('jaago_user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        setUser((prev) => ({
+          ...prev,
+          id: u.id || u.employeeId || prev.id,
+          fullName: u.fullName || u.name || prev.fullName,
+          jobTitle: u.jobTitle || u.designation || prev.jobTitle,
+          department: u.department || prev.department,
+          manager: u.manager || u.supervisor || prev.manager,
+          organization: u.organizationName || u.organization || prev.organization,
+          avatarUrl: u.avatarUrl || prev.avatarUrl,
+          workingSchedule: u.workingSchedule || prev.workingSchedule,
+          employeeCode: u.employeeCode || u.employeeId || prev.employeeCode,
+        }));
+      }
+    } catch {}
+
     evaluateSuperAdminRole();
 
     // Load active employee profile
     getActiveEmployeeProfile().then((emp) => {
       if (emp) {
-        setUser({
-          id: emp.id || 'emp-nasif',
-          fullName: emp.name,
-          jobTitle: emp.designation,
-          department: emp.department || "Founder's Office / FC",
-          manager: emp.supervisor || 'Founder & Executive Director',
-          organization: emp.organization || 'JAAGO Foundation Trust',
-          avatarUrl: emp.avatarUrl || '',
-          workingSchedule: emp.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
-          employeeCode: emp.code || 'FO032507061190',
-        });
+        setUser((prev) => ({
+          ...prev,
+          id: emp.id || prev.id,
+          fullName: emp.name || prev.fullName,
+          jobTitle: emp.designation || prev.jobTitle,
+          department: emp.department || prev.department,
+          manager: emp.supervisor || prev.manager,
+          organization: emp.organization || prev.organization,
+          avatarUrl: emp.avatarUrl || prev.avatarUrl,
+          workingSchedule: emp.workingSchedule || prev.workingSchedule,
+          employeeCode: emp.code || prev.employeeCode,
+        }));
         evaluateSuperAdminRole();
+        loadUserLogs(emp.code || emp.id);
+        refreshTodaySession(emp.code || emp.id);
       }
     });
 
@@ -290,19 +321,12 @@ export default function AttendancePage() {
     syncLiveRegularizations();
 
     // Initial logs load for current user
-    const loadUserLogs = async () => {
-      const empCodeOrId = user.employeeCode || user.id || 'FO032507061190';
-      const supaLogs = await fetchAttendanceLogsFromSupabase(false, empCodeOrId);
-      if (supaLogs && supaLogs.length > 0) {
-        setAllLogs(supaLogs);
-      } else {
-        setAllLogs(getLocalAttendanceLogs());
-      }
-    };
-    loadUserLogs();
+    const sess = getCurrentUserSession();
+    const initialCode = sess?.employeeCode || user.employeeCode || user.id;
+    loadUserLogs(initialCode);
 
     // Load today session
-    refreshTodaySession();
+    refreshTodaySession(initialCode);
 
     // Event listeners
     const handleAttUpdated = () => {
@@ -312,8 +336,24 @@ export default function AttendancePage() {
       refreshTodaySession();
     };
 
-    const handleUserUpdated = () => {
+    const handleUserUpdated = (e: any) => {
       evaluateSuperAdminRole();
+      if (e?.detail?.user) {
+        const u = e.detail.user;
+        setUser((prev) => ({
+          ...prev,
+          fullName: u.fullName || prev.fullName,
+          jobTitle: u.jobTitle || prev.jobTitle,
+          department: u.department || prev.department,
+          manager: u.manager || prev.manager,
+          organization: u.organizationName || prev.organization,
+          avatarUrl: u.avatarUrl || prev.avatarUrl,
+          workingSchedule: u.workingSchedule || prev.workingSchedule,
+          employeeCode: u.employeeCode || prev.employeeCode,
+        }));
+        loadUserLogs(u.employeeCode || u.id);
+        refreshTodaySession(u.employeeCode || u.id);
+      }
     };
 
     const handleODUpdated = () => {
@@ -351,6 +391,31 @@ export default function AttendancePage() {
     };
   }, []);
 
+  // Fetch logs whenever user employee code changes
+  useEffect(() => {
+    if (user.employeeCode || user.id) {
+      loadUserLogs(user.employeeCode || user.id);
+      refreshTodaySession(user.employeeCode || user.id);
+    }
+  }, [user.employeeCode, user.id]);
+
+  // Load user logs implementation
+  const loadUserLogs = async (targetCodeOrId?: string) => {
+    try {
+      const sess = getCurrentUserSession();
+      const codeOrId = (targetCodeOrId || sess?.employeeCode || user.employeeCode || user.id || '').trim();
+      const supaLogs = await fetchAttendanceLogsFromSupabase(true, codeOrId || undefined);
+      const localLogs = getLocalAttendanceLogs();
+      const combinedMap = new Map<string, AttendanceLogItem>();
+      localLogs.forEach((l) => combinedMap.set(l.id || `${l.employeeCode}_${l.date}`, l));
+      (supaLogs || []).forEach((l) => combinedMap.set(l.id || `${l.employeeCode}_${l.date}`, l));
+      setAllLogs(Array.from(combinedMap.values()));
+    } catch (err) {
+      console.warn('Error loading logs for user:', err);
+      setAllLogs(getLocalAttendanceLogs());
+    }
+  };
+
   // Live timer tick
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -371,9 +436,11 @@ export default function AttendancePage() {
   }, [isCheckedIn, firstCheckInTimestamp, serverTimeOffset]);
 
   // Query today session from backend
-  const refreshTodaySession = async () => {
+  const refreshTodaySession = async (targetCodeOrId?: string) => {
     try {
-      const empCodeOrId = user.employeeCode || user.id || 'emp-nasif';
+      const sess = getCurrentUserSession();
+      const empCodeOrId = (targetCodeOrId || sess?.employeeCode || user.employeeCode || user.id || '').trim();
+      if (!empCodeOrId) return;
       const res = await fetch(`/api/v1/attendance/me/today?employeeId=${encodeURIComponent(empCodeOrId)}`);
       const json = await res.json();
       if (json.success && json.data) {
@@ -602,14 +669,19 @@ export default function AttendancePage() {
       setEndDate(todayStr);
     } else if (preset === 'this-month') {
       const ym = todayStr.substring(0, 7);
+      const [y, m] = ym.split('-').map(Number);
+      const lastDay = new Date(y!, m!, 0).getDate();
       setStartDate(`${ym}-01`);
-      setEndDate(`${ym}-31`);
+      setEndDate(`${ym}-${String(lastDay).padStart(2, '0')}`);
     } else if (preset === 'last-month') {
       const prev = new Date();
+      prev.setDate(1);
       prev.setMonth(prev.getMonth() - 1);
       const ym = prev.toISOString().substring(0, 7);
+      const [y, m] = ym.split('-').map(Number);
+      const lastDay = new Date(y!, m!, 0).getDate();
       setStartDate(`${ym}-01`);
-      setEndDate(`${ym}-31`);
+      setEndDate(`${ym}-${String(lastDay).padStart(2, '0')}`);
     } else {
       setStartDate('');
       setEndDate('');
@@ -686,7 +758,7 @@ export default function AttendancePage() {
   const monthGroupedLogs = useMemo(() => {
     const groups = new Map<string, AttendanceLogItem[]>();
     filteredLogs.forEach((log) => {
-      const ym = log.date ? log.date.substring(0, 7) : '2026-08';
+      const ym = log.date ? log.date.substring(0, 7) : new Date().toISOString().substring(0, 7);
       if (!groups.has(ym)) groups.set(ym, []);
       groups.get(ym)!.push(log);
     });

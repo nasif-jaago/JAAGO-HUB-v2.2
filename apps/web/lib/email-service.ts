@@ -127,9 +127,8 @@ export const INITIAL_EMAIL_TEMPLATES: EmailTemplateItem[] = [
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
     <!-- Header -->
     <div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%);padding:36px 32px 28px;text-align:center;border-bottom:4px solid #f59e0b;">
-      <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:5px 14px;border-radius:20px;text-transform:uppercase;margin-bottom:12px;">JAAGO FOUNDATION TRUST</span>
+      <span style="display:inline-block;background:#f59e0b;color:#0f172a;font-size:11px;font-weight:900;letter-spacing:1.5px;padding:5px 14px;border-radius:20px;text-transform:uppercase;margin-bottom:12px;">JAAGO FOUNDATION</span>
       <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:800;letter-spacing:-0.5px;">JAAGO HUB &bull; Account Invitation</h1>
-      <p style="margin:6px 0 0;color:#cbd5e1;font-size:13px;font-weight:500;">Institutional Operations &amp; Enterprise Resource Planning Portal</p>
     </div>
 
     <!-- Content -->
@@ -164,16 +163,10 @@ export const INITIAL_EMAIL_TEMPLATES: EmailTemplateItem[] = [
       </div>
 
       <!-- Call to Action Button -->
-      <div style="text-align:center;margin:28px 0 16px 0;">
+      <div style="text-align:center;margin:28px 0 24px 0;">
         <a href="{{loginUrl}}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:linear-gradient(135deg,#f59e0b 0%,#d97706 100%);color:#ffffff !important;font-size:15px;font-weight:800;text-decoration:none;padding:14px 36px;border-radius:12px;box-shadow:0 10px 20px rgba(245,158,11,0.35);letter-spacing:0.5px;text-transform:uppercase;">
           Accept Invitation &amp; Set Password &rarr;
         </a>
-      </div>
-
-      <!-- Direct Access Link -->
-      <div style="text-align:center;font-size:12px;color:#64748b;margin-bottom:24px;">
-        Direct Access Link:<br>
-        <a href="{{loginUrl}}" target="_blank" rel="noopener noreferrer" style="color:#0284c7;word-break:break-all;text-decoration:underline;">{{loginUrl}}</a>
       </div>
 
       <!-- Getting Started Instructions -->
@@ -208,14 +201,14 @@ export const INITIAL_EMAIL_TEMPLATES: EmailTemplateItem[] = [
     <!-- Footer -->
     <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:20px 32px;text-align:center;font-size:11px;color:#94a3b8;line-height:1.6;">
       This is an automated formal notification from JAAGO HUB ERP.<br>
-      &copy; JAAGO Foundation Trust. All rights reserved.
+      &copy; JAAGO Foundation. All rights reserved.
     </div>
   </div>
 </body>
 </html>`,
     bodyText: `================================================================================
 JAAGO HUB — ACCOUNT INVITATION & LOGIN CREDENTIALS
-JAAGO Foundation Trust | Enterprise Operations & Resource Planning Portal
+JAAGO Foundation | Enterprise Operations Portal
 ================================================================================
 
 Dear {{employeeName}},
@@ -264,7 +257,7 @@ Support: pnc@jaago.com.bd | IT Helpdesk: it-support@jaago.com.bd
       { key: 'loginUrl', name: 'Login URL', description: 'Direct portal authentication link', required: true, sample: 'https://hub.jaago.com.bd/login' },
     ],
     isActive: true,
-    version: 3,
+    version: 4,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },

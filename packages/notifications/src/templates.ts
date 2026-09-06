@@ -233,9 +233,8 @@ export function renderEmployeeWelcomeEmail(params: EmployeeWelcomeEmailParams): 
 <body>
   <div class="wrapper">
     <div class="header">
-      <div class="logo-badge">JAAGO Foundation Trust</div>
+      <div class="logo-badge">JAAGO FOUNDATION</div>
       <h1>JAAGO HUB &bull; Official Account Provisioned</h1>
-      <p>Institutional Operations &amp; Enterprise Resource Planning Portal</p>
     </div>
 
     <div class="content">

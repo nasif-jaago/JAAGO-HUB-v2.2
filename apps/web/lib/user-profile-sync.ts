@@ -41,10 +41,12 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
   if (typeof window === 'undefined') return null;
 
   try {
-    // 1. Check local session email / code
+    // 1. Check local session email / code / name / id
     const session = getCurrentUserSession();
     let searchEmail = session?.email?.toLowerCase().trim() || '';
     let searchCode = session?.employeeCode?.trim() || '';
+    let searchName = session?.fullName?.toLowerCase().trim() || '';
+    let searchId = session?.id?.trim() || '';
 
     // 2. If no session email, check active Supabase Auth session
     if (!searchEmail) {
@@ -57,8 +59,8 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
       }
     }
 
-    // Default fallback to Nasif Kamal if development / mock
-    if (!searchEmail && !searchCode) {
+    // Default fallback to Nasif Kamal only if no session at all
+    if (!searchEmail && !searchCode && !searchName && !searchId) {
       searchEmail = 'nasif.kamal@jaago.com.bd';
     }
 
@@ -67,9 +69,11 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
     if (allEmployees && allEmployees.length > 0) {
       const match = allEmployees.find(
         (emp) =>
+          (searchCode && (emp.code?.toLowerCase().trim() === searchCode.toLowerCase() || emp.id === searchCode)) ||
+          (searchId && (emp.id === searchId || emp.code === searchId)) ||
           (searchEmail && emp.workEmail?.toLowerCase().trim() === searchEmail) ||
-          (searchCode && emp.code === searchCode) ||
-          (searchEmail && emp.personalEmail?.toLowerCase().trim() === searchEmail)
+          (searchEmail && emp.personalEmail?.toLowerCase().trim() === searchEmail) ||
+          (searchName && emp.name?.toLowerCase().trim() === searchName)
       );
 
       if (match) {
@@ -85,8 +89,11 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
       const cachedList: FullEmployeeProfile[] = JSON.parse(cachedRaw);
       const match = cachedList.find(
         (emp) =>
+          (searchCode && (emp.code?.toLowerCase().trim() === searchCode.toLowerCase() || emp.id === searchCode)) ||
+          (searchId && (emp.id === searchId || emp.code === searchId)) ||
           (searchEmail && emp.workEmail?.toLowerCase().trim() === searchEmail) ||
-          (searchCode && emp.code === searchCode)
+          (searchEmail && emp.personalEmail?.toLowerCase().trim() === searchEmail) ||
+          (searchName && emp.name?.toLowerCase().trim() === searchName)
       );
       if (match) {
         syncEmployeeToLocalUser(match);

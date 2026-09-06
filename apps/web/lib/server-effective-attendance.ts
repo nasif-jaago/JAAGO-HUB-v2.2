@@ -245,10 +245,25 @@ export async function getEffectiveDailyAttendance(options?: {
   }
   if (options?.date) {
     gpsQuery = gpsQuery.eq('business_date', options.date);
+    bioEventsQuery = bioEventsQuery
+      .gte('punch_time', `${options.date}T00:00:00+06:00`)
+      .lte('punch_time', `${options.date}T23:59:59+06:00`);
   } else if (options?.startDate && options?.endDate) {
     gpsQuery = gpsQuery.gte('business_date', options.startDate).lte('business_date', options.endDate);
+    bioEventsQuery = bioEventsQuery
+      .gte('punch_time', `${options.startDate}T00:00:00+06:00`)
+      .lte('punch_time', `${options.endDate}T23:59:59+06:00`);
   } else if (options?.month) {
-    gpsQuery = gpsQuery.gte('business_date', `${options.month}-01`).lte('business_date', `${options.month}-31`);
+    const [yStr, mStr] = options.month.split('-');
+    const y = parseInt(yStr || '2026', 10);
+    const m = parseInt(mStr || '1', 10);
+    const lastDay = new Date(y, m, 0).getDate();
+    const monthStart = `${options.month}-01`;
+    const monthEnd = `${options.month}-${String(lastDay).padStart(2, '0')}`;
+    gpsQuery = gpsQuery.gte('business_date', monthStart).lte('business_date', monthEnd);
+    bioEventsQuery = bioEventsQuery
+      .gte('punch_time', `${monthStart}T00:00:00+06:00`)
+      .lte('punch_time', `${monthEnd}T23:59:59+06:00`);
   }
 
   const [
@@ -301,6 +316,10 @@ export async function getEffectiveDailyAttendance(options?: {
   dayKeys.forEach((key) => {
     const [empId, dateStr] = key.split('__');
     if (!empId || !dateStr) return;
+
+    if (options?.date && dateStr !== options.date) return;
+    if (options?.startDate && options?.endDate && (dateStr < options.startDate || dateStr > options.endDate)) return;
+    if (options?.month && !dateStr.startsWith(options.month)) return;
 
     const gpsRec = (gpsRecords || []).find((g) => g.employee_id === empId && g.business_date === dateStr);
     const bioPunches = bioByEmpDate.get(key) || [];
