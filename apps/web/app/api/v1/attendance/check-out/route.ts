@@ -81,38 +81,7 @@ export async function POST(request: Request) {
       .map((iso) => new Date(iso).getTime())
       .filter((ts) => !isNaN(ts) && ts > 0);
 
-    const firstCheckInAt = validCheckInTimes.length > 0 ? new Date(Math.min(...validCheckInTimes)).toISOString() : null;
-
-    if (!firstCheckInAt) {
-      await supabase.from('attendance_events').insert({
-        employee_id: canonicalEmpId,
-        event_type: 'check_out',
-        punch_type: 'check_out',
-        source: 'gps',
-        attempted_at: nowUtc,
-        latitude,
-        longitude,
-        accuracy_m: accuracy || 0,
-        captured_at: capturedAt ? new Date(capturedAt).toISOString() : nowUtc,
-        device_info: deviceInfo || 'Web Portal',
-        result: 'rejected',
-        rejection_reason: 'not_checked_in',
-      });
-
-      return NextResponse.json(
-        {
-          success: false,
-          code: 'NOT_CHECKED_IN',
-          error: 'You cannot check out without checking in first.',
-          state: 'NOT_CHECKED_IN',
-          buttons: {
-            check_in_enabled: true,
-            check_out_enabled: false,
-          },
-        },
-        { status: 400 }
-      );
-    }
+    const firstCheckInAt = validCheckInTimes.length > 0 ? new Date(Math.min(...validCheckInTimes)).toISOString() : nowUtc;
 
     // 3. Server-side Geofence Verification (Invariant I6)
     const geoPayload: GPSPayload = {
@@ -279,8 +248,8 @@ export async function POST(request: Request) {
       data: enhancedRecord,
       derived,
       buttons: {
-        check_in_enabled: false,
-        check_out_enabled: false,
+        check_in_enabled: true,
+        check_out_enabled: true,
       },
       message: `Checked out successfully at ${geoResult.matchedLocationName || 'Store'}! Total working time: ${derived.workedDisplay}.`,
     });

@@ -971,10 +971,6 @@ export default function DashboardPage() {
   // Dedicated Check-In Action with Live GPS Geofence Verification & Multi-punch Counting
   const handleCheckInAction = async () => {
     if (isPunching) return;
-    if (hasCheckedInToday) {
-      showToast(`Check-in already recorded for today at ${checkInTime}. Multiple check-ins are blocked.`, 'info');
-      return;
-    }
     setIsPunching(true);
 
     try {
@@ -1069,14 +1065,6 @@ export default function DashboardPage() {
   // Dedicated Check-Out Action with Live GPS Geofence Verification & Working Hours Pause
   const handleCheckOutAction = async () => {
     if (isPunching) return;
-    if (!hasCheckedInToday) {
-      showToast('You must check in first before checking out.', 'error');
-      return;
-    }
-    if (hasCheckedOutToday) {
-      showToast(`Check-out already completed for today at ${checkOutTime}.`, 'info');
-      return;
-    }
     setIsPunching(true);
 
     try {
@@ -1288,16 +1276,16 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── CARD 2: SERVER-DRIVEN TWO-BUTTON CHECK-IN / CHECK-OUT STATE MACHINE ── */}
+        {/* ── CARD 2: SERVER-DRIVEN TWO-BUTTON CHECK-IN / CHECK-OUT STATE MACHINE (HYBRID) ── */}
         <div className="grid grid-cols-2 gap-3">
           {/* Mobile Check-In Button */}
           <button
-            onClick={handleCheckInAction}
-            disabled={isPunching || hasCheckedInToday}
-            aria-disabled={isPunching || hasCheckedInToday}
+            onClick={isCheckedIn ? undefined : handleCheckInAction}
+            disabled={isPunching || isCheckedIn}
+            aria-disabled={isPunching || isCheckedIn}
             className={`py-3.5 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all duration-200 ${
-              hasCheckedInToday
-                ? 'opacity-70 cursor-default bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 select-none'
+              isCheckedIn
+                ? 'opacity-65 backdrop-blur-[2px] saturate-[0.85] cursor-default bg-emerald-500/15 border border-emerald-500/25 text-emerald-800/80 dark:text-emerald-300/80 select-none shadow-none'
                 : 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white shadow-md shadow-emerald-500/25 cursor-pointer active:scale-[0.98]'
             }`}
           >
@@ -1307,14 +1295,14 @@ export default function DashboardPage() {
 
           {/* Mobile Check-Out Button */}
           <button
-            onClick={handleCheckOutAction}
-            disabled={isPunching || !hasCheckedInToday || hasCheckedOutToday}
-            aria-disabled={isPunching || !hasCheckedInToday || hasCheckedOutToday}
+            onClick={isCheckedIn ? handleCheckOutAction : undefined}
+            disabled={isPunching || !isCheckedIn}
+            aria-disabled={isPunching || !isCheckedIn}
             className={`py-3.5 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all duration-200 ${
               !hasCheckedInToday
-                ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border border-border text-muted-foreground'
-                : hasCheckedOutToday
-                ? 'opacity-70 cursor-default bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 select-none'
+                ? 'opacity-35 grayscale cursor-not-allowed bg-surface/50 border border-border text-muted-foreground'
+                : !isCheckedIn && hasCheckedOutToday
+                ? 'opacity-65 backdrop-blur-[2px] saturate-[0.85] cursor-default bg-rose-500/15 border border-rose-500/25 text-rose-800/80 dark:text-rose-300/80 select-none shadow-none'
                 : 'bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white shadow-md shadow-rose-500/25 cursor-pointer active:scale-[0.98]'
             }`}
           >
@@ -1634,20 +1622,20 @@ export default function DashboardPage() {
                 <Radio className={`h-5 w-5 ${isPunching ? 'animate-spin text-amber-500' : 'animate-pulse'}`} />
               </div>
 
-              {/* Check In Box - Active when NOT checked in yet today, Locked/Disabled when already checked in */}
+              {/* Check In Box - Read-only when actively checked in, active/clickable when not checked in or checked out */}
               <button
-                onClick={handleCheckInAction}
-                disabled={isPunching || hasCheckedInToday}
-                aria-disabled={isPunching || hasCheckedInToday}
-                title={hasCheckedInToday ? `Checked in at ${checkInTime}. Multiple check-ins blocked.` : 'Click to check in'}
+                onClick={isCheckedIn ? undefined : handleCheckInAction}
+                disabled={isPunching || isCheckedIn}
+                aria-disabled={isPunching || isCheckedIn}
+                title={isCheckedIn ? `Checked in at ${checkInTime}. Working hours are running.` : hasCheckedInToday ? `First Check-in recorded at ${checkInTime}. Click to re-check in.` : 'Click to check in'}
                 className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
-                  hasCheckedInToday
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 cursor-default opacity-90 select-none'
-                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60 cursor-pointer shadow-sm'
+                  isCheckedIn
+                    ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-800/80 dark:text-emerald-300/80 cursor-default opacity-65 backdrop-blur-[2px] saturate-[0.85] select-none shadow-none'
+                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60 cursor-pointer shadow-sm active:scale-[0.98]'
                 }`}
               >
                 <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  hasCheckedInToday
+                  isCheckedIn
                     ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
                     : 'bg-emerald-500/20 dark:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
                 }`}>
@@ -1659,43 +1647,43 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <div className={`text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1 ${
-                    hasCheckedInToday ? 'text-emerald-700 dark:text-emerald-400' : 'text-emerald-700/90 dark:text-emerald-300/90'
+                    isCheckedIn ? 'text-emerald-700 dark:text-emerald-400' : 'text-emerald-700/90 dark:text-emerald-300/90'
                   }`}>
                     <span>CHECK IN</span>
                     {hasCheckedInToday && <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">&bull; RECORDED</span>}
                   </div>
                   <div className={`text-xs font-black font-mono ${
-                    hasCheckedInToday ? 'text-emerald-900 dark:text-emerald-200' : 'text-emerald-950 dark:text-emerald-100'
+                    isCheckedIn ? 'text-emerald-900 dark:text-emerald-200' : 'text-emerald-950 dark:text-emerald-100'
                   }`}>
                     {checkInTime || '--:--'}
                   </div>
                 </div>
               </button>
 
-              {/* Check Out Box - Active when checked in & not checked out yet, Locked/Disabled otherwise */}
+              {/* Check Out Box - Active when actively checked in, Read-only when already checked out, Disabled when day not started */}
               <button
-                onClick={handleCheckOutAction}
-                disabled={isPunching || !hasCheckedInToday || hasCheckedOutToday}
-                aria-disabled={isPunching || !hasCheckedInToday || hasCheckedOutToday}
+                onClick={isCheckedIn ? handleCheckOutAction : undefined}
+                disabled={isPunching || !isCheckedIn}
+                aria-disabled={isPunching || !isCheckedIn}
                 title={
-                  !hasCheckedInToday
-                    ? 'Cannot check out before checking in'
+                  isCheckedIn
+                    ? 'Click to check out'
                     : hasCheckedOutToday
                     ? `Checked out at ${checkOutTime}`
-                    : 'Click to check out'
+                    : 'Cannot check out before checking in'
                 }
                 className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
                   !hasCheckedInToday
-                    ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
-                    : hasCheckedOutToday
-                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300 cursor-default opacity-90 select-none'
-                    : 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60 cursor-pointer shadow-sm'
+                    ? 'opacity-35 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
+                    : !isCheckedIn && hasCheckedOutToday
+                    ? 'bg-rose-500/10 border-rose-500/25 text-rose-800/80 dark:text-rose-300/80 cursor-default opacity-65 backdrop-blur-[2px] saturate-[0.85] select-none shadow-none'
+                    : 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60 cursor-pointer shadow-sm active:scale-[0.98]'
                 }`}
               >
                 <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
                   !hasCheckedInToday
                     ? 'bg-muted text-muted-foreground'
-                    : hasCheckedOutToday
+                    : !isCheckedIn && hasCheckedOutToday
                     ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
                     : 'bg-rose-500/20 dark:bg-rose-500/25 text-rose-700 dark:text-rose-300'
                 }`}>
@@ -1709,6 +1697,8 @@ export default function DashboardPage() {
                   <div className={`text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1 ${
                     !hasCheckedInToday
                       ? 'text-muted-foreground'
+                      : !isCheckedIn && hasCheckedOutToday
+                      ? 'text-rose-700 dark:text-rose-400'
                       : 'text-rose-700/90 dark:text-rose-300/90'
                   }`}>
                     <span>CHECK OUT</span>
@@ -1717,6 +1707,8 @@ export default function DashboardPage() {
                   <div className={`text-xs font-black font-mono ${
                     !hasCheckedInToday
                       ? 'text-muted-foreground'
+                      : !isCheckedIn && hasCheckedOutToday
+                      ? 'text-rose-900 dark:text-rose-200'
                       : 'text-rose-950 dark:text-rose-100'
                   }`}>
                     {checkOutTime || '--:--'}

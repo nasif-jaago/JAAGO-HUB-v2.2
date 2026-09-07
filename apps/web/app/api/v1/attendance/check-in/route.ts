@@ -68,44 +68,7 @@ export async function POST(request: Request) {
     ]);
     const effectiveToday = effectiveList[0] || null;
 
-    // 2. Strict Single Daily Check-In Guard (Block Multiple Check-Ins)
-    const existingCheckInAt =
-      effectiveToday?.countedCheckInAt ||
-      existingRecord?.first_check_in_at ||
-      existingRecord?.check_in_at ||
-      (effectiveToday?.allPunches || []).find((p) => p.punchType === 'check_in')?.punchAt ||
-      null;
-
-    if (existingCheckInAt) {
-      const formattedLocal =
-        effectiveToday?.countedCheckInTimeLocal ||
-        new Date(existingCheckInAt).toLocaleTimeString('en-US', {
-          timeZone: 'Asia/Dhaka',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true,
-        });
-
-      const hasCheckedOut = Boolean(
-        effectiveToday?.countedCheckOutAt || existingRecord?.last_check_out_at || existingRecord?.check_out_at
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          code: 'CHECK_IN_ALREADY_EXISTS',
-          error: `Multiple check-ins are blocked. Check-in already recorded today at ${formattedLocal}.`,
-          message: `Check-in already recorded today at ${formattedLocal}.`,
-          state: hasCheckedOut ? 'CHECKED_OUT' : 'CHECKED_IN',
-          buttons: {
-            check_in_enabled: false,
-            check_out_enabled: !hasCheckedOut,
-          },
-          data: existingRecord || effectiveToday,
-        },
-        { status: 400 }
-      );
-    }
+    // 2. Multi-Punch Hybrid Architecture: Allow multiple check-ins anytime, anchoring earliest First Check-In
 
     // 3. Server-side Geofence & Accuracy Verification (Invariant I6)
     const geoPayload: GPSPayload = {
@@ -277,7 +240,7 @@ export async function POST(request: Request) {
       data: enhancedRecord,
       derived,
       buttons: {
-        check_in_enabled: false,
+        check_in_enabled: true,
         check_out_enabled: true,
       },
       message: toastMessage,

@@ -62,14 +62,20 @@ export async function GET(request: Request) {
     const firstCheckIn = effectiveToday?.countedCheckInAt || record?.first_check_in_at || record?.check_in_at || null;
     const countedCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
 
-    // 5. Derive state machine status and button enablement
+    // 5. Derive state machine status based on latest punch
     const hasCheckedInToday = Boolean(firstCheckIn);
-    const hasCheckedOutToday = Boolean(
-      firstCheckIn && countedCheckOut && new Date(countedCheckOut).getTime() > new Date(firstCheckIn).getTime()
-    );
+    const allPunches = effectiveToday?.allPunches || [];
+    let isCheckedIn = false;
 
-    const isCheckedIn = hasCheckedInToday && !hasCheckedOutToday;
-    const lastCheckOut = hasCheckedOutToday ? countedCheckOut : null;
+    if (allPunches.length > 0) {
+      const sorted = [...allPunches].sort((a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime());
+      const latest = sorted[sorted.length - 1]!;
+      isCheckedIn = latest.punchType === 'check_in';
+    } else {
+      isCheckedIn = Boolean(firstCheckIn) && !record?.check_out_at;
+    }
+
+    const lastCheckOut = countedCheckOut;
 
     const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'CHECKED_OUT' = !hasCheckedInToday
       ? 'NOT_CHECKED_IN'
@@ -121,8 +127,8 @@ export async function GET(request: Request) {
         needs_review: Boolean(record?.needs_review || record?.is_auto_checkout),
         is_auto_checkout: Boolean(record?.is_auto_checkout),
         buttons: {
-          check_in_enabled: !hasCheckedInToday,
-          check_out_enabled: isCheckedIn,
+          check_in_enabled: true,
+          check_out_enabled: true,
         },
         server_now: nowUtc,
         businessDate,
