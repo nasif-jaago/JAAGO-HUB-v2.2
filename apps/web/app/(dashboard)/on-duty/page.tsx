@@ -320,15 +320,15 @@ export default function OnDutyPage() {
 
   // Current User Context
   const [currentUser, setCurrentUser] = useState({
-    id: 'emp-nasif',
-    code: 'FO032507061190',
-    name: 'Nasif Kamal',
-    department: "Founder's Office / FC",
-    designation: 'Lead Architect & Systems Engineer',
+    id: '',
+    code: '',
+    name: '',
+    department: '',
+    designation: '',
     avatarUrl: '',
-    supervisorId: 'emp-korvi',
-    supervisorName: 'Korvi Rakshand',
-    supervisorEmail: 'korvi@jaago.com.bd',
+    supervisorId: '',
+    supervisorName: '',
+    supervisorEmail: '',
   });
 
   // Requests Data
@@ -379,15 +379,15 @@ export default function OnDutyPage() {
     getActiveEmployeeProfile().then((emp: any) => {
       if (emp) {
         setCurrentUser({
-          id: emp.id || 'emp-nasif',
-          code: emp.code || 'FO032507061190',
-          name: emp.name || 'Nasif Kamal',
-          department: emp.department || "Founder's Office / FC",
-          designation: emp.designation || 'Lead Architect & Systems Engineer',
+          id: emp.id || '',
+          code: emp.code || '',
+          name: emp.name || '',
+          department: emp.department || '',
+          designation: emp.designation || '',
           avatarUrl: emp.avatarUrl || '',
-          supervisorId: emp.supervisorId || 'emp-korvi',
-          supervisorName: emp.supervisor || 'Korvi Rakshand',
-          supervisorEmail: 'korvi@jaago.com.bd',
+          supervisorId: emp.supervisorId || '',
+          supervisorName: emp.supervisor || '',
+          supervisorEmail: emp.supervisorEmail || '',
         });
       }
     });

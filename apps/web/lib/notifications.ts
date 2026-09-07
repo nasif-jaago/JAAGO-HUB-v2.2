@@ -78,6 +78,11 @@ function generateDynamicLeaveNotifications(
   const dynamicNotifs: AppNotification[] = [];
   const userCode = session.employeeCode?.trim().toLowerCase();
   const userName = (session.fullName || '').trim().toLowerCase();
+  const userEmail = (session.email || '').trim().toLowerCase();
+  const isSuperAdmin =
+    (session.roles || []).includes('super_admin') ||
+    userEmail.includes('nasif.kamal') ||
+    userName.includes('nasif kamal');
 
   for (const req of leaveRequests) {
     const reqCode = (req.employeeCode || '').trim().toLowerCase();
@@ -88,7 +93,15 @@ function generateDynamicLeaveNotifications(
     );
 
     // 1. Pending Approvals for Supervisors / Managers / Super Admin (EXCLUDING self-requests!)
-    if (req.status === 'Pending' && !isSelfRequest) {
+    // Must strictly check if this user is designated as the supervisor/approver or is super admin!
+    const reqSupervisorEmail = ((req as any).supervisorEmail || '').trim().toLowerCase();
+    const reqSupervisorName = ((req as any).supervisorName || '').trim().toLowerCase();
+    const isSupervisorOrAdmin =
+      isSuperAdmin ||
+      (userEmail && reqSupervisorEmail && reqSupervisorEmail === userEmail) ||
+      (userName && reqSupervisorName && (reqSupervisorName.includes(userName) || userName.includes(reqSupervisorName)));
+
+    if (req.status === 'Pending' && !isSelfRequest && isSupervisorOrAdmin) {
       const notifId = `notif-leave-pending-${req.id}`;
       // If already dismissed/actioned, skip
       if (readIds.has(notifId)) continue;
@@ -102,7 +115,7 @@ function generateDynamicLeaveNotifications(
         isRead: false,
         actionUrl: `/workflows?requestId=${encodeURIComponent(req.id)}`,
         createdAt: req.appliedAt || new Date().toISOString(),
-        targetSupervisorName: session.fullName || 'Supervisor',
+        targetSupervisorName: (req as any).supervisorName || session.fullName || 'Supervisor',
         targetEmployeeCode: userCode || undefined,
         relatedEntity: { type: 'leave_request', id: req.id },
       });
@@ -167,8 +180,8 @@ function generateDynamicRegularizationNotifications(
 
     const isSupervisorOrAdmin =
       isSuperAdmin ||
-      (userName && (itemSupervisorName.includes(userName) || userName.includes(itemSupervisorName))) ||
-      (userEmail && itemSupervisorEmail === userEmail);
+      (userName && itemSupervisorName && (itemSupervisorName.includes(userName) || userName.includes(itemSupervisorName))) ||
+      (userEmail && itemSupervisorEmail && itemSupervisorEmail === userEmail);
 
     // 1. Pending Approvals for Supervisors & Super Admin (EXCLUDING self-requests!)
     if (reg.status === 'Pending' && !isSelfRequest && isSupervisorOrAdmin) {
@@ -265,7 +278,8 @@ export function fetchUserNotifications(sessionUser?: UserSessionData | null): Ap
       return true;
     if (n.userId && session?.id && n.userId === session.id) return true;
     if (n.targetEmployeeCode === '*' || (!n.targetEmployeeCode && !n.targetEmail && !n.targetSupervisorName)) {
-      return true;
+      // General announcements or system notices
+      return n.category === 'circulars' || n.category === 'system';
     }
     // Super admin ONLY sees approvals pending review, NEVER personal decision notices of other staff!
     if (isSuperAdmin && n.category === 'approvals') {
@@ -346,7 +360,7 @@ export async function fetchUserNotificationsAsync(
       return true;
     if (n.userId && session?.id && n.userId === session.id) return true;
     if (n.targetEmployeeCode === '*' || (!n.targetEmployeeCode && !n.targetEmail && !n.targetSupervisorName)) {
-      return true;
+      return n.category === 'circulars' || n.category === 'system';
     }
     // Super admin ONLY sees approvals pending review, NEVER personal decision notices of other staff!
     if (isSuperAdmin && n.category === 'approvals') {

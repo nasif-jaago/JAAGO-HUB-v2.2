@@ -16,8 +16,8 @@ export default function DashboardLayout({
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [currentUser, setCurrentUser] = useState({
-    fullName: 'Nasif Kamal',
-    jobTitle: 'Coordinator',
+    fullName: '',
+    jobTitle: '',
     avatarUrl: '',
   });
 
@@ -25,10 +25,10 @@ export default function DashboardLayout({
   useEffect(() => {
     let isMounted = true;
     const session = getCurrentUserSession();
-    if (session && isMounted) {
+    if (session && isMounted && session.fullName) {
       setCurrentUser({
-        fullName: session.fullName || 'Nasif Kamal',
-        jobTitle: session.jobTitle || 'Coordinator',
+        fullName: session.fullName,
+        jobTitle: session.jobTitle || '',
         avatarUrl: session.avatarUrl || '',
       });
     }

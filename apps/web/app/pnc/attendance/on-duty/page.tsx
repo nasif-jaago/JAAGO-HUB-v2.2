@@ -92,12 +92,12 @@ export default function OnDutyLogsPage() {
   const handleOpenAddModal = () => {
     setEditingLog(null);
     const defaultEmp = employees[0] || {
-      id: 'emp-nasif',
-      code: 'FO032507061190',
-      name: 'Nasif Kamal',
-      designation: 'Coordinator, Tech 4 Development',
-      department: "Founder's Office (JFT)",
-      branch: 'Head Office (Banani)',
+      id: '',
+      code: '',
+      name: '',
+      designation: '',
+      department: '',
+      branch: '',
     };
     setFormData({
       employeeId: defaultEmp.id,

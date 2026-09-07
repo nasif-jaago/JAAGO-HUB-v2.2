@@ -59,9 +59,8 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
       }
     }
 
-    // Default fallback to Nasif Kamal only if no session at all
     if (!searchEmail && !searchCode && !searchName && !searchId) {
-      searchEmail = 'nasif.kamal@jaago.com.bd';
+      return null;
     }
 
     // 3. Fetch from Supabase

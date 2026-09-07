@@ -41,9 +41,9 @@ export default function MeetingRoomsPage() {
   const [rooms, setRooms] = useState<MeetingRoom[]>([]);
   const [bookings, setBookings] = useState<RoomBooking[]>([]);
   const [currentUser, setCurrentUser] = useState({
-    name: 'Nasif Kamal',
-    code: 'FO032507061190',
-    department: "Founder's Office / FC",
+    name: '',
+    code: '',
+    department: '',
   });
 
   // Filter States

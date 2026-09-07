@@ -200,10 +200,9 @@ export default function PnCEmployeesPage() {
   const [isProcessingImport, setIsProcessingImport] = useState(false);
   const [importErrorMsg, setImportErrorMsg] = useState<string | null>(null);
 
-  // Current logged in user info
   const [currentUser, setCurrentUser] = useState({
-    fullName: 'Nasif Kamal',
-    jobTitle: 'Coordinator',
+    fullName: '',
+    jobTitle: '',
   });
 
   // Invite Success Modal State & Controls

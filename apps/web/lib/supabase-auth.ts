@@ -209,6 +209,23 @@ export async function signOutUser() {
     localStorage.removeItem('jaago_user');
     localStorage.removeItem('jaago_is_checked_in');
     localStorage.removeItem('jaago_checkin_timestamp');
+    localStorage.removeItem('jaago_first_checkin_time');
+    localStorage.removeItem('jaago_last_checkout_time');
+    localStorage.removeItem('jaago_worked_seconds');
+    localStorage.removeItem('jaago_auto_checked_out');
+    localStorage.removeItem('jaago_today_date');
+    localStorage.removeItem('jaago_active_user_permissions');
+
+    // Clean up any jaago_att_* keys
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('jaago_att_') || key.startsWith('jaago_user_permissions_'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+
     document.cookie = 'jaago_access_token=; path=/; max-age=0; SameSite=Lax';
     document.cookie = 'jaago_user=; path=/; max-age=0; SameSite=Lax';
     window.location.href = '/login';

@@ -158,7 +158,6 @@ export function hasModuleAccess(
           'hr.employees.view_dept',
           'hr.employees.create',
           'hr.employees.edit',
-          'org.view',
           'org.manage',
           'attendance.view_all',
           'attendance.view_dept',

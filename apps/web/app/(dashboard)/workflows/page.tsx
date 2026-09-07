@@ -390,21 +390,39 @@ function WorkflowsContent() {
     }
   };
 
-  // Strictly filter out self-requests and enforce DSP scope if active
+  // Strictly filter out self-requests and enforce DSP scope & supervisor assignment
   const scopedInstances = useMemo(() => {
     const isDspScoped = typeof window !== 'undefined' ? isDspOnlyScoped() : false;
+    const userEmail = (session?.email || '').toLowerCase().trim();
+    const userName = (session?.fullName || '').toLowerCase().trim();
+    const isSuperAdmin =
+      (session?.roles || []).includes('super_admin') ||
+      userEmail.includes('nasif.kamal') ||
+      userName.includes('nasif kamal');
+
     return instances.filter((item) => {
       if (isDspScoped && !isDspDepartment(item.metadata?.department)) {
         return false;
       }
       const itemRequesterCode = (item.metadata.employeeCode || item.requesterId || '').toLowerCase().trim();
       const userCode = (session?.employeeCode || '').toLowerCase().trim();
-      const userName = (session?.fullName || '').toLowerCase().trim();
       const itemRequesterName = (item.metadata.requesterName || '').toLowerCase().trim();
 
+      // Request owner cannot approve their own request in the Approvals Engine
       if (userCode && itemRequesterCode === userCode) return false;
       if (userName && itemRequesterName && (userName === itemRequesterName || itemRequesterName.includes(userName))) return false;
-      return true;
+
+      // Super Admin sees all organizational requests
+      if (isSuperAdmin) return true;
+
+      // Regular staff / supervisor only sees requests where they are the designated supervisor
+      const itemSupervisorName = (item.metadata.supervisorName || '').toLowerCase().trim();
+      const itemSupervisorEmail = (item.metadata.supervisorEmail || '').toLowerCase().trim();
+      const isSupervisor =
+        (userName && itemSupervisorName && (itemSupervisorName.includes(userName) || userName.includes(itemSupervisorName))) ||
+        (userEmail && itemSupervisorEmail && itemSupervisorEmail === userEmail);
+
+      return isSupervisor;
     });
   }, [instances, session]);
 

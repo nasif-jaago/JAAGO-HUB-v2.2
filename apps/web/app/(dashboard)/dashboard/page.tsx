@@ -73,16 +73,16 @@ export default function DashboardPage() {
     emergencyRem: 4,
   });
   const [user, setUser] = useState({
-    id: 'emp-nasif',
-    fullName: 'Nasif Kamal',
-    jobTitle: 'Coordinator, Tech 4 Development',
-    department: "Founder's Office / FC",
+    id: '',
+    fullName: '',
+    jobTitle: '',
+    department: '',
     project: '',
-    manager: 'Founder & Executive Director',
-    organization: 'JAAGO Foundation Trust',
+    manager: '',
+    organization: '',
     avatarUrl: '',
     workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
-    employeeCode: 'FO032507061190',
+    employeeCode: '',
   });
 
   // Hydrate view mode, attendance status & elapsed timer from localStorage
@@ -101,7 +101,7 @@ export default function DashboardPage() {
           fullName: u.fullName || u.name || prev.fullName,
           jobTitle: u.jobTitle || u.designation || prev.jobTitle,
           department: u.department || prev.department,
-          project: u.project || prev.project,
+          project: u.project || u.team || prev.project,
           manager: u.manager || u.supervisor || prev.manager,
           organization: u.organizationName || u.organization || prev.organization,
           avatarUrl: u.avatarUrl || prev.avatarUrl,
@@ -138,7 +138,8 @@ export default function DashboardPage() {
     const refreshMonthlyMetrics = () => {
       try {
         const sess = getCurrentUserSession();
-        const codeOrId = (sess?.employeeCode || user.employeeCode || 'FO032507061190').trim();
+        const codeOrId = (sess?.employeeCode || user.employeeCode || user.id || '').trim();
+        if (!codeOrId) return;
         const currentMonth = new Date().toISOString().slice(0, 7);
         const stats = getEmployeeMonthlyAttendanceStats(codeOrId, currentMonth);
 
@@ -189,18 +190,18 @@ export default function DashboardPage() {
       getActiveEmployeeProfile().then((emp) => {
         if (emp) {
           setUser({
-            id: emp.id || 'emp-nasif',
-            fullName: emp.name,
-            jobTitle: emp.designation,
-            department: emp.department || "Founder's Office / FC",
+            id: emp.id || '',
+            fullName: emp.name || '',
+            jobTitle: emp.designation || '',
+            department: emp.department || '',
             project: (emp as any).project || (emp as any).projectName || '',
-            manager: emp.supervisor || 'Founder & Executive Director',
-            organization: emp.organization || 'JAAGO Foundation Trust',
+            manager: emp.supervisor || '',
+            organization: emp.organization || 'JAAGO Foundation',
             avatarUrl: emp.avatarUrl || '',
             workingSchedule: emp.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
-            employeeCode: emp.code || 'FO032507061190',
+            employeeCode: emp.code || '',
           });
-          refreshCanonicalAttendance(emp.id || 'emp-nasif');
+          refreshCanonicalAttendance(emp.id || emp.code);
           refreshLeaveBalance(emp.code);
         }
       });
@@ -321,68 +322,100 @@ export default function DashboardPage() {
       window.addEventListener('jaago_attendance_updated', refreshMonthlyMetrics);
       window.addEventListener('jaago_attendance_regularization_updated', refreshMonthlyMetrics);
 
-      // Daily Session & Rollover Hydration
+      // Daily Session & Rollover Hydration strictly scoped to the active logged-in user
       const todayStr = new Date().toISOString().slice(0, 10);
-      const storedDate = localStorage.getItem('jaago_today_date');
 
-      if (storedDate && storedDate !== todayStr) {
-        // New day rollover: reset punch session for the new day
-        localStorage.setItem('jaago_today_date', todayStr);
-        localStorage.removeItem('jaago_is_checked_in');
-        localStorage.removeItem('jaago_checkin_timestamp');
-        localStorage.removeItem('jaago_first_checkin_time');
-        localStorage.removeItem('jaago_last_checkout_time');
-        localStorage.removeItem('jaago_worked_seconds');
-        localStorage.removeItem('jaago_auto_checked_out');
+      // Clean any legacy un-scoped global punch items that may pollute across different accounts
+      localStorage.removeItem('jaago_is_checked_in');
+      localStorage.removeItem('jaago_checkin_timestamp');
+      localStorage.removeItem('jaago_first_checkin_time');
+      localStorage.removeItem('jaago_last_checkout_time');
+      localStorage.removeItem('jaago_worked_seconds');
+      localStorage.removeItem('jaago_auto_checked_out');
+
+      let currentSessionUser: any = null;
+      try {
+        const rawUser = localStorage.getItem('jaago_user');
+        if (rawUser) currentSessionUser = JSON.parse(rawUser);
+      } catch {}
+
+      const userKey = (
+        currentSessionUser?.employeeCode ||
+        currentSessionUser?.id ||
+        currentSessionUser?.email ||
+        ''
+      )
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]/g, '_');
+
+      if (!userKey) {
+        // No authenticated session key yet — remain clean with defaults
         setIsCheckedIn(false);
         setCheckInTime('--:--');
         setCheckOutTime('--:--');
         setElapsedSeconds(0);
       } else {
-        localStorage.setItem('jaago_today_date', todayStr);
-        const savedState = localStorage.getItem('jaago_is_checked_in');
-        const savedTime = localStorage.getItem('jaago_checkin_timestamp');
-        const savedWorkedSec = parseInt(localStorage.getItem('jaago_worked_seconds') || '0', 10);
-        const savedCheckInTime = localStorage.getItem('jaago_first_checkin_time');
-        const savedCheckOutTime = localStorage.getItem('jaago_last_checkout_time');
-        const alreadyAutoCheckedOut = localStorage.getItem('jaago_auto_checked_out') === 'true';
-
-        if (savedCheckInTime) setCheckInTime(savedCheckInTime);
-        if (savedCheckOutTime) setCheckOutTime(savedCheckOutTime);
-
-        if (savedState === 'true' && savedTime) {
-          // User is currently checked in — check if we need auto-checkout on hydration
-          const now = new Date();
-          const curHours = now.getHours();
-          const curMins = now.getMinutes();
-          // Auto-checkout ONLY in the 23:30-23:59 window AND only if not already done today
-          const isIn1130Window = curHours === 23 && curMins >= 30;
-
-          if (isIn1130Window && !alreadyAutoCheckedOut) {
-            // Auto check out on page load during 11:30-11:59 PM
-            const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
-            const totalSec = savedWorkedSec + diffSeconds;
-            setIsCheckedIn(false);
-            setCheckOutTime('11:30 PM');
-            setElapsedSeconds(totalSec);
-            localStorage.setItem('jaago_is_checked_in', 'false');
-            localStorage.removeItem('jaago_checkin_timestamp');
-            localStorage.setItem('jaago_last_checkout_time', '11:30 PM');
-            localStorage.setItem('jaago_worked_seconds', totalSec.toString());
-            localStorage.setItem('jaago_auto_checked_out', 'true');
-          } else {
-            // Normal resume: user is checked in
-            setIsCheckedIn(true);
-            const inTs = parseInt(savedTime, 10);
-            if (inTs > 0) {
-              setFirstCheckInTimestamp(inTs);
-              const diffSeconds = Math.max(0, Math.floor((Date.now() - inTs) / 1000));
-              setElapsedSeconds(savedWorkedSec + diffSeconds);
-            }
-          }
+        const storedDate = localStorage.getItem(`jaago_att_${userKey}_today_date`);
+        if (storedDate && storedDate !== todayStr) {
+          // New day rollover: reset punch session for the new day
+          localStorage.setItem(`jaago_att_${userKey}_today_date`, todayStr);
+          localStorage.removeItem(`jaago_att_${userKey}_is_checked_in`);
+          localStorage.removeItem(`jaago_att_${userKey}_checkin_timestamp`);
+          localStorage.removeItem(`jaago_att_${userKey}_first_checkin_time`);
+          localStorage.removeItem(`jaago_att_${userKey}_last_checkout_time`);
+          localStorage.removeItem(`jaago_att_${userKey}_worked_seconds`);
+          localStorage.removeItem(`jaago_att_${userKey}_auto_checked_out`);
+          setIsCheckedIn(false);
+          setCheckInTime('--:--');
+          setCheckOutTime('--:--');
+          setElapsedSeconds(0);
         } else {
-          // User is checked out — just restore accumulated worked seconds
-          setElapsedSeconds(savedWorkedSec);
+          localStorage.setItem(`jaago_att_${userKey}_today_date`, todayStr);
+          const savedState = localStorage.getItem(`jaago_att_${userKey}_is_checked_in`);
+          const savedTime = localStorage.getItem(`jaago_att_${userKey}_checkin_timestamp`);
+          const savedWorkedSec = parseInt(localStorage.getItem(`jaago_att_${userKey}_worked_seconds`) || '0', 10);
+          const savedCheckInTime = localStorage.getItem(`jaago_att_${userKey}_first_checkin_time`);
+          const savedCheckOutTime = localStorage.getItem(`jaago_att_${userKey}_last_checkout_time`);
+          const alreadyAutoCheckedOut = localStorage.getItem(`jaago_att_${userKey}_auto_checked_out`) === 'true';
+
+          if (savedCheckInTime) setCheckInTime(savedCheckInTime);
+          if (savedCheckOutTime) setCheckOutTime(savedCheckOutTime);
+
+          if (savedState === 'true' && savedTime) {
+            // User is currently checked in — check if we need auto-checkout on hydration
+            const now = new Date();
+            const curHours = now.getHours();
+            const curMins = now.getMinutes();
+            // Auto-checkout ONLY in the 23:30-23:59 window AND only if not already done today
+            const isIn1130Window = curHours === 23 && curMins >= 30;
+
+            if (isIn1130Window && !alreadyAutoCheckedOut) {
+              // Auto check out on page load during 11:30-11:59 PM
+              const diffSeconds = Math.max(0, Math.floor((Date.now() - parseInt(savedTime, 10)) / 1000));
+              const totalSec = savedWorkedSec + diffSeconds;
+              setIsCheckedIn(false);
+              setCheckOutTime('11:30 PM');
+              setElapsedSeconds(totalSec);
+              localStorage.setItem(`jaago_att_${userKey}_is_checked_in`, 'false');
+              localStorage.removeItem(`jaago_att_${userKey}_checkin_timestamp`);
+              localStorage.setItem(`jaago_att_${userKey}_last_checkout_time`, '11:30 PM');
+              localStorage.setItem(`jaago_att_${userKey}_worked_seconds`, totalSec.toString());
+              localStorage.setItem(`jaago_att_${userKey}_auto_checked_out`, 'true');
+            } else {
+              // Normal resume: user is checked in
+              setIsCheckedIn(true);
+              const inTs = parseInt(savedTime, 10);
+              if (inTs > 0) {
+                setFirstCheckInTimestamp(inTs);
+                const diffSeconds = Math.max(0, Math.floor((Date.now() - inTs) / 1000));
+                setElapsedSeconds(savedWorkedSec + diffSeconds);
+              }
+            }
+          } else {
+            // User is checked out — just restore accumulated worked seconds
+            setElapsedSeconds(savedWorkedSec);
+          }
         }
       }
     } catch {
@@ -414,18 +447,18 @@ export default function DashboardPage() {
       getActiveEmployeeProfile().then((emp) => {
         if (emp) {
           setUser({
-            id: emp.id || 'emp-nasif',
+            id: emp.id || '',
             fullName: emp.name,
             jobTitle: emp.designation,
-            department: emp.department || "Founder's Office / FC",
+            department: emp.department || '',
             project: (emp as any).project || (emp as any).projectName || '',
-            manager: emp.supervisor || 'Founder & Executive Director',
-            organization: emp.organization || 'JAAGO Foundation Trust',
+            manager: emp.supervisor || '',
+            organization: emp.organization || 'JAAGO Foundation',
             avatarUrl: emp.avatarUrl || '',
             workingSchedule: emp.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
-            employeeCode: emp.code || 'FO032507061190',
+            employeeCode: emp.code || '',
           });
-          refreshCanonicalAttendance(emp.id || emp.code || 'FO032507061190');
+          refreshCanonicalAttendance(emp.id || emp.code || '');
         }
       });
       refreshMonthlyMetrics();
@@ -659,8 +692,9 @@ export default function DashboardPage() {
 
   // Auto Check-Out after 11:30 PM (23:30)
   const performAutoCheckOut = (autoTimeStr = '11:30 PM') => {
-    const sessionStart = parseInt(localStorage.getItem('jaago_checkin_timestamp') || '0', 10);
-    const accumulated = parseInt(localStorage.getItem('jaago_worked_seconds') || '0', 10);
+    const activeKey = (user.employeeCode || user.id || user.fullName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+    const sessionStart = parseInt((activeKey ? localStorage.getItem(`jaago_att_${activeKey}_checkin_timestamp`) : null) || '0', 10);
+    const accumulated = parseInt((activeKey ? localStorage.getItem(`jaago_att_${activeKey}_worked_seconds`) : null) || '0', 10);
     const diff = sessionStart > 0 ? Math.max(0, Math.floor((Date.now() - sessionStart) / 1000)) : 0;
     const newTotal = accumulated + diff;
 
@@ -668,19 +702,19 @@ export default function DashboardPage() {
     setCheckOutTime(autoTimeStr);
     setElapsedSeconds(newTotal);
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('jaago_is_checked_in', 'false');
-      localStorage.removeItem('jaago_checkin_timestamp');
-      localStorage.setItem('jaago_last_checkout_time', autoTimeStr);
-      localStorage.setItem('jaago_worked_seconds', newTotal.toString());
-      localStorage.setItem('jaago_auto_checked_out', 'true');
+    if (typeof window !== 'undefined' && activeKey) {
+      localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'false');
+      localStorage.removeItem(`jaago_att_${activeKey}_checkin_timestamp`);
+      localStorage.setItem(`jaago_att_${activeKey}_last_checkout_time`, autoTimeStr);
+      localStorage.setItem(`jaago_att_${activeKey}_worked_seconds`, newTotal.toString());
+      localStorage.setItem(`jaago_att_${activeKey}_auto_checked_out`, 'true');
     }
 
     // Record to unified attendance store
     recordLocalAttendanceLog({
       employeeId: user.id,
-      employeeCode: user.employeeCode || 'FO032507061190',
-      employeeName: user.fullName || 'Nasif Kamal',
+      employeeCode: user.employeeCode || '',
+      employeeName: user.fullName || 'Staff Member',
       designation: user.jobTitle,
       department: user.department,
       branch: 'Head Office (Banani)',
@@ -796,25 +830,30 @@ export default function DashboardPage() {
           setCheckOutTime('--:--');
         }
 
-        // Synchronize client localStorage with canonical server status
-        if (typeof window !== 'undefined') {
+        // Synchronize client localStorage with canonical server status scoped to this employee
+        const activeKey = (empId || user.employeeCode || user.id || user.fullName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+        if (typeof window !== 'undefined' && activeKey) {
           if (isNowCheckedIn) {
-            localStorage.setItem('jaago_is_checked_in', 'true');
+            localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'true');
             if (first_check_in_at) {
-              localStorage.setItem('jaago_checkin_timestamp', String(new Date(first_check_in_at).getTime()));
-              localStorage.setItem('jaago_first_checkin_time', todayJson.data.check_in_time_local || '--:--');
+              localStorage.setItem(`jaago_att_${activeKey}_checkin_timestamp`, String(new Date(first_check_in_at).getTime()));
+              localStorage.setItem(`jaago_att_${activeKey}_first_checkin_time`, todayJson.data.check_in_time_local || '--:--');
             }
-            localStorage.removeItem('jaago_last_checkout_time');
+            localStorage.removeItem(`jaago_att_${activeKey}_last_checkout_time`);
           } else {
-            localStorage.setItem('jaago_is_checked_in', 'false');
-            localStorage.removeItem('jaago_checkin_timestamp');
+            localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'false');
+            localStorage.removeItem(`jaago_att_${activeKey}_checkin_timestamp`);
             if (first_check_in_at) {
-              localStorage.setItem('jaago_first_checkin_time', todayJson.data.check_in_time_local || '--:--');
+              localStorage.setItem(`jaago_att_${activeKey}_first_checkin_time`, todayJson.data.check_in_time_local || '--:--');
+            } else {
+              localStorage.removeItem(`jaago_att_${activeKey}_first_checkin_time`);
             }
             if (last_check_out_at) {
-              localStorage.setItem('jaago_last_checkout_time', resolvedOutTime);
+              localStorage.setItem(`jaago_att_${activeKey}_last_checkout_time`, resolvedOutTime);
+            } else {
+              localStorage.removeItem(`jaago_att_${activeKey}_last_checkout_time`);
             }
-            localStorage.setItem('jaago_worked_seconds', String(worked_seconds || 0));
+            localStorage.setItem(`jaago_att_${activeKey}_worked_seconds`, String(worked_seconds || 0));
           }
         }
 
@@ -848,8 +887,8 @@ export default function DashboardPage() {
           const todayItem: AttendanceLogItem = {
             id: `att-today-${todayDateStr}`,
             employeeId: empId,
-            employeeCode: user.employeeCode || 'FO032507061190',
-            employeeName: user.fullName || 'Nasif Kamal',
+            employeeCode: user.employeeCode || '',
+            employeeName: user.fullName || 'Staff Member',
             designation: user.jobTitle,
             department: user.department,
             branch: gpsTracker.locationName || 'Head Office (Banani)',
@@ -864,7 +903,7 @@ export default function DashboardPage() {
             sourceBreakdown: todayJson.data.source_breakdown,
             allPunches: todayJson.data.effectiveRecord?.allPunches || [],
             timestamp: new Date(first_check_in_at).toLocaleString(),
-            createdBy: user.fullName || 'Nasif Kamal',
+            createdBy: user.fullName || 'Self',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
             notes: todayJson.data.primary_source === 'Merged (GPS + BioTime)'
@@ -962,7 +1001,7 @@ export default function DashboardPage() {
   };
 
   const [imgError, setImgError] = useState(false);
-  const firstName = user.fullName.split(' ')[0] || 'Nasif';
+  const firstName = user.fullName ? user.fullName.split(' ').filter(Boolean)[0] || '' : '';
 
   // Canonical day status flags
   const hasCheckedInToday = Boolean(firstCheckInTimestamp || (checkInTime && checkInTime !== '--:--'));
@@ -1198,7 +1237,7 @@ export default function DashboardPage() {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <span suppressHydrationWarning className="text-primary font-black text-lg">
+              <span className="text-primary font-black text-lg">
                 {user.fullName
                   ? user.fullName
                       .split(' ')
@@ -1207,16 +1246,18 @@ export default function DashboardPage() {
                       .map((n: string) => n[0])
                       .join('')
                       .toUpperCase()
-                  : 'NK'}
+                  : ''}
               </span>
             )}
           </div>
           <div className="space-y-0.5 min-w-0">
-            <h1 suppressHydrationWarning className="text-xl font-black tracking-tight text-foreground truncate">
-              Hi, {firstName}!
+            <h1 className="text-xl font-black tracking-tight text-foreground truncate min-h-[28px]">
+              {firstName ? `Hi, ${firstName}!` : 'Hi!'}
             </h1>
-            <p suppressHydrationWarning className="text-xs font-semibold text-muted-foreground truncate">
-              {user.jobTitle} &bull; {user.organization}
+            <p className="text-xs font-semibold text-muted-foreground truncate min-h-[16px]">
+              {user.jobTitle && user.organization
+                ? `${user.jobTitle} • ${user.organization}`
+                : user.jobTitle || user.organization || ''}
             </p>
           </div>
         </div>
@@ -1572,7 +1613,7 @@ export default function DashboardPage() {
                     className="h-full w-full object-cover rounded-[22px]"
                   />
                 ) : (
-                  <div suppressHydrationWarning className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 rounded-[22px] flex items-center justify-center text-primary font-black text-3xl sm:text-4xl">
+                  <div className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 rounded-[22px] flex items-center justify-center text-primary font-black text-3xl sm:text-4xl">
                     {user.fullName
                       ? user.fullName
                           .split(' ')
@@ -1581,7 +1622,7 @@ export default function DashboardPage() {
                           .map((n: string) => n[0])
                           .join('')
                           .toUpperCase()
-                      : 'NK'}
+                      : ''}
                   </div>
                 )}
               </div>
@@ -1590,26 +1631,32 @@ export default function DashboardPage() {
             </div>
 
             {/* User Credentials & Metadata */}
-            <div className="space-y-1">
-              <h1 suppressHydrationWarning className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-                {user.fullName}
+            <div className="space-y-1 min-w-[240px]">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground min-h-[36px]">
+                {user.fullName || ''}
               </h1>
-              <div suppressHydrationWarning className="text-sm font-semibold text-muted-foreground">
-                {user.jobTitle}
+              <div className="text-sm font-semibold text-muted-foreground min-h-[20px]">
+                {user.jobTitle || ''}
               </div>
-              <div suppressHydrationWarning className="flex items-center space-x-1.5 text-xs font-bold text-amber-500 pt-0.5">
-                <Building2 className="h-3.5 w-3.5" />
-                <span>{user.organization}</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground pt-0.5">
-                <div className="flex items-center space-x-1">
-                  <MapPin className="h-3.5 w-3.5 text-muted-foreground/80" />
-                  <span>{user.department}</span>
+              {user.organization ? (
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-500 pt-0.5">
+                  <Building2 className="h-3.5 w-3.5" />
+                  <span>{user.organization}</span>
                 </div>
-                <div className="flex items-center space-x-1">
-                  <Briefcase className="h-3.5 w-3.5 text-muted-foreground/80" />
-                  <span>Manager: {user.manager}</span>
-                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground pt-0.5 min-h-[20px]">
+                {user.department ? (
+                  <div className="flex items-center space-x-1">
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground/80" />
+                    <span>{user.department}</span>
+                  </div>
+                ) : null}
+                {user.manager ? (
+                  <div className="flex items-center space-x-1">
+                    <Briefcase className="h-3.5 w-3.5 text-muted-foreground/80" />
+                    <span>Manager: {user.manager}</span>
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -2327,7 +2374,7 @@ export default function DashboardPage() {
                 <span>Office Verification</span>
               </div>
               <div className="text-xs font-black text-foreground truncate">
-                {gpsTracker.locationName || 'Nasif Home (Workstation)'}
+                {gpsTracker.locationName || 'Head Office (Banani)'}
               </div>
               <div className="text-[10px] font-bold text-emerald-500">
                 ● Geofence Verified
@@ -2395,7 +2442,7 @@ export default function DashboardPage() {
                               {log.device || 'Web Portal'}
                             </td>
                             <td className="py-3 px-3 text-muted-foreground text-[11px]">
-                              {log.branch || 'Nasif Home (Workstation)'}
+                              {log.branch || 'Head Office (Banani)'}
                             </td>
                             <td className="py-3 px-4 text-center">
                               <span

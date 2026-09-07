@@ -500,7 +500,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <span>
+                <span suppressHydrationWarning>
                   {user.fullName
                     ? user.fullName
                         .split(' ')
@@ -509,7 +509,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
                         .map((n) => n[0])
                         .join('')
                         .toUpperCase()
-                    : 'NK'}
+                    : ''}
                 </span>
               )}
             </div>
@@ -519,8 +519,8 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-card border border-border shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95">
               <div className="p-3 border-b border-border">
-                <div className="text-xs font-bold text-foreground truncate">{user.fullName}</div>
-                <div className="text-[11px] text-muted-foreground truncate">{user.jobTitle}</div>
+                <div suppressHydrationWarning className="text-xs font-bold text-foreground truncate">{user.fullName}</div>
+                <div suppressHydrationWarning className="text-[11px] text-muted-foreground truncate">{user.jobTitle}</div>
               </div>
               <div className="pt-2 space-y-1">
                 <button

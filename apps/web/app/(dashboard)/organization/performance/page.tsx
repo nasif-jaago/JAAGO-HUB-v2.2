@@ -37,10 +37,10 @@ export default function PerformanceAppraisalPage() {
   const [kpis, setKpis] = useState<PerformanceKPI[]>([]);
   const [tasks, setTasks] = useState<KanbanTaskLog[]>([]);
   const [currentUser, setCurrentUser] = useState({
-    name: 'Nasif Kamal',
-    code: 'FO032507061190',
-    department: "Founder's Office / FC",
-    supervisor: 'Korvi Rakshand (Founder & ED)',
+    name: '',
+    code: '',
+    department: '',
+    supervisor: '',
   });
 
   const [toastMsg, setToastMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);

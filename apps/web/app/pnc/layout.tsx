@@ -166,12 +166,12 @@ export default function PnCLayout({
     isAdmin: boolean;
     avatarUrl?: string;
   }>({
-    fullName: 'Nasif Kamal',
-    jobTitle: 'Coordinator',
-    role: 'SUPER_ADMIN',
-    roles: ['super_admin'],
-    isSuperAdmin: true,
-    isAdmin: true,
+    fullName: '',
+    jobTitle: '',
+    role: 'USER',
+    roles: ['user'],
+    isSuperAdmin: false,
+    isAdmin: false,
   });
 
   const handleSignOut = async () => {

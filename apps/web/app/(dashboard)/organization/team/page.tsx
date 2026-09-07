@@ -198,8 +198,8 @@ export default function MyTeamPage() {
     return set;
   }, [leaveRequests, todayStr]);
 
-  const currentUserName = (currentUserProfile?.name || 'Nasif Kamal').toLowerCase();
-  const currentUserCode = (currentUserProfile?.code || 'FO032507061190').toLowerCase();
+  const currentUserName = (currentUserProfile?.name || '').toLowerCase();
+  const currentUserCode = (currentUserProfile?.code || '').toLowerCase();
 
   // Filter team members based STRICTLY on Employee Profile Team field & Operational Squad roster
   const myTeamMembers = useMemo(() => {

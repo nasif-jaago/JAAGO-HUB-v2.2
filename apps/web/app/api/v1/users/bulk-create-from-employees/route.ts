@@ -99,7 +99,7 @@ export async function POST(request: Request) {
           user_metadata: {
             full_name: name,
             name: name,
-            role: 'Officer',
+            role: 'USER',
             department: emp.department || 'General',
             branch: emp.branch || 'Head Office (Banani)',
             job_title: emp.designation || 'Staff Member',

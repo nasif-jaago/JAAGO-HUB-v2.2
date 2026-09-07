@@ -509,14 +509,14 @@ export function normalizeRoleKey(raw: string | null | undefined): string {
   if (!raw) return 'user';
   const clean = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (clean === 'super_admin' || clean === 'superadmin' || clean === 'super') return 'super_admin';
-  if (clean === 'admin' || clean === 'pnc_lead' || clean === 'hr_manager' || clean === 'hr_admin' || clean === 'coordinator') return 'admin';
+  if (clean === 'admin' || clean === 'pnc_lead' || clean === 'hr_manager' || clean === 'hr_admin') return 'admin';
   if (clean === 'executive_director' || clean === 'director' || clean === 'management') return 'executive_director';
   if (clean === 'dept_manager' || clean === 'manager' || clean === 'team_lead') return 'dept_manager';
   if (clean === 'finance_lead' || clean === 'finance' || clean === 'accounts_lead') return 'finance_lead';
   if (clean === 'pnc_officer' || clean === 'hr_officer') return 'pnc_officer';
   if (clean === 'auditor' || clean === 'compliance') return 'auditor';
   if (clean === 'cluster_head' || clean === 'cluster_lead') return 'cluster_head';
-  if (clean === 'user' || clean === 'employee' || clean === 'staff' || clean === 'officer' || clean === 'general_staff' || clean === 'intern' || clean === 'volunteer') return 'user';
+  if (clean === 'user' || clean === 'employee' || clean === 'staff' || clean === 'officer' || clean === 'coordinator' || clean === 'general_staff' || clean === 'intern' || clean === 'volunteer') return 'user';
   return clean;
 }
 

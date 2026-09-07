@@ -181,7 +181,7 @@ export default function UserManagementPage() {
   const [newUserForm, setNewUserForm] = useState({
     fullName: '',
     email: '',
-    role: 'Staff',
+    role: 'USER',
     department: 'Admin & Procurement',
     branch: 'Head Office (Banani)',
     jobTitle: 'Administrative Officer',
@@ -192,13 +192,13 @@ export default function UserManagementPage() {
   const [inviteForm, setInviteForm] = useState({
     fullName: '',
     email: '',
-    role: 'Staff',
+    role: 'USER',
     department: 'Admin & Procurement',
     branch: 'Head Office (Banani)',
   });
 
   const [bulkInviteText, setBulkInviteText] = useState('');
-  const [bulkInviteRole, setBulkInviteRole] = useState('Staff');
+  const [bulkInviteRole, setBulkInviteRole] = useState('USER');
   const [bulkInviteDept, setBulkInviteDept] = useState('Admin & Procurement');
 
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -268,7 +268,7 @@ export default function UserManagementPage() {
         setNewUserForm({
           fullName: '',
           email: '',
-          role: 'Staff',
+          role: 'USER',
           department: 'Admin & Procurement',
           branch: 'Head Office (Banani)',
           jobTitle: 'Administrative Officer',

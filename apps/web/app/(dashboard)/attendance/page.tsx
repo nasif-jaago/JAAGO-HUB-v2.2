@@ -49,15 +49,15 @@ import {
 export default function AttendancePage() {
   const [, setMounted] = useState(false);
   const [user, setUser] = useState({
-    id: 'emp-nasif',
-    fullName: 'Nasif Kamal',
-    jobTitle: 'Coordinator, Tech 4 Development',
-    department: "Founder's Office / FC",
-    manager: 'Founder & Executive Director',
-    organization: 'JAAGO Foundation Trust',
+    id: '',
+    fullName: '',
+    jobTitle: '',
+    department: '',
+    manager: '',
+    organization: 'JAAGO Foundation',
     avatarUrl: '',
     workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
-    employeeCode: 'FO032507061190',
+    employeeCode: '',
   });
 
   // Punch session state
@@ -480,24 +480,29 @@ export default function AttendancePage() {
           setElapsedSeconds(worked_seconds || 0);
         }
 
-        if (typeof window !== 'undefined') {
+        const activeKey = (empCodeOrId || user.employeeCode || user.id || user.fullName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+        if (typeof window !== 'undefined' && activeKey) {
           if (checkedIn) {
-            localStorage.setItem('jaago_is_checked_in', 'true');
+            localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'true');
             if (first_check_in_at) {
-              localStorage.setItem('jaago_checkin_timestamp', String(new Date(first_check_in_at).getTime()));
-              localStorage.setItem('jaago_first_checkin_time', json.data.check_in_time_local || '--:--');
+              localStorage.setItem(`jaago_att_${activeKey}_checkin_timestamp`, String(new Date(first_check_in_at).getTime()));
+              localStorage.setItem(`jaago_att_${activeKey}_first_checkin_time`, json.data.check_in_time_local || '--:--');
             }
-            localStorage.removeItem('jaago_last_checkout_time');
+            localStorage.removeItem(`jaago_att_${activeKey}_last_checkout_time`);
           } else {
-            localStorage.setItem('jaago_is_checked_in', 'false');
-            localStorage.removeItem('jaago_checkin_timestamp');
+            localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'false');
+            localStorage.removeItem(`jaago_att_${activeKey}_checkin_timestamp`);
             if (first_check_in_at) {
-              localStorage.setItem('jaago_first_checkin_time', json.data.check_in_time_local || '--:--');
+              localStorage.setItem(`jaago_att_${activeKey}_first_checkin_time`, json.data.check_in_time_local || '--:--');
+            } else {
+              localStorage.removeItem(`jaago_att_${activeKey}_first_checkin_time`);
             }
             if (last_check_out_at) {
-              localStorage.setItem('jaago_last_checkout_time', json.data.check_out_time_local || '--:--');
+              localStorage.setItem(`jaago_att_${activeKey}_last_checkout_time`, json.data.check_out_time_local || '--:--');
+            } else {
+              localStorage.removeItem(`jaago_att_${activeKey}_last_checkout_time`);
             }
-            localStorage.setItem('jaago_worked_seconds', String(worked_seconds || 0));
+            localStorage.setItem(`jaago_att_${activeKey}_worked_seconds`, String(worked_seconds || 0));
           }
         }
       }
@@ -612,11 +617,11 @@ export default function AttendancePage() {
     try {
       const log = regModal.log;
       // Extract employee details from the log record first
-      const reqEmpCode = log.employeeCode || user.employeeCode || 'FO072408021002';
-      const reqEmpName = log.employeeName || user.fullName || 'S M Nayeem Rahman';
-      const reqEmpId = log.employeeId || user.id || 'emp-nayeem';
-      const reqDept = log.department || user.department || "Founder's Office (JF)";
-      const reqDesig = log.designation || user.jobTitle || 'Team Lead';
+      const reqEmpCode = log.employeeCode || user.employeeCode || '';
+      const reqEmpName = log.employeeName || user.fullName || 'User';
+      const reqEmpId = log.employeeId || user.id || '';
+      const reqDept = log.department || user.department || '';
+      const reqDesig = log.designation || user.jobTitle || '';
 
       // Determine Supervisor dynamically for ALL users across the organization:
       const matchedEmp = employees.find(
@@ -632,10 +637,10 @@ export default function AttendancePage() {
 
       let supervisorName = isNasif
         ? 'Korvi Rakshand (Founder & ED)'
-        : (matchedEmp?.supervisor || user.manager || 'Nasif Kamal');
+        : (matchedEmp?.supervisor || user.manager || 'HR Administrator');
       let supervisorEmail = isNasif
         ? 'korvi@jaago.com.bd'
-        : 'nasif.kamal@jaago.com.bd';
+        : 'hr@jaago.com.bd';
 
       if (!isNasif && matchedEmp?.supervisor) {
         const supProfile = employees.find(

@@ -108,7 +108,6 @@ export function DashboardSidebar({
             rawRoleUpper === 'HR_ADMIN' ||
             rawRole.toLowerCase() === 'admin' ||
             rawRole.toLowerCase() === 'hr_manager' ||
-            rawRole.toLowerCase() === 'coordinator' ||
             hasModuleAccess('admin', parsed);
 
           setIsSuperAdmin(Boolean(superAdmin));
@@ -433,7 +432,7 @@ export function DashboardSidebar({
           {/* ═══════════════════════════════════════════════════════════ */}
           {/* ── 2. DEPARTMENTS SECTION (Directly from Reference Images) ─ */}
           {/* ═══════════════════════════════════════════════════════════ */}
-          {!collapsed && (
+          {!collapsed && (isSuperAdmin || canAccessPnC || departmentsList.some((d) => allowedDeptSlugs[d.slug || normalizeDeptSlug(d.name)])) && (
             <div className="space-y-1 pt-3 border-t border-sidebar-border/70">
               <div className="px-1 text-[10px] uppercase font-bold tracking-wider text-sidebar-muted">
                 DEPARTMENTS
