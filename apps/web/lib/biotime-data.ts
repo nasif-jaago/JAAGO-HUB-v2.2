@@ -118,6 +118,32 @@ export async function fetchLiveBioTimeDevices(): Promise<BioTimeDevice[]> {
 }
 
 /**
+ * Safely parse a BioTime timestamp into a standardized ISO string in UTC with correct Asia/Dhaka (+06:00) origin.
+ * Handles strings like "2026-09-07 10:12:46", "2026-09-07T10:12:46", or existing ISO strings.
+ */
+export function parseBioTimePunchTime(rawTime: string | null | undefined): string {
+  if (!rawTime) return new Date().toISOString();
+  const trimmed = String(rawTime).trim();
+
+  // If already contains timezone offset (e.g. +06:00 or Z)
+  if (trimmed.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(trimmed)) {
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+  }
+
+  // Format is "YYYY-MM-DD HH:mm:ss" or "YYYY-MM-DDTHH:mm:ss" in Bangladesh Local Time (Asia/Dhaka)
+  const normalized = trimmed.replace(' ', 'T');
+  const withTz = `${normalized}+06:00`;
+  const d = new Date(withTz);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString();
+  }
+
+  const fallback = new Date(trimmed);
+  return isNaN(fallback.getTime()) ? new Date().toISOString() : fallback.toISOString();
+}
+
+/**
  * Fetch live paginated transactions from remote ZKTeco BioTime Server with optional date range
  */
 export async function fetchLiveBioTimeTransactions(
@@ -155,11 +181,11 @@ export async function fetchLiveBioTimeTransactions(
           employeeCode: String(item.emp_code || item.emp || ''),
           employeeName: item.first_name ? `${item.first_name} ${item.last_name || ''}`.trim() : `Staff (${item.emp_code})`,
           department: item.department || 'General Staff',
-          punchTime: item.punch_time ? new Date(item.punch_time).toISOString() : new Date().toISOString(),
+          punchTime: parseBioTimePunchTime(item.punch_time),
           punchState: item.punch_state_display?.toUpperCase().includes('OUT') ? 'CHECK_OUT' : 'CHECK_IN',
           verifyType: (item.verify_type_display as any) || 'Face',
           syncStatus: 'PROCESSED',
-          createdAt: item.upload_time ? new Date(item.upload_time).toISOString() : new Date().toISOString(),
+          createdAt: parseBioTimePunchTime(item.upload_time || item.punch_time),
         }));
         serverLogs = liveLogs;
         return { logs: liveLogs, total, page, pageSize, totalPages };

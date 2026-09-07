@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { addBioTimePunchLog, BioTimePunchLog, getBioTimeDevices } from '@/lib/biotime-data';
+import { addBioTimePunchLog, BioTimePunchLog, getBioTimeDevices, parseBioTimePunchTime } from '@/lib/biotime-data';
 import { getSupabaseAdminClient } from '@jaago/auth';
 import { logger } from '@jaago/logger';
 
@@ -18,7 +18,8 @@ export async function POST(request: Request) {
       serialNumber: device_sn || 'ZKT-WEBHOOK-01',
     };
 
-    const punchDate = punch_time ? new Date(punch_time) : new Date();
+    const punchIso = parseBioTimePunchTime(punch_time);
+    const punchDate = new Date(punchIso);
     const punchLog: BioTimePunchLog = {
       id: `zk-push-${Date.now()}`,
       deviceSn: matchedDevice.serialNumber,
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
       employeeCode: pin || 'EMP_UNKNOWN',
       employeeName: body.employee_name || `Staff (${pin || 'Biometric ID'})`,
       department: body.department || 'Banani HQ',
-      punchTime: punchDate.toISOString(),
+      punchTime: punchIso,
       punchState: punch_state || 'CHECK_IN',
       verifyType: verify_type || 'Fingerprint',
       syncStatus: 'PROCESSED',
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     const supabaseAdmin = getSupabaseAdminClient();
     if (supabaseAdmin && pin) {
       try {
-        const todayDate = punchDate.toISOString().split('T')[0];
+        const todayDate = punchDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
         const { data: emp } = await supabaseAdmin
           .from('employees')
           .select('id, full_name, designation, department')
@@ -48,15 +49,17 @@ export async function POST(request: Request) {
           .single();
 
         if (emp) {
-          const punchHour = punchDate.getHours();
-          const punchMin = punchDate.getMinutes();
+          const dhakaHoursStr = punchDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour12: false, hour: '2-digit' });
+          const dhakaMinsStr = punchDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', minute: '2-digit' });
+          const punchHour = parseInt(dhakaHoursStr, 10);
+          const punchMin = parseInt(dhakaMinsStr, 10);
           const isLate = punchHour > 10 || (punchHour === 10 && punchMin > 15);
 
           await supabaseAdmin.from('attendance_logs').upsert({
             id: `bio-push-${pin}-${todayDate}`,
             employee_id: emp.id,
             date: todayDate,
-            check_in_time: punchDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+            check_in_time: punchDate.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }),
             status: isLate ? 'Late' : 'Present',
             device: 'Device Login',
             location_name: matchedDevice.locationBranch,

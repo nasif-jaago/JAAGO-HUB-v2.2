@@ -1,18 +1,27 @@
 import { NextResponse } from 'next/server';
-import { logger } from '@jaago/logger';
-import { getSupabaseAdminClient } from '@jaago/auth';
+import { getSupabaseAdmin } from '@/lib/supabase-auth';
 import { deleteUsersByIds, updateUserInDb } from '@/lib/users-db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const { id } = await context.params;
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
+    }
+
+    // 1. Remove from local runtime database cache
     deleteUsersByIds([id]);
 
+    // 2. Supabase Auth and Database Cleanup
     try {
-      const supabaseAdmin = getSupabaseAdminClient();
+      const supabaseAdmin = getSupabaseAdmin();
       let deletedUserId = id;
       let targetEmail: string | null = null;
 
@@ -32,7 +41,7 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
         await supabaseAdmin.auth.admin.deleteUser(id);
       }
 
-      // Clear is_user flag on the linked employee record so "Create User" reappears
+      // 3. Clear is_user flag on the linked employee record so "Create User" reappears
       await supabaseAdmin
         .from('employees')
         .update({ is_user: false, user_id: null, updated_at: new Date().toISOString() })
@@ -44,31 +53,29 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
           .update({ is_user: false, user_id: null, updated_at: new Date().toISOString() })
           .or(`work_email.ilike.${targetEmail},personal_email.ilike.${targetEmail}`);
       }
-
     } catch (err: any) {
-      logger.warn('SYSTEM', 'user.delete_supabase_notice', { metadata: { userId: id, error: err?.message } });
+      console.warn('Supabase Auth user delete warning:', err?.message);
     }
-
-    logger.info('AUDIT', 'user.hard_deleted', {
-      metadata: { userId: id },
-    });
 
     return NextResponse.json({
       success: true,
-      message: `User ${id} has been permanently deleted from Supabase Auth.`,
+      message: `User ${id} has been permanently hard deleted from the database.`,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Delete operation failed' }, { status: 500 });
+    return NextResponse.json({ success: false, error: err.message || 'Delete operation failed' }, { status: 500 });
   }
 }
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
     const { id } = await context.params;
     const updates = await request.json();
 
     try {
-      const supabaseAdmin = getSupabaseAdminClient();
+      const supabaseAdmin = getSupabaseAdmin();
       let targetUserId = id;
 
       if (id.includes('@')) {
@@ -114,14 +121,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         }
       }
     } catch (err: any) {
-      logger.warn('SYSTEM', 'user.update_supabase_notice', { metadata: { userId: id, error: err?.message } });
+      console.warn('Supabase Auth user update warning:', err?.message);
     }
 
     updateUserInDb(id, updates);
-
-    logger.info('AUDIT', 'user.updated', {
-      metadata: { userId: id, fields: Object.keys(updates) },
-    });
 
     return NextResponse.json({
       success: true,
@@ -129,6 +132,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       message: 'User profile updated successfully.',
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Update failed' }, { status: 500 });
+    return NextResponse.json({ success: false, error: err.message || 'Update failed' }, { status: 500 });
   }
 }

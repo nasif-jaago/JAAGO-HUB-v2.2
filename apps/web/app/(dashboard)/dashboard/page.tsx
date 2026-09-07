@@ -46,8 +46,8 @@ export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const [viewMode, setViewMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
   const [isCheckedIn, setIsCheckedIn] = useState(false);
-  const [checkInTime, setCheckInTime] = useState<string | null>(null);
-  const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
+  const [checkInTime, setCheckInTime] = useState<string>('--:--');
+  const [checkOutTime, setCheckOutTime] = useState<string>('--:--');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [firstCheckInTimestamp, setFirstCheckInTimestamp] = useState<number | null>(null);
   const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
@@ -335,8 +335,8 @@ export default function DashboardPage() {
         localStorage.removeItem('jaago_worked_seconds');
         localStorage.removeItem('jaago_auto_checked_out');
         setIsCheckedIn(false);
-        setCheckInTime(null);
-        setCheckOutTime(null);
+        setCheckInTime('--:--');
+        setCheckOutTime('--:--');
         setElapsedSeconds(0);
       } else {
         localStorage.setItem('jaago_today_date', todayStr);
@@ -763,6 +763,7 @@ export default function DashboardPage() {
           const inTs = new Date(first_check_in_at).getTime();
           setFirstCheckInTimestamp(inTs);
           const inTime = todayJson.data.check_in_time_local || new Date(first_check_in_at).toLocaleTimeString('en-US', {
+            timeZone: 'Asia/Dhaka',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -785,6 +786,7 @@ export default function DashboardPage() {
         let resolvedOutTime = '--:--';
         if (last_check_out_at) {
           resolvedOutTime = todayJson.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
+            timeZone: 'Asia/Dhaka',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -820,12 +822,14 @@ export default function DashboardPage() {
         if (first_check_in_at) {
           const todayDateStr = todayJson.data.businessDate || new Date().toISOString().slice(0, 10);
           const inTime = todayJson.data.check_in_time_local || new Date(first_check_in_at).toLocaleTimeString('en-US', {
+            timeZone: 'Asia/Dhaka',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
           });
           const outTime = last_check_out_at
             ? todayJson.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
+                timeZone: 'Asia/Dhaka',
                 hour: '2-digit',
                 minute: '2-digit',
                 hour12: true,
@@ -960,9 +964,17 @@ export default function DashboardPage() {
   const [imgError, setImgError] = useState(false);
   const firstName = user.fullName.split(' ')[0] || 'Nasif';
 
+  // Canonical day status flags
+  const hasCheckedInToday = Boolean(firstCheckInTimestamp || (checkInTime && checkInTime !== '--:--'));
+  const hasCheckedOutToday = Boolean(checkOutTime && checkOutTime !== '--:--');
+
   // Dedicated Check-In Action with Live GPS Geofence Verification & Multi-punch Counting
   const handleCheckInAction = async () => {
     if (isPunching) return;
+    if (hasCheckedInToday) {
+      showToast(`Check-in already recorded for today at ${checkInTime}. Multiple check-ins are blocked.`, 'info');
+      return;
+    }
     setIsPunching(true);
 
     try {
@@ -1028,7 +1040,7 @@ export default function DashboardPage() {
       const inTs = new Date(firstIn).getTime();
       setFirstCheckInTimestamp(inTs);
       setIsCheckedIn(true);
-      setCheckInTime(new Date(firstIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
+      setCheckInTime(new Date(firstIn).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }));
 
       const currentServerNow = Date.now() + serverTimeOffset;
       const initialDiff = Math.max(0, Math.floor((currentServerNow - inTs) / 1000));
@@ -1057,6 +1069,14 @@ export default function DashboardPage() {
   // Dedicated Check-Out Action with Live GPS Geofence Verification & Working Hours Pause
   const handleCheckOutAction = async () => {
     if (isPunching) return;
+    if (!hasCheckedInToday) {
+      showToast('You must check in first before checking out.', 'error');
+      return;
+    }
+    if (hasCheckedOutToday) {
+      showToast(`Check-out already completed for today at ${checkOutTime}.`, 'info');
+      return;
+    }
     setIsPunching(true);
 
     try {
@@ -1116,11 +1136,13 @@ export default function DashboardPage() {
       const record = checkOutJson.data;
 
       setIsCheckedIn(false);
-      setFirstCheckInTimestamp(null);
+      if (record?.first_check_in_at) {
+        setFirstCheckInTimestamp(new Date(record.first_check_in_at).getTime());
+      }
       if (record?.last_check_out_at) {
-        setCheckOutTime(new Date(record.last_check_out_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
+        setCheckOutTime(new Date(record.last_check_out_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }));
       } else {
-        setCheckOutTime(now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }));
+        setCheckOutTime(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }));
       }
 
       if (record?.worked_seconds !== undefined) {
@@ -1271,31 +1293,33 @@ export default function DashboardPage() {
           {/* Mobile Check-In Button */}
           <button
             onClick={handleCheckInAction}
-            disabled={isPunching || isCheckedIn}
-            aria-disabled={isPunching || isCheckedIn}
-            className={`py-3.5 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all duration-200 active:scale-[0.98] ${
-              isCheckedIn
-                ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border border-border text-muted-foreground'
-                : 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white shadow-md shadow-emerald-500/25 cursor-pointer'
+            disabled={isPunching || hasCheckedInToday}
+            aria-disabled={isPunching || hasCheckedInToday}
+            className={`py-3.5 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all duration-200 ${
+              hasCheckedInToday
+                ? 'opacity-70 cursor-default bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 select-none'
+                : 'bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white shadow-md shadow-emerald-500/25 cursor-pointer active:scale-[0.98]'
             }`}
           >
-            <Clock className="h-4 w-4 stroke-[2.5]" />
-            <span>CHECK IN</span>
+            {hasCheckedInToday ? <CheckCircle2 className="h-4 w-4 stroke-[2.5]" /> : <Clock className="h-4 w-4 stroke-[2.5]" />}
+            <span>{hasCheckedInToday ? `IN: ${checkInTime}` : 'CHECK IN'}</span>
           </button>
 
           {/* Mobile Check-Out Button */}
           <button
             onClick={handleCheckOutAction}
-            disabled={isPunching || !isCheckedIn}
-            aria-disabled={isPunching || !isCheckedIn}
-            className={`py-3.5 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all duration-200 active:scale-[0.98] ${
-              !isCheckedIn
+            disabled={isPunching || !hasCheckedInToday || hasCheckedOutToday}
+            aria-disabled={isPunching || !hasCheckedInToday || hasCheckedOutToday}
+            className={`py-3.5 px-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all duration-200 ${
+              !hasCheckedInToday
                 ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border border-border text-muted-foreground'
-                : 'bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white shadow-md shadow-rose-500/25 cursor-pointer'
+                : hasCheckedOutToday
+                ? 'opacity-70 cursor-default bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 select-none'
+                : 'bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white shadow-md shadow-rose-500/25 cursor-pointer active:scale-[0.98]'
             }`}
           >
-            <Flag className="h-4 w-4 stroke-[2.5]" />
-            <span>CHECK OUT</span>
+            {hasCheckedOutToday ? <CheckCircle2 className="h-4 w-4 stroke-[2.5]" /> : <Flag className="h-4 w-4 stroke-[2.5]" />}
+            <span>{hasCheckedOutToday ? `OUT: ${checkOutTime}` : 'CHECK OUT'}</span>
           </button>
         </div>
 
@@ -1610,70 +1634,94 @@ export default function DashboardPage() {
                 <Radio className={`h-5 w-5 ${isPunching ? 'animate-spin text-amber-500' : 'animate-pulse'}`} />
               </div>
 
-              {/* Check In Box - Active when NOT_CHECKED_IN, Disabled/Greyed when CHECKED_IN */}
+              {/* Check In Box - Active when NOT checked in yet today, Locked/Disabled when already checked in */}
               <button
                 onClick={handleCheckInAction}
-                disabled={isPunching || isCheckedIn}
-                aria-disabled={isPunching || isCheckedIn}
+                disabled={isPunching || hasCheckedInToday}
+                aria-disabled={isPunching || hasCheckedInToday}
+                title={hasCheckedInToday ? `Checked in at ${checkInTime}. Multiple check-ins blocked.` : 'Click to check in'}
                 className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
-                  isCheckedIn
-                    ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
+                  hasCheckedInToday
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-300 cursor-default opacity-90 select-none'
                     : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60 cursor-pointer shadow-sm'
                 }`}
               >
                 <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  isCheckedIn
-                    ? 'bg-muted text-muted-foreground'
+                  hasCheckedInToday
+                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
                     : 'bg-emerald-500/20 dark:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
                 }`}>
-                  <Clock className="h-4 w-4 stroke-[2.2]" />
+                  {hasCheckedInToday ? (
+                    <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                  ) : (
+                    <Clock className="h-4 w-4 stroke-[2.2]" />
+                  )}
                 </div>
                 <div>
-                  <div className={`text-[10px] font-extrabold uppercase tracking-wider ${
-                    isCheckedIn ? 'text-muted-foreground' : 'text-emerald-700/90 dark:text-emerald-300/90'
+                  <div className={`text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1 ${
+                    hasCheckedInToday ? 'text-emerald-700 dark:text-emerald-400' : 'text-emerald-700/90 dark:text-emerald-300/90'
                   }`}>
-                    CHECK IN
+                    <span>CHECK IN</span>
+                    {hasCheckedInToday && <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">&bull; RECORDED</span>}
                   </div>
                   <div className={`text-xs font-black font-mono ${
-                    isCheckedIn ? 'text-muted-foreground' : 'text-emerald-950 dark:text-emerald-100'
+                    hasCheckedInToday ? 'text-emerald-900 dark:text-emerald-200' : 'text-emerald-950 dark:text-emerald-100'
                   }`}>
                     {checkInTime || '--:--'}
                   </div>
                 </div>
-                <span className="text-muted-foreground/40 text-xs font-bold">-</span>
               </button>
 
-              {/* Check Out Box - Active when CHECKED_IN, Disabled/Greyed when NOT_CHECKED_IN */}
+              {/* Check Out Box - Active when checked in & not checked out yet, Locked/Disabled otherwise */}
               <button
                 onClick={handleCheckOutAction}
-                disabled={isPunching || !isCheckedIn}
-                aria-disabled={isPunching || !isCheckedIn}
+                disabled={isPunching || !hasCheckedInToday || hasCheckedOutToday}
+                aria-disabled={isPunching || !hasCheckedInToday || hasCheckedOutToday}
+                title={
+                  !hasCheckedInToday
+                    ? 'Cannot check out before checking in'
+                    : hasCheckedOutToday
+                    ? `Checked out at ${checkOutTime}`
+                    : 'Click to check out'
+                }
                 className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
-                  !isCheckedIn
+                  !hasCheckedInToday
                     ? 'opacity-40 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
+                    : hasCheckedOutToday
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-300 cursor-default opacity-90 select-none'
                     : 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60 cursor-pointer shadow-sm'
                 }`}
               >
                 <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  !isCheckedIn
+                  !hasCheckedInToday
                     ? 'bg-muted text-muted-foreground'
+                    : hasCheckedOutToday
+                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
                     : 'bg-rose-500/20 dark:bg-rose-500/25 text-rose-700 dark:text-rose-300'
                 }`}>
-                  <Flag className="h-4 w-4 stroke-[2.2]" />
+                  {hasCheckedOutToday ? (
+                    <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                  ) : (
+                    <Flag className="h-4 w-4 stroke-[2.2]" />
+                  )}
                 </div>
                 <div>
-                  <div className={`text-[10px] font-extrabold uppercase tracking-wider ${
-                    !isCheckedIn ? 'text-muted-foreground' : 'text-rose-700/90 dark:text-rose-300/90'
+                  <div className={`text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1 ${
+                    !hasCheckedInToday
+                      ? 'text-muted-foreground'
+                      : 'text-rose-700/90 dark:text-rose-300/90'
                   }`}>
-                    CHECK OUT
+                    <span>CHECK OUT</span>
+                    {hasCheckedOutToday && <span className="text-[8px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-700 dark:text-rose-300 font-bold">&bull; RECORDED</span>}
                   </div>
                   <div className={`text-xs font-black font-mono ${
-                    !isCheckedIn ? 'text-muted-foreground' : 'text-rose-950 dark:text-rose-100'
+                    !hasCheckedInToday
+                      ? 'text-muted-foreground'
+                      : 'text-rose-950 dark:text-rose-100'
                   }`}>
                     {checkOutTime || '--:--'}
                   </div>
                 </div>
-                <span className="text-muted-foreground/40 text-xs font-bold">-</span>
               </button>
             </div>
 

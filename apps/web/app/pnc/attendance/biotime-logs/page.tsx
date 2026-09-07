@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   UserCheck,
   Link2,
+  Clock,
 } from 'lucide-react';
 import { BioTimeDevice } from '@/lib/biotime-data';
 import { FullEmployeeProfile, fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
@@ -257,6 +258,8 @@ export default function BioTimeLogsPage() {
 
   // Metrics summary
   const presentCount = useMemo(() => rows.filter((r) => r.status === 'Present').length, [rows]);
+  const completedCount = useMemo(() => rows.filter((r) => r.status === 'Present' && r.checkOut !== '--').length, [rows]);
+  const inProgressCount = useMemo(() => rows.filter((r) => r.status === 'Present' && r.checkOut === '--').length, [rows]);
   const absentCount = useMemo(() => rows.filter((r) => r.status === 'Absent').length, [rows]);
 
   if (isLoading) {
@@ -328,7 +331,7 @@ export default function BioTimeLogsPage() {
           <button
             onClick={handleSync}
             disabled={isSyncing}
-            className="px-4 py-1.5 rounded-lg text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs transition-all flex items-center gap-1.5"
+            className="px-4 py-1.5 rounded-lg text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Syncing...' : 'Sync with Supabase'}</span>
@@ -378,12 +381,12 @@ export default function BioTimeLogsPage() {
 
         <div className="p-3.5 rounded-xl bg-card border border-border shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Present (Completed)</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Present Staff</div>
             <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
               <span>{presentCount}</span>
-              <span className="text-[10px] font-semibold text-muted-foreground">Both IN &amp; OUT OK</span>
+              <span className="text-[10px] font-semibold text-muted-foreground">({completedCount} Out &bull; {inProgressCount} Active)</span>
             </div>
-            <div className="text-[10px] text-muted-foreground">Two or more distinct punches</div>
+            <div className="text-[10px] text-muted-foreground">Reconciled biometric check-ins</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-5 h-5" />
@@ -392,15 +395,15 @@ export default function BioTimeLogsPage() {
 
         <div className="p-3.5 rounded-xl bg-card border border-border shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Absent / Incomplete</div>
-            <div className="text-xl font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
-              <span>{absentCount}</span>
-              <span className="text-[10px] font-semibold text-muted-foreground">Missing OUT</span>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Pending Check-Out</div>
+            <div className="text-xl font-bold text-amber-600 dark:text-amber-400 flex items-center gap-2">
+              <span>{inProgressCount}</span>
+              <span className="text-[10px] font-semibold text-muted-foreground">Checked In</span>
             </div>
-            <div className="text-[10px] text-muted-foreground">Only 1 Check-In or no Check-Out</div>
+            <div className="text-[10px] text-muted-foreground">Awaiting end-of-shift check-out</div>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-            <XCircle className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
           </div>
         </div>
 
@@ -442,9 +445,9 @@ export default function BioTimeLogsPage() {
               onChange={(e) => setStatusFilter(e.target.value as any)}
               className="px-2.5 py-1.5 rounded-lg bg-background border border-border text-xs font-semibold text-foreground focus:outline-none shadow-2xs"
             >
-              <option value="ALL">All Status</option>
-              <option value="Present">Present (IN &amp; OUT done)</option>
-              <option value="Absent">Absent (Missing OUT)</option>
+              <option value="ALL">All Status ({rows.length})</option>
+              <option value="Present">Present ({presentCount})</option>
+              <option value="Absent">Absent ({absentCount})</option>
             </select>
 
             {/* Device Location Filter */}

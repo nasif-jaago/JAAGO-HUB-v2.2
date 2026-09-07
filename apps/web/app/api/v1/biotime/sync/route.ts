@@ -44,9 +44,11 @@ export async function POST(request: Request) {
       for (const punch of liveLogs) {
         const matchedEmp = empMap.get(punch.employeeCode.trim());
         const punchDateObj = new Date(punch.punchTime);
-        const todayDate = punchDateObj.toISOString().split('T')[0];
-        const punchHour = punchDateObj.getHours();
-        const punchMin = punchDateObj.getMinutes();
+        const todayDate = punchDateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+        const dhakaHoursStr = punchDateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour12: false, hour: '2-digit' });
+        const dhakaMinsStr = punchDateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', minute: '2-digit' });
+        const punchHour = parseInt(dhakaHoursStr, 10);
+        const punchMin = parseInt(dhakaMinsStr, 10);
         const isLate = punchHour > 10 || (punchHour === 10 && punchMin > 15);
 
         const logId = `zk-${punch.employeeCode}-${todayDate}-${punchHour < 14 ? 'in' : 'out'}`;
@@ -55,8 +57,8 @@ export async function POST(request: Request) {
           id: logId,
           employee_id: matchedEmp?.id || null,
           date: todayDate,
-          check_in_time: punchHour < 14 ? punchDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : undefined,
-          check_out_time: punchHour >= 14 ? punchDateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : undefined,
+          check_in_time: punchHour < 14 ? punchDateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : undefined,
+          check_out_time: punchHour >= 14 ? punchDateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : undefined,
           status: isLate ? 'Late' : 'Present',
           device: 'Device Login',
           location_name: punch.locationBranch || 'JAAGO Foundation HQ',

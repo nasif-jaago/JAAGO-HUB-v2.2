@@ -49,7 +49,7 @@ const nextConfig: NextConfig = {
     '@jaago/ui',
     '@jaago/workflow',
   ],
-  serverExternalPackages: ['nodemailer'],
+  serverExternalPackages: ['nodemailer', '@supabase/supabase-js'],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {

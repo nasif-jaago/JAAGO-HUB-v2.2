@@ -63,35 +63,19 @@ export async function GET(request: Request) {
     const countedCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
 
     // 5. Derive state machine status and button enablement
-    let isCheckedIn = false;
-    let lastCheckOut: string | null = null;
+    const hasCheckedInToday = Boolean(firstCheckIn);
+    const hasCheckedOutToday = Boolean(
+      firstCheckIn && countedCheckOut && new Date(countedCheckOut).getTime() > new Date(firstCheckIn).getTime()
+    );
 
-    if (firstCheckIn) {
-      if (countedCheckOut && new Date(countedCheckOut).getTime() > new Date(firstCheckIn).getTime()) {
-        // Check if there was an explicit GPS re-check-in AFTER countedCheckOut
-        const hasLaterReCheckIn = Boolean(
-          record?.check_in_at &&
-          new Date(record.check_in_at).getTime() > new Date(countedCheckOut).getTime() + 60_000 &&
-          !record?.check_out_at
-        );
-        if (hasLaterReCheckIn) {
-          isCheckedIn = true;
-          lastCheckOut = null;
-        } else {
-          isCheckedIn = false;
-          lastCheckOut = countedCheckOut;
-        }
-      } else {
-        // First check-in exists but no check-out yet -> active session
-        isCheckedIn = true;
-        lastCheckOut = null;
-      }
-    } else {
-      isCheckedIn = false;
-      lastCheckOut = null;
-    }
+    const isCheckedIn = hasCheckedInToday && !hasCheckedOutToday;
+    const lastCheckOut = hasCheckedOutToday ? countedCheckOut : null;
 
-    const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' = isCheckedIn ? 'CHECKED_IN' : 'NOT_CHECKED_IN';
+    const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'CHECKED_OUT' = !hasCheckedInToday
+      ? 'NOT_CHECKED_IN'
+      : isCheckedIn
+      ? 'CHECKED_IN'
+      : 'CHECKED_OUT';
 
     // 6. Compute Working Hours Today (Live vs Final)
     let workedSeconds = 0;
@@ -137,7 +121,7 @@ export async function GET(request: Request) {
         needs_review: Boolean(record?.needs_review || record?.is_auto_checkout),
         is_auto_checkout: Boolean(record?.is_auto_checkout),
         buttons: {
-          check_in_enabled: !isCheckedIn,
+          check_in_enabled: !hasCheckedInToday,
           check_out_enabled: isCheckedIn,
         },
         server_now: nowUtc,

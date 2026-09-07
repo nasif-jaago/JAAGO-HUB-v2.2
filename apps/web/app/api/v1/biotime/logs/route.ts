@@ -55,18 +55,29 @@ export async function GET(request: Request) {
     if (supabaseAdmin) {
       const { data: emps } = await supabaseAdmin
         .from('employees')
-        .select('id, code, name, department, branch')
+        .select('id, code, name, department, branch, rfid')
         .limit(1000);
       if (emps) empsList = emps;
     }
 
-    // Create fast lookup map by trimmed lowercase employee name
+    // Create fast lookup maps by rfid, code, and trimmed lowercase employee name
     const empNameMap = new Map<string, any>();
+    const empRfidMap = new Map<string, any>();
+    const empCodeMap = new Map<string, any>();
+
     empsList.forEach((e) => {
       if (e.name) empNameMap.set(e.name.toLowerCase().trim(), e);
+      if (e.rfid) {
+        empRfidMap.set(String(e.rfid).trim(), e);
+        empRfidMap.set(String(e.rfid).replace(/^RFID-/i, '').trim(), e);
+      }
+      if (e.code) {
+        empCodeMap.set(String(e.code).trim(), e);
+        empCodeMap.set(String(e.code).replace(/^[A-Z]+-?/i, '').trim(), e);
+      }
     });
 
-    // Group raw transactions by (emp_code + date)
+    // Group raw transactions by (emp_code + Asia/Dhaka date)
     const grouped = new Map<string, {
       rfid: string;
       name: string;
@@ -77,7 +88,10 @@ export async function GET(request: Request) {
     }>();
 
     result.logs.forEach((log) => {
-      const punchDate = log.punchTime ? log.punchTime.split('T')[0] : new Date().toISOString().split('T')[0];
+      const d = new Date(log.punchTime);
+      const punchDate = !isNaN(d.getTime())
+        ? d.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' })
+        : (log.punchTime ? log.punchTime.split('T')[0] : new Date().toISOString().split('T')[0]);
       const key = `${log.employeeCode}__${punchDate}`;
 
       if (!grouped.has(key)) {
@@ -86,7 +100,7 @@ export async function GET(request: Request) {
           name: log.employeeName,
           department: log.department || 'General Staff',
           deviceLocation: log.deviceName || log.locationBranch || 'JAAGO Foundation HQ',
-          date: punchDate || '2026-08-30',
+          date: punchDate || '2026-09-07',
           punches: [],
         });
       }
@@ -101,19 +115,37 @@ export async function GET(request: Request) {
       const firstPunch = group.punches[0] || new Date();
       const lastPunch = group.punches[group.punches.length - 1] || new Date();
 
-      // STATUS RULE:
-      // If only one Check In done but check out empty / same timestamp -> Absent
-      // If Check IN / OUT both blank -> Absent
-      // If distinct Check IN and Check OUT exist -> Present
-      const hasDistinctCheckOut = group.punches.length > 1 && firstPunch.getTime() !== lastPunch.getTime();
-      const checkInFormatted = firstPunch.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-      const checkOutFormatted = hasDistinctCheckOut
-        ? lastPunch.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
-        : '--';
-      const status: 'Present' | 'Absent' = hasDistinctCheckOut ? 'Present' : 'Absent';
+      // Check-out distinction rule:
+      // Require at least 5 minutes difference between first and last punch to count as Check-Out
+      // (Double scans < 5 min apart are treated as duplicate check-in taps)
+      const diffMinutes = (lastPunch.getTime() - firstPunch.getTime()) / (1000 * 60);
+      const hasDistinctCheckOut = group.punches.length > 1 && diffMinutes >= 5;
 
-      // Match with P&C Employee database
-      const matchedEmp = empNameMap.get(group.name.toLowerCase().trim()) ||
+      const checkInFormatted = firstPunch.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Dhaka',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
+      const checkOutFormatted = hasDistinctCheckOut
+        ? lastPunch.toLocaleTimeString('en-US', {
+            timeZone: 'Asia/Dhaka',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+          })
+        : '--';
+
+      // If an employee punched their biometric scan today, they are Present
+      const status: 'Present' | 'Absent' = group.punches.length > 0 ? 'Present' : 'Absent';
+
+      // Match with P&C Employee database by RFID, Code, or Name
+      const cleanRfid = group.rfid.trim();
+      const matchedEmp = empRfidMap.get(cleanRfid) ||
+        empCodeMap.get(cleanRfid) ||
+        empNameMap.get(group.name.toLowerCase().trim()) ||
         empsList.find((e) => e.name && (group.name.toLowerCase().includes(e.name.toLowerCase()) || e.name.toLowerCase().includes(group.name.toLowerCase())));
 
       reconciledRows.push({

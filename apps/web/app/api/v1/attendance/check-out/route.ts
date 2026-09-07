@@ -275,11 +275,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      state: 'NOT_CHECKED_IN',
+      state: 'CHECKED_OUT',
       data: enhancedRecord,
       derived,
       buttons: {
-        check_in_enabled: true,
+        check_in_enabled: false,
         check_out_enabled: false,
       },
       message: `Checked out successfully at ${geoResult.matchedLocationName || 'Store'}! Total working time: ${derived.workedDisplay}.`,

@@ -735,8 +735,8 @@ export default function UserManagementPage() {
   const handleDeleteUser = async () => {
     if (!showDeleteModal) return;
     try {
-      const res = await fetch(`/api/v1/users/${showDeleteModal.id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const res = await fetch(`/api/v1/users/${encodeURIComponent(showDeleteModal.id)}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({ success: res.ok, error: res.ok ? undefined : 'Server returned an invalid response' }));
       if (res.ok && data.success) {
         setUsers((prev) => prev.filter((u) => u.id !== showDeleteModal.id));
         setSelectedUserIds((prev) => prev.filter((id) => id !== showDeleteModal.id));
@@ -749,10 +749,10 @@ export default function UserManagementPage() {
         showToast(`User ${showDeleteModal.fullName} permanently hard deleted.`);
         setShowDeleteModal(null);
       } else {
-        alert(data.error || 'Hard delete failed');
+        showToast(data.error || 'Hard delete failed. Please try again.');
       }
     } catch (err: any) {
-      alert(err.message || 'Network error');
+      showToast(err.message || 'Network error during delete.');
     }
   };
 
@@ -766,7 +766,7 @@ export default function UserManagementPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedUserIds }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({ success: res.ok, error: res.ok ? undefined : 'Server returned an invalid response' }));
       if (res.ok && data.success) {
         const count = selectedUserIds.length;
         setUsers((prev) => prev.filter((u) => !selectedUserIds.includes(u.id)));
@@ -780,10 +780,10 @@ export default function UserManagementPage() {
         );
         showToast(`Permanently hard deleted ${count} user account(s) from database.`);
       } else {
-        alert(data.error || 'Bulk hard delete failed');
+        showToast(data.error || 'Bulk hard delete failed. Please try again.');
       }
     } catch (err: any) {
-      alert(err.message || 'Network error during hard delete');
+      showToast(err.message || 'Network error during bulk hard delete.');
     }
   };
 

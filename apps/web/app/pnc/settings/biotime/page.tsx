@@ -733,8 +733,8 @@ export default function BioTimeControlCenterPage() {
                       <div className="text-[10px] font-mono text-cyan-700 dark:text-cyan-300">{log.deviceSn}</div>
                     </td>
                     <td className="p-2.5 font-mono text-[10px]">
-                      <div>{new Date(log.punchTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</div>
-                      <div className="text-muted-foreground">{new Date(log.punchTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                      <div>{new Date(log.punchTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</div>
+                      <div className="text-muted-foreground">{new Date(log.punchTime).toLocaleDateString('en-US', { timeZone: 'Asia/Dhaka', month: 'short', day: 'numeric', year: 'numeric' })}</div>
                     </td>
                     <td className="p-2.5 text-center">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20">

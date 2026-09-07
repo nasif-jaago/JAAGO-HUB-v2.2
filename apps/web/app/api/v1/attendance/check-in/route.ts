@@ -68,37 +68,43 @@ export async function POST(request: Request) {
     ]);
     const effectiveToday = effectiveList[0] || null;
 
-    // Determine if currently checked in based on chronological latest punch
-    let isCurrentlyCheckedIn = false;
-    let latestPunchTime = 0;
-    if (effectiveToday?.allPunches && effectiveToday.allPunches.length > 0) {
-      const sorted = [...effectiveToday.allPunches].sort(
-        (a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime()
-      );
-      const latest = sorted[sorted.length - 1];
-      if (latest) {
-        isCurrentlyCheckedIn = latest.punchType === 'check_in';
-        latestPunchTime = new Date(latest.punchAt).getTime();
-      }
-    } else if (existingRecord?.check_in_at && !existingRecord?.check_out_at) {
-      isCurrentlyCheckedIn = true;
-      latestPunchTime = new Date(existingRecord.check_in_at).getTime();
-    }
+    // 2. Strict Single Daily Check-In Guard (Block Multiple Check-Ins)
+    const existingCheckInAt =
+      effectiveToday?.countedCheckInAt ||
+      existingRecord?.first_check_in_at ||
+      existingRecord?.check_in_at ||
+      (effectiveToday?.allPunches || []).find((p) => p.punchType === 'check_in')?.punchAt ||
+      null;
 
-    // Anti-double-click guard: only return idempotent response if identical check-in happened in last 30 seconds
-    const isRecentDuplicate = isCurrentlyCheckedIn && Math.abs(Date.now() - latestPunchTime) < 30_000;
-    if (isRecentDuplicate && !body.forceNew) {
-      return NextResponse.json({
-        success: true,
-        code: 'ALREADY_CHECKED_IN',
-        message: 'Check-in already recorded.',
-        state: 'CHECKED_IN',
-        buttons: {
-          check_in_enabled: false,
-          check_out_enabled: true,
+    if (existingCheckInAt) {
+      const formattedLocal =
+        effectiveToday?.countedCheckInTimeLocal ||
+        new Date(existingCheckInAt).toLocaleTimeString('en-US', {
+          timeZone: 'Asia/Dhaka',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+
+      const hasCheckedOut = Boolean(
+        effectiveToday?.countedCheckOutAt || existingRecord?.last_check_out_at || existingRecord?.check_out_at
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'CHECK_IN_ALREADY_EXISTS',
+          error: `Multiple check-ins are blocked. Check-in already recorded today at ${formattedLocal}.`,
+          message: `Check-in already recorded today at ${formattedLocal}.`,
+          state: hasCheckedOut ? 'CHECKED_OUT' : 'CHECKED_IN',
+          buttons: {
+            check_in_enabled: false,
+            check_out_enabled: !hasCheckedOut,
+          },
+          data: existingRecord || effectiveToday,
         },
-        data: existingRecord,
-      });
+        { status: 400 }
+      );
     }
 
     // 3. Server-side Geofence & Accuracy Verification (Invariant I6)

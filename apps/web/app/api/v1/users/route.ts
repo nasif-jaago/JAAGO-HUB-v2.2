@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@jaago/logger';
-import { getSupabaseAdminClient } from '@jaago/auth';
+import { getSupabaseAdmin } from '@/lib/supabase-auth';
 import { usersDatabase, deleteUsersByIds, UserItem } from '@/lib/users-db';
 import { normalizeRoleKey } from '@/lib/rbac-data';
 
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   let allUsers: UserItem[] = [];
 
   try {
-    const supabaseAdmin = getSupabaseAdminClient();
+    const supabaseAdmin = getSupabaseAdmin();
 
     // 1. Fetch live Supabase Auth users
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.listUsers({
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
     let createdId = `u-${Date.now().toString().slice(-4)}`;
 
     try {
-      const supabaseAdmin = getSupabaseAdminClient();
+      const supabaseAdmin = getSupabaseAdmin();
       const { data: supaUser, error: supaErr } = await supabaseAdmin.auth.admin.createUser({
         email: cleanEmail,
         password: initialPassword,
@@ -238,7 +238,7 @@ export async function DELETE(request: Request) {
     deleteUsersByIds(ids);
 
     try {
-      const supabaseAdmin = getSupabaseAdminClient();
+      const supabaseAdmin = getSupabaseAdmin();
       for (const id of ids) {
         await supabaseAdmin.auth.admin.deleteUser(id);
       }
