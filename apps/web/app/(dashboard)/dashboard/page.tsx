@@ -1492,7 +1492,7 @@ export default function DashboardPage() {
 
                       {pts.map((p, idx) => (
                         <circle
-                          key={p.date || idx}
+                          key={`mob-trend-pt-${p.date || 'd'}-${idx}`}
                           cx={p.x}
                           cy={p.y}
                           r="3"
@@ -1506,7 +1506,7 @@ export default function DashboardPage() {
 
                   <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-1">
                     {pts.map((p, idx) => (
-                      <span key={p.date || idx}>{p.label}</span>
+                      <span key={`mob-trend-lbl-${p.date || 'd'}-${idx}`}>{p.label}</span>
                     ))}
                   </div>
                 </div>
@@ -1544,11 +1544,11 @@ export default function DashboardPage() {
 
           <div className="space-y-2.5">
             {myAttendanceLogs.length > 0 ? (
-              myAttendanceLogs.slice(0, 4).map((log) => {
+              myAttendanceLogs.slice(0, 4).map((log, idx) => {
                 const isToday = log.date === new Date().toISOString().slice(0, 10);
                 const duration = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
                 return (
-                  <div key={log.id} className={`p-3.5 rounded-2xl border space-y-1.5 ${isToday ? 'bg-primary/5 border-primary/30' : 'bg-surface/50 border-border/70'}`}>
+                  <div key={`mob-log-${log.id || log.date}-${idx}`} className={`p-3.5 rounded-2xl border space-y-1.5 ${isToday ? 'bg-primary/5 border-primary/30' : 'bg-surface/50 border-border/70'}`}>
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-bold text-xs text-foreground flex items-center space-x-1.5">
                         <span>{log.date}</span>
@@ -2089,7 +2089,7 @@ export default function DashboardPage() {
                         {/* Points on Curve */}
                         {pts.map((p, idx) => (
                           <circle
-                            key={p.date || idx}
+                            key={`desk-trend-pt-${p.date || 'd'}-${idx}`}
                             cx={p.x}
                             cy={p.y}
                             r="3.5"
@@ -2104,7 +2104,7 @@ export default function DashboardPage() {
                     {/* X-Axis Dates */}
                     <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-1">
                       {pts.map((p, idx) => (
-                        <span key={p.date || idx}>{p.label}</span>
+                        <span key={`desk-trend-lbl-${p.date || 'd'}-${idx}`}>{p.label}</span>
                       ))}
                     </div>
                   </div>
@@ -2175,7 +2175,7 @@ export default function DashboardPage() {
                       </p>
                     </div>
                   ) : (
-                    upcomingList.map((h) => {
+                    upcomingList.map((h, idx) => {
                       const dateObj = new Date(h.date);
                       const monthName = isNaN(dateObj.getTime())
                         ? 'HOL'
@@ -2193,7 +2193,7 @@ export default function DashboardPage() {
 
                       return (
                         <div
-                          key={h.id}
+                          key={`holiday-${h.id || h.date}-${idx}`}
                           className="p-2.5 px-3 rounded-2xl bg-surface/60 border border-border/80 hover:border-border transition flex items-center justify-between gap-3 group shadow-sm"
                         >
                           <div className="flex items-center space-x-3 min-w-0">
@@ -2412,7 +2412,7 @@ export default function DashboardPage() {
                   </thead>
                   <tbody className="divide-y divide-border/40 font-medium">
                     {myAttendanceLogs.length > 0 ? (
-                      myAttendanceLogs.slice(0, 6).map((log) => {
+                      myAttendanceLogs.slice(0, 6).map((log, idx) => {
                         const todayStr = new Date().toISOString().slice(0, 10);
                         const isToday = log.date === todayStr;
                         const duration = isToday && isCheckedIn
@@ -2423,7 +2423,7 @@ export default function DashboardPage() {
                           : (log.checkOutTime || '--:--');
 
                         return (
-                          <tr key={log.id} className={`hover:bg-surface/60 transition ${isToday ? 'bg-primary/5' : ''}`}>
+                          <tr key={`table-log-${log.id || log.date}-${idx}`} className={`hover:bg-surface/60 transition ${isToday ? 'bg-primary/5' : ''}`}>
                             <td className="py-3 px-4 font-mono text-[11px] text-foreground font-bold flex items-center space-x-1.5">
                               <span>{log.date}</span>
                               {isToday && (

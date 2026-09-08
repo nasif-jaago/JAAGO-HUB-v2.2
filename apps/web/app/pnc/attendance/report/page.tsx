@@ -29,6 +29,12 @@ import {
   matchesSelectedDept,
   isDspDepartment,
 } from '@/lib/use-organization-scope';
+import {
+  fetchBranchesFromSupabase,
+  fetchDepartmentsFromSupabase,
+  OrganizationBranch,
+  DepartmentItem,
+} from '@/lib/supabase-organization';
 import { TimePickerInput } from '@/components/ui/time-picker-input';
 
 interface ReportRow {
@@ -46,6 +52,8 @@ interface ReportRow {
   lateBy: string;
   earlyOutBy: string;
   status: 'Present' | 'Absent' | 'Late' | 'Early Out' | 'Checked In' | 'Checked Out' | 'Auto Check Out' | 'Half Day' | 'On Duty' | 'Leave' | 'Holiday' | 'Weekend' | 'N/A';
+  halfDayType?: 'Full Day' | 'First Half' | 'Second Half';
+  leaveType?: string;
 }
 
 const FALLBACK_EMPLOYEES: Partial<FullEmployeeProfile>[] = [
@@ -127,8 +135,11 @@ export default function AttendanceReportPage() {
   // Filters
   const [branchFilter, setBranchFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
-  const [designationFilter, setDesignationFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Org data for filter dropdowns
+  const [branches, setBranches] = useState<OrganizationBranch[]>([]);
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [activeStatusTab, setActiveStatusTab] = useState<string>('All');
 
   // Manual In/Out Modal
@@ -217,7 +228,10 @@ export default function AttendanceReportPage() {
         });
 
         if (matchingLeave) {
-          const isHalf = matchingLeave.halfDayType && matchingLeave.halfDayType !== 'Full Day';
+          const isHalf = (matchingLeave.halfDayType && matchingLeave.halfDayType !== 'Full Day') || Number(matchingLeave.totalDays) === 0.5;
+          const effectiveHalfType = (matchingLeave.halfDayType && matchingLeave.halfDayType !== 'Full Day')
+            ? matchingLeave.halfDayType
+            : (Number(matchingLeave.totalDays) === 0.5 ? 'First Half' : 'Full Day');
           return {
             id: `rep-${emp.id || index}-${targetDate}`,
             employeeId: emp.id || `emp-${emp.code}`,
@@ -228,11 +242,13 @@ export default function AttendanceReportPage() {
             branch: emp.branch || 'Head Office (Banani)',
             avatarUrl: emp.avatarUrl || '',
             date: targetDate,
-            checkInTime: matchingLeave.halfDayType === 'Second Half' ? '02:00 PM' : 'N/A',
-            checkOutTime: matchingLeave.halfDayType === 'First Half' ? '02:00 PM' : 'N/A',
+            checkInTime: effectiveHalfType === 'Second Half' ? '02:00 PM' : 'N/A',
+            checkOutTime: effectiveHalfType === 'First Half' ? '02:00 PM' : 'N/A',
             lateBy: 'N/A',
             earlyOutBy: 'N/A',
             status: isHalf ? 'Half Day' : 'Leave',
+            halfDayType: effectiveHalfType,
+            leaveType: matchingLeave.leaveType,
           };
         }
 
@@ -279,10 +295,12 @@ export default function AttendanceReportPage() {
     } catch {}
 
     async function loadInitialData() {
-      const [emps, , leaves] = await Promise.all([
+      const [emps, , leaves, branchList, deptList] = await Promise.all([
         fetchEmployeesFromSupabase(),
         fetchAttendanceLogsFromSupabase(),
         fetchLeaveRequests(),
+        fetchBranchesFromSupabase(),
+        fetchDepartmentsFromSupabase(),
       ]);
 
       if (isMounted) {
@@ -291,6 +309,8 @@ export default function AttendanceReportPage() {
         setEmployees(loadedEmps);
         setLeaveRequests(loadedLeaves);
         setReportRows(generateReportForDate(selectedDate, loadedEmps, loadedLeaves));
+        if (branchList && branchList.length > 0) setBranches(branchList);
+        if (deptList && deptList.length > 0) setDepartments(deptList);
       }
     }
 
@@ -421,7 +441,6 @@ export default function AttendanceReportPage() {
 
     const matchesBranch = !branchFilter || r.branch.includes(branchFilter);
     const matchesDept = !departmentFilter || r.department.includes(departmentFilter);
-    const matchesDesig = !designationFilter || r.designation.includes(designationFilter);
 
     const matchesStatusTab =
       activeStatusTab === 'All' ||
@@ -436,7 +455,7 @@ export default function AttendanceReportPage() {
       (activeStatusTab === 'Holiday' && r.status === 'Holiday') ||
       (activeStatusTab === 'Weekend' && r.status === 'Weekend');
 
-    return matchesSearch && matchesBranch && matchesDept && matchesDesig && matchesStatusTab;
+    return matchesSearch && matchesBranch && matchesDept && matchesStatusTab;
   });
 
   return (
@@ -588,10 +607,10 @@ export default function AttendanceReportPage() {
         </div>
       </div>
 
-      {/* ── 3. FILTER CONTROLS (Screenshot 5) ── */}
+      {/* ── 3. FILTER CONTROLS ── */}
       <div className="bg-card border border-border/70 rounded-2xl p-4 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          {/* Branch */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+          {/* Branch — dynamic from org data */}
           <div>
             <select
               value={branchFilter}
@@ -599,15 +618,13 @@ export default function AttendanceReportPage() {
               className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
             >
               <option value="">Branch (All)</option>
-              <option value="Head Office (Banani)">Head Office (Banani)</option>
-              <option value="Madaripur School">Madaripur School</option>
-              <option value="Habiganj School">Habiganj School</option>
-              <option value="Cox’s Bazar Branch">Cox’s Bazar Branch</option>
-              <option value="Chittagong Campus">Chittagong Campus</option>
+              {branches.map((b) => (
+                <option key={b.id} value={b.name}>{b.name}</option>
+              ))}
             </select>
           </div>
 
-          {/* Department */}
+          {/* Department — dynamic from org data */}
           <div>
             <select
               suppressHydrationWarning
@@ -619,26 +636,10 @@ export default function AttendanceReportPage() {
               }`}
             >
               {!isDspScoped && <option value="">Department (All)</option>}
-              {!isDspScoped && <option value="Founder's Office">Founder&apos;s Office / FC</option>}
-              <option value="Digital School Program">Digital School Program</option>
-              {!isDspScoped && <option value="Program Implementation">Program Implementation</option>}
-              {!isDspScoped && <option value="DSP Central Team">DSP Central Team</option>}
-            </select>
-          </div>
-
-          {/* Designation */}
-          <div>
-            <select
-              value={designationFilter}
-              onChange={(e) => setDesignationFilter(e.target.value)}
-              className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
-            >
-              <option value="">Designation (All)</option>
-              {Array.from(new Set(employees.map((e) => e.designation).filter(Boolean))).map((des) => (
-                <option key={des} value={des}>
-                  {des}
-                </option>
+              {!isDspScoped && departments.map((d) => (
+                <option key={d.id} value={d.name}>{d.name}</option>
               ))}
+              {isDspScoped && <option value="Digital School Program">Digital School Program</option>}
             </select>
           </div>
 
@@ -656,7 +657,7 @@ export default function AttendanceReportPage() {
         </div>
       </div>
 
-      {/* ── 4. STAT SUMMARY BADGE CARDS (Screenshot 5) ── */}
+      {/* ── 4. STAT SUMMARY BADGE CARDS ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5 text-xs">
         <div className="bg-card border border-border/70 rounded-2xl p-3 text-center space-y-1 shadow-sm">
           <div className="h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-500 mx-auto flex items-center justify-center text-[10px] font-bold">
@@ -892,6 +893,58 @@ export default function AttendanceReportPage() {
                         <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/30 text-[11px] font-bold">
                           Absent
                         </span>
+                      ) : (row.status === 'Leave' || row.status === 'Half Day') ? (
+                        (() => {
+                          const isFullDay = !row.halfDayType || row.halfDayType === 'Full Day';
+                          const isFirst = row.halfDayType === 'First Half';
+                          const isSecond = row.halfDayType === 'Second Half';
+                          const isFuture = row.date > new Date().toISOString().slice(0, 10);
+                          const showWorking = !isFullDay && !isFuture;
+                          return (
+                            <div className="flex flex-col gap-1 min-w-[90px]">
+                              {isFullDay ? (
+                                <div className="flex items-center gap-1">
+                                  <div className="h-4 w-full rounded bg-purple-500/25 border border-purple-500/40 flex items-center justify-center">
+                                    <span className="text-[9px] font-black text-purple-400 tracking-tight">LEAVE · Full Day</span>
+                                  </div>
+                                </div>
+                              ) : isFirst ? (
+                                <div className="flex gap-0.5">
+                                  <div className="h-4 flex-1 rounded-l bg-purple-500/30 border border-purple-500/40 flex items-center justify-center">
+                                    <span className="text-[8.5px] font-black text-purple-400">🌅 AM</span>
+                                  </div>
+                                  <div className={`h-4 flex-1 rounded-r flex items-center justify-center ${
+                                    showWorking
+                                      ? 'bg-emerald-500/20 border border-emerald-500/40'
+                                      : 'bg-surface border border-border/40'
+                                  }`}>
+                                    <span className={`text-[8.5px] font-black ${
+                                      showWorking ? 'text-emerald-400' : 'text-muted-foreground'
+                                    }`}>{showWorking ? '✓ PM' : '· PM'}</span>
+                                  </div>
+                                </div>
+                              ) : isSecond ? (
+                                <div className="flex gap-0.5">
+                                  <div className={`h-4 flex-1 rounded-l flex items-center justify-center ${
+                                    showWorking
+                                      ? 'bg-emerald-500/20 border border-emerald-500/40'
+                                      : 'bg-surface border border-border/40'
+                                  }`}>
+                                    <span className={`text-[8.5px] font-black ${
+                                      showWorking ? 'text-emerald-400' : 'text-muted-foreground'
+                                    }`}>{showWorking ? '✓ AM' : '· AM'}</span>
+                                  </div>
+                                  <div className="h-4 flex-1 rounded-r bg-purple-500/30 border border-purple-500/40 flex items-center justify-center">
+                                    <span className="text-[8.5px] font-black text-purple-400">🌇 PM</span>
+                                  </div>
+                                </div>
+                              ) : null}
+                              <span className="text-[9px] font-semibold text-purple-400 leading-none">
+                                {isFullDay ? 'Leave' : `Leave · ${row.halfDayType}`}
+                              </span>
+                            </div>
+                          );
+                        })()
                       ) : (
                         <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-500 border border-purple-500/30 text-[11px] font-bold">
                           {row.status}
@@ -899,7 +952,7 @@ export default function AttendanceReportPage() {
                       )}
                     </td>
 
-                    {/* Add In/Out Button (Screenshot 5) */}
+                    {/* Add In/Out Button */}
                     <td className="py-4 px-4 text-center">
                       <button
                         type="button"

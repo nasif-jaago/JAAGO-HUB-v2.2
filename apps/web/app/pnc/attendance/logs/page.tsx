@@ -591,18 +591,85 @@ export default function AttendanceLogsPage() {
                         <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/30 text-[11px] font-bold">
                           Absent
                         </span>
-                      ) : log.status === 'Leave' ? (
-                        <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[11px] font-bold">
-                          Leave
-                        </span>
                       ) : log.status === 'On Duty' ? (
                         <span className="px-2.5 py-1 rounded-lg bg-sky-500/15 text-sky-400 border border-sky-500/30 text-[11px] font-bold">
                           On Duty
                         </span>
-                      ) : log.status === 'Half Day' ? (
-                        <span className="px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 text-[11px] font-bold">
-                          Half Day
-                        </span>
+                      ) : (log.status === 'Leave' || log.status === 'Half Day') ? (
+                        (() => {
+                          // Parse half-day type from notes, punch times, or cross-referenced leave
+                          const notes = log.notes || '';
+                          let isFirst = notes.includes('First Half') || notes.includes('1st Half');
+                          let isSecond = notes.includes('Second Half') || notes.includes('2nd Half');
+                          if (!isFirst && !isSecond && (log.status === 'Half Day' || (log.checkInTime && log.checkInTime !== 'N/A') || (log.checkOutTime && log.checkOutTime !== 'N/A'))) {
+                            if (log.checkInTime && log.checkInTime.includes('02:00')) isSecond = true;
+                            else if (log.checkOutTime && log.checkOutTime.includes('02:00')) isFirst = true;
+                            else if (log.status === 'Half Day') isFirst = true;
+                          }
+                          if (!isFirst && !isSecond && typeof window !== 'undefined') {
+                            try {
+                              const rawLeaves = localStorage.getItem('jaago_pnc_leave_requests_v3');
+                              if (rawLeaves) {
+                                const leaves = JSON.parse(rawLeaves);
+                                const match = leaves.find((l: any) =>
+                                  l.status === 'Approved' &&
+                                  (l.employeeCode === log.employeeCode || l.employeeId === log.employeeId) &&
+                                  log.date >= l.fromDate &&
+                                  log.date <= l.toDate
+                                );
+                                if (match) {
+                                  if (match.halfDayType === 'First Half' || (!match.halfDayType && Number(match.totalDays) === 0.5)) isFirst = true;
+                                  else if (match.halfDayType === 'Second Half') isSecond = true;
+                                }
+                              }
+                            } catch {}
+                          }
+                          const isFullDay = !isFirst && !isSecond;
+                          const isFuture = log.date > new Date().toISOString().slice(0, 10);
+                          const showWorking = !isFullDay && !isFuture;
+                          return (
+                            <div className="flex flex-col gap-1 min-w-[90px]">
+                              {isFullDay ? (
+                                <div className="h-4 w-full rounded bg-purple-500/25 border border-purple-500/40 flex items-center justify-center">
+                                  <span className="text-[9px] font-black text-purple-400 tracking-tight">LEAVE · Full Day</span>
+                                </div>
+                              ) : isFirst ? (
+                                <div className="flex gap-0.5">
+                                  <div className="h-4 flex-1 rounded-l bg-purple-500/30 border border-purple-500/40 flex items-center justify-center">
+                                    <span className="text-[8.5px] font-black text-purple-400">🌅 AM</span>
+                                  </div>
+                                  <div className={`h-4 flex-1 rounded-r flex items-center justify-center ${
+                                    showWorking
+                                      ? 'bg-emerald-500/20 border border-emerald-500/40'
+                                      : 'bg-surface border border-border/40'
+                                  }`}>
+                                    <span className={`text-[8.5px] font-black ${showWorking ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                                      {showWorking ? '✓ PM' : '· PM'}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex gap-0.5">
+                                  <div className={`h-4 flex-1 rounded-l flex items-center justify-center ${
+                                    showWorking
+                                      ? 'bg-emerald-500/20 border border-emerald-500/40'
+                                      : 'bg-surface border border-border/40'
+                                  }`}>
+                                    <span className={`text-[8.5px] font-black ${showWorking ? 'text-emerald-400' : 'text-muted-foreground'}`}>
+                                      {showWorking ? '✓ AM' : '· AM'}
+                                    </span>
+                                  </div>
+                                  <div className="h-4 flex-1 rounded-r bg-purple-500/30 border border-purple-500/40 flex items-center justify-center">
+                                    <span className="text-[8.5px] font-black text-purple-400">🌇 PM</span>
+                                  </div>
+                                </div>
+                              )}
+                              <span className="text-[9px] font-semibold text-purple-400 leading-none">
+                                {isFullDay ? 'Leave' : isFirst ? 'Leave · 1st Half' : 'Leave · 2nd Half'}
+                              </span>
+                            </div>
+                          );
+                        })()
                       ) : (
                         <span className="px-2.5 py-1 rounded-lg bg-slate-500/15 text-slate-400 border border-slate-500/30 text-[11px] font-bold">
                           {log.status || 'N/A'}

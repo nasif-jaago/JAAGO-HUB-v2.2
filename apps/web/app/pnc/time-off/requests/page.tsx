@@ -50,42 +50,9 @@ const LEAVE_TYPES: LeaveType[] = [
 
 export default function LeaveRequestsPage() {
   const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
-  const [requests, setRequests] = useState<LeaveRequestItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('jaago_pnc_leave_requests_v2');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
-  const [allocations, setAllocations] = useState<LeaveAllocationItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('jaago_pnc_leave_allocations');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
-  const [employees, setEmployees] = useState<any[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('jaago_pnc_employees_v2');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
+  const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
+  const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [selectedTab, setSelectedTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -128,6 +95,24 @@ export default function LeaveRequestsPage() {
   };
 
   useEffect(() => {
+    try {
+      const rawReq = localStorage.getItem('jaago_pnc_leave_requests_v2');
+      if (rawReq) {
+        const parsed = JSON.parse(rawReq);
+        if (Array.isArray(parsed) && parsed.length > 0) setRequests(parsed);
+      }
+      const rawAlloc = localStorage.getItem('jaago_pnc_leave_allocations');
+      if (rawAlloc) {
+        const parsed = JSON.parse(rawAlloc);
+        if (Array.isArray(parsed) && parsed.length > 0) setAllocations(parsed);
+      }
+      const rawEmps = localStorage.getItem('jaago_pnc_employees_v2');
+      if (rawEmps) {
+        const parsed = JSON.parse(rawEmps);
+        if (Array.isArray(parsed) && parsed.length > 0) setEmployees(parsed);
+      }
+    } catch {}
+
     loadData();
 
     const handleReqUpdate = () => {
@@ -739,12 +724,22 @@ export default function LeaveRequestsPage() {
                     <span className={`px-2.5 py-0.5 rounded-lg border text-xs font-bold ${badgeStyle.bg} ${badgeStyle.textColor}`}>
                       {req.leaveType}
                     </span>
-                    <span className="text-xs font-bold text-foreground">
-                      {req.totalDays} day{req.totalDays > 1 ? 's' : ''}
-                    </span>
-                    {req.halfDayType && req.halfDayType !== 'Full Day' && (
-                      <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-400 font-mono text-[10px] font-extrabold uppercase">
-                        {req.halfDayType}
+
+                    {/* Explicit Leave Duration & Shift Badge */}
+                    {req.halfDayType === 'First Half' || (req.totalDays === 0.5 && req.halfDayType !== 'Second Half') ? (
+                      <span className="px-2.5 py-0.5 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-300 text-xs font-bold flex items-center space-x-1 shadow-xs">
+                        <span>🌅</span>
+                        <span>0.5 Day &bull; Half Day (1st Half / AM)</span>
+                      </span>
+                    ) : req.halfDayType === 'Second Half' ? (
+                      <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-600 dark:text-indigo-300 text-xs font-bold flex items-center space-x-1 shadow-xs">
+                        <span>🌇</span>
+                        <span>0.5 Day &bull; Half Day (2nd Half / PM)</span>
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-lg bg-surface border border-border text-foreground text-xs font-bold flex items-center space-x-1 shadow-xs">
+                        <span>🗓️</span>
+                        <span>{req.totalDays} {req.totalDays === 1 ? 'Day' : 'Days'} &bull; Full Day</span>
                       </span>
                     )}
                   </div>
@@ -1226,7 +1221,15 @@ export default function LeaveRequestsPage() {
                         {r.employeeName} &bull; <span className="font-mono text-muted-foreground">{r.employeeCode}</span>
                       </div>
                       <div className="text-[11px] text-muted-foreground">
-                        {r.leaveType} ({r.totalDays}d) &bull; {r.fromDate} &bull; <em>&ldquo;{r.reason}&rdquo;</em>
+                        {r.leaveType} &bull;{' '}
+                        <span className="font-bold text-foreground">
+                          {r.halfDayType === 'First Half' || (r.totalDays === 0.5 && r.halfDayType !== 'Second Half')
+                            ? '0.5 Day (1st Half / AM)'
+                            : r.halfDayType === 'Second Half'
+                            ? '0.5 Day (2nd Half / PM)'
+                            : `${r.totalDays}d Full Day`}
+                        </span>{' '}
+                        &bull; {r.fromDate} &bull; <em>&ldquo;{r.reason}&rdquo;</em>
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -1287,7 +1290,15 @@ export default function LeaveRequestsPage() {
                 {refusalModalReq.employeeName} ({refusalModalReq.employeeCode})
               </div>
               <div className="text-muted-foreground">
-                {refusalModalReq.leaveType} &bull; {refusalModalReq.totalDays} Days ({refusalModalReq.fromDate} to {refusalModalReq.toDate})
+                {refusalModalReq.leaveType} &bull;{' '}
+                <span className="font-bold text-foreground">
+                  {refusalModalReq.halfDayType === 'First Half' || (refusalModalReq.totalDays === 0.5 && refusalModalReq.halfDayType !== 'Second Half')
+                    ? '0.5 Day • Half Day (1st Half / AM)'
+                    : refusalModalReq.halfDayType === 'Second Half'
+                    ? '0.5 Day • Half Day (2nd Half / PM)'
+                    : `${refusalModalReq.totalDays} Days • Full Day`}
+                </span>{' '}
+                ({refusalModalReq.fromDate} to {refusalModalReq.toDate})
               </div>
               <div className="text-muted-foreground italic">
                 Reason: &ldquo;{refusalModalReq.reason}&rdquo;

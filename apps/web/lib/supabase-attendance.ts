@@ -394,6 +394,11 @@ export function getLocalAttendanceLogs(): AttendanceLogItem[] {
           const end = new Date(lv.toDate);
           if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
+          const isHalf = (lv.halfDayType && lv.halfDayType !== 'Full Day') || Number(lv.totalDays) === 0.5;
+          const effectiveHalfType = (lv.halfDayType && lv.halfDayType !== 'Full Day')
+            ? lv.halfDayType
+            : (Number(lv.totalDays) === 0.5 ? 'First Half' : 'Full Day');
+
           const current = new Date(start);
           while (current <= end) {
             const dateStr = current.toISOString().split('T')[0]!;
@@ -402,10 +407,16 @@ export function getLocalAttendanceLogs(): AttendanceLogItem[] {
             const matchKey = `${lvCode.toLowerCase()}_${dateStr}`;
             const logId = `att-leave-${lvCode}-${dateStr}`;
             if (deletedKeysSet.has(logId) || deletedKeysSet.has(matchKey)) continue;
-            if (existingKeys.has(matchKey)) continue;
 
-            const isHalf = lv.halfDayType && lv.halfDayType !== 'Full Day';
-            cleanLogs.push({
+            const existingLogIdx = cleanLogs.findIndex(
+              (l) =>
+                l.id === logId ||
+                ((l.employeeCode || '').toLowerCase().trim() === lvCode.toLowerCase() &&
+                  l.date === dateStr &&
+                  (l.status === 'Leave' || l.status === 'Half Day' || l.id.startsWith('att-leave-')))
+            );
+
+            const logData = {
               id: logId,
               employeeId: lv.employeeId || `emp-${lvCode}`,
               employeeCode: lvCode,
@@ -414,11 +425,11 @@ export function getLocalAttendanceLogs(): AttendanceLogItem[] {
               department: lv.department || "Founder's Office",
               branch: 'Head Office (Banani)',
               avatarUrl: lv.avatarUrl || '',
-              status: isHalf ? 'Half Day' : 'Leave',
+              status: (isHalf ? 'Half Day' : 'Leave') as any,
               device: 'Web Portal',
               date: dateStr,
-              checkInTime: lv.halfDayType === 'Second Half' ? '02:00 PM' : 'N/A',
-              checkOutTime: lv.halfDayType === 'First Half' ? '02:00 PM' : 'N/A',
+              checkInTime: effectiveHalfType === 'Second Half' ? '02:00 PM' : 'N/A',
+              checkOutTime: effectiveHalfType === 'First Half' ? '02:00 PM' : 'N/A',
               lateByMin: 0,
               earlyOutByMin: 0,
               locationName: 'On Leave',
@@ -428,9 +439,15 @@ export function getLocalAttendanceLogs(): AttendanceLogItem[] {
               createdAt: lv.appliedAt || new Date().toISOString(),
               updatedAt: lv.approvedAt || new Date().toISOString(),
               timestamp: `${dateStr} 09:00 AM`,
-              notes: `Approved Leave: ${lv.leaveType}${isHalf ? ` (${lv.halfDayType})` : ''} - ${lv.reason || ''}`,
-            });
-            existingKeys.add(matchKey);
+              notes: `Approved Leave: ${lv.leaveType}${isHalf ? ` (${effectiveHalfType})` : ''} - ${lv.reason || ''}`,
+            };
+
+            if (existingLogIdx >= 0) {
+              cleanLogs[existingLogIdx] = { ...cleanLogs[existingLogIdx], ...logData };
+            } else if (!existingKeys.has(matchKey)) {
+              cleanLogs.push(logData);
+              existingKeys.add(matchKey);
+            }
           }
         });
       } catch {}
@@ -990,7 +1007,11 @@ export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, mont
 
   // Calculate total hours
   let totalMinutes = 0;
-  const dailyTrend: Array<{
+
+  // Sort chronological for trend
+  const sortedMonthLogs = [...monthLogs].sort((a, b) => a.date.localeCompare(b.date));
+
+  const trendMap = new Map<string, {
     date: string;
     label: string;
     workedHours: number;
@@ -998,10 +1019,8 @@ export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, mont
     status: string;
     checkInTime?: string | undefined;
     checkOutTime?: string | undefined;
-  }> = [];
-
-  // Sort chronological for trend
-  const sortedMonthLogs = [...monthLogs].sort((a, b) => a.date.localeCompare(b.date));
+    dayMins: number;
+  }>();
 
   sortedMonthLogs.forEach((l) => {
     let dayMins = 0;
@@ -1024,16 +1043,28 @@ export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, mont
       ? dayDate.toLocaleDateString('en-US', { day: '2-digit', month: 'short' })
       : l.date.substring(5);
 
-    dailyTrend.push({
-      date: l.date,
-      label,
-      workedHours: Math.round((dayMins / 60) * 10) / 10,
-      isLate,
-      status: l.status,
-      checkInTime: l.checkInTime,
-      checkOutTime: l.checkOutTime,
-    });
+    if (trendMap.has(l.date)) {
+      const existing = trendMap.get(l.date)!;
+      existing.dayMins += dayMins;
+      existing.workedHours = Math.round((existing.dayMins / 60) * 10) / 10;
+      if (isLate) existing.isLate = true;
+      if (l.status === 'Present' || l.status === 'Late') existing.status = l.status;
+      if (l.checkOutTime) existing.checkOutTime = l.checkOutTime;
+    } else {
+      trendMap.set(l.date, {
+        date: l.date,
+        label,
+        workedHours: Math.round((dayMins / 60) * 10) / 10,
+        isLate,
+        status: l.status,
+        checkInTime: l.checkInTime,
+        checkOutTime: l.checkOutTime,
+        dayMins,
+      });
+    }
   });
+
+  const dailyTrend = Array.from(trendMap.values()).map(({ dayMins, ...rest }) => rest);
 
   const totalWorkedHours = (totalMinutes / 60).toFixed(1);
   const avgHoursPerDay = presentDays > 0 && totalMinutes > 0 ? (totalMinutes / (presentDays * 60)).toFixed(1) : '0.0';

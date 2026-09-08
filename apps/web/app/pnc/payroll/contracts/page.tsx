@@ -53,18 +53,7 @@ export type GroupByDimension =
   | 'Entity';
 
 export default function EmploymentContractsPage() {
-  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('jaago_pnc_employees_v2');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   const [departments, setDepartments] = useState<DepartmentItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);

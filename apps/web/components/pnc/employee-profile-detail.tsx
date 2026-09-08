@@ -3567,39 +3567,62 @@ export function EmployeeProfileDetail({
                         </td>
                       </tr>
                     ) : (
-                      empLeaveRequests.map((req) => (
-                        <tr key={req.id} className="hover:bg-surface/40 transition">
-                          <td className="py-3 px-4 font-bold text-foreground">
-                            {req.leaveType}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-[11px] text-foreground">
-                            {req.fromDate} &rarr; {req.toDate}
-                            {req.halfDayType && req.halfDayType !== 'Full Day' && (
-                              <span className="text-amber-500 font-sans font-bold ml-1">({req.halfDayType})</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 font-bold text-foreground">
-                            {req.totalDays} {req.totalDays === 1 ? 'day' : 'days'}
-                          </td>
-                          <td className="py-3 px-3 text-muted-foreground truncate max-w-xs">
-                            {req.bereavementRelationship ? `[${req.bereavementRelationship}] ` : ''}
-                            {req.reason}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                req.status === 'Approved'
-                                  ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                                  : req.status === 'Pending'
-                                  ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
-                                  : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
-                              }`}
-                            >
-                              {req.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
+                      empLeaveRequests.map((req) => {
+                        const isFirstHalf = req.halfDayType === 'First Half' || (req.totalDays === 0.5 && req.halfDayType !== 'Second Half');
+                        const isSecondHalf = req.halfDayType === 'Second Half';
+                        const isHalfDay = isFirstHalf || isSecondHalf;
+
+                        return (
+                          <tr key={req.id} className="hover:bg-surface/40 transition">
+                            <td className="py-3 px-4 font-bold text-foreground">
+                              {req.leaveType}
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-foreground">
+                                <span>{req.fromDate} &rarr; {req.toDate}</span>
+                                {isFirstHalf ? (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-sans font-bold bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
+                                    🌅 1st Half (AM)
+                                  </span>
+                                ) : isSecondHalf ? (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-sans font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30">
+                                    🌇 2nd Half (PM)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-sans font-bold bg-surface border border-border text-muted-foreground">
+                                    Full Day
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-foreground">
+                                {req.totalDays} {req.totalDays === 1 ? 'day' : 'days'}
+                              </div>
+                              <span className="text-[10px] font-semibold text-muted-foreground">
+                                {isHalfDay ? '(Half Day)' : '(Full Day)'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-muted-foreground truncate max-w-xs">
+                              {req.bereavementRelationship ? `[${req.bereavementRelationship}] ` : ''}
+                              {req.reason}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                  req.status === 'Approved'
+                                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                    : req.status === 'Pending'
+                                    ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                                    : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                                }`}
+                              >
+                                {req.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -3825,21 +3848,74 @@ export function EmployeeProfileDetail({
                               {log.device || 'Web Portal'}
                             </td>
                             <td className="py-3 px-4 text-center">
-                              <span
-                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                  log.status === 'Present'
-                                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                                    : log.status === 'Late'
-                                    ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
-                                    : log.status === 'Leave'
-                                    ? 'bg-purple-500/10 text-purple-500 border-purple-500/30'
-                                    : log.status === 'Half Day'
-                                    ? 'bg-sky-500/10 text-sky-500 border-sky-500/30'
-                                    : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
-                                }`}
-                              >
-                                {log.status}
-                              </span>
+                              {(log.status === 'Leave' || log.status === 'Half Day') ? (
+                                (() => {
+                                  const notes = log.notes || '';
+                                  let isFirst = notes.includes('First Half') || notes.includes('1st Half');
+                                  let isSecond = notes.includes('Second Half') || notes.includes('2nd Half');
+                                  if (!isFirst && !isSecond && (log.status === 'Half Day' || (log.checkInTime && log.checkInTime !== 'N/A') || (log.checkOutTime && log.checkOutTime !== 'N/A'))) {
+                                    if (log.checkInTime && log.checkInTime.includes('02:00')) isSecond = true;
+                                    else if (log.checkOutTime && log.checkOutTime.includes('02:00')) isFirst = true;
+                                    else if (log.status === 'Half Day') isFirst = true;
+                                  }
+                                  if (!isFirst && !isSecond && empLeaveRequests && empLeaveRequests.length > 0) {
+                                    const matched = empLeaveRequests.find((req) =>
+                                      req.status === 'Approved' &&
+                                      log.date >= req.fromDate &&
+                                      log.date <= req.toDate
+                                    );
+                                    if (matched) {
+                                      if (matched.halfDayType === 'First Half' || (!matched.halfDayType && Number(matched.totalDays) === 0.5)) isFirst = true;
+                                      else if (matched.halfDayType === 'Second Half') isSecond = true;
+                                    }
+                                  }
+                                  const isFullDay = !isFirst && !isSecond;
+                                  const isFuture = log.date > new Date().toISOString().slice(0, 10);
+                                  const showWorking = !isFullDay && !isFuture;
+                                  return (
+                                    <div className="flex flex-col items-center gap-1 min-w-[80px]">
+                                      {isFullDay ? (
+                                        <div className="h-3.5 w-full rounded bg-purple-500/25 border border-purple-500/40 flex items-center justify-center">
+                                          <span className="text-[8px] font-black text-purple-400">LEAVE · Full Day</span>
+                                        </div>
+                                      ) : isFirst ? (
+                                        <div className="flex gap-0.5 w-full">
+                                          <div className="h-3.5 flex-1 rounded-l bg-purple-500/30 border border-purple-500/40 flex items-center justify-center">
+                                            <span className="text-[7.5px] font-black text-purple-400">🌅AM</span>
+                                          </div>
+                                          <div className={`h-3.5 flex-1 rounded-r flex items-center justify-center ${showWorking ? 'bg-emerald-500/20 border border-emerald-500/40' : 'bg-surface border border-border/40'}`}>
+                                            <span className={`text-[7.5px] font-black ${showWorking ? 'text-emerald-400' : 'text-muted-foreground'}`}>{showWorking ? '✓PM' : '·PM'}</span>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex gap-0.5 w-full">
+                                          <div className={`h-3.5 flex-1 rounded-l flex items-center justify-center ${showWorking ? 'bg-emerald-500/20 border border-emerald-500/40' : 'bg-surface border border-border/40'}`}>
+                                            <span className={`text-[7.5px] font-black ${showWorking ? 'text-emerald-400' : 'text-muted-foreground'}`}>{showWorking ? '✓AM' : '·AM'}</span>
+                                          </div>
+                                          <div className="h-3.5 flex-1 rounded-r bg-purple-500/30 border border-purple-500/40 flex items-center justify-center">
+                                            <span className="text-[7.5px] font-black text-purple-400">🌇PM</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                      <span className="text-[8px] font-semibold text-purple-400 leading-none">
+                                        {isFullDay ? 'Leave' : isFirst ? '1st Half' : '2nd Half'}
+                                      </span>
+                                    </div>
+                                  );
+                                })()
+                              ) : (
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    log.status === 'Present'
+                                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                                      : log.status === 'Late'
+                                      ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                                      : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                                  }`}
+                                >
+                                  {log.status}
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );

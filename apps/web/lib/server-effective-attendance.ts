@@ -449,6 +449,21 @@ export async function getEffectiveDailyAttendance(options?: {
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
 
     const cur = new Date(start);
+    let halfDayType: 'Full Day' | 'First Half' | 'Second Half' = 'Full Day';
+    const rawReason = lv.reason || '';
+    if (/\[Half Day:\s*([\s\S]*?)\]/i.test(rawReason)) {
+      const match = rawReason.match(/\[Half Day:\s*([\s\S]*?)\]/i);
+      if (match && match[1]) {
+        const val = match[1].trim();
+        if (val === 'First Half' || val === 'Second Half') halfDayType = val as any;
+      }
+    } else if (lv.half_day_type) {
+      halfDayType = lv.half_day_type;
+    } else if (Number(lv.total_days) === 0.5) {
+      halfDayType = 'First Half';
+    }
+    const isHalf = halfDayType !== 'Full Day';
+
     while (cur <= end) {
       const dStr = cur.toISOString().split('T')[0]!;
       cur.setDate(cur.getDate() + 1);
@@ -462,8 +477,8 @@ export async function getEffectiveDailyAttendance(options?: {
       );
 
       if (existing) {
-        existing.status = lv.halfDayType && lv.halfDayType !== 'Full Day' ? 'Half Day' : 'Leave';
-        existing.notes = `Approved Leave: ${lv.leave_type} - ${lv.reason || ''}`;
+        existing.status = isHalf ? 'Half Day' : 'Leave';
+        existing.notes = `Approved Leave: ${lv.leave_type}${isHalf ? ` (${halfDayType})` : ''} - ${lv.reason || ''}`;
       } else {
         effectiveDays.push({
           employeeId: lvId || emp?.id || `emp-${lvCode}`,
@@ -476,14 +491,14 @@ export async function getEffectiveDailyAttendance(options?: {
           businessDate: dStr,
           countedCheckInAt: null,
           countedCheckOutAt: null,
-          countedCheckInTimeLocal: lv.halfDayType === 'Second Half' ? '02:00 PM' : 'N/A',
-          countedCheckOutTimeLocal: lv.halfDayType === 'First Half' ? '02:00 PM' : 'N/A',
+          countedCheckInTimeLocal: halfDayType === 'Second Half' ? '02:00 PM' : 'N/A',
+          countedCheckOutTimeLocal: halfDayType === 'First Half' ? '02:00 PM' : 'N/A',
           checkInSource: 'none',
           checkOutSource: 'none',
           primarySource: 'None',
           workedSeconds: 0,
           workedDisplay: '0h 00m',
-          status: lv.halfDayType && lv.halfDayType !== 'Full Day' ? 'Half Day' : 'Leave',
+          status: isHalf ? 'Half Day' : 'Leave',
           isLate: false,
           lateByMinutes: 0,
           isAutoCheckout: false,

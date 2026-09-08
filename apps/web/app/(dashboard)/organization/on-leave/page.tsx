@@ -19,31 +19,8 @@ import {
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
 
 export default function OnLeaveCalendarPage() {
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('jaago_pnc_leave_requests_v2');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
-
-  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('jaago_pnc_employees_v2');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestItem[]>([]);
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [timeframeFilter, setTimeframeFilter] = useState<'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'ALL_APPROVED'>('TODAY');
@@ -60,6 +37,19 @@ export default function OnLeaveCalendarPage() {
   };
 
   useEffect(() => {
+    try {
+      const rawReq = localStorage.getItem('jaago_pnc_leave_requests_v2');
+      if (rawReq) {
+        const parsed = JSON.parse(rawReq);
+        if (Array.isArray(parsed) && parsed.length > 0) setLeaveRequests(parsed);
+      }
+      const rawEmps = localStorage.getItem('jaago_pnc_employees_v2');
+      if (rawEmps) {
+        const parsed = JSON.parse(rawEmps);
+        if (Array.isArray(parsed) && parsed.length > 0) setEmployees(parsed);
+      }
+    } catch {}
+
     loadData();
     window.addEventListener('jaago_leave_request_updated', loadData);
     return () => window.removeEventListener('jaago_leave_request_updated', loadData);

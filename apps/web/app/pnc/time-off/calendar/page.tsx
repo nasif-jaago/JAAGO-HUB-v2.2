@@ -30,45 +30,36 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+function getLeaveTypeBadge(type: string): { code: string; color: string; bg: string; border: string } {
+  switch (type) {
+    case 'Casual Leave':
+      return { code: 'CL', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30' };
+    case 'Medical Leave':
+      return { code: 'ML', color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-500/15', border: 'border-rose-500/30' };
+    case 'Annual Leave':
+      return { code: 'AL', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-500/15', border: 'border-purple-500/30' };
+    case 'Emergency Leave':
+      return { code: 'EL', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/15', border: 'border-amber-500/30' };
+    case 'Maternity Leave':
+      return { code: 'MatL', color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-500/15', border: 'border-pink-500/30' };
+    case 'Paternity Leave':
+      return { code: 'PatL', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-500/15', border: 'border-blue-500/30' };
+    case 'Compensatory Leave':
+      return { code: 'CO', color: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-500/15', border: 'border-teal-500/30' };
+    case 'Bereavement Leave':
+      return { code: 'BL', color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-500/15', border: 'border-indigo-500/30' };
+    default:
+      return { code: 'LV', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500/15', border: 'border-amber-500/30' };
+  }
+}
+
 export default function PnCLeaveCalendarPage() {
   const { selectedOrg, selectedDept, isDspScoped } = useOrganizationScope();
-  const [currentDate, setCurrentDate] = useState<Date>(new Date(2026, 7, 1)); // August 2026 default
-  const [requests, setRequests] = useState<LeaveRequestItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('jaago_pnc_leave_requests_v2');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
-  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('jaago_pnc_employees_v2');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
-  const [holidays, setHolidays] = useState<PublicHolidayItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('jaago_pnc_public_holidays');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
+  // Default to current dynamic date/month
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
+  const [holidays, setHolidays] = useState<PublicHolidayItem[]>([]);
 
   const loadData = async () => {
     const [reqs, hols, emps] = await Promise.all([
@@ -82,6 +73,24 @@ export default function PnCLeaveCalendarPage() {
   };
 
   useEffect(() => {
+    try {
+      const rawReq = localStorage.getItem('jaago_pnc_leave_requests_v2');
+      if (rawReq) {
+        const parsed = JSON.parse(rawReq);
+        if (Array.isArray(parsed) && parsed.length > 0) setRequests(parsed);
+      }
+      const rawEmps = localStorage.getItem('jaago_pnc_employees_v2');
+      if (rawEmps) {
+        const parsed = JSON.parse(rawEmps);
+        if (Array.isArray(parsed) && parsed.length > 0) setEmployees(parsed);
+      }
+      const rawHols = localStorage.getItem('jaago_pnc_public_holidays');
+      if (rawHols) {
+        const parsed = JSON.parse(rawHols);
+        if (Array.isArray(parsed) && parsed.length > 0) setHolidays(parsed);
+      }
+    } catch {}
+
     loadData();
   }, []);
 
@@ -116,6 +125,10 @@ export default function PnCLeaveCalendarPage() {
 
   const nextMonth = () => {
     setCurrentDate(new Date(year, month + 1, 1));
+  };
+
+  const goToToday = () => {
+    setCurrentDate(new Date());
   };
 
   // Calendar calculations
@@ -215,12 +228,22 @@ export default function PnCLeaveCalendarPage() {
 
       {/* ── 3. MONTH PICKER BAR ── */}
       <div className="p-3 rounded-2xl bg-card border border-border shadow-sm flex items-center justify-between">
-        <button
-          onClick={prevMonth}
-          className="p-2 rounded-xl bg-surface border border-border hover:border-amber-500 text-muted-foreground hover:text-foreground transition cursor-pointer"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={prevMonth}
+            className="p-2 rounded-xl bg-surface border border-border hover:border-amber-500 text-muted-foreground hover:text-foreground transition cursor-pointer"
+            title="Previous Month"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={goToToday}
+            className="px-3.5 py-1.5 rounded-xl bg-surface border border-border hover:border-amber-500/60 text-xs font-bold text-foreground hover:text-amber-500 transition cursor-pointer"
+            title="Jump to Current Month"
+          >
+            Today
+          </button>
+        </div>
 
         <h2 className="text-lg font-serif font-black text-foreground">
           {monthString}
@@ -229,6 +252,7 @@ export default function PnCLeaveCalendarPage() {
         <button
           onClick={nextMonth}
           className="p-2 rounded-xl bg-surface border border-border hover:border-amber-500 text-muted-foreground hover:text-foreground transition cursor-pointer"
+          title="Next Month"
         >
           <ChevronRight className="h-4 w-4" />
         </button>
@@ -251,7 +275,7 @@ export default function PnCLeaveCalendarPage() {
         <div className="grid grid-cols-7 divide-x divide-y divide-border/50 text-xs">
           {/* Pre-padding empty boxes */}
           {Array.from({ length: firstDayOfWeek }).map((_, idx) => (
-            <div key={`empty-${idx}`} className="min-h-[110px] p-2 bg-surface/20"></div>
+            <div key={`empty-${idx}`} className="min-h-[120px] p-2 bg-surface/20"></div>
           ))}
 
           {/* Days in Month */}
@@ -281,7 +305,7 @@ export default function PnCLeaveCalendarPage() {
             return (
               <div
                 key={`day-${dayNum}`}
-                className={`min-h-[110px] p-2 space-y-1 transition ${
+                className={`min-h-[120px] p-2 space-y-1.5 transition ${
                   isToday
                     ? 'bg-amber-500/10 border border-amber-500/30'
                     : dayHoliday
@@ -291,7 +315,7 @@ export default function PnCLeaveCalendarPage() {
               >
                 <div className="flex items-center justify-between">
                   {isToday ? (
-                    <span className="text-[9px] uppercase font-black text-amber-500">TODAY</span>
+                    <span className="text-[9px] uppercase font-black text-amber-500 tracking-wider">TODAY</span>
                   ) : <span />}
                   <span
                     className={`font-mono font-bold text-xs ${
@@ -306,31 +330,128 @@ export default function PnCLeaveCalendarPage() {
 
                 {dayHoliday && (
                   <div
-                    title={dayHoliday.title}
-                    className="text-[10px] font-bold bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 p-1 rounded-md truncate"
+                    title={`Public Holiday: ${dayHoliday.title}`}
+                    className="text-[10px] font-bold bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 px-1.5 py-1 rounded-lg truncate shadow-xs flex items-center space-x-1"
                   >
-                    🎉 {dayHoliday.title}
+                    <span>🎉</span>
+                    <span className="truncate">{dayHoliday.title}</span>
                   </div>
                 )}
 
-                {dayLeaves.map((lv) => (
-                  <div
-                    key={lv.id}
-                    title={`${lv.employeeName} — ${lv.leaveType} (${lv.status})`}
-                    className={`text-[10px] font-semibold border p-1 rounded-md truncate ${
-                      lv.status === 'Approved'
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                        : lv.status === 'Pending'
-                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
-                        : 'bg-surface border-border text-muted-foreground'
-                    }`}
-                  >
-                    👤 {lv.employeeName}
-                  </div>
-                ))}
+                {/* VISUAL LEAVE DURATION BARS */}
+                {dayLeaves.map((lv) => {
+                  const badge = getLeaveTypeBadge(lv.leaveType);
+                  const isFirstHalf = lv.halfDayType === 'First Half' || (lv.totalDays === 0.5 && lv.halfDayType !== 'Second Half');
+                  const isSecondHalf = lv.halfDayType === 'Second Half';
+
+                  const statusBorder =
+                    lv.status === 'Approved'
+                      ? 'border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/15'
+                      : lv.status === 'Pending'
+                      ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15'
+                      : 'border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/15';
+
+                  const durationText = isFirstHalf
+                    ? '½d • 1st Half'
+                    : isSecondHalf
+                    ? '½d • 2nd Half'
+                    : lv.totalDays > 1
+                    ? `Full (${lv.totalDays}d)`
+                    : 'Full Day';
+
+                  const tooltipText = `${lv.employeeName} (${lv.employeeCode})
+Department: ${lv.department || 'General'}
+Leave Category: ${lv.leaveType}
+Duration: ${isFirstHalf ? 'Half Day — First Half (Morning / AM)' : isSecondHalf ? 'Half Day — Second Half (Afternoon / PM)' : `Full Day (${lv.totalDays} Day${lv.totalDays > 1 ? 's' : ''})`}
+Date Span: ${lv.fromDate}${lv.toDate && lv.toDate !== lv.fromDate ? ` to ${lv.toDate}` : ''}
+Status: ${lv.status}
+Reason: "${lv.reason}"`;
+
+                  return (
+                    <div
+                      key={lv.id}
+                      title={tooltipText}
+                      className={`rounded-lg border p-1.5 transition text-xs shadow-xs space-y-0.5 cursor-pointer relative overflow-hidden group ${statusBorder}`}
+                    >
+                      {/* Top bar row: Leave Type Badge + Duration Pill + Status Dot */}
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="flex items-center space-x-1 min-w-0">
+                          <span
+                            className={`px-1 py-0.2 rounded text-[8.5px] font-black uppercase tracking-wider border flex-shrink-0 ${badge.bg} ${badge.color} ${badge.border}`}
+                          >
+                            {badge.code}
+                          </span>
+
+                          <span
+                            className={`px-1 py-0.2 rounded text-[8.5px] font-extrabold flex-shrink-0 ${
+                              isFirstHalf
+                                ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30'
+                                : isSecondHalf
+                                ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30'
+                                : 'bg-surface/80 text-foreground/80 border border-border/50'
+                            }`}
+                          >
+                            {durationText}
+                          </span>
+                        </div>
+
+                        {/* Status Indicator Dot */}
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                            lv.status === 'Approved'
+                              ? 'bg-emerald-500 ring-2 ring-emerald-500/20'
+                              : lv.status === 'Pending'
+                              ? 'bg-amber-500 ring-2 ring-amber-500/20'
+                              : 'bg-rose-500 ring-2 ring-rose-500/20'
+                          }`}
+                          title={lv.status}
+                        />
+                      </div>
+
+                      {/* Employee Name */}
+                      <div className="text-[10px] font-bold text-foreground truncate group-hover:text-amber-500 transition">
+                        {lv.employeeName}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
+        </div>
+
+        {/* ── 5. CALENDAR LEGEND BAR ── */}
+        <div className="p-3.5 bg-surface/50 border-t border-border/70 flex flex-wrap items-center justify-between gap-3 text-[11px] font-semibold text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Legend:</span>
+            <div className="flex items-center space-x-1.5">
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-surface border border-border text-foreground">Full Day</span>
+              <span>Full Day Leave</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30">½d • 1st Half</span>
+              <span>Morning Shift</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30">½d • 2nd Half</span>
+              <span>Afternoon Shift</span>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span>Approved</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              <span>Pending</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <span className="text-xs">🎉</span>
+              <span>Holiday</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

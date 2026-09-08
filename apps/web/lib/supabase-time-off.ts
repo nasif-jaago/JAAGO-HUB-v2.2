@@ -707,9 +707,26 @@ export async function fetchLeaveRequests(forceRefresh: boolean = false): Promise
                 const match = rawReason.match(/\[Refusal Note:\s*([\s\S]*?)\]/i);
                 if (match && match[1]) rejectionReason = match[1].trim();
               }
+
+              let halfDayType: HalfDayType = 'Full Day';
+              if (/\[Half Day:\s*([\s\S]*?)\]/i.test(rawReason)) {
+                const match = rawReason.match(/\[Half Day:\s*([\s\S]*?)\]/i);
+                if (match && match[1]) {
+                  const val = match[1].trim();
+                  if (val === 'First Half' || val === 'Second Half') {
+                    halfDayType = val as HalfDayType;
+                  }
+                }
+              } else if (row.half_day_type) {
+                halfDayType = row.half_day_type;
+              } else if (Number(row.total_days) === 0.5) {
+                halfDayType = 'First Half';
+              }
+
               const cleanReason = rawReason
                 .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
                 .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
+                .replace(/\[Half Day:\s*[\s\S]*?\]/gi, '')
                 .trim();
 
               return {
@@ -723,6 +740,7 @@ export async function fetchLeaveRequests(forceRefresh: boolean = false): Promise
                 fromDate: row.from_date,
                 toDate: row.to_date,
                 totalDays: Number(row.total_days || 1),
+                halfDayType: halfDayType,
                 reason: cleanReason,
                 rejectionReason: rejectionReason || undefined,
                 attachmentName: attachmentName || undefined,
@@ -777,7 +795,10 @@ function syncLeaveToAttendanceLogs(request: LeaveRequestItem) {
       while (current <= end) {
         const dateStr = current.toISOString().split('T')[0];
         const logId = `att-leave-${request.employeeCode}-${dateStr}`;
-        const isHalf = request.halfDayType && request.halfDayType !== 'Full Day';
+        const isHalf = (request.halfDayType && request.halfDayType !== 'Full Day') || Number(request.totalDays) === 0.5;
+        const effectiveHalfType = (request.halfDayType && request.halfDayType !== 'Full Day')
+          ? request.halfDayType
+          : (Number(request.totalDays) === 0.5 ? 'First Half' : 'Full Day');
         const attStatus = isHalf ? 'Half Day' : 'Leave';
 
         const existingIdx = logs.findIndex(
@@ -795,9 +816,9 @@ function syncLeaveToAttendanceLogs(request: LeaveRequestItem) {
           device: 'Web Portal',
           timestamp: `${dateStr} 09:00 am`,
           date: dateStr,
-          checkInTime: request.halfDayType === 'Second Half' ? '02:00 PM' : undefined,
-          checkOutTime: request.halfDayType === 'First Half' ? '02:00 PM' : undefined,
-          notes: `Approved Leave: ${request.leaveType}${isHalf ? ` (${request.halfDayType})` : ''} - ${request.reason}`,
+          checkInTime: effectiveHalfType === 'Second Half' ? '02:00 PM' : undefined,
+          checkOutTime: effectiveHalfType === 'First Half' ? '02:00 PM' : undefined,
+          notes: `Approved Leave: ${request.leaveType}${isHalf ? ` (${effectiveHalfType})` : ''} - ${request.reason}`,
           createdBy: request.approvedBy || `${request.employeeName} (${request.employeeCode})`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -886,6 +907,9 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
     const supabase = getSupabase();
     if (supabase) {
       let finalReason = request.reason || '';
+      if (request.halfDayType && request.halfDayType !== 'Full Day' && !finalReason.includes('[Half Day:')) {
+        finalReason = `[Half Day: ${request.halfDayType}] ${finalReason}`.trim();
+      }
       if (request.attachmentName && !finalReason.includes('[Attachment:')) {
         const attachStr = request.attachmentUrl
           ? `${request.attachmentName}|${request.attachmentUrl}`

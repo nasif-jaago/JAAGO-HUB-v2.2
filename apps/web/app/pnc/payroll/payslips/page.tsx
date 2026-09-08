@@ -19,6 +19,7 @@ import {
   getPayrollConfig,
   getSavedPayRuns,
   savePayRuns,
+  loadPayRunsFromIndexedDB,
   generatePayRunBatch,
   numberToWordsBDT,
   PayRun,
@@ -43,6 +44,12 @@ export default function PayslipsPage() {
       try {
         const empList = await fetchEmployeesFromSupabase();
         let runs = getSavedPayRuns();
+        if (runs.length === 0) {
+          const idbRuns = await loadPayRunsFromIndexedDB();
+          if (idbRuns && idbRuns.length > 0) {
+            runs = idbRuns;
+          }
+        }
         if (runs.length === 0 && empList && empList.length > 0) {
           const cfg = getPayrollConfig();
           const sepRun = generatePayRunBatch(9, 2026, empList, cfg, { applyAttendanceDeductions: true });

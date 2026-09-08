@@ -87,18 +87,7 @@ import { getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
 import { hasPermission, isDspDepartment, isDspOnlyScoped } from '@/lib/rbac-guard';
 
 export default function PnCEmployeesPage() {
-  const [employees, setEmployees] = useState<FullEmployeeProfile[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('jaago_pnc_employees_v2');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return [];
-  });
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   // ── RBAC PERMISSION STATE ──
   const [rbacLoaded, setRbacLoaded] = useState(false);
@@ -116,24 +105,8 @@ export default function PnCEmployeesPage() {
   const [selectedProfile, setSelectedProfile] = useState<FullEmployeeProfile | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedOrg, setSelectedOrg] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedOrg = localStorage.getItem('jaago_selected_org');
-        if (savedOrg && savedOrg !== 'ALL') return savedOrg;
-      } catch {}
-    }
-    return '';
-  });
-  const [selectedDept, setSelectedDept] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedDept = localStorage.getItem('jaago_selected_dept');
-        if (savedDept && savedDept !== 'ALL') return savedDept;
-      } catch {}
-    }
-    return '';
-  });
+  const [selectedOrg, setSelectedOrg] = useState<string>('');
+  const [selectedDept, setSelectedDept] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const [selectedProject, setSelectedProject] = useState('');
   const [selectedDesignation, setSelectedDesignation] = useState('');

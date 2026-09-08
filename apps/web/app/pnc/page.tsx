@@ -94,22 +94,8 @@ export default function PnCDashboardPage() {
   const [, setOrganizations] = useState<OrganizationEntity[]>([]);
 
   // ── 2. FILTER STATE ──
-  const [selectedOrg, setSelectedOrg] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return localStorage.getItem('jaago_selected_org') || 'ALL';
-      } catch {}
-    }
-    return 'ALL';
-  });
-  const [selectedDept, setSelectedDept] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return localStorage.getItem('jaago_selected_dept') || 'ALL';
-      } catch {}
-    }
-    return 'ALL';
-  });
+  const [selectedOrg, setSelectedOrg] = useState<string>('ALL');
+  const [selectedDept, setSelectedDept] = useState<string>('ALL');
   const [datePreset, setDatePreset] = useState<DateRangePreset>('MTD');
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
@@ -121,18 +107,7 @@ export default function PnCDashboardPage() {
   });
 
   // ── 3. DRAGGABLE WIDGET GRID STATE ──
-  const [widgetOrder, setWidgetOrder] = useState<DashboardWidgetId[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('jaago_pnc_widget_order_v3');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } catch {}
-    }
-    return DEFAULT_WIDGET_ORDER;
-  });
+  const [widgetOrder, setWidgetOrder] = useState<DashboardWidgetId[]>(DEFAULT_WIDGET_ORDER);
 
   const [isCustomizeMode, setIsCustomizeMode] = useState<boolean>(false);
   const [draggedWidgetId, setDraggedWidgetId] = useState<DashboardWidgetId | null>(null);
@@ -221,6 +196,18 @@ export default function PnCDashboardPage() {
   };
 
   useEffect(() => {
+    try {
+      const savedOrg = localStorage.getItem('jaago_selected_org');
+      if (savedOrg) setSelectedOrg(savedOrg);
+      const savedDept = localStorage.getItem('jaago_selected_dept');
+      if (savedDept) setSelectedDept(savedDept);
+      const saved = localStorage.getItem('jaago_pnc_widget_order_v3');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) setWidgetOrder(parsed);
+      }
+    } catch {}
+
     loadDashboardData();
 
     const handleAttUpdate = () => loadDashboardData();
@@ -1598,42 +1585,42 @@ export default function PnCDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* ── 1. EXECUTIVE HERO COMMAND BANNER (DARK BLACK GLASS) ─── */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="relative overflow-hidden rounded-[32px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] p-6 sm:p-8 text-white">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_8px_30px_0_rgba(0,0,0,0.5)] py-3.5 px-4 sm:py-4 sm:px-6 text-white">
         {/* Ambient subtle glow */}
-        <div className="absolute top-0 right-1/3 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
-        <div className="absolute bottom-0 right-0 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
+        <div className="absolute top-0 right-1/3 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
+        <div className="absolute bottom-0 right-0 w-60 h-60 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 relative z-10">
           {/* Left Welcome Branding */}
-          <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-[11px] font-extrabold uppercase tracking-wider text-amber-300 backdrop-blur-md shadow-inner">
-              <Sparkles className="h-3.5 w-3.5" />
+          <div className="space-y-1 sm:space-y-1.5 max-w-xl">
+            <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/20 text-[10px] font-extrabold uppercase tracking-wider text-amber-300 backdrop-blur-md shadow-inner">
+              <Sparkles className="h-3 w-3" />
               <span>People &amp; Culture Intelligence &bull; JAAGO Foundation</span>
             </div>
 
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white drop-shadow-md">
+            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white drop-shadow-md">
               Welcome back to <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400">Workspace</span> 👋
             </h1>
-            <p className="text-xs sm:text-sm text-white/85 font-medium leading-relaxed">
+            <p className="text-[11px] sm:text-xs text-white/80 font-medium leading-normal">
               Track and manage workforce capacity, live attendance radar, leave authorizations, and talent growth in real-time.
             </p>
           </div>
 
           {/* Right Corner: Team Avatar Illustration (without background) */}
-          <div className="relative w-56 sm:w-72 lg:w-80 h-32 sm:h-36 lg:h-44 -my-4 self-center lg:self-end flex-shrink-0">
+          <div className="relative w-36 sm:w-48 lg:w-56 h-16 sm:h-20 lg:h-24 -my-1.5 sm:-my-2 self-center lg:self-end flex-shrink-0">
             <Image
               src="/pnc-team-avatar.png"
               alt="P&C Team Avatar"
               fill
               priority
-              className="object-contain object-right-bottom drop-shadow-[0_12px_28px_rgba(0,0,0,0.85)] hover:scale-105 transition duration-300 pointer-events-none select-none"
+              className="object-contain object-right-bottom drop-shadow-[0_8px_20px_rgba(0,0,0,0.85)] hover:scale-105 transition duration-300 pointer-events-none select-none"
             />
           </div>
         </div>
 
         {/* Dynamic Date Filter Bar & Drag Customization Toolbar */}
-        <div className="mt-5 pt-4 border-t border-white/15 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-black/70 border border-white/20 backdrop-blur-md">
+        <div className="mt-3 pt-2.5 border-t border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-1 p-0.5 rounded-xl bg-black/70 border border-white/20 backdrop-blur-md">
             {(
               [
                 { key: 'TODAY', label: 'Today' },
@@ -1647,7 +1634,7 @@ export default function PnCDashboardPage() {
               <button
                 key={p.key}
                 onClick={() => handleDatePresetChange(p.key)}
-                className={`px-3 py-1.5 rounded-xl text-[11px] font-black uppercase tracking-wider transition cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
                   datePreset === p.key
                     ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md scale-100 font-extrabold'
                     : 'text-white/80 hover:text-white hover:bg-white/10'
@@ -1658,11 +1645,11 @@ export default function PnCDashboardPage() {
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Date Picker Range Inputs */}
-            <div className="flex items-center space-x-2 text-xs font-bold">
-              <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-black/60 border border-white/20 backdrop-blur-md shadow-inner">
-                <span className="text-white/60 text-[10px] uppercase font-extrabold">Start:</span>
+            <div className="flex items-center space-x-1.5 text-xs font-bold">
+              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-black/60 border border-white/20 backdrop-blur-md shadow-inner">
+                <span className="text-white/60 text-[9px] uppercase font-extrabold">Start:</span>
                 <input
                   type="date"
                   value={startDate}
@@ -1670,14 +1657,14 @@ export default function PnCDashboardPage() {
                     setStartDate(e.target.value);
                     setDatePreset('CUSTOM');
                   }}
-                  className="bg-transparent text-white focus:outline-none text-xs font-semibold cursor-pointer"
+                  className="bg-transparent text-white focus:outline-none text-[11px] font-semibold cursor-pointer"
                 />
               </div>
 
-              <span className="text-white/40 font-bold">&rarr;</span>
+              <span className="text-white/40 font-bold text-xs">&rarr;</span>
 
-              <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-black/60 border border-white/20 backdrop-blur-md shadow-inner">
-                <span className="text-white/60 text-[10px] uppercase font-extrabold">End:</span>
+              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-black/60 border border-white/20 backdrop-blur-md shadow-inner">
+                <span className="text-white/60 text-[9px] uppercase font-extrabold">End:</span>
                 <input
                   type="date"
                   value={endDate}
@@ -1685,7 +1672,7 @@ export default function PnCDashboardPage() {
                     setEndDate(e.target.value);
                     setDatePreset('CUSTOM');
                   }}
-                  className="bg-transparent text-white focus:outline-none text-xs font-semibold cursor-pointer"
+                  className="bg-transparent text-white focus:outline-none text-[11px] font-semibold cursor-pointer"
                 />
               </div>
             </div>
@@ -1694,21 +1681,21 @@ export default function PnCDashboardPage() {
             <div className="flex items-center space-x-1.5">
               <button
                 onClick={() => setIsCustomizeMode(!isCustomizeMode)}
-                className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer shadow-md ${
+                className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer shadow-md ${
                   isCustomizeMode
                     ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
                     : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
                 }`}
                 title="Toggle Drag & Drop Dashboard Rearrange Mode"
               >
-                <Move className="h-3.5 w-3.5" />
-                <span>{isCustomizeMode ? 'Done Rearranging' : 'Rearrange Grid'}</span>
+                <Move className="h-3 w-3" />
+                <span>{isCustomizeMode ? 'Done' : 'Rearrange Grid'}</span>
               </button>
 
               {isCustomizeMode && (
                 <button
                   onClick={handleResetWidgetOrder}
-                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 transition cursor-pointer"
+                  className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 transition cursor-pointer"
                   title="Reset Layout to Standard"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -1722,44 +1709,44 @@ export default function PnCDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* ── 2. CORE EXECUTIVE KPI SCORECARD (DARK BLACK GLASS) ───── */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {/* KPI 1: TOTAL EMPLOYEES */}
         <div
           onClick={() => {
             setModalFilterTab('ALL');
             setActiveModal('EMPLOYEES');
           }}
-          className="group relative p-5 rounded-3xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-amber-400/60 shadow-[0_8px_30px_rgb(0,0,0,0.5)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-amber-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-amber-300 transition">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-amber-300 transition truncate pr-1">
               TOTAL EMPLOYEES
             </span>
-            <div className="h-10 w-10 rounded-2xl bg-blue-500/20 border border-blue-400/40 text-blue-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner">
-              <Users className="h-5 w-5" />
+            <div className="h-7 w-7 rounded-xl bg-blue-500/20 border border-blue-400/40 text-blue-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
+              <Users className="h-3.5 w-3.5" />
             </div>
           </div>
 
-          <div className="py-2">
-            <div className="text-3xl sm:text-4xl font-black text-white tracking-tight flex items-baseline space-x-2 drop-shadow-sm">
+          <div className="py-1">
+            <div className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{totalEmployeesCount}</span>
-              <span className="text-xs font-bold text-white/60">Staff</span>
+              <span className="text-[11px] font-bold text-white/60">Staff</span>
             </div>
-            <div className="text-[11px] font-bold text-emerald-400 flex items-center space-x-1 pt-1">
+            <div className="text-[10px] font-bold text-emerald-400 flex items-center space-x-1 pt-0.5">
               <span>▲ 1.6%</span>
               <span className="text-white/60 font-normal">vs prev cycle</span>
             </div>
           </div>
 
           {/* Sparkline Visual */}
-          <div className="h-6 w-full pt-1">
+          <div className="h-3.5 w-full">
             <svg className="w-full h-full" viewBox="0 0 100 20">
               <path d="M 0 16 Q 30 12, 60 8 T 100 4" fill="none" stroke="#60A5FA" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
             <span>View directory</span>
-            <ArrowUpRight className="h-3 w-3 text-amber-400 opacity-0 group-hover:opacity-100 transition" />
+            <ArrowUpRight className="h-2.5 w-2.5 text-amber-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
         </div>
 
@@ -1769,39 +1756,39 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('ACTIVE_WORKFORCE');
           }}
-          className="group relative p-5 rounded-3xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-emerald-400/60 shadow-[0_8px_30px_rgb(0,0,0,0.5)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-emerald-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-emerald-300 transition">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-emerald-300 transition truncate pr-1">
               ACTIVE WORKFORCE
             </span>
-            <div className="h-10 w-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner">
-              <UserCheck className="h-5 w-5" />
+            <div className="h-7 w-7 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
+              <UserCheck className="h-3.5 w-3.5" />
             </div>
           </div>
 
-          <div className="py-2">
-            <div className="text-3xl sm:text-4xl font-black text-white tracking-tight flex items-baseline space-x-2 drop-shadow-sm">
+          <div className="py-1">
+            <div className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{activeEmployeesCount}</span>
-              <span className="text-xs font-bold text-emerald-400">
+              <span className="text-[11px] font-bold text-emerald-400">
                 {totalEmployeesCount > 0 ? `${Math.round((activeEmployeesCount / totalEmployeesCount) * 100)}%` : '0%'}
               </span>
             </div>
-            <div className="text-[11px] font-bold text-emerald-400 flex items-center space-x-1 pt-1">
+            <div className="text-[10px] font-bold text-emerald-400 flex items-center space-x-1 pt-0.5">
               <span>▲ Deployment</span>
               <span className="text-white/60 font-normal">verified live</span>
             </div>
           </div>
 
           {/* Sparkline Visual */}
-          <div className="h-6 w-full pt-1">
+          <div className="h-3.5 w-full">
             <svg className="w-full h-full" viewBox="0 0 100 20">
               <path d="M 0 14 Q 25 15, 50 10 T 100 3" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
             <span>Active roster</span>
-            <ArrowUpRight className="h-3 w-3 text-emerald-400 opacity-0 group-hover:opacity-100 transition" />
+            <ArrowUpRight className="h-2.5 w-2.5 text-emerald-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
         </div>
 
@@ -1811,36 +1798,36 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('INCOMPLETE_PROFILES');
           }}
-          className="group relative p-5 rounded-3xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-amber-400/60 shadow-[0_8px_30px_rgb(0,0,0,0.5)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-amber-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-amber-300 transition">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-amber-300 transition truncate pr-1">
               INCOMPLETE PROFILES
             </span>
-            <div className="h-10 w-10 rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner">
-              <AlertTriangle className="h-5 w-5" />
+            <div className="h-7 w-7 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
+              <AlertTriangle className="h-3.5 w-3.5" />
             </div>
           </div>
 
-          <div className="py-2">
-            <div className="text-3xl sm:text-4xl font-black text-amber-300 tracking-tight flex items-baseline space-x-2 drop-shadow-sm">
+          <div className="py-1">
+            <div className="text-xl sm:text-2xl font-black text-amber-300 tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{incompleteProfiles.length}</span>
-              <span className="text-xs font-bold text-white/60">Audited</span>
+              <span className="text-[11px] font-bold text-white/60">Audited</span>
             </div>
-            <div className="text-[11px] font-bold text-amber-300/90 flex items-center space-x-1 pt-1">
+            <div className="text-[10px] font-bold text-amber-300/90 flex items-center space-x-1 pt-0.5">
               <span>▲ Requires Action</span>
             </div>
           </div>
 
           {/* Sparkline Visual */}
-          <div className="h-6 w-full pt-1">
+          <div className="h-3.5 w-full">
             <svg className="w-full h-full" viewBox="0 0 100 20">
               <path d="M 0 10 L 30 14 L 60 8 L 100 12" fill="none" stroke="#FBBF24" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
             <span>Fix data gaps</span>
-            <ArrowUpRight className="h-3 w-3 text-amber-400 opacity-0 group-hover:opacity-100 transition" />
+            <ArrowUpRight className="h-2.5 w-2.5 text-amber-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
         </div>
 
@@ -1850,37 +1837,37 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('NEW_JOINERS');
           }}
-          className="group relative p-5 rounded-3xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-cyan-400/60 shadow-[0_8px_30px_rgb(0,0,0,0.5)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-cyan-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-cyan-300 transition">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-cyan-300 transition truncate pr-1">
               NEW JOINERS
             </span>
-            <div className="h-10 w-10 rounded-2xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner">
-              <UserPlus className="h-5 w-5" />
+            <div className="h-7 w-7 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
+              <UserPlus className="h-3.5 w-3.5" />
             </div>
           </div>
 
-          <div className="py-2">
-            <div className="text-3xl sm:text-4xl font-black text-white tracking-tight flex items-baseline space-x-2 drop-shadow-sm">
+          <div className="py-1">
+            <div className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{newJoiners.length}</span>
-              <span className="text-xs font-bold text-cyan-300">Onboarding</span>
+              <span className="text-[11px] font-bold text-cyan-300">Onboarding</span>
             </div>
-            <div className="text-[11px] font-bold text-emerald-400 flex items-center space-x-1 pt-1">
+            <div className="text-[10px] font-bold text-emerald-400 flex items-center space-x-1 pt-0.5">
               <span>▲ +{newJoiners.length}</span>
               <span className="text-white/60 font-normal">in period</span>
             </div>
           </div>
 
           {/* Sparkline Visual */}
-          <div className="h-6 w-full pt-1">
+          <div className="h-3.5 w-full">
             <svg className="w-full h-full" viewBox="0 0 100 20">
               <path d="M 0 18 L 25 14 L 50 8 L 75 12 L 100 5" fill="none" stroke="#22D3EE" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
             <span>Onboarding list</span>
-            <ArrowUpRight className="h-3 w-3 text-cyan-400 opacity-0 group-hover:opacity-100 transition" />
+            <ArrowUpRight className="h-2.5 w-2.5 text-cyan-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
         </div>
 
@@ -1890,36 +1877,36 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('ATTRITION');
           }}
-          className="group relative p-5 rounded-3xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-rose-400/60 shadow-[0_8px_30px_rgb(0,0,0,0.5)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-rose-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-rose-300 transition">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-rose-300 transition truncate pr-1">
               ATTRITION / EXITS
             </span>
-            <div className="h-10 w-10 rounded-2xl bg-rose-500/20 border border-rose-400/40 text-rose-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner">
-              <UserMinus className="h-5 w-5" />
+            <div className="h-7 w-7 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
+              <UserMinus className="h-3.5 w-3.5" />
             </div>
           </div>
 
-          <div className="py-2">
-            <div className="text-3xl sm:text-4xl font-black text-rose-300 tracking-tight flex items-baseline space-x-2 drop-shadow-sm">
+          <div className="py-1">
+            <div className="text-xl sm:text-2xl font-black text-rose-300 tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{attritionEmployees.length}</span>
-              <span className="text-xs font-bold text-white/60">Exited</span>
+              <span className="text-[11px] font-bold text-white/60">Exited</span>
             </div>
-            <div className="text-[11px] font-bold text-rose-300/90 flex items-center space-x-1 pt-1">
+            <div className="text-[10px] font-bold text-rose-300/90 flex items-center space-x-1 pt-0.5">
               <span>▼ Exit reviews</span>
             </div>
           </div>
 
           {/* Sparkline Visual */}
-          <div className="h-6 w-full pt-1">
+          <div className="h-3.5 w-full">
             <svg className="w-full h-full" viewBox="0 0 100 20">
               <path d="M 0 6 Q 35 12, 65 14 T 100 18" fill="none" stroke="#FB7185" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
             <span>Exit reasons</span>
-            <ArrowUpRight className="h-3 w-3 text-rose-400 opacity-0 group-hover:opacity-100 transition" />
+            <ArrowUpRight className="h-2.5 w-2.5 text-rose-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
         </div>
 
@@ -1929,35 +1916,35 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('GROWTH_RATE');
           }}
-          className="group relative p-5 rounded-3xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-purple-400/60 shadow-[0_8px_30px_rgb(0,0,0,0.5)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-1 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-purple-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-purple-300 transition">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-purple-300 transition truncate pr-1">
               GROWTH RATE (%)
             </span>
-            <div className="h-10 w-10 rounded-2xl bg-purple-500/20 border border-purple-400/40 text-purple-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner">
-              <Activity className="h-5 w-5" />
+            <div className="h-7 w-7 rounded-xl bg-purple-500/20 border border-purple-400/40 text-purple-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
+              <Activity className="h-3.5 w-3.5" />
             </div>
           </div>
 
-          <div className="py-2">
-            <div className={`text-3xl sm:text-4xl font-black tracking-tight flex items-baseline space-x-1 drop-shadow-sm ${growthRatePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <div className="py-1">
+            <div className={`text-xl sm:text-2xl font-black tracking-tight flex items-baseline space-x-1 drop-shadow-sm ${growthRatePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               <span>{growthRatePct > 0 ? `+${growthRatePct}` : growthRatePct}%</span>
             </div>
-            <div className="text-[11px] font-bold text-white/70 flex items-center space-x-1 pt-1">
+            <div className="text-[10px] font-bold text-white/70 flex items-center space-x-1 pt-0.5">
               <span>{growthRatePct >= 0 ? '▲ Positive Expansion' : '▼ Contraction'}</span>
             </div>
           </div>
 
           {/* Sparkline Visual */}
-          <div className="h-6 w-full pt-1">
+          <div className="h-3.5 w-full">
             <svg className="w-full h-full" viewBox="0 0 100 20">
               <path d="M 0 14 L 30 10 L 60 16 L 100 6" fill="none" stroke="#C084FC" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
             <span>Talent velocity</span>
-            <ArrowUpRight className="h-3 w-3 text-purple-400 opacity-0 group-hover:opacity-100 transition" />
+            <ArrowUpRight className="h-2.5 w-2.5 text-purple-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
         </div>
       </div>

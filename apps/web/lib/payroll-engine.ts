@@ -1229,30 +1229,136 @@ export function resetPayrollConfig(): PayrollConfig {
 // 8. PAY RUN GENERATOR & BATCH CALCULATOR (§12, §13)
 // ═══════════════════════════════════════════════════════════════════════════
 
+let _inMemoryPayRuns: PayRun[] | null = null;
+
+const IDB_NAME = 'jaago_pnc_payroll_db';
+const IDB_STORE = 'pay_runs';
+
+function openPayRunsDB(): Promise<IDBDatabase | null> {
+  if (typeof window === 'undefined' || typeof indexedDB === 'undefined') {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+export async function savePayRunsToIndexedDB(runs: PayRun[]): Promise<boolean> {
+  try {
+    const db = await openPayRunsDB();
+    if (!db) return false;
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    store.clear();
+    runs.forEach((r) => store.put(r));
+    return new Promise((resolve) => {
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch {
+    return false;
+  }
+}
+
+export async function loadPayRunsFromIndexedDB(): Promise<PayRun[]> {
+  try {
+    const db = await openPayRunsDB();
+    if (!db) return [];
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.getAll();
+    return new Promise((resolve) => {
+      req.onsuccess = () => {
+        const res = Array.isArray(req.result) ? req.result : [];
+        if (res.length > 0 && (!_inMemoryPayRuns || _inMemoryPayRuns.length === 0)) {
+          _inMemoryPayRuns = res;
+        }
+        resolve(res);
+      };
+      req.onerror = () => resolve([]);
+    });
+  } catch {
+    return [];
+  }
+}
+
+function prepareCompactPayRunsForStorage(runs: PayRun[]): any[] {
+  return runs.map((run) => ({
+    ...run,
+    items: (run.items || []).map((item) => {
+      const { settingsSnapshot, contractSnapshot, avatarUrl, ...rest } = item;
+      return {
+        ...rest,
+        // Strip heavy base64 data URIs from localStorage
+        avatarUrl: avatarUrl && avatarUrl.startsWith('data:') ? undefined : avatarUrl,
+      };
+    }),
+  }));
+}
+
 export function getSavedPayRuns(): PayRun[] {
+  if (_inMemoryPayRuns && _inMemoryPayRuns.length > 0) {
+    return _inMemoryPayRuns;
+  }
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(PAYRUNS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        _inMemoryPayRuns = parsed;
+        return parsed;
+      }
     }
   } catch (err) {
-    console.warn('Failed to load pay runs:', err);
+    console.warn('Failed to load pay runs from localStorage:', err);
   }
-  return [];
+  loadPayRunsFromIndexedDB().catch(() => {});
+  return _inMemoryPayRuns || [];
 }
 
 export function savePayRuns(runs: PayRun[]): boolean {
   if (typeof window === 'undefined') return false;
+  _inMemoryPayRuns = runs;
+
+  // 1. Asynchronously persist full data to IndexedDB (virtually unlimited quota)
+  savePayRunsToIndexedDB(runs).catch(() => {});
+
+  // 2. Compact for localStorage safely without uncaught QuotaExceededError
   try {
-    localStorage.setItem(PAYRUNS_STORAGE_KEY, JSON.stringify(runs));
-    window.dispatchEvent(new CustomEvent('jaago_payruns_changed', { detail: runs }));
-    return true;
-  } catch (err) {
-    console.error('Failed to save pay runs:', err);
-    return false;
+    const compact = prepareCompactPayRunsForStorage(runs);
+    localStorage.setItem(PAYRUNS_STORAGE_KEY, JSON.stringify(compact));
+  } catch (err: any) {
+    console.warn('[Payroll] LocalStorage quota exceeded, storing in IndexedDB and in-memory cache:', err?.message || err);
+    try {
+      const metadataOnly = runs.map(({ items, ...rest }) => ({
+        ...rest,
+        items: (items || []).slice(0, 5).map(({ settingsSnapshot, contractSnapshot, avatarUrl, ...itemRest }) => itemRest),
+      }));
+      localStorage.setItem(PAYRUNS_STORAGE_KEY, JSON.stringify(metadataOnly));
+    } catch {
+      // Even if fallback fails, memory and IndexedDB have the data
+    }
   }
+
+  // 3. Dispatch reactive update event
+  try {
+    window.dispatchEvent(new CustomEvent('jaago_payruns_changed', { detail: runs }));
+  } catch {}
+
+  return true;
 }
 
 export function generatePayRunBatch(
@@ -1432,7 +1538,6 @@ export function generatePayRunBatch(
         basic_salary_percentage: config.basic_salary_percentage,
         pf_base: config.pf_base,
         provident_fund_employee_rate: config.provident_fund_employee_rate,
-        tax_slabs: config.tax_slabs,
       },
       contractSnapshot: {
         wage: emp.wage,
