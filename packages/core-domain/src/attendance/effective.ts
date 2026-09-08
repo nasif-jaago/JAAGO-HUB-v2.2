@@ -117,17 +117,19 @@ export function computeEffectiveAttendanceDay(params: {
   } = params;
 
   // 1. Gather all check-in candidates across sources
-  const checkInCandidates: { time: Date; iso: string; source: 'gps' | 'biotime'; punchId?: string }[] = [];
-  const checkOutCandidates: { time: Date; iso: string; source: 'gps' | 'biotime'; punchId?: string }[] = [];
+  // 1. Gather all check-in candidates across sources
+  const checkInCandidates: { time: Date; iso: string; source: 'gps' | 'biotime' | 'manual'; punchId?: string }[] = [];
+  const checkOutCandidates: { time: Date; iso: string; source: 'gps' | 'biotime' | 'auto'; punchId?: string; isSyntheticAuto?: boolean }[] = [];
 
   // GPS raw punches list if available
   for (const p of gpsPunches) {
     const d = new Date(p.punchAt);
     if (!isNaN(d.getTime())) {
+      const isSyntheticAuto = p.source === 'auto' || Boolean(p.deviceInfo && p.deviceInfo.toLowerCase().includes('auto-checkout'));
       if (p.punchType === 'check_in') {
-        checkInCandidates.push({ time: d, iso: p.punchAt, source: 'gps', punchId: p.id });
+        checkInCandidates.push({ time: d, iso: p.punchAt, source: p.source === 'biotime' ? 'biotime' : 'gps', punchId: p.id });
       } else if (p.punchType === 'check_out') {
-        checkOutCandidates.push({ time: d, iso: p.punchAt, source: 'gps', punchId: p.id });
+        checkOutCandidates.push({ time: d, iso: p.punchAt, source: isSyntheticAuto ? 'auto' : 'gps', punchId: p.id, isSyntheticAuto });
       }
     }
   }
@@ -155,7 +157,7 @@ export function computeEffectiveAttendanceDay(params: {
       if (bp.punchType === 'check_out' || String((bp as any).punch_state).toUpperCase() === 'CHECK_OUT') {
         const d = new Date(bp.punchAt);
         if (!isNaN(d.getTime())) {
-          checkOutCandidates.push({ time: d, iso: bp.punchAt, source: 'biotime', punchId: bp.id });
+          checkOutCandidates.push({ time: d, iso: bp.punchAt, source: 'biotime', punchId: bp.id, isSyntheticAuto: false });
         }
       }
     }
@@ -167,7 +169,7 @@ export function computeEffectiveAttendanceDay(params: {
       const diffMinutes = (lastTime - firstTime) / (1000 * 60);
 
       if (!isNaN(lastTime) && (diffMinutes >= 5 || lastBio.punchType === 'check_out')) {
-        checkOutCandidates.push({ time: new Date(lastBio.punchAt), iso: lastBio.punchAt, source: 'biotime', punchId: lastBio.id });
+        checkOutCandidates.push({ time: new Date(lastBio.punchAt), iso: lastBio.punchAt, source: 'biotime', punchId: lastBio.id, isSyntheticAuto: false });
       }
     }
   }
@@ -182,7 +184,8 @@ export function computeEffectiveAttendanceDay(params: {
   if (gpsCheckOutAt) {
     const d = new Date(gpsCheckOutAt);
     if (!isNaN(d.getTime()) && !checkOutCandidates.some((c) => c.iso === gpsCheckOutAt)) {
-      checkOutCandidates.push({ time: d, iso: gpsCheckOutAt, source: 'gps' });
+      const isAutoOut = Boolean(isAutoCheckout);
+      checkOutCandidates.push({ time: d, iso: gpsCheckOutAt, source: isAutoOut ? 'auto' : 'gps', isSyntheticAuto: isAutoOut });
     }
   }
 
@@ -203,15 +206,25 @@ export function computeEffectiveAttendanceDay(params: {
   let countedCheckOutIso: string | null = null;
   let checkOutSource: 'gps' | 'biotime' | 'manual' | 'auto' | 'none' = 'none';
   let winningOutPunchId: string | undefined;
+  let effectiveIsAuto = false;
 
   const validCheckOutCandidates = checkOutCandidates.filter((c) => {
     if (!countedCheckInIso) return true;
     return c.time.getTime() > new Date(countedCheckInIso).getTime() + 60_000;
   });
 
-  if (validCheckOutCandidates.length > 0) {
-    validCheckOutCandidates.sort((a, b) => b.time.getTime() - a.time.getTime());
-    const winnerOut = validCheckOutCandidates[0]!;
+  // Separate physical check-out candidates (BioTime, user GPS) from synthetic auto-checkout events
+  const physicalCheckOutCandidates = validCheckOutCandidates.filter(
+    (c) => !c.isSyntheticAuto && c.source !== 'auto'
+  );
+  const autoCheckOutCandidates = validCheckOutCandidates.filter(
+    (c) => c.isSyntheticAuto || c.source === 'auto'
+  );
+
+  if (physicalCheckOutCandidates.length > 0) {
+    // Physical punches always take precedence over synthetic auto-checkout!
+    physicalCheckOutCandidates.sort((a, b) => b.time.getTime() - a.time.getTime());
+    const winnerOut = physicalCheckOutCandidates[0]!;
 
     // Check if there was an explicit GPS re-check-in AFTER winnerOut
     const hasLaterGpsCheckIn = gpsPunches.some(
@@ -222,17 +235,26 @@ export function computeEffectiveAttendanceDay(params: {
       countedCheckOutIso = winnerOut.iso;
       checkOutSource = winnerOut.source;
       winningOutPunchId = winnerOut.punchId;
+      effectiveIsAuto = false;
     }
+  } else if (autoCheckOutCandidates.length > 0) {
+    autoCheckOutCandidates.sort((a, b) => b.time.getTime() - a.time.getTime());
+    const winnerOut = autoCheckOutCandidates[0]!;
+    countedCheckOutIso = winnerOut.iso;
+    checkOutSource = 'auto';
+    winningOutPunchId = winnerOut.punchId;
+    effectiveIsAuto = true;
   }
 
-  // 3.1 Auto Check-out Safety Net: If isAutoCheckout is explicitly flagged or time passed 23:30 cutoff for this date
+  // 3.1 Auto Check-out Safety Net: ONLY if no valid check-out was found anywhere (physical or synthetic)
   const cutoffIso = new Date(`${businessDate}T23:30:00+06:00`).toISOString();
   const isPastCutoff = Date.now() >= new Date(cutoffIso).getTime();
-  let effectiveIsAuto = Boolean(isAutoCheckout);
 
-  if (countedCheckInIso && (!countedCheckOutIso || isAutoCheckout) && (isAutoCheckout || isPastCutoff)) {
+  if (countedCheckInIso && !countedCheckOutIso && (isAutoCheckout || isPastCutoff)) {
     countedCheckOutIso = cutoffIso;
     checkOutSource = 'auto';
+    effectiveIsAuto = true;
+  } else if (checkOutSource === 'auto') {
     effectiveIsAuto = true;
   }
 
@@ -320,8 +342,13 @@ export function computeEffectiveAttendanceDay(params: {
     (a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime()
   );
 
+  // If employee closed their day with a physical check-out, omit synthetic auto-checkout events from the punch audit trail
+  const punchesToAudit = !effectiveIsAuto
+    ? sortedAllPunches.filter((p) => !(p.source === 'auto' || Boolean(p.deviceInfo && p.deviceInfo.toLowerCase().includes('auto-checkout'))))
+    : sortedAllPunches;
+
   // Mark the counted punches
-  sortedAllPunches.forEach((p) => {
+  punchesToAudit.forEach((p) => {
     p.isCountedCheckIn = Boolean(countedCheckInIso && (p.id === winningInPunchId || p.punchAt === countedCheckInIso));
     p.isCountedCheckOut = Boolean(countedCheckOutIso && (p.id === winningOutPunchId || p.punchAt === countedCheckOutIso));
     if (p.isCountedCheckOut) {
@@ -352,8 +379,8 @@ export function computeEffectiveAttendanceDay(params: {
     status: derivedStatus,
     isLate,
     lateByMinutes,
-    isAutoCheckout,
-    allPunches: sortedAllPunches,
+    isAutoCheckout: effectiveIsAuto,
+    allPunches: punchesToAudit,
     sourceBreakdown: {
       gpsCheckIn: gpsCheckInAt || null,
       gpsCheckOut: gpsCheckOutAt || null,

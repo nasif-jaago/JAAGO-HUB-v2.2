@@ -14,6 +14,39 @@ interface CacheEntry<T> {
 const memoryCache = new Map<string, CacheEntry<any>>();
 const inFlightRequests = new Map<string, Promise<any>>();
 
+export function cleanupExpiredCache(forceAllCache: boolean = false): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const now = Date.now();
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('jaago_cache_')) {
+        if (forceAllCache) {
+          keysToRemove.push(k);
+        } else {
+          try {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed && parsed.timestamp && parsed.ttl) {
+                if (now - parsed.timestamp > parsed.ttl) {
+                  keysToRemove.push(k);
+                }
+              } else {
+                keysToRemove.push(k);
+              }
+            }
+          } catch {
+            keysToRemove.push(k);
+          }
+        }
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {}
+}
+
 export function getCachedDataSync<T>(key: string, fallback: T): T {
   if (memoryCache.has(key)) {
     const entry = memoryCache.get(key)!;
@@ -25,12 +58,19 @@ export function getCachedDataSync<T>(key: string, fallback: T): T {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.data !== undefined) {
-          memoryCache.set(key, {
-            data: parsed.data,
-            timestamp: parsed.timestamp || Date.now(),
-            ttl: parsed.ttl || 30000,
-          });
-          return parsed.data;
+          const now = Date.now();
+          const ttl = parsed.ttl || 30000;
+          const timestamp = parsed.timestamp || now;
+          if (now - timestamp < ttl) {
+            memoryCache.set(key, {
+              data: parsed.data,
+              timestamp,
+              ttl,
+            });
+            return parsed.data;
+          } else {
+            localStorage.removeItem(`jaago_cache_${key}`);
+          }
         }
       }
     } catch {}
@@ -48,14 +88,27 @@ export function setCachedData<T>(key: string, data: T, ttlMs: number = 30000): v
 
   if (typeof window !== 'undefined') {
     try {
-      localStorage.setItem(
-        `jaago_cache_${key}`,
-        JSON.stringify({
-          data,
-          timestamp: entry.timestamp,
-          ttl: entry.ttl,
-        })
-      );
+      const serialized = JSON.stringify({
+        data,
+        timestamp: entry.timestamp,
+        ttl: entry.ttl,
+      });
+      // Skip caching oversized payloads (>250KB) to preserve browser localStorage quota
+      if (serialized.length > 250000) {
+        return;
+      }
+      try {
+        localStorage.setItem(`jaago_cache_${key}`, serialized);
+      } catch (err: any) {
+        if (err?.name === 'QuotaExceededError' || err?.code === 22) {
+          cleanupExpiredCache(true);
+          try {
+            localStorage.setItem(`jaago_cache_${key}`, serialized);
+          } catch {
+            // Silently retain in in-memory cache
+          }
+        }
+      }
     } catch {}
   }
 }
@@ -123,6 +176,9 @@ if (typeof window !== 'undefined') {
       memoryCache.delete(cacheKey);
     }
   });
+
+  // Automatically prune expired cache on load to keep localStorage lean
+  cleanupExpiredCache();
 }
 
 /**

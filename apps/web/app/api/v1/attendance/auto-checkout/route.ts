@@ -74,8 +74,67 @@ async function processAutoCheckout(options?: {
   for (const rec of recordsToClose) {
     try {
       const recDate = rec.business_date || businessDate;
-      const recCutoffIso = new Date(`${recDate}T${cutoffTime}:00+06:00`).toISOString();
       const firstIn = rec.first_check_in_at || rec.check_in_at;
+
+      // Check if employee has a legitimate BioTime check-out on this date
+      const { data: bioPunches } = await supabase
+        .from('att_biotime_events')
+        .select('*')
+        .eq('hub_employee_id', rec.employee_id)
+        .gte('punch_time', `${recDate}T00:00:00+06:00`)
+        .lte('punch_time', `${recDate}T23:59:59+06:00`)
+        .order('punch_time', { ascending: true });
+
+      let physicalOutUtc: string | null = null;
+      if (bioPunches && bioPunches.length > 0) {
+        const checkOutBio = bioPunches.filter(
+          (bp) => bp.punch_state === 'CHECK_OUT' || (firstIn && new Date(bp.punch_time).getTime() > new Date(firstIn).getTime() + 5 * 60 * 1000)
+        );
+        if (checkOutBio.length > 0) {
+          physicalOutUtc = checkOutBio[checkOutBio.length - 1]!.punch_time;
+        }
+      }
+
+      if (physicalOutUtc) {
+        // Legitimate BioTime checkout exists: close attendance_records with BioTime punch without inserting synthetic auto-checkout
+        const facts = {
+          employeeId: rec.employee_id,
+          businessDate: recDate,
+          firstCheckInAt: firstIn,
+          lastCheckOutAt: physicalOutUtc,
+          checkInAt: rec.check_in_at,
+          checkOutAt: physicalOutUtc,
+          calcMethod: (rec.calc_method as 'span' | 'sessions') || 'span',
+        };
+
+        const workedSeconds = calculateWorkedSeconds(facts, facts.calcMethod, physicalOutUtc);
+        const workedMinutes = Math.floor(workedSeconds / 60);
+        const workedDisplay = formatWorkingHours(workedSeconds);
+
+        const { data: updatedBio } = await supabase
+          .from('attendance_records')
+          .update({
+            check_out_at: physicalOutUtc,
+            last_check_out_at: physicalOutUtc,
+            check_out_source: 'biotime',
+            is_auto_checkout: false,
+            needs_review: false,
+            worked_seconds: workedSeconds,
+            worked_minutes: workedMinutes,
+            worked_display: workedDisplay,
+            status: rec.status === 'absent' ? 'present' : (rec.status || 'present'),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', rec.id)
+          .select()
+          .single();
+
+        autoClosedCount++;
+        if (updatedBio) updatedRecords.push(updatedBio);
+        continue;
+      }
+
+      const recCutoffIso = new Date(`${recDate}T${cutoffTime}:00+06:00`).toISOString();
       const lastOut = recCutoffIso;
 
       const facts = {

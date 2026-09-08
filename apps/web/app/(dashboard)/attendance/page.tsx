@@ -1346,7 +1346,7 @@ export default function AttendancePage() {
                               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
                                 Auto (11:30 PM)
                               </span>
-                            ) : log.checkOutSource === 'BIOTIME' ? (
+                            ) : log.checkOutSource?.toUpperCase() === 'BIOTIME' ? (
                               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
                                 <Fingerprint className="w-2.5 h-2.5" />
                                 BioTime
@@ -2271,7 +2271,7 @@ function AttendanceLogRow({
       <td className="py-3.5 px-3">
         <div className="font-mono font-bold text-rose-500">{log.checkOutTime || '--:--'}</div>
         <div className="flex items-center gap-1 mt-0.5">
-          {log.checkOutSource === 'BIOTIME' ? (
+          {log.checkOutSource?.toUpperCase() === 'BIOTIME' ? (
             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
               <Fingerprint className="w-2.5 h-2.5" />
               BioTime

@@ -1,6 +1,7 @@
 import { getSupabase } from './supabase-auth';
 import { fetchEmployeesFromSupabase } from './supabase-employees';
 import { fetchWithCache, invalidateCache } from './data-cache';
+import { getLocalAttendanceLogs, saveLocalAttendanceLogs } from './supabase-attendance';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & INTERFACES
@@ -784,8 +785,7 @@ export async function fetchLeaveRequests(forceRefresh: boolean = false): Promise
 function syncLeaveToAttendanceLogs(request: LeaveRequestItem) {
   if (typeof window === 'undefined') return;
   try {
-    const raw = localStorage.getItem('jaago_pnc_attendance_logs_v2');
-    let logs: any[] = raw ? JSON.parse(raw) : [];
+    let logs: any[] = getLocalAttendanceLogs();
 
     const start = new Date(request.fromDate);
     const end = new Date(request.toDate);
@@ -845,7 +845,7 @@ function syncLeaveToAttendanceLogs(request: LeaveRequestItem) {
       }
     }
 
-    localStorage.setItem('jaago_pnc_attendance_logs_v2', JSON.stringify(logs));
+    saveLocalAttendanceLogs(logs);
   } catch (err) {
     console.warn('Attendance log sync error:', err);
   }

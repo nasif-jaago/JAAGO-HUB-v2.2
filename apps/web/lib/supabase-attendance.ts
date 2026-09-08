@@ -1,5 +1,5 @@
 import { getSupabase } from './supabase-auth';
-import { fetchWithCache, invalidateCache } from './data-cache';
+import { fetchWithCache, invalidateCache, cleanupExpiredCache } from './data-cache';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & INTERFACES
@@ -333,7 +333,7 @@ export function saveLocalShifts(shifts: ShiftItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEY_SHIFTS, JSON.stringify(shifts));
   } catch (err) {
-    console.error('Error saving shifts to localStorage', err);
+    console.warn('Error saving shifts to localStorage', err);
   }
 }
 
@@ -354,21 +354,28 @@ export function saveDeletedAttendanceLogKeys(keys: string[]): void {
   try {
     localStorage.setItem(STORAGE_KEY_DELETED_LOGS, JSON.stringify(keys));
   } catch (err) {
-    console.error('Error saving deleted attendance log keys', err);
+    console.warn('Error saving deleted attendance log keys', err);
   }
 }
+
+let inMemoryAttendanceLogs: AttendanceLogItem[] | null = null;
 
 export function getLocalAttendanceLogs(): AttendanceLogItem[] {
   if (typeof window === 'undefined') return [];
   try {
     const deletedKeysSet = new Set(getDeletedAttendanceLogKeys());
-    const raw = localStorage.getItem(STORAGE_KEY_ATTENDANCE);
     let parsed: AttendanceLogItem[] = [];
-    if (raw) {
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = [];
+    if (inMemoryAttendanceLogs && inMemoryAttendanceLogs.length > 0) {
+      parsed = inMemoryAttendanceLogs;
+    } else {
+      const raw = localStorage.getItem(STORAGE_KEY_ATTENDANCE);
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw);
+          inMemoryAttendanceLogs = parsed;
+        } catch {
+          parsed = [];
+        }
       }
     }
 
@@ -540,12 +547,60 @@ export function getLocalAttendanceLogs(): AttendanceLogItem[] {
   }
 }
 
+function prepareCompactAttendanceLog(log: AttendanceLogItem): AttendanceLogItem {
+  return {
+    ...log,
+    // Keep at most 4 punches in local storage cache (detailed punch audits are queried live or stored in memory)
+    allPunches: log.allPunches && log.allPunches.length > 4 ? log.allPunches.slice(0, 4) : log.allPunches,
+    // Drop heavy base64 data URIs from avatars to conserve storage quota
+    avatarUrl: log.avatarUrl && log.avatarUrl.startsWith('data:') ? '' : log.avatarUrl,
+    // Truncate overly long notes
+    notes: log.notes && log.notes.length > 250 ? log.notes.slice(0, 250) : log.notes,
+  };
+}
+
 export function saveLocalAttendanceLogs(logs: AttendanceLogItem[]): void {
   if (typeof window === 'undefined') return;
+  // Always update in-memory cache with full fidelity
+  inMemoryAttendanceLogs = logs;
+
   try {
-    localStorage.setItem(STORAGE_KEY_ATTENDANCE, JSON.stringify(logs));
+    const sorted = [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Attempt 1: Store top 200 recent records compacted
+    const primarySlice = sorted.slice(0, 200).map(prepareCompactAttendanceLog);
+    try {
+      localStorage.setItem(STORAGE_KEY_ATTENDANCE, JSON.stringify(primarySlice));
+      return;
+    } catch (storageErr: any) {
+      console.warn('[Attendance] LocalStorage quota reached, pruning cache and applying fallback compaction:', storageErr?.message || storageErr);
+    }
+
+    // Attempt 2: Clear all jaago_cache_ items to reclaim space and try 100 records
+    cleanupExpiredCache(true);
+    const slice100 = sorted.slice(0, 100).map(prepareCompactAttendanceLog);
+    try {
+      localStorage.setItem(STORAGE_KEY_ATTENDANCE, JSON.stringify(slice100));
+      return;
+    } catch {}
+
+    // Attempt 3: Try 50 records
+    const slice50 = sorted.slice(0, 50).map(prepareCompactAttendanceLog);
+    try {
+      localStorage.setItem(STORAGE_KEY_ATTENDANCE, JSON.stringify(slice50));
+      return;
+    } catch {}
+
+    // Attempt 4: Try 25 records
+    const slice25 = sorted.slice(0, 25).map(prepareCompactAttendanceLog);
+    try {
+      localStorage.setItem(STORAGE_KEY_ATTENDANCE, JSON.stringify(slice25));
+      return;
+    } catch {}
+
+    console.warn('[Attendance] Storage quota critically full. All attendance logs are safely preserved in-memory.');
   } catch (err) {
-    console.error('Error saving attendance logs to localStorage', err);
+    console.warn('[Attendance] Non-fatal error saving attendance logs to localStorage:', err);
   }
 }
 
@@ -645,7 +700,7 @@ export function saveLocalOnDutyLogs(logs: OnDutyLogItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEY_ONDUTY, JSON.stringify(logs));
   } catch (err) {
-    console.error('Error saving on duty logs to localStorage', err);
+    console.warn('Error saving on duty logs to localStorage', err);
   }
 }
 
