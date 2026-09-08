@@ -69,6 +69,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const ALLOWED_EXTENSIONS = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.docx', '.xlsx', '.csv', '.txt']);
+    const ext = path.extname(originalName).toLowerCase();
+    if (!ALLOWED_EXTENSIONS.has(ext)) {
+      return NextResponse.json(
+        { success: false, error: `Invalid file type: ${ext}. Only documents and images (PDF, PNG, JPG, WEBP, DOCX, XLSX, CSV, TXT) are permitted.` },
+        { status: 400 }
+      );
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     ensureUploadDirExists();
 

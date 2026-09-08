@@ -56,7 +56,7 @@ export interface BioTimePaginatedLogs {
 
 export const INITIAL_BIOTIME_CONFIG: BioTimeConfig = {
   serverUrl: process.env.BIOTIME_SERVER_URL || 'http://182.160.105.162:4390',
-  apiToken: process.env.BIOTIME_API_TOKEN || 'bdb2bffa3748e8aa85fc43bcdc1e51690f89eb20',
+  apiToken: process.env.BIOTIME_API_TOKEN || '',
   autoSyncEnabled: true,
   syncIntervalMinutes: 5,
   lastSyncTime: new Date().toISOString(),

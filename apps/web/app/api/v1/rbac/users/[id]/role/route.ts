@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@jaago/auth';
+import { getSupabaseAdminClient, extractTokenFromRequest, validateAccessToken } from '@jaago/auth';
 import { logger } from '@jaago/logger';
 import { updateUserInDb } from '@/lib/users-db';
 
@@ -8,6 +8,15 @@ export const dynamic = 'force-dynamic';
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const token = extractTokenFromRequest(request);
+    if (!token) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+    const session = await validateAccessToken(token);
+    if (!session || (!session.isSuperAdmin && !session.roles.includes('admin') && !session.permissions.includes('system.users.manage') && !session.permissions.includes('*'))) {
+      return NextResponse.json({ success: false, error: 'Forbidden. Admin privileges required.' }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const body = await request.json();
     const { role } = body;

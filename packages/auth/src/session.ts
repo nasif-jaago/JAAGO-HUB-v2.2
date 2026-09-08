@@ -12,15 +12,18 @@ export interface UserSession {
 }
 
 export async function validateAccessToken(token: string): Promise<UserSession> {
-  const isMock = !process.env['NEXT_PUBLIC_SUPABASE_URL'] || process.env['NEXT_PUBLIC_SUPABASE_URL'].includes('mock');
+  if (!token || typeof token !== 'string') {
+    throw new UnauthorizedError('Authentication token is required');
+  }
 
-  if (isMock || token.startsWith('mock-') || token.startsWith('jwt-jaago-') || token.startsWith('jaago-')) {
+  // Only allow mock testing tokens in explicit automated testing environment
+  if (process.env.NODE_ENV === 'test' && (token.startsWith('mock-') || token.startsWith('test-'))) {
     return {
-      userId: 'c8a1f5e4-3231-442c-ab13-c7d9b473e4d5',
-      email: 'nasif.kamal@jaago.com.bd',
+      userId: 'test-mock-user-id',
+      email: 'tester@jaago.com.bd',
       organizationId: 'org-jaago-dhaka',
-      roles: ['super_admin', 'coordinator'],
-      permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*', 'directory.*', 'announcements.*'],
+      roles: ['super_admin'],
+      permissions: ['*'],
       isSuperAdmin: true,
       mfaVerified: true,
     };
@@ -38,8 +41,7 @@ export async function validateAccessToken(token: string): Promise<UserSession> {
       const isSuper =
         rawRoleUpper === 'SUPER_ADMIN' ||
         rawRole.toLowerCase() === 'super_admin' ||
-        userMetadata['is_super_admin'] === true ||
-        user.email?.toLowerCase().includes('nasif.kamal') === true;
+        userMetadata['is_super_admin'] === true;
 
       const isAdmin =
         isSuper ||
@@ -72,20 +74,8 @@ export async function validateAccessToken(token: string): Promise<UserSession> {
         mfaVerified: Boolean(user.app_metadata?.['aal'] === 'aal2'),
       };
     }
-  } catch {
-    // Fall back to enterprise fallback if token is signed or recognized
-  }
-
-  if (token.startsWith('jwt-') || token.startsWith('jaago_') || token.length > 20) {
-    return {
-      userId: 'c8a1f5e4-3231-442c-ab13-c7d9b473e4d5',
-      email: 'nasif.kamal@jaago.com.bd',
-      organizationId: 'org-jaago-dhaka',
-      roles: ['super_admin', 'coordinator'],
-      permissions: ['system.*', 'hr.*', 'finance.*', 'pnc.*', 'directory.*', 'announcements.*'],
-      isSuperAdmin: true,
-      mfaVerified: true,
-    };
+  } catch (err) {
+    if (err instanceof UnauthorizedError) throw err;
   }
 
   throw new UnauthorizedError('Invalid or expired authentication session');
@@ -97,4 +87,25 @@ export function extractBearerToken(authHeader?: string | null): string | undefin
   }
   return authHeader.slice(7).trim();
 }
+
+/**
+ * Extracts session token from either Authorization header or request Cookies
+ */
+export function extractTokenFromRequest(request: Request): string | undefined {
+  const authHeader = request.headers.get('authorization');
+  const bearerToken = extractBearerToken(authHeader);
+  if (bearerToken) return bearerToken;
+
+  const cookieHeader = request.headers.get('cookie');
+  if (cookieHeader) {
+    const cookies = cookieHeader.split(';').map((c) => c.trim());
+    for (const cookie of cookies) {
+      if (cookie.startsWith('jaago_access_token=')) {
+        return decodeURIComponent(cookie.slice('jaago_access_token='.length));
+      }
+    }
+  }
+  return undefined;
+}
+
 

@@ -138,13 +138,16 @@ export const POST = createApiHandler({
         },
       });
 
+      const isProd = process.env.NODE_ENV === 'production';
+      const secureFlag = isProd ? '; Secure' : '';
+
       response.headers.append(
         'Set-Cookie',
-        `jaago_access_token=${data.session.access_token}; Path=/; Max-Age=${data.session.expires_in || 604800}; SameSite=Lax`
+        `jaago_access_token=${data.session.access_token}; Path=/; Max-Age=${data.session.expires_in || 604800}; HttpOnly; SameSite=Lax${secureFlag}`
       );
       response.headers.append(
         'Set-Cookie',
-        `jaago_user=${encodeURIComponent(JSON.stringify(userObj))}; Path=/; Max-Age=${data.session.expires_in || 604800}; SameSite=Lax`
+        `jaago_user=${encodeURIComponent(JSON.stringify(userObj))}; Path=/; Max-Age=${data.session.expires_in || 604800}; SameSite=Lax${secureFlag}`
       );
 
       return response;

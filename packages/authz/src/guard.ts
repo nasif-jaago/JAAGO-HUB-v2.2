@@ -1,6 +1,6 @@
 import { extractTraceHeaders, runWithContext } from '@jaago/observability';
 import { logger } from '@jaago/logger';
-import { extractBearerToken, validateAccessToken, UserSession } from '@jaago/auth';
+import { extractTokenFromRequest, validateAccessToken, UserSession } from '@jaago/auth';
 import { createErrorEnvelope, AppError, ErrorCode, UnauthorizedError, ForbiddenError, TooManyRequestsError } from '@jaago/contracts';
 import { globalRateLimiter, RATE_LIMIT_POLICIES } from '@jaago/cache';
 import { evaluatePermission } from './evaluator';
@@ -45,8 +45,7 @@ export function createApiHandler(options: ApiHandlerOptions) {
         let session: UserSession | undefined;
 
         if (requireAuth) {
-          const authHeader = request.headers.get('authorization');
-          const token = extractBearerToken(authHeader);
+          const token = extractTokenFromRequest(request);
 
           if (!token) {
             throw new UnauthorizedError('Authentication token is required');

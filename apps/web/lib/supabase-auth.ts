@@ -47,10 +47,10 @@ export function getSupabaseAdmin(): SupabaseClient {
     throw new Error('[Security Violation] Supabase Service Role client must never be instantiated in the browser.');
   }
   if (!supabaseAdminClient) {
-    const serviceKey =
-      process.env['SUPABASE_SERVICE_ROLE_KEY'] ||
-      process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZuZW1zdndlanltbnFwdWZ1bWhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzIzNDY1NywiZXhwIjoyMTAyODEwNjU3fQ.WsvG5oRwqp7U04JnfiKmxIbnEnan1a0TqaY97vlhLVI';
+    const serviceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+    if (!serviceKey) {
+      throw new Error('[Security Exception] SUPABASE_SERVICE_ROLE_KEY environment variable is required.');
+    }
     supabaseAdminClient = createClient(supabaseUrl, serviceKey, {
       auth: {
         persistSession: false,

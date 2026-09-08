@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { emailStore, createTransporterForServer, validateEmailAddress } from '@/lib/email-service';
 import { logger } from '@jaago/logger';
+import { extractTokenFromRequest, validateAccessToken } from '@jaago/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,15 @@ export const dynamic = 'force-dynamic';
 // POST /api/v1/admin/email/servers/[id]/test-send — Sends an actual test email through a specific server
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const token = extractTokenFromRequest(request);
+    if (!token) {
+      return NextResponse.json({ success: false, error: 'Unauthorized. Admin session required.' }, { status: 401 });
+    }
+    const session = await validateAccessToken(token);
+    if (!session || (!session.isSuperAdmin && !session.roles.includes('admin'))) {
+      return NextResponse.json({ success: false, error: 'Forbidden. Admin privileges required.' }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const body = await request.json();
     const { to } = body;

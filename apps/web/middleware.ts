@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 /**
- * Public routes that do NOT require authentication
+ * Public web page routes that do NOT require authentication
  */
 const PUBLIC_PATHS = [
   '/login',
@@ -12,24 +12,65 @@ const PUBLIC_PATHS = [
   '/health',
 ];
 
+/**
+ * Public API routes that do NOT require user session
+ */
+const PUBLIC_API_PATHS = [
+  '/api/v1/auth/sign-in',
+  '/api/v1/auth/login',
+  '/api/v1/auth/forgot-password',
+  '/api/v1/biotime/push',
+  '/health',
+];
+
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  // 1. Check if the path is a public route, API route, or static asset
-  const isPublicRoute =
-    PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`)) ||
-    pathname.startsWith('/api/') ||
+  // 1. Static assets and Next.js internal files
+  const isStaticAsset =
     pathname.startsWith('/_next') ||
-    pathname.includes('.'); // Static files (.png, .jpg, .ico, .svg, .webp, etc.)
+    pathname.includes('.') ||
+    pathname === '/favicon.ico';
 
-  // 2. Check for session tokens in request cookies
+  if (isStaticAsset) {
+    return NextResponse.next();
+  }
+
+  // 2. Check for session tokens in request cookies or Authorization header (Dual-Channel Auth)
   const hasAccessToken = request.cookies.has('jaago_access_token');
   const hasUserCookie = request.cookies.has('jaago_user');
   const hasSupabaseCookie = Array.from(request.cookies.getAll()).some(
     (c) => (c.name.startsWith('sb-') && c.name.endsWith('-auth-token')) || c.name === 'supabase-auth-token'
   );
+  const authHeader = request.headers.get('authorization');
+  const hasBearerToken = Boolean(authHeader && authHeader.startsWith('Bearer ') && authHeader.length > 10);
 
-  const isAuthenticated = hasAccessToken || hasUserCookie || hasSupabaseCookie;
+  const isAuthenticated = hasAccessToken || hasUserCookie || hasSupabaseCookie || hasBearerToken;
+
+  // 3. API ROUTE GATEWAY SECURITY
+  if (pathname.startsWith('/api/')) {
+    const isPublicApi = PUBLIC_API_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+
+    if (!isPublicApi && !isAuthenticated) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Unauthorized',
+          message: 'Authentication token or active session is required to access this resource.',
+        },
+        { status: 401 }
+      );
+    }
+
+    const response = NextResponse.next();
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    response.headers.set('X-Frame-Options', 'DENY');
+    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    return response;
+  }
+
+  // 4. WEB PAGE ROUTING & AUTHENTICATION
+  const isPublicPage = PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 
   // Root path routing
   if (pathname === '/') {
@@ -40,9 +81,8 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // ── 3. STRICT ERP AUTHENTICATION ENFORCEMENT ──
   // If accessing a protected route without authentication, immediately redirect to /login
-  if (!isPublicRoute && !isAuthenticated) {
+  if (!isPublicPage && !isAuthenticated) {
     const redirectUrl = new URL('/login', request.url);
     const destination = pathname + search;
     if (destination !== '/' && destination !== '/dashboard') {
@@ -56,7 +96,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
-  // 4. Continue with request and apply Enterprise Security Headers
+  // 5. Continue with request and apply Enterprise Security Headers
   const response = NextResponse.next();
 
   // Content Security Policy (CSP)

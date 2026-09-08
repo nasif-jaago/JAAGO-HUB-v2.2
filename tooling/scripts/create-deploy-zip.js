@@ -19,7 +19,10 @@ const excludeList = [
   '.tempmediaStorage',
   '.system_generated',
   '.user_uploaded',
+  '.env',
   '.env.local',
+  '.env.production',
+  '.env.staging',
 ];
 
 const stagingDir = path.join(rootDir, '.deploy_staging');
