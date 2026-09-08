@@ -43,9 +43,9 @@ export const DEFAULT_ROOMS: MeetingRoom[] = [
     floor: 'Floor 1',
     location: 'Floor 1 • HQ - JAAGO Foundation',
     status: 'Available',
-    amenities: ['20 Chairs', 'Projector & Screen', 'Video Conference Camera', 'High Speed WiFi', 'Air Conditioned', 'Whiteboard'],
-    image: '/rooms/room-1.jpg',
-    description: 'Internal presentation and hybrid team conferencing hall with theater-style and classroom chair arrangement.',
+    amenities: ['Conference Table', 'Ergonomic Mesh Chairs', 'Wall Display TV', 'Conference Audio Puck', 'Air Conditioned', 'High Speed WiFi'],
+    image: '/rooms/room-1.jpg?v=2',
+    description: 'Internal presentation and hybrid team conferencing room with central conference table, wall display screen, and video conference setup.',
     color: 'amber',
   },
   {
@@ -56,9 +56,9 @@ export const DEFAULT_ROOMS: MeetingRoom[] = [
     floor: 'Floor 1',
     location: 'Floor 1 • HQ - JAAGO Foundation',
     status: 'Available',
-    amenities: ['Conference Table', '20 Executive Chairs', 'Wall Display TV', 'Conference Mic', 'Air Conditioned', 'Whiteboard'],
-    image: '/rooms/room-2.jpg',
-    description: 'Formal executive board meeting room featuring a solid wood conference table and multimedia video conferencing gear.',
+    amenities: ['Audience & Seminar Chairs', 'Presenter Desk & Executive Chairs', 'Wall Display TV', 'Podium', 'Air Conditioned', 'High Speed WiFi'],
+    image: '/rooms/room-2.jpg?v=2',
+    description: 'Seminar & training hall configured with rows of audience seating, presenter workstation, podium, and wall-mounted multimedia display.',
     color: 'blue',
   },
   {
@@ -69,9 +69,9 @@ export const DEFAULT_ROOMS: MeetingRoom[] = [
     floor: 'Floor 1',
     location: 'Floor 1 • HQ - JAAGO Foundation',
     status: 'Available',
-    amenities: ['60 Audience Chairs', 'Dual Laser Projector', 'Stage Audio System', 'Wireless Microphones', 'Central AC', 'Podium'],
-    image: '/rooms/room-3.jpg',
-    description: 'Large multifunctional auditorium & training hall suited for all-hands townhalls, workshops, and youth leadership assemblies.',
+    amenities: ['60 Audience Chairs', 'Wall Display TV', 'Podium', 'Wireless Microphones', 'Central AC', 'Presentation Setup'],
+    image: '/rooms/room-3.jpg?v=2',
+    description: 'Large multifunctional presentation & training hall suited for all-hands townhalls, workshops, and team assemblies.',
     color: 'purple',
   },
   {
@@ -82,9 +82,9 @@ export const DEFAULT_ROOMS: MeetingRoom[] = [
     floor: 'Floor 1',
     location: 'Floor 1 • HQ - JAAGO Foundation',
     status: 'Available',
-    amenities: ['Glass Enclosure', 'Lounge Chairs & Table', 'Coffee Bar Access', 'Whiteboard', 'Air Conditioned'],
-    image: '/rooms/room-4.jpg',
-    description: 'Volunteer for Bangladesh (VBD) executive lounge & collaborative brainstorming nook with cozy acoustic setup.',
+    amenities: ['Glass Enclosure Door', 'Meeting Desks & Chairs', 'Track Lighting', 'Air Conditioned', 'High Speed WiFi'],
+    image: '/rooms/room-4.jpg?v=2',
+    description: 'Volunteer for Bangladesh (VBD) meeting and collaborative work room with glass door enclosure, track lighting, and workstations.',
     color: 'emerald',
   },
   {
@@ -95,9 +95,9 @@ export const DEFAULT_ROOMS: MeetingRoom[] = [
     floor: 'Floor 2',
     location: 'Floor 2 • HQ - JAAGO Foundation',
     status: 'Available',
-    amenities: ['Soundproof Booth', 'Ergonomic Task Chairs', 'Power & USB Hubs', 'Focus Lighting', 'Air Conditioned'],
-    image: '/rooms/room-5.jpg',
-    description: 'Dedicated soundproof acoustic focus pod designed for confidential 1-on-1 appraisals, donor calls, and deep work.',
+    amenities: ['Glass Sliding Door Pod', 'Cozy Seating Nook & Cushions', 'Round Discussion Table', 'Focus Lighting', 'Tower Cooling Fan'],
+    image: '/rooms/room-5.jpg?v=2',
+    description: 'Glass-enclosed quiet focus pod with comfortable seating nook, inspirational quote graphics, and discussion table for 1-on-1s.',
     color: 'rose',
   },
   {
@@ -108,22 +108,22 @@ export const DEFAULT_ROOMS: MeetingRoom[] = [
     floor: 'Floor 1',
     location: 'Floor 1 • HQ - JAAGO Foundation',
     status: 'Available',
-    amenities: ['Round Meeting Table', '3 Mesh Chairs', 'Whiteboard', 'Air Conditioned', 'Power Strip'],
-    image: '/rooms/room-6.jpg',
-    description: 'Compact round-table huddle space for fast tactical check-ins, sprint reviews, and peer design syncs.',
+    amenities: ['Glass Door Pod', 'Round Bistro Table', 'Cushioned Ottoman Stools', 'Tower Cooling Fan', 'High Speed WiFi'],
+    image: '/rooms/room-6.jpg?v=2',
+    description: 'Compact glass-enclosed focus booth with warm yellow walls, round bistro table, and cushioned ottoman seating for 1-on-1s.',
     color: 'teal',
   },
   {
     id: 'room-7',
-    name: '7. Ground Floor',
+    name: '7. Ground Floor In',
     roomNumber: 7,
     capacity: 6,
     floor: 'Ground Floor',
     location: 'Ground Floor • HQ - JAAGO Foundation',
     status: 'Available',
-    amenities: ['Open Collaborative Table', 'Standing Desk Station', 'High-Speed WiFi', 'Power Bar', 'Natural Light'],
-    image: '/rooms/room-7.jpg',
-    description: 'Ground floor agile team collaboration station offering instant walk-in accessibility and open-air natural lighting.',
+    amenities: ['Team Workstation Table', 'Comfortable Lounge Sofa', 'Pendant Lighting', 'Cooling Fan', 'High-Speed WiFi'],
+    image: '/rooms/room-7.jpg?v=2',
+    description: 'Ground floor agile team collaboration station with work desks, sofa seating, and overhead ambient lighting.',
     color: 'amber',
   },
 ];
@@ -226,7 +226,7 @@ export const DEFAULT_BOOKINGS: RoomBooking[] = [
   {
     id: 'b-107',
     roomId: 'room-7',
-    roomName: '7. Ground Floor',
+    roomName: '7. Ground Floor In',
     title: 'DSP Digital Classroom Teacher Sync',
     date: '2026-09-01',
     startTime: '13:00',
@@ -480,11 +480,17 @@ export function getMeetingRooms(): MeetingRoom[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_ROOMS;
 
-    // Migrate any legacy unsplash URLs to local room assets
+    // Migrate legacy room images and synchronize default rooms metadata
     const migrated = parsed.map((room: MeetingRoom) => {
-      if (room.image && room.image.includes('unsplash.com')) {
-        const defaultMatch = DEFAULT_ROOMS.find((dr) => dr.id === room.id);
-        return defaultMatch ? { ...room, image: defaultMatch.image } : room;
+      const defaultMatch = DEFAULT_ROOMS.find((dr) => dr.id === room.id);
+      if (defaultMatch) {
+        return {
+          ...room,
+          name: defaultMatch.name,
+          image: defaultMatch.image,
+          amenities: defaultMatch.amenities,
+          description: defaultMatch.description,
+        };
       }
       return room;
     });
