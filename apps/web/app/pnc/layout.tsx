@@ -400,8 +400,9 @@ export default function PnCLayout({
 
   // Load saved theme or sync from DOM on mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('jaago_theme') as ThemeMode | null;
+    if (typeof window === 'undefined') return;
+
+    const applyTheme = (savedTheme: ThemeMode | null) => {
       const root = document.documentElement;
       if (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'espresso') {
         root.classList.remove('dark', 'light', 'espresso');
@@ -416,7 +417,20 @@ export default function PnCLayout({
       } else {
         setTheme('light');
       }
-    }
+    };
+
+    const saved = localStorage.getItem('jaago_theme') as ThemeMode | null;
+    applyTheme(saved);
+
+    const handleThemeChanged = (e: Event) => {
+      const next = (e as CustomEvent).detail as ThemeMode;
+      if (next) applyTheme(next);
+    };
+
+    window.addEventListener('jaago_theme_changed', handleThemeChanged);
+    return () => {
+      window.removeEventListener('jaago_theme_changed', handleThemeChanged);
+    };
   }, []);
 
   const cycleTheme = () => {
@@ -435,6 +449,7 @@ export default function PnCLayout({
     setTheme(nextTheme);
     if (typeof window !== 'undefined') {
       localStorage.setItem('jaago_theme', nextTheme);
+      window.dispatchEvent(new CustomEvent('jaago_theme_changed', { detail: nextTheme }));
     }
   };
 
@@ -510,24 +525,24 @@ export default function PnCLayout({
       <aside
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-[#090C10]/90 dark:bg-[#06080B]/92 backdrop-blur-2xl border-r border-white/10 text-white transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden ${
+        className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border text-sidebar-foreground transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-[0_0_50px_rgba(0,0,0,0.4)] overflow-hidden ${
           sidebarCollapsed
             ? '-translate-x-full w-72 pointer-events-none opacity-0'
             : 'translate-x-0 w-72 pointer-events-auto opacity-100'
         }`}
       >
         {/* Top Header Card: P&C Brand Badge */}
-        <div className="p-4 border-b border-white/[0.08] space-y-3 bg-white/[0.03] relative">
+        <div className="p-4 border-b border-sidebar-border/70 space-y-3 bg-surface/40 relative">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center font-black text-sm shadow-md flex-shrink-0">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center font-black text-sm shadow-md flex-shrink-0">
                 P&amp;C
               </div>
               <div>
-                <h1 className="text-sm font-extrabold text-white leading-tight">
+                <h1 className="text-sm font-extrabold text-sidebar-foreground leading-tight">
                   People and Culture
                 </h1>
-                <p className="text-[11px] font-semibold text-white/50">
+                <p className="text-[11px] font-semibold text-sidebar-muted">
                   v1.0 HR Management
                 </p>
               </div>
@@ -539,20 +554,20 @@ export default function PnCLayout({
                 e.stopPropagation();
                 setSidebarCollapsed(true);
               }}
-              className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/70 hover:text-white transition shadow-sm cursor-pointer"
+              className="p-1.5 rounded-lg bg-surface/70 hover:bg-surface border border-sidebar-border text-sidebar-muted hover:text-sidebar-foreground transition shadow-sm cursor-pointer"
               title="Hide Sidebar"
               aria-label="Hide Sidebar"
             >
-              <ChevronLeft className="h-3.5 w-3.5 text-white" />
+              <ChevronLeft className="h-3.5 w-3.5 text-sidebar-foreground" />
             </button>
           </div>
 
           {/* Back to JAAGO HUB button */}
           <Link
             href="/dashboard"
-            className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-white/80 hover:text-amber-400 bg-white/[0.04] hover:bg-amber-500/10 border border-white/[0.08] hover:border-amber-500/30 transition shadow-sm"
+            className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:text-primary bg-surface/50 hover:bg-primary/10 border border-sidebar-border/70 hover:border-primary/40 transition shadow-sm"
           >
-            <ArrowLeft className="h-3.5 w-3.5 text-amber-400" />
+            <ArrowLeft className="h-3.5 w-3.5 text-primary" />
             <span className="uppercase tracking-wider text-[10px]">BACK TO JAAGO HUB</span>
           </Link>
         </div>
@@ -566,7 +581,7 @@ export default function PnCLayout({
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
                 pathname === '/pnc'
                   ? 'bg-gradient-to-r from-amber-500/20 to-amber-500/5 text-amber-400 font-black border border-amber-500/30 shadow-sm shadow-amber-500/10'
-                  : 'text-white/75 hover:bg-white/[0.06] hover:text-white'
+                  : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
               }`}
             >
               <LayoutDashboard className="h-4 w-4 text-amber-400 flex-shrink-0" />
@@ -581,7 +596,7 @@ export default function PnCLayout({
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
                 pathname === '/pnc/employees'
                   ? 'bg-gradient-to-r from-amber-500/20 to-amber-500/5 text-amber-400 font-black border border-amber-500/30 shadow-sm shadow-amber-500/10'
-                  : 'text-white/75 hover:bg-white/[0.06] hover:text-white'
+                  : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
               }`}
             >
               <Users className="h-4 w-4 text-amber-400/90 flex-shrink-0" />
@@ -602,7 +617,7 @@ export default function PnCLayout({
                   pathname.startsWith('/pnc/projects') ||
                   pathname.startsWith('/pnc/insurance')
                     ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
+                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
@@ -614,7 +629,7 @@ export default function PnCLayout({
                     pathname.startsWith('/pnc/projects') ||
                     pathname.startsWith('/pnc/insurance')
                       ? 'text-amber-400'
-                      : 'text-white/60'
+                      : 'text-sidebar-muted'
                   }`} />
                   <span className="uppercase tracking-wider text-[11px]">ORGANIZATION</span>
                 </div>
@@ -627,7 +642,7 @@ export default function PnCLayout({
                 pathname.startsWith('/pnc/insurance') ? (
                   <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+                  <ChevronRight className="h-3.5 w-3.5 text-sidebar-muted/60" />
                 )}
               </button>
               {(openSections['organization'] ||
@@ -637,7 +652,7 @@ export default function PnCLayout({
                 pathname.startsWith('/pnc/departments') ||
                 pathname.startsWith('/pnc/projects') ||
                 pathname.startsWith('/pnc/insurance')) && (
-                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-sidebar-muted border-l border-sidebar-border/70 ml-4 py-1">
                   <Link
                     href="/pnc/organization"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
@@ -711,25 +726,25 @@ export default function PnCLayout({
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/time-off')
                     ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
+                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
                   <Calendar className={`h-4 w-4 flex-shrink-0 ${
                     pathname.startsWith('/pnc/time-off')
                       ? 'text-amber-400'
-                      : 'text-white/60'
+                      : 'text-sidebar-muted'
                   }`} />
                   <span className="uppercase tracking-wider text-[11px]">TIME OFF</span>
                 </div>
                 {openSections['timeOff'] || pathname.startsWith('/pnc/time-off') ? (
                   <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+                  <ChevronRight className="h-3.5 w-3.5 text-sidebar-muted/60" />
                 )}
               </button>
               {(openSections['timeOff'] || pathname.startsWith('/pnc/time-off')) && (
-                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-sidebar-muted border-l border-sidebar-border/70 ml-4 py-1">
                   <Link
                     href="/pnc/time-off/calendar"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
@@ -793,7 +808,7 @@ export default function PnCLayout({
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/attendance')
                     ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
+                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
@@ -801,7 +816,7 @@ export default function PnCLayout({
                     className={`h-4 w-4 flex-shrink-0 ${
                       pathname.startsWith('/pnc/attendance')
                         ? 'text-amber-400'
-                        : 'text-white/60'
+                        : 'text-sidebar-muted'
                     }`}
                   />
                   <span className="uppercase tracking-wider text-[11px]">ATTENDANCE</span>
@@ -809,11 +824,11 @@ export default function PnCLayout({
                 {openSections['attendance'] || pathname.startsWith('/pnc/attendance') ? (
                   <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+                  <ChevronRight className="h-3.5 w-3.5 text-sidebar-muted/60" />
                 )}
               </button>
               {(openSections['attendance'] || pathname.startsWith('/pnc/attendance')) && (
-                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-sidebar-muted border-l border-sidebar-border/70 ml-4 py-1">
                   <Link
                     href="/pnc/attendance/logs"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
@@ -871,12 +886,12 @@ export default function PnCLayout({
 
           {/* APPRAISALS */}
           {permissionsState.canAccessAppraisals && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
-                <Award className="h-4 w-4 text-white/60 flex-shrink-0" />
+                <Award className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">APPRAISALS</span>
               </div>
-              <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+              <ChevronRight className="h-3.5 w-3.5 text-sidebar-muted/60" />
             </div>
           )}
 
@@ -888,21 +903,21 @@ export default function PnCLayout({
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/payroll')
                     ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
+                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
-                  <DollarSign className="h-4 w-4 text-white/60 flex-shrink-0" />
+                  <DollarSign className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                   <span className="uppercase tracking-wider text-[11px]">PAYROLL</span>
                 </div>
                 {openSections['payroll'] || pathname.startsWith('/pnc/payroll') ? (
                   <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+                  <ChevronRight className="h-3.5 w-3.5 text-sidebar-muted/60" />
                 )}
               </button>
               {(openSections['payroll'] || pathname.startsWith('/pnc/payroll')) && (
-                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-sidebar-muted border-l border-sidebar-border/70 ml-4 py-1">
                   <Link
                     href="/pnc/payroll"
                     className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
@@ -942,30 +957,30 @@ export default function PnCLayout({
 
           {/* REQUESTS */}
           {permissionsState.canAccessRequests && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
-                <FileText className="h-4 w-4 text-white/60 flex-shrink-0" />
+                <FileText className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">REQUESTS</span>
               </div>
-              <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+              <ChevronRight className="h-3.5 w-3.5 text-sidebar-muted/60" />
             </div>
           )}
 
           {/* REPORTS */}
           {permissionsState.canAccessReports && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
-                <BarChart3 className="h-4 w-4 text-white/60 flex-shrink-0" />
+                <BarChart3 className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">REPORTS</span>
               </div>
-              <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+              <ChevronRight className="h-3.5 w-3.5 text-sidebar-muted/60" />
             </div>
           )}
 
           {/* ANNOUNCEMENTS */}
           {permissionsState.canAccessAnnouncements && (
-            <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white/75 hover:bg-white/[0.05] hover:text-white transition cursor-pointer">
-              <Megaphone className="h-4 w-4 text-white/60 flex-shrink-0" />
+            <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground transition cursor-pointer">
+              <Megaphone className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">ANNOUNCEMENTS</span>
             </div>
           )}
@@ -977,10 +992,10 @@ export default function PnCLayout({
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 pathname.startsWith('/admin/rbac')
                   ? 'bg-amber-500/15 text-amber-400 font-black border border-amber-500/30'
-                  : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
+                  : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
               }`}
             >
-              <ShieldAlert className="h-4 w-4 text-white/60 flex-shrink-0" />
+              <ShieldAlert className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">U.ROLE</span>
             </Link>
           )}
@@ -993,21 +1008,21 @@ export default function PnCLayout({
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') || pathname === '/pnc/organization'
                     ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-white/75 hover:bg-white/[0.05] hover:text-white'
+                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
-                  <Settings className="h-4 w-4 text-white/60 flex-shrink-0" />
+                  <Settings className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                   <span className="uppercase tracking-wider text-[11px]">SETTINGS</span>
                 </div>
                 {openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') || pathname === '/pnc/organization' ? (
                   <ChevronDown className="h-3.5 w-3.5 text-amber-400" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-white/40" />
+                  <ChevronRight className="h-3.5 w-3.5 text-sidebar-muted/60" />
                 )}
               </button>
               {(openSections['settings'] || pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') || pathname === '/pnc/organization') && (
-                <div className="pl-6 space-y-1 text-xs text-white/60 border-l border-white/10 ml-4 py-1">
+                <div className="pl-6 space-y-1 text-xs text-sidebar-muted border-l border-sidebar-border/70 ml-4 py-1">
                   <Link
                     href="/pnc/organization"
                     className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
@@ -1047,27 +1062,27 @@ export default function PnCLayout({
         </div>
 
         {/* Bottom User Card & Log Out */}
-        <div className="p-3.5 border-t border-white/[0.08] bg-white/[0.03] space-y-3">
+        <div className="p-3.5 border-t border-sidebar-border/70 bg-surface/40 space-y-3">
           <div className="flex items-center space-x-3">
             {currentUser.avatarUrl ? (
               <img
                 src={currentUser.avatarUrl}
                 alt={currentUser.fullName}
-                className="h-9 w-9 rounded-full object-cover border border-amber-500/40 shadow-sm ring-1 ring-amber-500/20 flex-shrink-0"
+                className="h-9 w-9 rounded-full object-cover border border-primary/40 shadow-sm ring-1 ring-primary/20 flex-shrink-0"
               />
             ) : (
-              <div className="h-9 w-9 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center font-black text-xs shadow-sm uppercase flex-shrink-0">
+              <div className="h-9 w-9 rounded-full bg-primary/15 border border-primary/30 text-primary flex items-center justify-center font-black text-xs shadow-sm uppercase flex-shrink-0">
                 {currentUser.fullName ? currentUser.fullName.charAt(0) : 'U'}
               </div>
             )}
             <div className="overflow-hidden min-w-0 flex-1">
               <div
-                className="text-xs font-bold text-white truncate"
+                className="text-xs font-bold text-sidebar-foreground truncate"
                 title={`${currentUser.fullName} | ${currentUser.jobTitle}`}
               >
                 {currentUser.fullName} | {currentUser.jobTitle}
               </div>
-              <div className="text-[10px] font-semibold text-amber-400/90">
+              <div className="text-[10px] font-semibold text-primary">
                 {currentUser.isSuperAdmin
                   ? 'Super Admin'
                   : currentUser.isAdmin
@@ -1098,7 +1113,7 @@ export default function PnCLayout({
         }`}
       >
         {/* Top Header Bar */}
-        <header className="h-16 border-b border-white/[0.08] bg-[#090C10]/75 dark:bg-[#06080B]/85 backdrop-blur-xl text-white px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20 shadow-md shadow-black/30">
+        <header className="h-16 border-b border-header-border bg-header/90 backdrop-blur-xl text-header-foreground px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20 shadow-xs">
           <div className="flex items-center space-x-3 text-xs sm:text-sm font-bold">
             <button
               onClick={() => {
@@ -1108,7 +1123,7 @@ export default function PnCLayout({
                   setSidebarCollapsed(true);
                 }
               }}
-              className="p-1.5 rounded-xl hover:bg-white/[0.08] text-white/80 hover:text-amber-400 transition cursor-pointer"
+              className="p-1.5 rounded-xl hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
               title="Toggle Sidebar"
             >
               <Menu className="h-5 w-5" />
@@ -1116,14 +1131,14 @@ export default function PnCLayout({
             <div className="flex items-center space-x-2 text-xs sm:text-sm font-bold">
               <Link
                 href="/pnc"
-                className="text-amber-400 hover:underline transition cursor-pointer font-bold"
+                className="text-primary hover:underline transition cursor-pointer font-bold"
               >
                 People and Culture
               </Link>
-              <span className="text-white/30 font-bold">&gt;</span>
+              <span className="text-muted-foreground font-bold">&gt;</span>
               <Link
                 href={currentCrumb.href}
-                className="text-white hover:text-amber-400 transition cursor-pointer font-bold"
+                className="text-foreground hover:text-primary transition cursor-pointer font-bold"
               >
                 {currentCrumb.label}
               </Link>
@@ -1137,20 +1152,20 @@ export default function PnCLayout({
                 suppressHydrationWarning
                 value={selectedOrg}
                 onChange={(e) => handleOrgChange(e.target.value)}
-                className="appearance-none pl-8 pr-7 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40 backdrop-blur-md transition cursor-pointer shadow-sm max-w-[160px] sm:max-w-[210px] truncate"
+                className="appearance-none pl-8 pr-7 py-1.5 bg-surface hover:bg-surface/80 border border-border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 backdrop-blur-md transition cursor-pointer shadow-xs max-w-[160px] sm:max-w-[210px] truncate"
                 title="Select Active Organization"
               >
-                <option value="ALL" className="bg-[#0D1117] text-white font-bold">
+                <option value="ALL" className="bg-card text-foreground font-bold">
                   All Organizations (Consolidated)
                 </option>
                 {organizations.map((org) => (
-                  <option key={org.id} value={org.name} className="bg-[#0D1117] text-white">
+                  <option key={org.id} value={org.name} className="bg-card text-foreground">
                     {org.name}
                   </option>
                 ))}
               </select>
-              <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400 pointer-events-none" />
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/60 pointer-events-none" />
+              <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             </div>
 
             {/* Department Switcher Dropdown in Top Header */}
@@ -1160,32 +1175,32 @@ export default function PnCLayout({
                 value={isDspScoped ? 'Digital School Program' : selectedDept}
                 onChange={(e) => handleDeptChange(e.target.value)}
                 disabled={isDspScoped}
-                className={`appearance-none pl-8 pr-7 py-1.5 bg-white/[0.06] hover:bg-white/[0.1] border rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40 backdrop-blur-md transition shadow-sm max-w-[150px] sm:max-w-[200px] truncate ${
+                className={`appearance-none pl-8 pr-7 py-1.5 bg-surface hover:bg-surface/80 border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 backdrop-blur-md transition shadow-xs max-w-[150px] sm:max-w-[200px] truncate ${
                   isDspScoped
-                    ? 'border-amber-500/50 bg-amber-500/10 text-amber-400 cursor-not-allowed'
-                    : 'border-white/10 cursor-pointer'
+                    ? 'border-amber-500/50 bg-amber-500/10 text-amber-500 cursor-not-allowed'
+                    : 'border-border cursor-pointer'
                 }`}
                 title={isDspScoped ? 'Locked to Digital School Program Scope' : 'Select Active Department'}
               >
                 {!isDspScoped && (
-                  <option value="ALL" className="bg-[#0D1117] text-white font-bold">
+                  <option value="ALL" className="bg-card text-foreground font-bold">
                     All Departments
                   </option>
                 )}
                 {availableDepts.map((deptName) => (
-                  <option key={deptName} value={deptName} className="bg-[#0D1117] text-white">
+                  <option key={deptName} value={deptName} className="bg-card text-foreground">
                     {deptName}
                   </option>
                 ))}
               </select>
-              <Users className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400 pointer-events-none" />
-              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/60 pointer-events-none" />
+              <Users className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-primary pointer-events-none" />
+              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             </div>
 
             {/* Theme Mode Switcher (3-Way: Dark / Light / Espresso) */}
             <button
               onClick={cycleTheme}
-              className="p-2 rounded-xl text-white/75 hover:text-white hover:bg-white/[0.08] transition flex items-center justify-center cursor-pointer"
+              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition flex items-center justify-center cursor-pointer"
               title={`Theme: ${
                 theme === 'dark'
                   ? 'Matte Black (Click for Light Mode)'
@@ -1195,18 +1210,18 @@ export default function PnCLayout({
               }`}
               aria-label="Toggle Theme Mode"
             >
-              {theme === 'dark' && <Moon className="h-4 w-4 text-amber-400" />}
-              {theme === 'light' && <Sun className="h-4 w-4 text-amber-400" />}
-              {theme === 'espresso' && <Coffee className="h-4 w-4 text-amber-400" />}
+              {theme === 'dark' && <Moon className="h-4 w-4 text-primary" />}
+              {theme === 'light' && <Sun className="h-4 w-4 text-primary" />}
+              {theme === 'espresso' && <Coffee className="h-4 w-4 text-primary" />}
             </button>
 
-            <button className="p-2 rounded-xl text-white/75 hover:text-amber-400 hover:bg-white/[0.08] transition cursor-pointer" title="Search">
+            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer" title="Search">
               <Search className="h-4 w-4" />
             </button>
-            <button className="p-2 rounded-xl text-white/75 hover:text-amber-400 hover:bg-white/[0.08] transition cursor-pointer" title="Notifications">
+            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer" title="Notifications">
               <Bell className="h-4 w-4" />
             </button>
-            <button className="p-2 rounded-xl text-white/75 hover:text-amber-400 hover:bg-white/[0.08] transition cursor-pointer" title="Help">
+            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer" title="Help">
               <HelpCircle className="h-4 w-4" />
             </button>
           </div>

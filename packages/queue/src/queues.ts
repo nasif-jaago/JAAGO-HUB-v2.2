@@ -22,6 +22,21 @@ export interface EnqueuedJobResult {
 export class QueueProducerManager {
   private inMemoryQueue = new Map<string, Array<{ id: string; name: string; data: unknown }>>();
   private seenIdempotencyKeys = new Set<string>();
+  private hasWarnedMultiProcess = false;
+
+  constructor() {
+    if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') {
+      const hasRedis = Boolean(process.env.REDIS_URL || process.env.UPSTASH_REDIS_REST_URL);
+      if (!hasRedis && !this.hasWarnedMultiProcess) {
+        this.hasWarnedMultiProcess = true;
+        logger.warn('SYSTEM', 'queue.standalone_in_memory_mode', {
+          metadata: {
+            message: 'Queue running in standalone in-memory mode. Cross-process workers require REDIS_URL to share jobs.',
+          },
+        });
+      }
+    }
+  }
 
   public async enqueue<T extends BaseJobPayload>(
     queueName: StandardQueueName,

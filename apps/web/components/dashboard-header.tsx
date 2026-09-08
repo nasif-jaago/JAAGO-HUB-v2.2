@@ -127,8 +127,9 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
   // Load saved theme and view mode from localStorage on mount
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem('jaago_theme') as ThemeMode | null;
+    if (typeof window === 'undefined') return;
+
+    const applyTheme = (savedTheme: ThemeMode | null) => {
       const root = document.documentElement;
       if (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'espresso') {
         root.classList.remove('dark', 'light', 'espresso');
@@ -143,12 +144,26 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
       } else {
         setTheme('light');
       }
+    };
 
-      const savedViewMode = localStorage.getItem('jaago_view_mode') as ViewMode | null;
-      if (savedViewMode === 'mobile' || savedViewMode === 'desktop') {
-        setViewMode(savedViewMode);
-      }
+    const savedTheme = localStorage.getItem('jaago_theme') as ThemeMode | null;
+    applyTheme(savedTheme);
+
+    const handleThemeChanged = (e: Event) => {
+      const next = (e as CustomEvent).detail as ThemeMode;
+      if (next) applyTheme(next);
+    };
+
+    window.addEventListener('jaago_theme_changed', handleThemeChanged);
+
+    const savedViewMode = localStorage.getItem('jaago_view_mode') as ViewMode | null;
+    if (savedViewMode === 'mobile' || savedViewMode === 'desktop') {
+      setViewMode(savedViewMode);
     }
+
+    return () => {
+      window.removeEventListener('jaago_theme_changed', handleThemeChanged);
+    };
   }, []);
 
   const handleSearch = async (q: string) => {
@@ -187,6 +202,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
     setTheme(nextTheme);
     if (typeof window !== 'undefined') {
       localStorage.setItem('jaago_theme', nextTheme);
+      window.dispatchEvent(new CustomEvent('jaago_theme_changed', { detail: nextTheme }));
     }
   };
 

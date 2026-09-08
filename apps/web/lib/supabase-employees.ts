@@ -393,9 +393,6 @@ export function addDeletedEmployeeCode(_code: string) {}
 
 export function removeDeletedEmployeeCode(_code: string) {}
 
-/**
- * Bulk archive employees
- */
 export async function archiveEmployeesInSupabase(codes: string[]): Promise<boolean> {
   try {
     const supabase = getSupabase();
@@ -404,6 +401,9 @@ export async function archiveEmployeesInSupabase(codes: string[]): Promise<boole
       .from('employees')
       .update({ status: 'Archived', is_archived: true, updated_at: new Date().toISOString() })
       .in('code', codes);
+    if (!error) {
+      invalidateCache('pnc_employees_list');
+    }
     return !error;
   } catch {
     return false;
@@ -421,6 +421,9 @@ export async function unarchiveEmployeesInSupabase(codes: string[]): Promise<boo
       .from('employees')
       .update({ status: 'Active', is_archived: false, updated_at: new Date().toISOString() })
       .in('code', codes);
+    if (!error) {
+      invalidateCache('pnc_employees_list');
+    }
     return !error;
   } catch {
     return false;
@@ -438,10 +441,14 @@ export async function deleteEmployeesFromSupabase(codes: string[]): Promise<bool
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ codes }),
     });
+    if (res.ok) {
+      invalidateCache('pnc_employees_list');
+    }
     return res.ok;
   } catch (err) {
     console.warn('Delete employee error:', err);
     return false;
   }
 }
+
 

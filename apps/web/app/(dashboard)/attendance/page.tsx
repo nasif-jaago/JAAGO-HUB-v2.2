@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Clock,
   Calendar,
@@ -17,6 +18,9 @@ import {
   Fingerprint,
   Layers,
   Smartphone,
+  ExternalLink,
+  FileText,
+  BarChart3,
 } from 'lucide-react';
 import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
 import {
@@ -944,7 +948,7 @@ export default function AttendancePage() {
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* ── 1. HEADER & BREADCRUMB ────────────────────────────────────────── */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight flex items-center space-x-2.5">
             <Clock className="h-7 w-7 text-amber-500" />
@@ -957,6 +961,43 @@ export default function AttendancePage() {
             <span>&bull;</span>
             <span className="text-primary font-bold">Attendance</span>
           </div>
+        </div>
+
+        {/* ── Attendance Subsystem Navigation Switcher ── */}
+        <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-card border border-border/80 shadow-xs">
+          <button
+            type="button"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-primary text-primary-foreground shadow-sm cursor-default"
+          >
+            My Attendance &amp; Punch
+          </button>
+          <Link
+            href="/pnc/attendance/logs"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface transition"
+            title="View All Employee Attendance Logs (People & Culture)"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>Org Logs</span>
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </Link>
+          <Link
+            href="/pnc/attendance/report"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface transition"
+            title="Attendance Audit & Shift Report"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            <span>Shift Report</span>
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </Link>
+          <Link
+            href="/pnc/biotime"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface transition"
+            title="BioTime Biometric Machine Sync"
+          >
+            <Fingerprint className="h-3.5 w-3.5 text-amber-500" />
+            <span>BioTime Sync</span>
+            <ExternalLink className="h-3 w-3 opacity-60" />
+          </Link>
         </div>
       </div>
 

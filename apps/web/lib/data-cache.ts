@@ -63,13 +63,66 @@ export function setCachedData<T>(key: string, data: T, ttlMs: number = 30000): v
 export function invalidateCache(keyOrPrefix?: string): void {
   if (!keyOrPrefix) {
     memoryCache.clear();
-    return;
-  }
-  for (const k of Array.from(memoryCache.keys())) {
-    if (k === keyOrPrefix || k.startsWith(keyOrPrefix)) {
-      memoryCache.delete(k);
+    if (typeof window !== 'undefined') {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('jaago_cache_')) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {}
+    }
+  } else {
+    for (const k of Array.from(memoryCache.keys())) {
+      if (k === keyOrPrefix || k.startsWith(keyOrPrefix)) {
+        memoryCache.delete(k);
+      }
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const fullKey = `jaago_cache_${keyOrPrefix}`;
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k === fullKey || k.startsWith(fullKey))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+      } catch {}
     }
   }
+
+  // Broadcast cross-tab and cross-component invalidation event
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('jaago_cache_invalidated', { detail: keyOrPrefix }));
+  }
+}
+
+// Attach listener once in browser for multi-tab synchronization
+if (typeof window !== 'undefined') {
+  window.addEventListener('jaago_cache_invalidated', (e: Event) => {
+    const key = (e as CustomEvent).detail;
+    if (!key) {
+      memoryCache.clear();
+    } else {
+      for (const k of Array.from(memoryCache.keys())) {
+        if (k === key || k.startsWith(key)) {
+          memoryCache.delete(k);
+        }
+      }
+    }
+  });
+
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key && e.key.startsWith('jaago_cache_')) {
+      const cacheKey = e.key.replace('jaago_cache_', '');
+      memoryCache.delete(cacheKey);
+    }
+  });
 }
 
 /**
@@ -109,3 +162,4 @@ export async function fetchWithCache<T>(
   inFlightRequests.set(key, promise);
   return promise;
 }
+
