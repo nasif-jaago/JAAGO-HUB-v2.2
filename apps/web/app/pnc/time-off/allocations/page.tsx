@@ -119,6 +119,7 @@ export default function LeaveAllocationsPage() {
     unpaidUsed: 0,
     fiscalYear: '2026-2027',
   });
+  const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
 
   const loadData = async () => {
     const [allocs, emps, depts, projs] = await Promise.all([
@@ -273,14 +274,26 @@ export default function LeaveAllocationsPage() {
     e.preventDefault();
 
     if (editingSingleItem) {
-      // Save Single
+      // Save Single with Gender Sanity Enforcement
+      const singleEmp = employees.find((e) => e.code === singleFormData.employeeCode);
+      const singleGender = (singleEmp?.gender || singleFormData.gender || '').toUpperCase().trim();
+      const isSingleMale = singleGender === 'MALE' || singleGender === 'M';
+      const isSingleFemale = singleGender === 'FEMALE' || singleGender === 'F';
+
+      const sanitizedSingle: LeaveAllocationItem = {
+        ...singleFormData,
+        gender: singleGender,
+        maternityAllocated: isSingleMale ? 0 : singleFormData.maternityAllocated,
+        paternityAllocated: isSingleFemale ? 0 : singleFormData.paternityAllocated,
+      };
+
       const updated = allocations.map((a) =>
-        a.id === singleFormData.id ? singleFormData : a
+        a.id === sanitizedSingle.id ? sanitizedSingle : a
       );
       setAllocations(updated);
       setShowAllocateModal(false);
-      await saveLeaveAllocation(singleFormData);
-      showToastMsg(`Updated leave allocation for ${singleFormData.employeeName}`);
+      await saveLeaveAllocation(sanitizedSingle);
+      showToastMsg(`Updated leave allocation for ${sanitizedSingle.employeeName}`);
       return;
     }
 
@@ -290,16 +303,58 @@ export default function LeaveAllocationsPage() {
       return;
     }
 
+    // Check gender prohibition on bulk allocation
+    if (selectedLeaveType === 'Maternity Leave') {
+      const maleRecipients = selectedEmpCodes
+        .map((code) => employees.find((e) => e.code === code))
+        .filter((e) => {
+          const g = (e?.gender || '').toUpperCase().trim();
+          return g === 'MALE' || g === 'M';
+        });
+
+      if (maleRecipients.length === selectedEmpCodes.length) {
+        setPolicyErrorModal({
+          isOpen: true,
+          title: 'Maternity Leave Allocation Prohibited',
+          reason:
+            'Under JAAGO Foundation HR Policy (Clause 4.2), Maternity Leave is exclusively available for Female employees. All selected employees are Male, so Maternity Leave cannot be allocated to them.',
+        });
+        return;
+      }
+    }
+
+    if (selectedLeaveType === 'Paternity Leave') {
+      const femaleRecipients = selectedEmpCodes
+        .map((code) => employees.find((e) => e.code === code))
+        .filter((e) => {
+          const g = (e?.gender || '').toUpperCase().trim();
+          return g === 'FEMALE' || g === 'F';
+        });
+
+      if (femaleRecipients.length === selectedEmpCodes.length) {
+        setPolicyErrorModal({
+          isOpen: true,
+          title: 'Paternity Leave Allocation Prohibited',
+          reason:
+            'Under JAAGO Foundation HR Policy (Clause 4.3), Paternity Leave is exclusively available for Male employees. All selected employees are Female, so Paternity Leave cannot be allocated to them.',
+        });
+        return;
+      }
+    }
+
     const itemsToSave: LeaveAllocationItem[] = selectedEmpCodes.map((code) => {
       const emp = employees.find((e) => e.code === code);
       const existing = allocations.find((a) => a.employeeCode === code);
+      const empG = (emp?.gender || existing?.gender || '').toUpperCase().trim();
+      const isMale = empG === 'MALE' || empG === 'M';
+      const isFemale = empG === 'FEMALE' || empG === 'F';
 
       let casual = existing?.casualAllocated || 10;
       let medical = existing?.medicalAllocated || 10;
       let emergency = existing?.emergencyAllocated || 4;
       let annual = existing?.annualAllocated || 15;
-      let paternity = existing?.paternityAllocated || 15;
-      let maternity = existing?.maternityAllocated || 120;
+      let paternity = isFemale ? 0 : (existing?.paternityAllocated || 15);
+      let maternity = isMale ? 0 : (existing?.maternityAllocated || 120);
       let compOff = existing?.compOffAllocated || 16;
 
       if (selectedLeaveType === 'ALL_PACKAGE') {
@@ -307,6 +362,8 @@ export default function LeaveAllocationsPage() {
         medical = 10;
         emergency = 4;
         annual = 15;
+        paternity = isMale ? 15 : 0;
+        maternity = isFemale ? 120 : 0;
       } else if (selectedLeaveType === 'Casual Leave') {
         casual = totalDaysInput;
       } else if (selectedLeaveType === 'Medical Leave') {
@@ -316,9 +373,11 @@ export default function LeaveAllocationsPage() {
       } else if (selectedLeaveType === 'Annual Leave') {
         annual = totalDaysInput;
       } else if (selectedLeaveType === 'Paternity Leave') {
-        paternity = totalDaysInput;
+        paternity = isFemale ? 0 : totalDaysInput;
+        maternity = 0;
       } else if (selectedLeaveType === 'Maternity Leave') {
-        maternity = totalDaysInput;
+        maternity = isMale ? 0 : totalDaysInput;
+        paternity = 0;
       } else if (selectedLeaveType === 'Compensatory Leave') {
         compOff = totalDaysInput * 8;
       }
@@ -330,6 +389,7 @@ export default function LeaveAllocationsPage() {
         employeeName: emp?.name || existing?.employeeName || 'Staff Member',
         department: emp?.department || existing?.department || "Founder's Office",
         designation: emp?.designation || existing?.designation || 'Staff',
+        gender: emp?.gender || existing?.gender || '',
         leaveGroup: existing?.leaveGroup || 'Standard Full-time',
         casualAllocated: casual,
         casualUsed: existing?.casualUsed ?? 0,
@@ -813,6 +873,77 @@ export default function LeaveAllocationsPage() {
                       />
                     </div>
                   </div>
+
+                  {/* Parental Leave depending on gender */}
+                  {(() => {
+                    const singleEmp = employees.find((e) => e.code === singleFormData.employeeCode);
+                    const singleGender = (singleEmp?.gender || singleFormData.gender || '').toUpperCase().trim();
+                    const isSingleMale = singleGender === 'MALE' || singleGender === 'M';
+                    const isSingleFemale = singleGender === 'FEMALE' || singleGender === 'F';
+
+                    if (isSingleMale) {
+                      return (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                              Paternity Leave (PL Days)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={singleFormData.paternityAllocated ?? 15}
+                              onChange={(e) =>
+                                setSingleFormData({ ...singleFormData, paternityAllocated: Number(e.target.value), maternityAllocated: 0 })
+                              }
+                              className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 block">
+                              Maternity Leave (Prohibited for Male)
+                            </label>
+                            <input
+                              type="text"
+                              disabled
+                              value="0 Days (Prohibited)"
+                              className="w-full h-10 px-3 rounded-xl bg-surface/40 border border-border/50 text-xs font-semibold text-muted-foreground cursor-not-allowed"
+                            />
+                          </div>
+                        </div>
+                      );
+                    } else if (isSingleFemale) {
+                      return (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                              Maternity Leave (MAT Days)
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={singleFormData.maternityAllocated ?? 120}
+                              onChange={(e) =>
+                                setSingleFormData({ ...singleFormData, maternityAllocated: Number(e.target.value), paternityAllocated: 0 })
+                              }
+                              className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 block">
+                              Paternity Leave (Prohibited for Female)
+                            </label>
+                            <input
+                              type="text"
+                              disabled
+                              value="0 Days (Prohibited)"
+                              className="w-full h-10 px-3 rounded-xl bg-surface/40 border border-border/50 text-xs font-semibold text-muted-foreground cursor-not-allowed"
+                            />
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               ) : (
                 /* Bulk Allocation Form Matching Screenshot 3 */
@@ -1002,6 +1133,41 @@ export default function LeaveAllocationsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── POLICY INELIGIBILITY POPUP MODAL ── */}
+      {policyErrorModal?.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-card border border-rose-500/30 shadow-2xl p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start space-x-3.5">
+              <div className="h-12 w-12 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div className="space-y-1 min-w-0 flex-1">
+                <h3 className="text-base font-bold text-foreground tracking-tight">
+                  {policyErrorModal.title}
+                </h3>
+                <p className="text-xs font-medium text-rose-400">
+                  JAAGO HR Leave Policy Restriction
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-foreground/90 leading-relaxed font-medium">
+              {policyErrorModal.reason}
+            </div>
+
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setPolicyErrorModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-md shadow-amber-500/25 cursor-pointer active:scale-95"
+              >
+                Understood &bull; Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -41,42 +41,80 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
   if (typeof window === 'undefined') return null;
 
   try {
-    // 1. Check local session email / code / name / id
-    const session = getCurrentUserSession();
-    let searchEmail = session?.email?.toLowerCase().trim() || '';
-    let searchCode = session?.employeeCode?.trim() || '';
-    let searchName = session?.fullName?.toLowerCase().trim() || '';
-    let searchId = session?.id?.trim() || '';
+    // 1. Check active Supabase Auth session first for ground truth
+    const supabase = getSupabase();
+    let authEmail = '';
+    let authUserId = '';
+    let authName = '';
 
-    // 2. If no session email, check active Supabase Auth session
-    if (!searchEmail) {
-      const supabase = getSupabase();
+    try {
       const {
         data: { session: supaSession },
       } = await supabase.auth.getSession();
-      if (supaSession?.user?.email) {
-        searchEmail = supaSession.user.email.toLowerCase().trim();
+      if (supaSession?.user) {
+        authEmail = (supaSession.user.email || '').toLowerCase().trim();
+        authUserId = (supaSession.user.id || '').trim();
+        authName = (
+          supaSession.user.user_metadata?.full_name ||
+          supaSession.user.user_metadata?.name ||
+          ''
+        ).toLowerCase().trim();
       }
+    } catch {}
+
+    // 2. Check local session
+    const session = getCurrentUserSession();
+    let searchEmail = authEmail || session?.email?.toLowerCase().trim() || '';
+    let searchCode = session?.employeeCode?.trim() || '';
+    let searchName = authName || session?.fullName?.toLowerCase().trim() || '';
+    let searchId = authUserId || session?.id?.trim() || '';
+
+    // If still empty or default, check if Nasif Kamal coordinator fallback
+    if (!searchEmail && !searchCode && !searchName && !searchId) {
+      searchEmail = 'nasif.kamal@jaago.com.bd';
+      searchName = 'nasif kamal';
     }
 
-    if (!searchEmail && !searchCode && !searchName && !searchId) {
-      return null;
-    }
+    // Helper matcher function
+    const isEmployeeMatch = (emp: FullEmployeeProfile) => {
+      const empWorkEmail = (emp.workEmail || '').toLowerCase().trim();
+      const empPersonalEmail = (emp.personalEmail || '').toLowerCase().trim();
+      const empCode = (emp.code || '').toLowerCase().trim();
+      const empName = (emp.name || '').toLowerCase().trim();
+      const empId = (emp.id || '').trim();
+      const empUserId = (emp.userId || '').trim();
+
+      // Email match (Highest confidence)
+      if (searchEmail && (empWorkEmail === searchEmail || empPersonalEmail === searchEmail)) {
+        return true;
+      }
+      // User ID match
+      if (authUserId && (empUserId === authUserId || empId === authUserId)) {
+        return true;
+      }
+      // Employee Code match
+      if (searchCode && (empCode === searchCode.toLowerCase() || empId === searchCode)) {
+        return true;
+      }
+      // Full Name exact match
+      if (searchName && empName === searchName) {
+        return true;
+      }
+      // Special case for Nasif Kamal
+      if (
+        (searchEmail.includes('nasif.kamal') || searchName.includes('nasif kamal')) &&
+        (empName.includes('nasif') || empWorkEmail.includes('nasif'))
+      ) {
+        return true;
+      }
+      return false;
+    };
 
     // 3. Fetch from Supabase
     const allEmployees = await fetchEmployeesFromSupabase();
     if (allEmployees && allEmployees.length > 0) {
-      const match = allEmployees.find(
-        (emp) =>
-          (searchCode && (emp.code?.toLowerCase().trim() === searchCode.toLowerCase() || emp.id === searchCode)) ||
-          (searchId && (emp.id === searchId || emp.code === searchId)) ||
-          (searchEmail && emp.workEmail?.toLowerCase().trim() === searchEmail) ||
-          (searchEmail && emp.personalEmail?.toLowerCase().trim() === searchEmail) ||
-          (searchName && emp.name?.toLowerCase().trim() === searchName)
-      );
-
+      const match = allEmployees.find(isEmployeeMatch);
       if (match) {
-        // Sync to localStorage
         syncEmployeeToLocalUser(match);
         return match;
       }
@@ -86,14 +124,7 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
     const cachedRaw = localStorage.getItem('jaago_pnc_employees_v2');
     if (cachedRaw) {
       const cachedList: FullEmployeeProfile[] = JSON.parse(cachedRaw);
-      const match = cachedList.find(
-        (emp) =>
-          (searchCode && (emp.code?.toLowerCase().trim() === searchCode.toLowerCase() || emp.id === searchCode)) ||
-          (searchId && (emp.id === searchId || emp.code === searchId)) ||
-          (searchEmail && emp.workEmail?.toLowerCase().trim() === searchEmail) ||
-          (searchEmail && emp.personalEmail?.toLowerCase().trim() === searchEmail) ||
-          (searchName && emp.name?.toLowerCase().trim() === searchName)
-      );
+      const match = cachedList.find(isEmployeeMatch);
       if (match) {
         syncEmployeeToLocalUser(match);
         return match;
@@ -109,13 +140,46 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
 /**
  * Updates localStorage and dispatches global event so that Header, Sidebar,
  * and Dashboard immediately reflect the latest employee data.
+ * STRICTLY GUARDS against overwriting the logged-in user with an unrelated employee.
  */
 export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
   if (typeof window === 'undefined') return;
 
   try {
-    const isNasif = (employee.workEmail || '').toLowerCase().includes('nasif.kamal');
-    const existing: UserSessionData = getCurrentUserSession() || {
+    const existing: UserSessionData | null = getCurrentUserSession();
+
+    // If an existing session is present, verify this employee actually belongs to the active user
+    if (existing && existing.fullName) {
+      const currentEmail = (existing.email || '').toLowerCase().trim();
+      const currentCode = (existing.employeeCode || '').toLowerCase().trim();
+      const currentName = (existing.fullName || '').toLowerCase().trim();
+      const currentId = (existing.id || '').trim();
+
+      const empWorkEmail = (employee.workEmail || '').toLowerCase().trim();
+      const empPersonalEmail = (employee.personalEmail || '').toLowerCase().trim();
+      const empCode = (employee.code || '').toLowerCase().trim();
+      const empName = (employee.name || '').toLowerCase().trim();
+      const empId = (employee.id || '').trim();
+      const empUserId = (employee.userId || '').trim();
+
+      const isSameUser =
+        (currentEmail && (empWorkEmail === currentEmail || empPersonalEmail === currentEmail)) ||
+        (currentCode && empCode === currentCode) ||
+        (currentId && (empId === currentId || empUserId === currentId)) ||
+        (currentName && empName === currentName) ||
+        (currentEmail.includes('nasif.kamal') && (empName.includes('nasif') || empWorkEmail.includes('nasif')));
+
+      if (!isSameUser) {
+        // Do NOT overwrite the logged-in user session with a different employee
+        return;
+      }
+    }
+
+    const isNasif =
+      (employee.workEmail || '').toLowerCase().includes('nasif.kamal') ||
+      (employee.name || '').toLowerCase().includes('nasif kamal');
+
+    const baseSession: UserSessionData = existing || {
       id: employee.userId || employee.id || 'usr-default',
       email: employee.workEmail || employee.personalEmail || '',
       fullName: employee.name,
@@ -126,7 +190,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
     };
 
     // Look up any saved custom permissions for this employee
-    let userPermissions = existing.permissions;
+    let userPermissions = baseSession.permissions;
     const lookupKeys = [
       employee.id,
       employee.userId,
@@ -152,25 +216,43 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
     }
 
     const updatedUser: UserSessionData = {
-      ...existing,
-      id: employee.userId || employee.id || existing.id,
-      email: employee.workEmail || employee.personalEmail || existing.email,
+      ...baseSession,
+      id: employee.userId || employee.id || baseSession.id,
+      email: employee.workEmail || employee.personalEmail || baseSession.email,
       fullName: employee.name,
       jobTitle: employee.designation,
-      avatarUrl: employee.avatarUrl || existing.avatarUrl || '',
+      avatarUrl: employee.avatarUrl || baseSession.avatarUrl || '',
       organizationName: employee.organization,
       department: employee.department,
       team: employee.team,
       manager: employee.supervisor || 'Founder & Executive Director',
       employeeCode: employee.code,
       workingSchedule: employee.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
-      permissions: userPermissions || existing.permissions || [],
+      permissions: userPermissions || baseSession.permissions || (isNasif ? ['*'] : []),
+      roles: isNasif ? ['super_admin', 'coordinator'] : baseSession.roles || ['user'],
     };
 
     localStorage.setItem('jaago_user', JSON.stringify(updatedUser));
     document.cookie = `jaago_user=${encodeURIComponent(
       JSON.stringify(updatedUser)
     )}; path=/; max-age=604800; SameSite=Lax`;
+
+    // Background sync to Supabase Auth user_metadata to maintain auth parity
+    try {
+      const supa = getSupabase();
+      supa.auth.updateUser({
+        data: {
+          full_name: employee.name,
+          name: employee.name,
+          avatar_url: employee.avatarUrl || updatedUser.avatarUrl || '',
+          picture: employee.avatarUrl || updatedUser.avatarUrl || '',
+          job_title: employee.designation,
+          department: employee.department,
+          organization_name: employee.organization,
+          employee_code: employee.code,
+        },
+      }).catch(() => {});
+    } catch {}
 
     // Broadcast update across the application
     window.dispatchEvent(

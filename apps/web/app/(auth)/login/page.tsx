@@ -238,7 +238,7 @@ export default function LoginPage() {
   };
 
 
-  // ── 5. FORGOT PASSWORD HANDLER (SUPABASE AUTH) ──
+  // ── 5. FORGOT PASSWORD HANDLER (CENTRAL SMTP SERVICE) ──
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError('');
@@ -255,20 +255,9 @@ export default function LoginPage() {
     setForgotLoading(true);
 
     try {
-      const { error } = await requestPasswordReset(cleanForgotEmail);
-      if (error) {
-        // Fallback to API route
-        const res = await fetch('/api/v1/auth/forgot-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanForgotEmail }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error?.message || 'Failed to send reset link');
-      }
-
+      const res = await requestPasswordReset(cleanForgotEmail);
       setForgotSuccess(
-        `Password reset link sent to ${cleanForgotEmail}. Please check your inbox.`
+        res.data?.message || `Password reset link sent to ${cleanForgotEmail}. Please check your inbox.`
       );
     } catch (err: any) {
       setForgotError(err.message || 'Failed to send password recovery email.');

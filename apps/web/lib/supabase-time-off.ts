@@ -81,6 +81,7 @@ export interface LeaveAllocationItem {
   department: string;
   designation: string;
   avatarUrl?: string;
+  gender?: string;
   leaveGroup: string;
   casualAllocated: number;
   casualUsed: number;
@@ -268,6 +269,41 @@ export const QUICK_LEAVE_POLICIES: Record<LeaveType, QuickPolicyItem> = {
     docThresholdDays: 0,
   },
 };
+
+/**
+ * Validates whether an employee is eligible for a specific leave category based on gender.
+ * Strictly enforces JAAGO Foundation HR Policy:
+ * - Male employees: Allocated Paternity Leave (15d); strictly PROHIBITED from Maternity Leave.
+ * - Female employees: Allocated Maternity Leave (120d); strictly PROHIBITED from Paternity Leave.
+ */
+export function validateLeaveGenderEligibility(
+  gender: string | undefined,
+  leaveType: LeaveType | string
+): { valid: boolean; title?: string; reason?: string } {
+  const g = (gender || '').toUpperCase().trim();
+  const isMale = g === 'MALE' || g === 'M';
+  const isFemale = g === 'FEMALE' || g === 'F';
+
+  if (isMale && leaveType === 'Maternity Leave') {
+    return {
+      valid: false,
+      title: 'Maternity Leave Prohibited',
+      reason:
+        'Under JAAGO Foundation HR Policy (Clause 4.2), Maternity Leave is exclusively available for Female employees. Male employees are not eligible for Maternity Leave allocations or requests. Please select Paternity Leave (15 Days) instead.',
+    };
+  }
+
+  if (isFemale && leaveType === 'Paternity Leave') {
+    return {
+      valid: false,
+      title: 'Paternity Leave Prohibited',
+      reason:
+        'Under JAAGO Foundation HR Policy (Clause 4.3), Paternity Leave is exclusively available for Male employees. Female employees are not eligible for Paternity Leave allocations or requests. Please select Maternity Leave (120 Days) instead.',
+    };
+  }
+
+  return { valid: true };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. PRODUCTION SEED DATA WITH FULL RULES
@@ -794,6 +830,35 @@ function syncLeaveToAttendanceLogs(request: LeaveRequestItem) {
 }
 
 export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boolean> {
+  // Validate Gender Policy Restriction: Male cannot take Maternity; Female cannot take Paternity
+  if (request.leaveType === 'Maternity Leave' || request.leaveType === 'Paternity Leave') {
+    let empGender = '';
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedEmps = localStorage.getItem('jaago_pnc_employees_v2');
+        if (cachedEmps) {
+          const emps = JSON.parse(cachedEmps);
+          const found = emps.find((e: any) => e.code === request.employeeCode || e.id === request.employeeId);
+          if (found?.gender) empGender = found.gender;
+        }
+      } catch {}
+    }
+    if (!empGender) {
+      try {
+        const emps = await fetchEmployeesFromSupabase();
+        const found = emps?.find((e: any) => e.code === request.employeeCode || e.id === request.employeeId);
+        if (found?.gender) empGender = found.gender;
+      } catch {}
+    }
+    if (empGender) {
+      const eligibility = validateLeaveGenderEligibility(empGender, request.leaveType);
+      if (!eligibility.valid) {
+        console.warn(`[Leave Policy Ineligibility] ${eligibility.title}: ${eligibility.reason}`);
+        throw new Error(eligibility.reason || 'This leave type is not allowed for this employee gender.');
+      }
+    }
+  }
+
   invalidateCache('pnc_leave_requests_list');
   invalidateCache('pnc_attendance_logs_list');
   if (typeof window !== 'undefined') {
@@ -985,13 +1050,31 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
     const isDsp = emp.department === 'Digital School Program' || emp.leaveGroup === 'DSP Faculty Group';
     const isProbation = emp.probationaryStatus === 'Probationary' || emp.leaveGroup === 'Probationary Staff';
 
+    const g = (emp.gender || existing?.gender || '').toUpperCase().trim();
+    const isMale = g === 'MALE' || g === 'M';
+    const isFemale = g === 'FEMALE' || g === 'F';
+
     // Base allocations (from custom cache, or employee profile fields, or standard defaults)
     const casualAlloc = existing?.casualAllocated ?? (emp.casualLeaveAllocated ? Number(emp.casualLeaveAllocated) : isProbation ? 0 : isDsp ? 12 : 10);
     const medicalAlloc = existing?.medicalAllocated ?? (emp.sickLeaveAllocated ? Number(emp.sickLeaveAllocated) : isProbation ? 3 : 10);
     const emergencyAlloc = existing?.emergencyAllocated ?? (emp.specialLeaveAllocated ? Number(emp.specialLeaveAllocated) : isProbation ? 3 : 4);
     const annualAlloc = existing?.annualAllocated ?? (emp.earnedLeaveAllocated ? Number(emp.earnedLeaveAllocated) : isProbation ? 0 : 15);
-    const maternityAlloc = existing?.maternityAllocated ?? (isProbation ? 90 : 120);
-    const paternityAlloc = existing?.paternityAllocated ?? (isProbation ? 7 : 15);
+
+    // Auto fix Parental Leaves based on Employee Profile Gender
+    let maternityAlloc = 0;
+    let paternityAlloc = 0;
+
+    if (isMale) {
+      paternityAlloc = existing?.paternityAllocated && existing.paternityAllocated > 0 ? existing.paternityAllocated : (isProbation ? 7 : 15);
+      maternityAlloc = 0; // Strictly prohibited for Male
+    } else if (isFemale) {
+      maternityAlloc = existing?.maternityAllocated && existing.maternityAllocated > 0 ? existing.maternityAllocated : (isProbation ? 90 : 120);
+      paternityAlloc = 0; // Strictly prohibited for Female
+    } else {
+      maternityAlloc = 0;
+      paternityAlloc = 0;
+    }
+
     const compOffAlloc = existing?.compOffAllocated ?? 16;
 
     const allocationItem: LeaveAllocationItem = {
@@ -1002,6 +1085,7 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
       department: emp.department || existing?.department || "Founder's Office",
       designation: emp.designation || existing?.designation || 'Staff',
       avatarUrl: emp.avatarUrl || existing?.avatarUrl || '',
+      gender: emp.gender || existing?.gender || '',
       leaveGroup: existing?.leaveGroup || emp.leaveGroup || (isDsp ? 'DSP Faculty Group' : isProbation ? 'Probationary Staff' : 'Standard Full-time'),
       casualAllocated: casualAlloc,
       casualUsed: clUsed,
@@ -1028,7 +1112,14 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
   // Include any extra cached items that weren't in employees list (as long as not deleted)
   for (const [code, item] of cachedMap.entries()) {
     if (!resultMap.has(code) && !deletedKeysSet.has(item.id) && !deletedKeysSet.has(code)) {
-      resultMap.set(code, item);
+      const g = (item.gender || '').toUpperCase().trim();
+      const isMale = g === 'MALE' || g === 'M';
+      const isFemale = g === 'FEMALE' || g === 'F';
+      resultMap.set(code, {
+        ...item,
+        maternityAllocated: isMale ? 0 : item.maternityAllocated,
+        paternityAllocated: isFemale ? 0 : item.paternityAllocated,
+      });
     }
   }
 
@@ -1048,13 +1139,24 @@ export async function saveLeaveAllocation(item: LeaveAllocationItem): Promise<bo
 }
 
 export async function saveBulkLeaveAllocations(items: LeaveAllocationItem[]): Promise<boolean> {
+  const normalizedItems = items.map((item) => {
+    const g = (item.gender || '').toUpperCase().trim();
+    const isMale = g === 'MALE' || g === 'M';
+    const isFemale = g === 'FEMALE' || g === 'F';
+    return {
+      ...item,
+      maternityAllocated: isMale ? 0 : item.maternityAllocated,
+      paternityAllocated: isFemale ? 0 : item.paternityAllocated,
+    };
+  });
+
   if (typeof window !== 'undefined') {
     try {
       const current = await fetchLeaveAllocations();
       const updated = [...current];
       const itemsToUnDelete = new Set<string>();
 
-      for (const item of items) {
+      for (const item of normalizedItems) {
         itemsToUnDelete.add(item.id);
         itemsToUnDelete.add(item.employeeCode);
         const idx = updated.findIndex((a) => a.id === item.id || a.employeeCode === item.employeeCode);
@@ -1070,7 +1172,7 @@ export async function saveBulkLeaveAllocations(items: LeaveAllocationItem[]): Pr
       const deleted = getDeletedAllocationKeys().filter((k) => !itemsToUnDelete.has(k));
       saveDeletedAllocationKeys(deleted);
 
-      window.dispatchEvent(new CustomEvent('jaago_leave_allocation_updated', { detail: { items, all: updated } }));
+      window.dispatchEvent(new CustomEvent('jaago_leave_allocation_updated', { detail: { items: normalizedItems, all: updated } }));
       window.dispatchEvent(new CustomEvent('jaago_employees_updated'));
     } catch {}
   }
@@ -1079,7 +1181,7 @@ export async function saveBulkLeaveAllocations(items: LeaveAllocationItem[]): Pr
   try {
     const supabase = getSupabase();
     if (supabase) {
-      for (const item of items) {
+      for (const item of normalizedItems) {
         await supabase
           .from('employees')
           .update({

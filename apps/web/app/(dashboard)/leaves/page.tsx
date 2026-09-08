@@ -30,6 +30,7 @@ import {
   deleteLeaveRequest,
   fetchLeaveAllocations,
   LeaveAllocationItem,
+  validateLeaveGenderEligibility,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import {
@@ -121,6 +122,7 @@ export default function MyLeavePage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
 
   const loadData = async () => {
     const [reqs, allocs, emps] = await Promise.all([
@@ -328,7 +330,20 @@ export default function MyLeavePage() {
   const availableBalance = getAvailableBalance(leaveCategory);
   const remainingBalanceAfter = availableBalance - totalCalculatedDays;
 
+  const empGender = (currentEmp?.gender || (currentAlloc as any)?.gender || '').toUpperCase().trim();
+  const isMale = empGender === 'MALE' || empGender === 'M';
+  const isFemale = empGender === 'FEMALE' || empGender === 'F';
+
   const handleCategoryChange = (newCat: LeaveType) => {
+    const eligibility = validateLeaveGenderEligibility(empGender, newCat);
+    if (!eligibility.valid) {
+      setPolicyErrorModal({
+        isOpen: true,
+        title: eligibility.title || 'Leave Policy Ineligibility',
+        reason: eligibility.reason || 'This leave type is not allowed for your gender profile.',
+      });
+      return;
+    }
     setLeaveCategory(newCat);
     if (!isHalfDayAllowed(newCat)) {
       setLeaveDurationMode('FULL');
@@ -380,6 +395,16 @@ export default function MyLeavePage() {
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (validationError) return;
+
+    const eligibility = validateLeaveGenderEligibility(empGender, leaveCategory);
+    if (!eligibility.valid) {
+      setPolicyErrorModal({
+        isOpen: true,
+        title: eligibility.title || 'Leave Policy Ineligibility',
+        reason: eligibility.reason || 'This leave type is not allowed for your gender profile.',
+      });
+      return;
+    }
 
     const halfType: HalfDayType =
       leaveDurationMode === 'HALF'
@@ -702,53 +727,57 @@ export default function MyLeavePage() {
           </div>
         </div>
 
-        {/* 6. Paternity Leave */}
-        <div className="rounded-2xl bg-card border border-border/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden flex flex-col justify-between space-y-3">
-          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-2xl" />
-          <div className="flex items-center justify-between pl-2">
-            <div className="flex items-center space-x-2">
-              <span className="h-2 w-2 rounded-full bg-indigo-500" />
-              <span className="text-sm font-bold text-foreground">Paternity</span>
-            </div>
-            <span className="text-xs font-mono font-bold text-muted-foreground uppercase">PL</span>
-          </div>
-          <div className="flex items-center space-x-4 pl-2 pt-1">
-            <CircularProgress percentage={plPct} strokeColor="#6366f1" size={62} strokeWidth={6} />
-            <div className="space-y-0.5">
-              <div className="text-2xl font-black text-foreground tracking-tight">
-                {plRem}
-                <span className="text-sm font-semibold text-muted-foreground">/{plAlloc}d</span>
+        {/* 6. Paternity Leave (Exclusively for Male Employees) */}
+        {(!isFemale || (!isMale && !isFemale && plAlloc > 0)) && (
+          <div className="rounded-2xl bg-card border border-border/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden flex flex-col justify-between space-y-3">
+            <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-2xl" />
+            <div className="flex items-center justify-between pl-2">
+              <div className="flex items-center space-x-2">
+                <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                <span className="text-sm font-bold text-foreground">Paternity</span>
               </div>
-              <div className="text-xs font-medium text-muted-foreground">
-                Used <strong className="text-foreground font-bold">{plUsed}</strong> &bull; {plAlloc} total
+              <span className="text-xs font-mono font-bold text-muted-foreground uppercase">PL</span>
+            </div>
+            <div className="flex items-center space-x-4 pl-2 pt-1">
+              <CircularProgress percentage={plPct} strokeColor="#6366f1" size={62} strokeWidth={6} />
+              <div className="space-y-0.5">
+                <div className="text-2xl font-black text-foreground tracking-tight">
+                  {plRem}
+                  <span className="text-sm font-semibold text-muted-foreground">/{plAlloc}d</span>
+                </div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Used <strong className="text-foreground font-bold">{plUsed}</strong> &bull; {plAlloc} total
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* 7. Maternity Leave */}
-        <div className="rounded-2xl bg-card border border-border/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden flex flex-col justify-between space-y-3">
-          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 rounded-l-2xl" />
-          <div className="flex items-center justify-between pl-2">
-            <div className="flex items-center space-x-2">
-              <span className="h-2 w-2 rounded-full bg-rose-500" />
-              <span className="text-sm font-bold text-foreground">Maternity</span>
-            </div>
-            <span className="text-xs font-mono font-bold text-muted-foreground uppercase">MAT</span>
-          </div>
-          <div className="flex items-center space-x-4 pl-2 pt-1">
-            <CircularProgress percentage={matPct} strokeColor="#f43f5e" size={62} strokeWidth={6} />
-            <div className="space-y-0.5">
-              <div className="text-2xl font-black text-foreground tracking-tight">
-                {matRem}
-                <span className="text-sm font-semibold text-muted-foreground">/{matAlloc}d</span>
+        {/* 7. Maternity Leave (Exclusively for Female Employees) */}
+        {(!isMale || (!isMale && !isFemale && matAlloc > 0)) && (
+          <div className="rounded-2xl bg-card border border-border/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden flex flex-col justify-between space-y-3">
+            <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 rounded-l-2xl" />
+            <div className="flex items-center justify-between pl-2">
+              <div className="flex items-center space-x-2">
+                <span className="h-2 w-2 rounded-full bg-rose-500" />
+                <span className="text-sm font-bold text-foreground">Maternity</span>
               </div>
-              <div className="text-xs font-medium text-muted-foreground">
-                Used <strong className="text-foreground font-bold">{matUsed}</strong> &bull; {matAlloc} total
+              <span className="text-xs font-mono font-bold text-muted-foreground uppercase">MAT</span>
+            </div>
+            <div className="flex items-center space-x-4 pl-2 pt-1">
+              <CircularProgress percentage={matPct} strokeColor="#f43f5e" size={62} strokeWidth={6} />
+              <div className="space-y-0.5">
+                <div className="text-2xl font-black text-foreground tracking-tight">
+                  {matRem}
+                  <span className="text-sm font-semibold text-muted-foreground">/{matAlloc}d</span>
+                </div>
+                <div className="text-xs font-medium text-muted-foreground">
+                  Used <strong className="text-foreground font-bold">{matUsed}</strong> &bull; {matAlloc} total
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* 8. Bereavement Leave */}
         <div className="rounded-2xl bg-card border border-border/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden flex flex-col justify-between space-y-3">
@@ -819,8 +848,12 @@ export default function MyLeavePage() {
                 <option value="Emergency Leave">Emergency Leave (EL)</option>
                 <option value="Annual Leave">Annual Leave (AL)</option>
                 <option value="Compensatory Leave">Compensatory Leave</option>
-                <option value="Paternity Leave">Paternity Leave</option>
-                <option value="Maternity Leave">Maternity Leave</option>
+                {(!isFemale || (!isMale && !isFemale && plAlloc > 0)) && (
+                  <option value="Paternity Leave">Paternity Leave</option>
+                )}
+                {(!isMale || (!isMale && !isFemale && matAlloc > 0)) && (
+                  <option value="Maternity Leave">Maternity Leave</option>
+                )}
                 <option value="Bereavement Leave">Bereavement Leave</option>
               </select>
             </div>
@@ -1411,6 +1444,41 @@ export default function MyLeavePage() {
                 className="px-4 py-2 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-bold transition cursor-pointer"
               >
                 CLOSE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── POLICY INELIGIBILITY POPUP MODAL ── */}
+      {policyErrorModal?.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-card border border-rose-500/30 shadow-2xl p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start space-x-3.5">
+              <div className="h-12 w-12 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="space-y-1 min-w-0 flex-1">
+                <h3 className="text-base font-bold text-foreground tracking-tight">
+                  {policyErrorModal.title}
+                </h3>
+                <p className="text-xs font-medium text-rose-400">
+                  JAAGO HR Leave Policy Restriction
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-foreground/90 leading-relaxed font-medium">
+              {policyErrorModal.reason}
+            </div>
+
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setPolicyErrorModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-md shadow-amber-500/25 cursor-pointer active:scale-95"
+              >
+                Understood &bull; Close
               </button>
             </div>
           </div>

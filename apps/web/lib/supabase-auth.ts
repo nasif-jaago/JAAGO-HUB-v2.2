@@ -81,19 +81,26 @@ export async function signInWithGoogle() {
 }
 
 /**
- * Request password recovery email via Supabase Auth
+ * Request password recovery email via central API with SMTP delivery
  */
 export async function requestPasswordReset(email: string) {
-  if (!isAllowedWorkDomain(email)) {
-    throw new Error(getDomainRestrictionError(email));
+  const cleanEmail = email.trim().toLowerCase();
+  if (!isAllowedWorkDomain(cleanEmail)) {
+    throw new Error(getDomainRestrictionError(cleanEmail));
   }
 
-  const supabase = getSupabase();
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
-
-  return await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo: `${origin}/reset-password`,
+  const res = await fetch('/api/v1/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: cleanEmail }),
   });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error?.message || data.message || 'Failed to dispatch password recovery email.');
+  }
+
+  return { data, error: null };
 }
 
 /**
@@ -123,9 +130,43 @@ export interface AppUserSession {
   isSuperAdmin: boolean;
 }
 
-export function buildUserSessionPayload(user: any): AppUserSession {
+export function buildUserSessionPayload(user: any, fallbackEmployee?: any): AppUserSession {
   const email = (user.email || '').toLowerCase().trim();
+  const userId = (user.id || '').trim();
   const meta = user.user_metadata || {};
+
+  // Check if we have cached employee profiles to extract canonical employee details
+  let matchedEmp = fallbackEmployee || null;
+  if (!matchedEmp && typeof window !== 'undefined') {
+    try {
+      const cachedRaw = localStorage.getItem('jaago_pnc_employees_v2');
+      if (cachedRaw) {
+        const list = JSON.parse(cachedRaw);
+        if (Array.isArray(list)) {
+          matchedEmp = list.find((e: any) => {
+            const wEmail = (e.workEmail || e.work_email || '').toLowerCase().trim();
+            const pEmail = (e.personalEmail || e.personal_email || '').toLowerCase().trim();
+            const empUserId = (e.userId || e.user_id || '').trim();
+            return (
+              (email && (wEmail === email || pEmail === email)) ||
+              (userId && empUserId === userId) ||
+              (email.includes('nasif.kamal') && (wEmail.includes('nasif') || (e.name || '').toLowerCase().includes('nasif')))
+            );
+          });
+        }
+      }
+
+      if (!matchedEmp) {
+        const prevUserRaw = localStorage.getItem('jaago_user');
+        if (prevUserRaw) {
+          const prevU = JSON.parse(prevUserRaw);
+          if (prevU && (prevU.email?.toLowerCase().trim() === email || prevU.id === userId)) {
+            matchedEmp = prevU;
+          }
+        }
+      }
+    } catch {}
+  }
 
   const rawRole = (meta['role'] || (Array.isArray(meta['roles']) ? meta['roles'][0] : '') || 'USER').toString();
   const rawRoleUpper = rawRole.toUpperCase();
@@ -171,16 +212,61 @@ export function buildUserSessionPayload(user: any): AppUserSession {
     ? meta['permissions']
     : getPermissionsForRole(normKey);
 
+  const canonicalFullName =
+    matchedEmp?.name ||
+    matchedEmp?.fullName ||
+    meta['full_name'] ||
+    meta['name'] ||
+    user.email?.split('@')[0] ||
+    'User';
+
+  const canonicalAvatar =
+    matchedEmp?.avatarUrl ||
+    matchedEmp?.avatar_url ||
+    meta['avatar_url'] ||
+    meta['picture'] ||
+    '';
+
+  const canonicalJobTitle =
+    matchedEmp?.designation ||
+    matchedEmp?.jobTitle ||
+    meta['job_title'] ||
+    meta['designation'] ||
+    (isSuper ? 'Coordinator' : 'Staff Member');
+
+  const canonicalDepartment =
+    matchedEmp?.department ||
+    meta['department'] ||
+    'General';
+
+  const canonicalBranch =
+    matchedEmp?.branch ||
+    meta['branch'] ||
+    'Head Office (Banani)';
+
+  const canonicalEmployeeCode =
+    matchedEmp?.code ||
+    matchedEmp?.employeeCode ||
+    meta['employee_code'] ||
+    meta['employee_id'] ||
+    '';
+
+  const canonicalOrgName =
+    matchedEmp?.organization ||
+    matchedEmp?.organizationName ||
+    meta['organization_name'] ||
+    'JAAGO Foundation Trust';
+
   return {
     id: user.id,
     email: user.email,
-    fullName: meta['full_name'] || meta['name'] || user.email?.split('@')[0] || 'User',
-    avatarUrl: meta['avatar_url'] || meta['picture'] || '',
-    jobTitle: meta['job_title'] || meta['designation'] || (isSuper ? 'Coordinator' : 'Staff Member'),
-    department: meta['department'] || 'General',
-    branch: meta['branch'] || 'Head Office (Banani)',
-    employeeCode: meta['employee_code'] || meta['employee_id'] || '',
-    organizationName: meta['organization_name'] || 'JAAGO Foundation Trust',
+    fullName: canonicalFullName,
+    avatarUrl: canonicalAvatar,
+    jobTitle: canonicalJobTitle,
+    department: canonicalDepartment,
+    branch: canonicalBranch,
+    employeeCode: canonicalEmployeeCode,
+    organizationName: canonicalOrgName,
     organizationId: meta['organization_id'] || 'org-jaago-dhaka',
     roles,
     role: canonicalRole,

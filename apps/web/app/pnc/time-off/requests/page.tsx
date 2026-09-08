@@ -25,6 +25,7 @@ import {
   deleteLeaveRequest,
   fetchLeaveAllocations,
   LeaveAllocationItem,
+  validateLeaveGenderEligibility,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import {
@@ -94,6 +95,7 @@ export default function LeaveRequestsPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [refusalModalReq, setRefusalModalReq] = useState<LeaveRequestItem | null>(null);
   const [refusalNoteText, setRefusalNoteText] = useState<string>('');
+  const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
 
   // Create & Direct Approve Form State
   const [selectedEmpCode, setSelectedEmpCode] = useState<string>('');
@@ -357,6 +359,18 @@ export default function LeaveRequestsPage() {
       showToastMsg('Please select an employee first', 'error');
       return;
     }
+
+    const selectedEmpGender = (selectedEmp?.gender || selectedEmpAllocation?.gender || '').toUpperCase().trim();
+    const eligibility = validateLeaveGenderEligibility(selectedEmpGender, createLeaveType);
+    if (!eligibility.valid) {
+      setPolicyErrorModal({
+        isOpen: true,
+        title: eligibility.title || 'Leave Policy Ineligibility',
+        reason: eligibility.reason || 'This leave type is not allowed for this employee gender.',
+      });
+      return;
+    }
+
     if (!createReason.trim()) {
       showToastMsg('Please enter a reason or remarks for this leave', 'error');
       return;
@@ -947,6 +961,13 @@ export default function LeaveRequestsPage() {
                             setSelectedEmpCode(emp.code);
                             setEmpSearchInput(`${emp.name} (${emp.code})`);
                             setIsEmpDropdownOpen(false);
+                            const empGender = (emp.gender || '').toUpperCase().trim();
+                            if (empGender) {
+                              const eligibility = validateLeaveGenderEligibility(empGender, createLeaveType);
+                              if (!eligibility.valid) {
+                                setCreateLeaveType('Casual Leave');
+                              }
+                            }
                           }}
                           className={`p-2.5 rounded-xl cursor-pointer transition flex items-center justify-between ${
                             selectedEmpCode === emp.code ? 'bg-amber-500/15 text-amber-500' : 'hover:bg-surface'
@@ -973,14 +994,36 @@ export default function LeaveRequestsPage() {
                 </label>
                 <select
                   value={createLeaveType}
-                  onChange={(e) => setCreateLeaveType(e.target.value as LeaveType)}
+                  onChange={(e) => {
+                    const chosenType = e.target.value as LeaveType;
+                    const selectedGender = (selectedEmp?.gender || selectedEmpAllocation?.gender || '').toUpperCase().trim();
+                    if (selectedGender) {
+                      const eligibility = validateLeaveGenderEligibility(selectedGender, chosenType);
+                      if (!eligibility.valid) {
+                        setPolicyErrorModal({
+                          isOpen: true,
+                          title: eligibility.title || 'Leave Policy Ineligibility',
+                          reason: eligibility.reason || 'This leave type is not permitted for the selected employee based on HR gender policy.',
+                        });
+                        return;
+                      }
+                    }
+                    setCreateLeaveType(chosenType);
+                  }}
                   disabled={!selectedEmpCode}
                   className="w-full h-11 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm disabled:opacity-50"
                 >
                   {!selectedEmpCode ? (
                     <option value="">Select an employee first to see leave balances</option>
                   ) : (
-                    LEAVE_TYPES.map((type) => {
+                    LEAVE_TYPES.filter((type) => {
+                      const g = (selectedEmp?.gender || selectedEmpAllocation?.gender || '').toUpperCase().trim();
+                      const isMale = g === 'MALE' || g === 'M';
+                      const isFemale = g === 'FEMALE' || g === 'F';
+                      if (type === 'Maternity Leave' && isMale) return false;
+                      if (type === 'Paternity Leave' && isFemale) return false;
+                      return true;
+                    }).map((type) => {
                       const bal = getEmpAvailableBalance(type);
                       const unit = type === 'Compensatory Leave' ? 'h' : 'd';
                       return (
@@ -1279,6 +1322,43 @@ export default function LeaveRequestsPage() {
                 className="px-5 py-2 rounded-xl bg-destructive text-white text-xs font-black uppercase tracking-wider hover:bg-destructive/90 transition shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Confirm &amp; Refuse Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          MODAL: GENDER / POLICY INELIGIBILITY ERROR POPUP
+          ═══════════════════════════════════════════════════════════════════ */}
+      {policyErrorModal?.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-card border border-rose-500/30 shadow-2xl p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start space-x-3.5">
+              <div className="h-12 w-12 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div className="space-y-1 min-w-0 flex-1">
+                <h3 className="text-base font-bold text-foreground tracking-tight">
+                  {policyErrorModal.title}
+                </h3>
+                <p className="text-xs font-medium text-rose-400">
+                  JAAGO HR Leave Policy Restriction
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-foreground/90 leading-relaxed font-medium">
+              {policyErrorModal.reason}
+            </div>
+
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setPolicyErrorModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-md shadow-amber-500/25 cursor-pointer active:scale-95"
+              >
+                Understood &bull; Close
               </button>
             </div>
           </div>

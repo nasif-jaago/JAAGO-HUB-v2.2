@@ -9,6 +9,7 @@ import {
   isAllowedWorkDomain,
   buildUserSessionPayload,
 } from '@/lib/supabase-auth';
+import { getActiveEmployeeProfile, syncEmployeeToLocalUser } from '@/lib/user-profile-sync';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -119,8 +120,14 @@ export default function AuthCallbackPage() {
         return;
       }
 
+      // Pre-fetch canonical employee profile so jaago_user is accurate from instant zero
+      let empProfile = null;
+      try {
+        empProfile = await getActiveEmployeeProfile();
+      } catch {}
+
       // Store in localStorage
-      const userPayload = buildUserSessionPayload(session.user);
+      const userPayload = buildUserSessionPayload(session.user, empProfile);
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('jaago_access_token', session.access_token);
@@ -130,6 +137,10 @@ export default function AuthCallbackPage() {
         const maxAge = session.expires_in || 604800;
         document.cookie = `jaago_access_token=${session.access_token}; path=/; max-age=${maxAge}; SameSite=Lax`;
         document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(userPayload))}; path=/; max-age=${maxAge}; SameSite=Lax`;
+
+        if (empProfile) {
+          syncEmployeeToLocalUser(empProfile);
+        }
       }
 
       if (isMounted) {

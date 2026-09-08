@@ -61,22 +61,36 @@ export default function DashboardLayout({
       }
     });
 
+    const handleUserUpdated = (e: any) => {
+      if (e.detail?.user && isMounted) {
+        const u = e.detail.user;
+        setCurrentUser({
+          fullName: u.fullName || '',
+          jobTitle: u.jobTitle || '',
+          avatarUrl: u.avatarUrl || '',
+        });
+      }
+    };
+    window.addEventListener('jaago_user_updated', handleUserUpdated);
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, authSession) => {
       if (authSession?.user && isMounted) {
+        const existing = getCurrentUserSession();
         const userMeta = authSession.user.user_metadata || {};
-        setCurrentUser({
-          fullName: userMeta.full_name || authSession.user.email?.split('@')[0] || 'User',
-          jobTitle: userMeta.job_title || 'Staff Member',
-          avatarUrl: userMeta.avatar_url || authSession.user.user_metadata?.picture || '',
-        });
+        setCurrentUser((prev) => ({
+          fullName: prev.fullName || existing?.fullName || userMeta.full_name || authSession.user.email?.split('@')[0] || 'User',
+          jobTitle: prev.jobTitle || existing?.jobTitle || userMeta.job_title || 'Staff Member',
+          avatarUrl: prev.avatarUrl || existing?.avatarUrl || userMeta.avatar_url || authSession.user.user_metadata?.picture || '',
+        }));
       }
     });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+      window.removeEventListener('jaago_user_updated', handleUserUpdated);
     };
   }, []);
 

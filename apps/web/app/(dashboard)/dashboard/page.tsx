@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
+import { getSupabase } from '@/lib/supabase-auth';
 import {
   recordLocalAttendanceLog,
   getEmployeeAttendanceLogs,
@@ -92,21 +93,20 @@ export default function DashboardPage() {
 
     // Safely hydrate session from localStorage after client mount
     try {
-      const raw = localStorage.getItem('jaago_user');
-      if (raw) {
-        const u = JSON.parse(raw);
+      const sess = getCurrentUserSession();
+      if (sess && sess.fullName) {
         setUser((prev) => ({
           ...prev,
-          id: u.id || u.employeeId || prev.id,
-          fullName: u.fullName || u.name || prev.fullName,
-          jobTitle: u.jobTitle || u.designation || prev.jobTitle,
-          department: u.department || prev.department,
-          project: u.project || u.team || prev.project,
-          manager: u.manager || u.supervisor || prev.manager,
-          organization: u.organizationName || u.organization || prev.organization,
-          avatarUrl: u.avatarUrl || prev.avatarUrl,
-          workingSchedule: u.workingSchedule || prev.workingSchedule,
-          employeeCode: u.employeeCode || u.employeeId || prev.employeeCode,
+          id: sess.id || prev.id,
+          fullName: sess.fullName,
+          jobTitle: sess.jobTitle || prev.jobTitle,
+          department: sess.department || prev.department,
+          project: sess.team || prev.project,
+          manager: sess.manager || prev.manager,
+          organization: sess.organizationName || prev.organization,
+          avatarUrl: sess.avatarUrl || prev.avatarUrl,
+          workingSchedule: sess.workingSchedule || prev.workingSchedule,
+          employeeCode: sess.employeeCode || prev.employeeCode,
         }));
       }
     } catch {}
@@ -123,6 +123,7 @@ export default function DashboardPage() {
         const u = e.detail.user;
         setUser((prev) => ({
           ...prev,
+          id: u.id || prev.id,
           fullName: u.fullName || prev.fullName,
           jobTitle: u.jobTitle || prev.jobTitle,
           department: u.department || prev.department,
@@ -168,23 +169,25 @@ export default function DashboardPage() {
         setViewMode(savedViewMode);
       }
 
-      const storedUser = localStorage.getItem('jaago_user');
-      if (storedUser) {
-        const parsed = JSON.parse(storedUser);
-        if (parsed.fullName) {
+      // Check active Supabase Auth session for definitive ground truth
+      const supabase = getSupabase();
+      supabase.auth.getSession().then(({ data: { session: supaSession } }) => {
+        if (supaSession?.user) {
+          const userMeta = supaSession.user.user_metadata || {};
+          const email = (supaSession.user.email || '').toLowerCase().trim();
+          const isNasif = email.includes('nasif.kamal');
+
           setUser((prev) => ({
             ...prev,
-            fullName: parsed.fullName,
-            jobTitle: parsed.jobTitle || prev.jobTitle,
-            department: parsed.department || prev.department,
-            manager: parsed.manager || prev.manager,
-            organization: parsed.organizationName || prev.organization,
-            avatarUrl: parsed.avatarUrl || prev.avatarUrl,
-            workingSchedule: parsed.workingSchedule || prev.workingSchedule,
-            employeeCode: parsed.employeeCode || prev.employeeCode,
+            id: supaSession.user.id || prev.id,
+            fullName: prev.fullName || userMeta.full_name || userMeta.name || (isNasif ? 'Nasif Kamal' : ''),
+            jobTitle: prev.jobTitle || userMeta.job_title || userMeta.designation || (isNasif ? 'Coordinator' : ''),
+            department: prev.department || userMeta.department || (isNasif ? "Founder's Office JFT" : ''),
+            organization: prev.organization || userMeta.organization_name || 'JAAGO Foundation Trust',
+            avatarUrl: prev.avatarUrl || userMeta.avatar_url || userMeta.picture || '',
           }));
         }
-      }
+      });
 
       // Fetch active employee from Supabase
       getActiveEmployeeProfile().then((emp) => {

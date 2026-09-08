@@ -99,17 +99,31 @@ export const POST = createApiHandler({
         ? ['hr.*', 'finance.*', 'pnc.*', 'attendance.*', 'leaves.*', 'directory.*', 'system.*']
         : ['self.attendance', 'self.leaves', 'self.profile', 'self.requests'];
 
+      // Query canonical employee record if present
+      let matchingEmp: any = null;
+      try {
+        const { getSupabaseAdminClient } = await import('@jaago/auth');
+        const supabaseAdmin = getSupabaseAdminClient();
+        const { data: empData } = await supabaseAdmin
+          .from('employees')
+          .select('id, code, name, designation, department, organization, branch, avatar_url, working_schedule')
+          .or(`work_email.ilike.${email},personal_email.ilike.${email},user_id.eq.${data.user.id}`)
+          .limit(1)
+          .maybeSingle();
+        matchingEmp = empData;
+      } catch {}
+
       const userObj = {
         id: data.user.id,
         email: data.user.email,
-        fullName: meta['full_name'] || meta['name'] || email,
-        avatarUrl: meta['avatar_url'] || meta['picture'] || '',
-        jobTitle: meta['job_title'] || meta['designation'] || (isSuper ? 'Coordinator' : 'Staff Member'),
-        department: meta['department'] || 'General',
-        branch: meta['branch'] || 'Head Office (Banani)',
-        employeeCode: meta['employee_code'] || meta['employee_id'] || '',
+        fullName: matchingEmp?.name || meta['full_name'] || meta['name'] || email,
+        avatarUrl: matchingEmp?.avatar_url || meta['avatar_url'] || meta['picture'] || '',
+        jobTitle: matchingEmp?.designation || meta['job_title'] || meta['designation'] || (isSuper ? 'Coordinator' : 'Staff Member'),
+        department: matchingEmp?.department || meta['department'] || 'General',
+        branch: matchingEmp?.branch || meta['branch'] || 'Head Office (Banani)',
+        employeeCode: matchingEmp?.code || meta['employee_code'] || meta['employee_id'] || '',
         organizationId: meta['organization_id'] || 'org-jaago-dhaka',
-        organizationName: meta['organization_name'] || 'JAAGO Foundation Trust',
+        organizationName: matchingEmp?.organization || meta['organization_name'] || 'JAAGO Foundation Trust',
         roles,
         role: canonicalRole,
         permissions,

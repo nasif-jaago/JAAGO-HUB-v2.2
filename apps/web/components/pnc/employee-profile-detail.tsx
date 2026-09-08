@@ -34,9 +34,22 @@ import {
   ArrowUpRight,
   Plus,
   X,
+  FilePlus,
+  FileText,
+  Printer,
+  Edit3,
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
+import { NewContractModal } from '@/components/contracts/NewContractModal';
+import { ContractDocumentModal } from '@/components/contracts/ContractDocumentModal';
+import {
+  EmploymentContractVersion,
+  convertEmployeeToContract,
+  getStoredCustomContracts,
+  saveStoredCustomContracts,
+  deriveContractStatus,
+} from '@/lib/contracts-engine';
 import {
   getEmployeeAttendanceLogs,
   fetchAttendanceLogsFromSupabase,
@@ -64,6 +77,7 @@ import {
   fetchLeaveAllocations,
   fetchLeaveRequests,
   saveLeaveRequest,
+  validateLeaveGenderEligibility,
   type LeaveAllocationItem,
   type LeaveRequestItem,
   type LeaveType,
@@ -251,8 +265,8 @@ export function EmployeeProfileDetail({
 }: EmployeeProfileDetailProps) {
   const isNew = !initialData?.id;
 
-  // Active Tab state: 'WORK' | 'PERSONAL' | 'PAYROLL' | 'INSURANCE' | 'DSP' | 'LEAVE_ATTENDANCE' | 'LOG_HISTORY'
-  const [activeTab, setActiveTab] = useState<'WORK' | 'PERSONAL' | 'PAYROLL' | 'INSURANCE' | 'DSP' | 'LEAVE_ATTENDANCE' | 'LOG_HISTORY'>('WORK');
+  // Active Tab state: 'WORK' | 'PERSONAL' | 'PAYROLL' | 'CONTRACTS' | 'INSURANCE' | 'DSP' | 'LEAVE_ATTENDANCE' | 'LOG_HISTORY'
+  const [activeTab, setActiveTab] = useState<'WORK' | 'PERSONAL' | 'PAYROLL' | 'CONTRACTS' | 'INSURANCE' | 'DSP' | 'LEAVE_ATTENDANCE' | 'LOG_HISTORY'>('WORK');
 
   // Dynamic organization metadata options from Supabase
   const [organizations, setOrganizations] = useState<OrganizationEntity[]>([]);
@@ -664,6 +678,140 @@ export function EmployeeProfileDetail({
   // Notification / Save feedback
   const [saveToast, setSaveToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // ── Employment Contracts Live Integration ──
+  const [isNewContractModalOpen, setIsNewContractModalOpen] = useState(false);
+  const [contractToAmend, setContractToAmend] = useState<EmploymentContractVersion | null>(null);
+  const [selectedContractForDoc, setSelectedContractForDoc] = useState<EmploymentContractVersion | null>(null);
+  const [contractsRevision, setContractsRevision] = useState(0);
+
+  // Compute full contracts history list for this employee
+  const employeeContracts = useMemo(() => {
+    const baseContract = convertEmployeeToContract(formData);
+    const customStored = getStoredCustomContracts();
+    const matchingCustom = customStored.filter(
+      (c) => c.employeeId === formData.id || c.employeeCode === formData.code
+    );
+
+    if (matchingCustom.length === 0) {
+      return [baseContract];
+    }
+
+    // Sort custom versions newest first
+    const sorted = [...matchingCustom].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+    return sorted;
+  }, [formData, contractsRevision]);
+
+  // Ensure full employee profile array is available for modal autocomplete
+  const allFullEmployees = useMemo<FullEmployeeProfile[]>(() => {
+    const map = new Map<string, FullEmployeeProfile>();
+    map.set(formData.code, formData);
+    if (Array.isArray(allEmployees)) {
+      allEmployees.forEach((emp) => {
+        if (!map.has(emp.code)) {
+          map.set(emp.code, {
+            ...formData,
+            id: emp.id,
+            code: emp.code,
+            name: emp.name,
+            designation: emp.designation,
+            department: emp.department,
+            avatarUrl: emp.avatarUrl,
+            organization: emp.organization || formData.organization,
+            branch: emp.branch || formData.branch,
+            project: emp.project || formData.project,
+            team: emp.team || '',
+            workingSchedule: emp.workingSchedule || formData.workingSchedule,
+          });
+        }
+      });
+    }
+    return Array.from(map.values());
+  }, [allEmployees, formData]);
+
+  // Handle contract save with bi-directional profile update
+  const handleSaveContract = (newContract: EmploymentContractVersion) => {
+    const customStored = getStoredCustomContracts();
+    const filtered = customStored.filter((c) => c.id !== newContract.id);
+    const updatedContracts = [newContract, ...filtered];
+    saveStoredCustomContracts(updatedContracts);
+    setContractsRevision((prev) => prev + 1);
+
+    // Update current employee profile fields with bi-directional sync
+    const wageNum = Number(newContract.remunerationAmount || formData.wage || 0);
+    const scheduleStr =
+      newContract.workingSchedule === 'Full-Time'
+        ? 'JAAGO HQ (10:00 AM - 06:00 PM)'
+        : newContract.workingSchedule;
+
+    const contractTypeStr =
+      newContract.contractType === 'Fixed-Term'
+        ? 'Full Time'
+        : (newContract.contractType as any) || formData.contractType;
+
+    const empTypeStr =
+      newContract.contractType === 'Permanent'
+        ? 'Permanent'
+        : newContract.contractType === 'Intern'
+        ? 'Intern'
+        : newContract.contractType === 'Consultant'
+        ? 'Consultant'
+        : 'Contractual';
+
+    const probStatus =
+      newContract.contractType === 'Probationary' ? 'On Probation' : 'Confirmed';
+
+    const totalSalaryCalc = wageNum + Number(formData.extraPayment || 0) + Number(formData.temporarySalary || 0);
+
+    const now = new Date();
+    const newLogEntry: LogHistoryEntry = {
+      id: `log-${Date.now()}`,
+      timestamp: now.toISOString(),
+      formattedDate: now.toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }),
+      userName: currentUser.fullName || 'Nasif Kamal',
+      userRole: currentUser.jobTitle || 'Coordinator',
+      field: 'Employment Contract',
+      oldValue: formData.contractEndDate ? `Ended: ${formData.contractEndDate}` : 'Active Base Contract',
+      newValue: `Contract Ref: ${newContract.contractNo} (Wage: ৳${wageNum.toLocaleString()}, Type: ${newContract.contractType})`,
+      actionType: 'update',
+    };
+
+    const updatedProfile: FullEmployeeProfile = {
+      ...formData,
+      wage: wageNum,
+      regularSalary: wageNum,
+      totalCurrentSalary: totalSalaryCalc,
+      salaryJulDec: wageNum,
+      salaryJanJun: wageNum,
+      designation: newContract.designation || formData.designation,
+      department: newContract.department || formData.department,
+      organization: newContract.organization || formData.organization,
+      project: newContract.project || formData.project,
+      supervisor: newContract.reportingTo || formData.supervisor,
+      workLocation: newContract.placeOfPosting || formData.workLocation,
+      joiningDate: newContract.startDate || formData.joiningDate,
+      contractEndDate: newContract.endDate || '',
+      workingSchedule: scheduleStr,
+      contractType: contractTypeStr,
+      employeeType: empTypeStr as any,
+      probationaryStatus: probStatus as any,
+      logHistory: [newLogEntry, ...(formData.logHistory || [])],
+    };
+
+    setFormData(updatedProfile);
+    originalStateRef.current = { ...updatedProfile };
+    onSave(updatedProfile);
+    setIsNewContractModalOpen(false);
+    setContractToAmend(null);
+    setSaveToast({
+      message: `Contract ${newContract.contractNo} saved & synced with profile!`,
+      type: 'success',
+    });
+    setTimeout(() => setSaveToast(null), 3500);
+  };
+
   // Leave & Attendance live connection
   const [empLeaveAllocation, setEmpLeaveAllocation] = useState<LeaveAllocationItem | null>(null);
   const [empLeaveRequests, setEmpLeaveRequests] = useState<LeaveRequestItem[]>([]);
@@ -692,6 +840,7 @@ export function EmployeeProfileDetail({
     bereavementRelationship: '',
   });
   const [profileLeaveError, setProfileLeaveError] = useState<string | null>(null);
+  const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
 
   useEffect(() => {
     async function loadEmpLeaveData() {
@@ -985,6 +1134,20 @@ export function EmployeeProfileDetail({
 
         {/* Action Buttons */}
         <div className="flex items-center space-x-2.5">
+          {/* New Contract Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setContractToAmend(null);
+              setIsNewContractModalOpen(true);
+            }}
+            className="px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold tracking-wide transition flex items-center space-x-1.5 shadow-md shadow-amber-500/20 cursor-pointer active:scale-95"
+            title="Create New Employment Contract for this employee"
+          >
+            <FilePlus className="h-3.5 w-3.5" />
+            <span>New Contract</span>
+          </button>
+
           {/* Create User Button */}
           {!formData.isUser && onCreateUser && (
             <button
@@ -1353,6 +1516,7 @@ export function EmployeeProfileDetail({
           { key: 'WORK', label: 'Work', icon: Briefcase },
           { key: 'PERSONAL', label: 'Personal', icon: User },
           { key: 'PAYROLL', label: 'Payroll', icon: DollarSign },
+          { key: 'CONTRACTS', label: 'Contracts', icon: FileText, count: employeeContracts.length },
           { key: 'INSURANCE', label: 'Insurance', icon: Shield },
           { key: 'DSP', label: 'DSP', icon: Sparkles },
           { key: 'LEAVE_ATTENDANCE', label: 'Leave & Attendance', icon: CalendarDays },
@@ -1911,7 +2075,20 @@ export function EmployeeProfileDetail({
                     </label>
                     <select
                       value={formData.gender}
-                      onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                      onChange={(e) => {
+                        const newGender = e.target.value;
+                        setFormData({ ...formData, gender: newGender as any });
+                        if (empLeaveAllocation) {
+                          const isM = newGender === 'MALE' || newGender === 'M';
+                          const isF = newGender === 'FEMALE' || newGender === 'F';
+                          setEmpLeaveAllocation({
+                            ...empLeaveAllocation,
+                            gender: newGender,
+                            paternityAllocated: isM ? (empLeaveAllocation.paternityAllocated > 0 ? empLeaveAllocation.paternityAllocated : 15) : 0,
+                            maternityAllocated: isF ? (empLeaveAllocation.maternityAllocated > 0 ? empLeaveAllocation.maternityAllocated : 120) : 0,
+                          });
+                        }
+                      }}
                       className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                     >
                       <option value="MALE">MALE</option>
@@ -2404,6 +2581,230 @@ export function EmployeeProfileDetail({
         )}
 
         {/* ═══════════════════════════════════════════════════════════════════
+            TAB 4: CONTRACTS (EMPLOYMENT CONTRACTS & VERSION HISTORY)
+            ═══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'CONTRACTS' && (
+          <div className="space-y-6">
+            {/* Header & New Contract Action */}
+            <div className="border-b border-border/70 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-2">
+                  <div className="h-6 w-6 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                    <FileText className="h-3.5 w-3.5" />
+                  </div>
+                  <span>Employment Contracts &amp; Version History</span>
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Directly synchronized with employee profile payroll, designation, and governance records.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setContractToAmend(null);
+                  setIsNewContractModalOpen(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-xs font-bold tracking-wide transition flex items-center space-x-1.5 shadow-md shadow-amber-500/20 cursor-pointer self-start sm:self-auto active:scale-95"
+              >
+                <FilePlus className="h-3.5 w-3.5" />
+                <span>+ New Contract</span>
+              </button>
+            </div>
+
+            {/* Quick Metrics Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-2xl bg-surface/60 border border-border">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Total Versions
+                </span>
+                <span className="text-lg font-bold text-foreground mt-0.5 block">
+                  {employeeContracts.length}
+                </span>
+                <span className="text-[10px] text-muted-foreground">Contract agreements</span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-surface/60 border border-border">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Active Status
+                </span>
+                <div className="mt-1">
+                  {(() => {
+                    const latest = employeeContracts[0];
+                    const status = latest ? deriveContractStatus(latest) : 'Active';
+                    const color =
+                      status === 'Active'
+                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                        : status === 'Expiring'
+                        ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
+                        : 'bg-rose-500/10 text-rose-500 border-rose-500/30';
+                    return (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border ${color}`}>
+                        &bull; {status}
+                      </span>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-surface/60 border border-border">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Contract Type
+                </span>
+                <span className="text-xs font-bold text-foreground mt-1 block">
+                  {employeeContracts[0]?.contractType || 'Fixed-Term'}
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {employeeContracts[0]?.workingSchedule || 'Full-Time'}
+                </span>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-surface/60 border border-border">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Monthly Wage
+                </span>
+                <span className="text-sm font-bold text-emerald-500 font-mono mt-0.5 block">
+                  ৳ {(employeeContracts[0]?.remunerationAmount || formData.wage || 0).toLocaleString()}
+                </span>
+                <span className="text-[10px] text-muted-foreground">Gross monthly BDT</span>
+              </div>
+            </div>
+
+            {/* Contracts List Table */}
+            <div className="border border-border/80 rounded-2xl overflow-hidden shadow-sm bg-surface/30">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface/80 text-[11px] uppercase font-bold text-muted-foreground border-b border-border/70 tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Contract Ref / No</th>
+                      <th className="py-3 px-4">Effective &amp; Duration</th>
+                      <th className="py-3 px-4">Designation &amp; Entity</th>
+                      <th className="py-3 px-4">Type &amp; Schedule</th>
+                      <th className="py-3 px-4">Monthly Wage</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {employeeContracts.map((c, idx) => {
+                      const status = deriveContractStatus(c);
+                      const statusBadge =
+                        status === 'Active'
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                          : status === 'Expiring'
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                          : status === 'Upcoming'
+                          ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30';
+
+                      return (
+                        <tr
+                          key={c.id || idx}
+                          onClick={() => setSelectedContractForDoc(c)}
+                          className="hover:bg-surface/60 transition cursor-pointer group"
+                        >
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center space-x-2">
+                              <div className="h-7 w-7 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                                {idx === 0 ? 'v' + employeeContracts.length : 'v' + (employeeContracts.length - idx)}
+                              </div>
+                              <div>
+                                <span className="font-mono font-bold text-foreground block group-hover:text-amber-500 transition">
+                                  {c.contractNo || `CON-${c.employeeCode}`}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {c.effectiveDate ? `Effective: ${c.effectiveDate}` : 'Base Profile Record'}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-4 font-medium">
+                            <div className="text-foreground">
+                              {c.startDate} <span className="text-muted-foreground">&rarr;</span> {c.endDate || 'Permanent'}
+                            </div>
+                            <span className="text-[10px] text-muted-foreground">
+                              {c.endDate ? 'Fixed-Term Contract' : 'Permanent Employment'}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span className="font-semibold text-foreground block">
+                              {c.designation || formData.designation}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground block">
+                              {c.organization} &bull; {c.department}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-surface border border-border text-foreground">
+                              {c.contractType}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground block mt-0.5">
+                              {c.workingSchedule}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4">
+                            <span className="font-mono font-bold text-emerald-500 text-xs">
+                              ৳ {(c.remunerationAmount || formData.wage || 0).toLocaleString()}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground block">Monthly Gross</span>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-center">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${statusBadge}`}>
+                              &bull; {status}
+                            </span>
+                          </td>
+
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                              {/* Details / Document View */}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedContractForDoc(c)}
+                                className="p-1.5 rounded-xl bg-card border border-border hover:border-amber-500 hover:text-amber-500 text-muted-foreground transition shadow-sm cursor-pointer"
+                                title="View Contract Document & Details"
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                              </button>
+
+                              {/* Print / PDF */}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedContractForDoc(c)}
+                                className="p-1.5 rounded-xl bg-card border border-border hover:border-emerald-500 hover:text-emerald-500 text-muted-foreground transition shadow-sm cursor-pointer"
+                                title="Print / PDF Export"
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                              </button>
+
+                              {/* Edit / Amend */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setContractToAmend(c);
+                                  setIsNewContractModalOpen(true);
+                                }}
+                                className="p-1.5 rounded-xl bg-card border border-border hover:border-blue-500 hover:text-blue-500 text-muted-foreground transition shadow-sm cursor-pointer"
+                                title="Edit / Amend Contract"
+                              >
+                                <Edit3 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════
             TAB: INSURANCE (HEALTH & MEDICAL COVERAGE)
             ═══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'INSURANCE' && (
@@ -2866,6 +3267,10 @@ export function EmployeeProfileDetail({
               const blUsed = empLeaveAllocation ? (empLeaveAllocation.bereavementUsed ?? 0) : 0;
               const blRem = Math.max(0, blAlloc - blUsed);
 
+              const empGender = (formData.gender || empLeaveAllocation?.gender || '').toUpperCase().trim();
+              const isMale = empGender === 'MALE' || empGender === 'M';
+              const isFemale = empGender === 'FEMALE' || empGender === 'F';
+
               const clPct = clAlloc > 0 ? (clRem / clAlloc) * 100 : 0;
               const mlPct = mlAlloc > 0 ? (mlRem / mlAlloc) * 100 : 0;
               const elPct = elAlloc > 0 ? (elRem / elAlloc) * 100 : 0;
@@ -3051,53 +3456,57 @@ export function EmployeeProfileDetail({
                     </div>
                   </div>
 
-                  {/* 6. Paternity Leave Card */}
-                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
-                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-2xl" />
-                    <div className="flex items-center justify-between pl-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="h-2 w-2 rounded-full bg-indigo-500" />
-                        <span className="text-xs font-bold text-foreground">Paternity</span>
-                      </div>
-                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">PL</span>
-                    </div>
-                    <div className="flex items-center space-x-3 pl-2 pt-1">
-                      {renderRing(plPct, '#6366f1')}
-                      <div className="space-y-0.5">
-                        <div className="text-xl font-black text-foreground">
-                          {plRem}
-                          <span className="text-xs font-semibold text-muted-foreground">/{plAlloc}d</span>
+                  {/* 6. Paternity Leave Card (Only for Male Employees) */}
+                  {(!isFemale || (!isMale && !isFemale && plAlloc > 0)) && (
+                    <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-2xl" />
+                      <div className="flex items-center justify-between pl-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                          <span className="text-xs font-bold text-foreground">Paternity</span>
                         </div>
-                        <div className="text-[11px] text-muted-foreground font-medium">
-                          Used <strong className="text-foreground font-bold">{plUsed}</strong> &bull; {plAlloc} total
+                        <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">PL</span>
+                      </div>
+                      <div className="flex items-center space-x-3 pl-2 pt-1">
+                        {renderRing(plPct, '#6366f1')}
+                        <div className="space-y-0.5">
+                          <div className="text-xl font-black text-foreground">
+                            {plRem}
+                            <span className="text-xs font-semibold text-muted-foreground">/{plAlloc}d</span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground font-medium">
+                            Used <strong className="text-foreground font-bold">{plUsed}</strong> &bull; {plAlloc} total
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* 7. Maternity Leave Card */}
-                  <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
-                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 rounded-l-2xl" />
-                    <div className="flex items-center justify-between pl-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="h-2 w-2 rounded-full bg-rose-500" />
-                        <span className="text-xs font-bold text-foreground">Maternity</span>
-                      </div>
-                      <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">MAT</span>
-                    </div>
-                    <div className="flex items-center space-x-3 pl-2 pt-1">
-                      {renderRing(matPct, '#f43f5e')}
-                      <div className="space-y-0.5">
-                        <div className="text-xl font-black text-foreground">
-                          {matRem}
-                          <span className="text-xs font-semibold text-muted-foreground">/{matAlloc}d</span>
+                  {/* 7. Maternity Leave Card (Only for Female Employees) */}
+                  {(!isMale || (!isMale && !isFemale && matAlloc > 0)) && (
+                    <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
+                      <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 rounded-l-2xl" />
+                      <div className="flex items-center justify-between pl-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="h-2 w-2 rounded-full bg-rose-500" />
+                          <span className="text-xs font-bold text-foreground">Maternity</span>
                         </div>
-                        <div className="text-[11px] text-muted-foreground font-medium">
-                          Used <strong className="text-foreground font-bold">{matUsed}</strong> &bull; {matAlloc} total
+                        <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase">MAT</span>
+                      </div>
+                      <div className="flex items-center space-x-3 pl-2 pt-1">
+                        {renderRing(matPct, '#f43f5e')}
+                        <div className="space-y-0.5">
+                          <div className="text-xl font-black text-foreground">
+                            {matRem}
+                            <span className="text-xs font-semibold text-muted-foreground">/{matAlloc}d</span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground font-medium">
+                            Used <strong className="text-foreground font-bold">{matUsed}</strong> &bull; {matAlloc} total
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* 8. Bereavement Leave Card */}
                   <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
@@ -3586,6 +3995,17 @@ export function EmployeeProfileDetail({
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                const empGender = (formData.gender || empLeaveAllocation?.gender || '').toUpperCase().trim();
+                const eligibility = validateLeaveGenderEligibility(empGender, profileLeaveForm.leaveType);
+                if (!eligibility.valid) {
+                  setPolicyErrorModal({
+                    isOpen: true,
+                    title: eligibility.title || 'Leave Policy Ineligibility',
+                    reason: eligibility.reason || 'This leave type is not allowed for this employee gender.',
+                  });
+                  return;
+                }
+
                 if (!profileLeaveForm.reason) {
                   setProfileLeaveError('Please enter the reason for leave');
                   return;
@@ -3626,39 +4046,63 @@ export function EmployeeProfileDetail({
               className="space-y-4 text-xs"
             >
               {/* Category */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Leave Category <span className="text-amber-500">*</span>
-                </label>
-                <select
-                  value={profileLeaveForm.leaveType}
-                  onChange={(e) => {
-                    const newType = e.target.value as LeaveType;
-                    const d1 = new Date(profileLeaveForm.fromDate);
-                    const d2 = new Date(profileLeaveForm.toDate);
-                    let diffDays = 1;
-                    if (newType === 'Maternity Leave') diffDays = 120;
-                    else if (profileLeaveForm.halfDayType !== 'Full Day' && newType === 'Casual Leave') diffDays = 0.5;
-                    else if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
-                      diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
-                    }
-                    setProfileLeaveForm({
-                      ...profileLeaveForm,
-                      leaveType: newType,
-                      totalDays: diffDays > 0 ? diffDays : 1,
-                    });
-                  }}
-                  className="w-full h-10 px-3 rounded-xl bg-surface border border-border font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
-                >
-                  <option value="Casual Leave">Casual Leave (CL)</option>
-                  <option value="Medical Leave">Medical Leave (ML)</option>
-                  <option value="Emergency Leave">Emergency Leave (EL)</option>
-                  <option value="Annual Leave">Annual Leave (AL)</option>
-                  <option value="Paternity Leave">Paternity Leave (15 Days)</option>
-                  <option value="Maternity Leave">Maternity Leave (120 Days)</option>
-                  <option value="Bereavement Leave">Bereavement Leave</option>
-                </select>
-              </div>
+              {(() => {
+                const empGender = (formData.gender || empLeaveAllocation?.gender || '').toUpperCase().trim();
+                const isMale = empGender === 'MALE' || empGender === 'M';
+                const isFemale = empGender === 'FEMALE' || empGender === 'F';
+                const plAlloc = empLeaveAllocation ? (empLeaveAllocation.paternityAllocated ?? 0) : 0;
+                const matAlloc = empLeaveAllocation ? (empLeaveAllocation.maternityAllocated ?? 0) : 0;
+
+                return (
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      Leave Category <span className="text-amber-500">*</span>
+                    </label>
+                    <select
+                      value={profileLeaveForm.leaveType}
+                      onChange={(e) => {
+                        const newType = e.target.value as LeaveType;
+                        const eligibility = validateLeaveGenderEligibility(empGender, newType);
+                        if (!eligibility.valid) {
+                          setPolicyErrorModal({
+                            isOpen: true,
+                            title: eligibility.title || 'Leave Policy Ineligibility',
+                            reason: eligibility.reason || 'This leave type is not allowed for this employee gender.',
+                          });
+                          return;
+                        }
+
+                        const d1 = new Date(profileLeaveForm.fromDate);
+                        const d2 = new Date(profileLeaveForm.toDate);
+                        let diffDays = 1;
+                        if (newType === 'Maternity Leave') diffDays = 120;
+                        else if (profileLeaveForm.halfDayType !== 'Full Day' && newType === 'Casual Leave') diffDays = 0.5;
+                        else if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+                          diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                        }
+                        setProfileLeaveForm({
+                          ...profileLeaveForm,
+                          leaveType: newType,
+                          totalDays: diffDays > 0 ? diffDays : 1,
+                        });
+                      }}
+                      className="w-full h-10 px-3 rounded-xl bg-surface border border-border font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
+                    >
+                      <option value="Casual Leave">Casual Leave (CL)</option>
+                      <option value="Medical Leave">Medical Leave (ML)</option>
+                      <option value="Emergency Leave">Emergency Leave (EL)</option>
+                      <option value="Annual Leave">Annual Leave (AL)</option>
+                      {(!isFemale || (!isMale && !isFemale && plAlloc > 0)) && (
+                        <option value="Paternity Leave">Paternity Leave (15 Days)</option>
+                      )}
+                      {(!isMale || (!isMale && !isFemale && matAlloc > 0)) && (
+                        <option value="Maternity Leave">Maternity Leave (120 Days)</option>
+                      )}
+                      <option value="Bereavement Leave">Bereavement Leave</option>
+                    </select>
+                  </div>
+                );
+              })()}
 
               {/* Leave Duration & Period Dropdowns */}
               <div className="grid grid-cols-2 gap-3">
@@ -3871,6 +4315,67 @@ export function EmployeeProfileDetail({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 5. CONTRACT MODALS INTEGRATION ── */}
+      {/* Contract Document View / PDF Modal */}
+      {selectedContractForDoc && (
+        <ContractDocumentModal
+          isOpen={Boolean(selectedContractForDoc)}
+          onClose={() => setSelectedContractForDoc(null)}
+          contract={selectedContractForDoc}
+          employeeProfile={formData}
+        />
+      )}
+
+      {/* New / Amend Contract Modal */}
+      {isNewContractModalOpen && (
+        <NewContractModal
+          isOpen={isNewContractModalOpen}
+          onClose={() => {
+            setIsNewContractModalOpen(false);
+            setContractToAmend(null);
+          }}
+          onSaveContract={handleSaveContract}
+          employees={allFullEmployees}
+          existingContractToAmend={contractToAmend}
+          initialEmployeeId={formData.id || formData.code}
+        />
+      )}
+
+      {/* ── POLICY INELIGIBILITY POPUP MODAL ── */}
+      {policyErrorModal?.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-card border border-rose-500/30 shadow-2xl p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start space-x-3.5">
+              <div className="h-12 w-12 rounded-2xl bg-rose-500/15 text-rose-500 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div className="space-y-1 min-w-0 flex-1">
+                <h3 className="text-base font-bold text-foreground tracking-tight">
+                  {policyErrorModal.title}
+                </h3>
+                <p className="text-xs font-medium text-rose-400">
+                  JAAGO HR Leave Policy Restriction
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs text-foreground/90 leading-relaxed font-medium">
+              {policyErrorModal.reason}
+            </div>
+
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setPolicyErrorModal(null)}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-bold text-xs uppercase tracking-wider transition shadow-md shadow-amber-500/25 cursor-pointer active:scale-95"
+              >
+                Understood &bull; Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -58,7 +58,7 @@ import {
   unarchiveEmployeesInSupabase,
   deleteEmployeesFromSupabase,
 } from '@/lib/supabase-employees';
-import { syncEmployeeToLocalUser } from '@/lib/user-profile-sync';
+import { syncEmployeeToLocalUser, getCurrentUserSession } from '@/lib/user-profile-sync';
 import {
   exportEmployeesToComprehensiveCSV,
   parseComprehensiveEmployeeCSV,
@@ -1075,7 +1075,17 @@ function toCanonicalOrgName(raw: string): string {
 
     // Save to Supabase PostgreSQL in background
     await saveEmployeeToSupabase(updatedProfile, updatedProfile.logHistory);
-    syncEmployeeToLocalUser(updatedProfile);
+    
+    // Only sync to active user session if this is the currently logged-in user
+    const currentSession = getCurrentUserSession();
+    if (
+      currentSession &&
+      ((currentSession.email && (updatedProfile.workEmail?.toLowerCase() === currentSession.email.toLowerCase() || updatedProfile.personalEmail?.toLowerCase() === currentSession.email.toLowerCase())) ||
+       (currentSession.employeeCode && updatedProfile.code === currentSession.employeeCode) ||
+       (currentSession.fullName && updatedProfile.name.toLowerCase().trim() === currentSession.fullName.toLowerCase().trim()))
+    ) {
+      syncEmployeeToLocalUser(updatedProfile);
+    }
   };
 
   // Create User Account from Employee and send Invite Email
