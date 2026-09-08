@@ -2084,8 +2084,8 @@ export function EmployeeProfileDetail({
                           setEmpLeaveAllocation({
                             ...empLeaveAllocation,
                             gender: newGender,
-                            paternityAllocated: isM ? (empLeaveAllocation.paternityAllocated > 0 ? empLeaveAllocation.paternityAllocated : 15) : 0,
-                            maternityAllocated: isF ? (empLeaveAllocation.maternityAllocated > 0 ? empLeaveAllocation.maternityAllocated : 120) : 0,
+                            paternityAllocated: isM ? (empLeaveAllocation.paternityAllocated || 0) : 0,
+                            maternityAllocated: isF ? (empLeaveAllocation.maternityAllocated || 0) : 0,
                           });
                         }
                       }}
@@ -3829,7 +3829,14 @@ export function EmployeeProfileDetail({
                       }
 
                       return empLogs.slice(0, 14).map((log: any) => {
-                        const durationStr = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
+                        const isAuto = Boolean(
+                          log.isAutoCheckout ||
+                          log.status === 'Auto Check Out' ||
+                          (log.checkOutTime && (log.checkOutTime.includes('11:30') || log.checkOutTime === '23:30')) ||
+                          (log.notes && log.notes.toLowerCase().includes('auto check-out'))
+                        );
+                        const effectiveCheckOut = isAuto ? (log.checkOutTime && log.checkOutTime !== '--:--' ? log.checkOutTime : '11:30 PM') : log.checkOutTime;
+                        const durationStr = calculateWorkingHoursString(log.checkInTime, effectiveCheckOut);
                         return (
                           <tr key={log.id} className="hover:bg-surface/40 transition">
                             <td className="py-3 px-4 font-mono text-[11px] text-foreground font-bold">
@@ -3839,13 +3846,17 @@ export function EmployeeProfileDetail({
                               {log.checkInTime || '--:--'}
                             </td>
                             <td className="py-3 px-3 font-semibold text-rose-500 font-mono">
-                              {log.checkOutTime || '--:--'}
+                              {effectiveCheckOut || '--:--'}
                             </td>
                             <td className="py-3 px-3 font-mono text-[11px] text-foreground font-bold">
                               {durationStr}
                             </td>
                             <td className="py-3 px-3 text-muted-foreground text-[11px]">
-                              {log.device || 'Web Portal'}
+                              {isAuto ? (
+                                <span className="inline-flex items-center space-x-1 text-amber-500 font-semibold">
+                                  <span>{log.device || 'Web Portal'} (Auto)</span>
+                                </span>
+                              ) : (log.device || 'Web Portal')}
                             </td>
                             <td className="py-3 px-4 text-center">
                               {(log.status === 'Leave' || log.status === 'Half Day') ? (
@@ -3873,10 +3884,10 @@ export function EmployeeProfileDetail({
                                   const isFuture = log.date > new Date().toISOString().slice(0, 10);
                                   const showWorking = !isFullDay && !isFuture;
                                   return (
-                                    <div className="flex flex-col items-center gap-1 min-w-[80px]">
+                                    <div className="flex flex-col items-center gap-0.5 max-w-[85px] mx-auto">
                                       {isFullDay ? (
                                         <div className="h-3.5 w-full rounded bg-purple-500/25 border border-purple-500/40 flex items-center justify-center">
-                                          <span className="text-[8px] font-black text-purple-400">LEAVE · Full Day</span>
+                                          <span className="text-[7.5px] font-black text-purple-400">FULL DAY</span>
                                         </div>
                                       ) : isFirst ? (
                                         <div className="flex gap-0.5 w-full">
@@ -3903,6 +3914,10 @@ export function EmployeeProfileDetail({
                                     </div>
                                   );
                                 })()
+                              ) : isAuto ? (
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-amber-500/15 text-amber-500 border-amber-500/30 whitespace-nowrap">
+                                  Auto Check Out
+                                </span>
                               ) : (
                                 <span
                                   className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${

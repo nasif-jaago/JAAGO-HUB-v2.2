@@ -41,13 +41,20 @@ export async function runAutoCheckoutJob(targetDate?: string): Promise<AutoCheck
     metadata: { businessDate, cutoffUtc },
   });
 
-  // Query all records for this business date with open sessions (check_in present, check_out missing)
-  const { data: openRecords, error: fetchErr } = await supabase
+  // Query all records with open sessions (check_in present, check_out missing)
+  let query = supabase
     .from('attendance_records')
     .select('*')
-    .eq('business_date', businessDate)
     .not('check_in_at', 'is', null)
     .is('check_out_at', null);
+
+  if (targetDate) {
+    query = query.eq('business_date', targetDate);
+  } else {
+    query = query.lte('business_date', businessDate);
+  }
+
+  const { data: openRecords, error: fetchErr } = await query;
 
   if (fetchErr) {
     logger.error('SYSTEM', 'attendance.auto_checkout.fetch_error', {
@@ -64,12 +71,14 @@ export async function runAutoCheckoutJob(targetDate?: string): Promise<AutoCheck
 
   for (const record of recordsToClose) {
     try {
+      const recDate = record.business_date || businessDate;
+      const recCutoffUtc = new Date(`${recDate}T23:30:00+06:00`).toISOString();
       const firstIn = record.first_check_in_at || record.check_in_at;
-      const lastOut = cutoffUtc;
+      const lastOut = recCutoffUtc;
 
       const facts = {
         employeeId: record.employee_id,
-        businessDate,
+        businessDate: recDate,
         firstCheckInAt: firstIn,
         lastCheckOutAt: lastOut,
         checkInAt: record.check_in_at,
@@ -87,9 +96,9 @@ export async function runAutoCheckoutJob(targetDate?: string): Promise<AutoCheck
         event_type: 'check_out',
         punch_type: 'check_out',
         source: 'auto',
-        attempted_at: cutoffUtc,
-        captured_at: cutoffUtc,
-        device_info: 'System Auto-Checkout Worker',
+        attempted_at: recCutoffUtc,
+        captured_at: recCutoffUtc,
+        device_info: 'System Auto-Checkout Worker (11:30 PM)',
         result: 'accepted',
         is_within_geofence: true,
       });
@@ -99,12 +108,14 @@ export async function runAutoCheckoutJob(targetDate?: string): Promise<AutoCheck
         .from('attendance_records')
         .update({
           check_out_at: lastOut,
+          last_check_out_at: lastOut,
           check_out_source: 'auto',
           is_auto_checkout: true,
+          needs_review: true,
           worked_seconds: workedSeconds,
           worked_minutes: workedMinutes,
           worked_display: workedDisplay,
-          status: 'present',
+          status: record.status === 'absent' ? 'present' : (record.status || 'present'),
           updated_at: new Date().toISOString(),
         })
         .eq('id', record.id);

@@ -579,7 +579,11 @@ export default function AttendanceLogsPage() {
 
                     {/* Status */}
                     <td className="py-4 px-3">
-                      {log.status === 'Present' ? (
+                      {log.status === 'Auto Check Out' || log.isAutoCheckout ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[11px] font-bold whitespace-nowrap">
+                          Auto Check Out
+                        </span>
+                      ) : log.status === 'Present' ? (
                         <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[11px] font-bold">
                           Present
                         </span>
@@ -665,14 +669,14 @@ export default function AttendanceLogsPage() {
                                 </div>
                               )}
                               <span className="text-[9px] font-semibold text-purple-400 leading-none">
-                                {isFullDay ? 'Leave' : isFirst ? 'Leave · 1st Half' : 'Leave · 2nd Half'}
+                                {isFullDay ? (log.notes || 'Full Day') : isFirst ? '1st Half' : '2nd Half'}
                               </span>
                             </div>
                           );
                         })()
                       ) : (
-                        <span className="px-2.5 py-1 rounded-lg bg-slate-500/15 text-slate-400 border border-slate-500/30 text-[11px] font-bold">
-                          {log.status || 'N/A'}
+                        <span className="px-2.5 py-1 rounded-lg bg-surface border border-border/70 text-[11px] font-bold text-muted-foreground">
+                          {log.status}
                         </span>
                       )}
                     </td>
@@ -683,6 +687,11 @@ export default function AttendanceLogsPage() {
                         <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[11px] font-bold">
                           <Calendar className="h-3 w-3" />
                           <span>Leave Portal</span>
+                        </span>
+                      ) : log.isAutoCheckout || log.status === 'Auto Check Out' ? (
+                        <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[11px] font-bold whitespace-nowrap">
+                          <Clock className="h-3 w-3" />
+                          <span>Auto Check Out</span>
                         </span>
                       ) : log.primarySource === 'BioTime Terminal' || (log.device as string) === 'BioTime Terminal' ? (
                         <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 text-[11px] font-bold">
@@ -711,18 +720,28 @@ export default function AttendanceLogsPage() {
                         <div className="text-[11px] text-purple-400 font-semibold pt-0.5 max-w-[220px] truncate">
                           {log.notes || 'Approved Leave'}
                         </div>
-                      ) : (
-                        <>
-                          <div className="text-[11px] text-muted-foreground flex items-center space-x-1.5 pt-0.5 font-mono">
-                            <span className="text-emerald-500 font-semibold">In: {log.checkInTime || '--:--'}</span>
-                            <span>&bull;</span>
-                            <span className="text-rose-500 font-semibold">Out: {log.checkOutTime || '--:--'}</span>
-                          </div>
-                          <div className="text-[10px] text-muted-foreground/80 font-bold pt-0.5">
-                            Duration: {calculateWorkingHoursString(log.checkInTime, log.checkOutTime)}
-                          </div>
-                        </>
-                      )}
+                      ) : (() => {
+                        const isAuto = Boolean(
+                          log.isAutoCheckout ||
+                          log.status === 'Auto Check Out' ||
+                          (log.checkOutTime && (log.checkOutTime.includes('11:30') || log.checkOutTime === '23:30')) ||
+                          (log.notes && log.notes.toLowerCase().includes('auto check-out'))
+                        );
+                        const effectiveCheckOut = isAuto ? (log.checkOutTime && log.checkOutTime !== '--:--' ? log.checkOutTime : '11:30 PM') : log.checkOutTime;
+                        const duration = calculateWorkingHoursString(log.checkInTime, effectiveCheckOut);
+                        return (
+                          <>
+                            <div className="text-[11px] text-muted-foreground flex items-center space-x-1.5 pt-0.5 font-mono">
+                              <span className="text-emerald-500 font-semibold">In: {log.checkInTime || '--:--'}</span>
+                              <span>&bull;</span>
+                              <span className="text-rose-500 font-semibold">Out: {effectiveCheckOut || '--:--'}</span>
+                            </div>
+                            <div className="text-[10px] text-muted-foreground/80 font-bold pt-0.5">
+                              Duration: {duration}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </td>
 
                     {/* Created By Details */}

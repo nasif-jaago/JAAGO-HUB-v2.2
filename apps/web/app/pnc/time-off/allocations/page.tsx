@@ -14,7 +14,10 @@ import {
 } from 'lucide-react';
 import {
   LeaveAllocationItem,
+  LeavePolicyConfig,
   fetchLeaveAllocations,
+  fetchLeavePolicies,
+  getCoreLeaveQuotaFromPolicies,
   saveLeaveAllocation,
   saveBulkLeaveAllocations,
   deleteLeaveAllocation,
@@ -40,6 +43,7 @@ export default function LeaveAllocationsPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [departmentsList, setDepartmentsList] = useState<DepartmentItem[]>([]);
   const [projectsList, setProjectsList] = useState<ProjectItem[]>([]);
+  const [policies, setPolicies] = useState<LeavePolicyConfig[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('');
@@ -66,9 +70,9 @@ export default function LeaveAllocationsPage() {
   const [modalProjectFilter, setModalProjectFilter] = useState<string>('');
   const [modalEmpSearch, setModalEmpSearch] = useState<string>('');
   const [selectedEmpCodes, setSelectedEmpCodes] = useState<string[]>([]);
-  const [selectedLeaveType, setSelectedLeaveType] = useState<string>('ALL_PACKAGE');
+  const [selectedLeaveType, setSelectedLeaveType] = useState<string>('ALL_CONFIGURED');
   const [allocationYear, setAllocationYear] = useState<string>('2026');
-  const [totalDaysInput, setTotalDaysInput] = useState<number>(10);
+  const [totalDaysInput, setTotalDaysInput] = useState<number>(39);
 
   // Single Edit Modal State
   const [singleFormData, setSingleFormData] = useState<LeaveAllocationItem>({
@@ -89,10 +93,11 @@ export default function LeaveAllocationsPage() {
     annualUsed: 0,
     maternityAllocated: 0,
     maternityUsed: 0,
-    paternityAllocated: 15,
+    paternityAllocated: 0,
     paternityUsed: 0,
-    compOffAllocated: 16,
+    compOffAllocated: 0,
     compOffUsed: 0,
+    bereavementAllocated: 0,
     bereavementUsed: 0,
     unpaidUsed: 0,
     fiscalYear: '2026-2027',
@@ -100,21 +105,23 @@ export default function LeaveAllocationsPage() {
   const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
 
   const loadData = async () => {
-    const [allocs, emps, depts, projs] = await Promise.all([
+    const [allocs, emps, depts, projs, pols] = await Promise.all([
       fetchLeaveAllocations(),
       fetchEmployeesFromSupabase(),
       fetchDepartmentsFromSupabase(),
       fetchProjectsFromSupabase(),
+      fetchLeavePolicies(),
     ]);
     if (allocs) setAllocations(allocs);
     if (emps) setEmployees(emps);
     if (depts) setDepartmentsList(depts);
     if (projs) setProjectsList(projs);
+    if (pols) setPolicies(pols);
   };
 
   useEffect(() => {
     try {
-      const rawAlloc = localStorage.getItem('jaago_pnc_leave_allocations');
+      const rawAlloc = localStorage.getItem('jaago_pnc_leave_allocations_v3') || localStorage.getItem('jaago_pnc_leave_allocations');
       if (rawAlloc) {
         const parsed = JSON.parse(rawAlloc);
         if (Array.isArray(parsed) && parsed.length > 0) setAllocations(parsed);
@@ -133,10 +140,12 @@ export default function LeaveAllocationsPage() {
     };
     window.addEventListener('jaago_leave_allocation_updated', handleUpdate);
     window.addEventListener('jaago_employees_updated', handleUpdate);
+    window.addEventListener('jaago_leave_policies_updated', handleUpdate);
 
     return () => {
       window.removeEventListener('jaago_leave_allocation_updated', handleUpdate);
       window.removeEventListener('jaago_employees_updated', handleUpdate);
+      window.removeEventListener('jaago_leave_policies_updated', handleUpdate);
     };
   }, []);
 
@@ -152,16 +161,22 @@ export default function LeaveAllocationsPage() {
     setModalProjectFilter('');
     setModalEmpSearch('');
     setSelectedEmpCodes(employees.map((e) => e.code)); // select all by default
-    setSelectedLeaveType('ALL_PACKAGE');
+    setSelectedLeaveType('ALL_CONFIGURED');
     setAllocationYear('2026');
-    setTotalDaysInput(10);
+    setTotalDaysInput(39);
     setShowAllocateModal(true);
   };
 
   // Open Single Edit Modal
   const handleOpenEditSingle = (item: LeaveAllocationItem) => {
     setEditingSingleItem(item);
-    setSingleFormData({ ...item });
+    setSingleFormData({
+      ...item,
+      bereavementAllocated: item.bereavementAllocated ?? 0,
+      compOffAllocated: item.compOffAllocated ?? 0,
+      paternityAllocated: item.paternityAllocated ?? 0,
+      maternityAllocated: item.maternityAllocated ?? 0,
+    });
     setShowAllocateModal(true);
   };
 
@@ -274,8 +289,10 @@ export default function LeaveAllocationsPage() {
       const sanitizedSingle: LeaveAllocationItem = {
         ...singleFormData,
         gender: singleGender,
-        maternityAllocated: isSingleMale ? 0 : singleFormData.maternityAllocated,
-        paternityAllocated: isSingleFemale ? 0 : singleFormData.paternityAllocated,
+        maternityAllocated: isSingleMale ? 0 : (singleFormData.maternityAllocated || 0),
+        paternityAllocated: isSingleFemale ? 0 : (singleFormData.paternityAllocated || 0),
+        compOffAllocated: singleFormData.compOffAllocated || 0,
+        bereavementAllocated: singleFormData.bereavementAllocated || 0,
       };
 
       const updated = allocations.map((a) =>
@@ -294,45 +311,6 @@ export default function LeaveAllocationsPage() {
       return;
     }
 
-    // Check gender prohibition on bulk allocation
-    if (selectedLeaveType === 'Maternity Leave') {
-      const maleRecipients = selectedEmpCodes
-        .map((code) => employees.find((e) => e.code === code))
-        .filter((e) => {
-          const g = (e?.gender || '').toUpperCase().trim();
-          return g === 'MALE' || g === 'M';
-        });
-
-      if (maleRecipients.length === selectedEmpCodes.length) {
-        setPolicyErrorModal({
-          isOpen: true,
-          title: 'Maternity Leave Allocation Prohibited',
-          reason:
-            'Under JAAGO Foundation HR Policy (Clause 4.2), Maternity Leave is exclusively available for Female employees. All selected employees are Male, so Maternity Leave cannot be allocated to them.',
-        });
-        return;
-      }
-    }
-
-    if (selectedLeaveType === 'Paternity Leave') {
-      const femaleRecipients = selectedEmpCodes
-        .map((code) => employees.find((e) => e.code === code))
-        .filter((e) => {
-          const g = (e?.gender || '').toUpperCase().trim();
-          return g === 'FEMALE' || g === 'F';
-        });
-
-      if (femaleRecipients.length === selectedEmpCodes.length) {
-        setPolicyErrorModal({
-          isOpen: true,
-          title: 'Paternity Leave Allocation Prohibited',
-          reason:
-            'Under JAAGO Foundation HR Policy (Clause 4.3), Paternity Leave is exclusively available for Male employees. All selected employees are Female, so Paternity Leave cannot be allocated to them.',
-        });
-        return;
-      }
-    }
-
     const itemsToSave: LeaveAllocationItem[] = selectedEmpCodes.map((code) => {
       const emp = employees.find((e) => e.code === code);
       const existing = allocations.find((a) => a.employeeCode === code);
@@ -340,21 +318,27 @@ export default function LeaveAllocationsPage() {
       const isMale = empG === 'MALE' || empG === 'M';
       const isFemale = empG === 'FEMALE' || empG === 'F';
 
-      let casual = existing?.casualAllocated || 10;
-      let medical = existing?.medicalAllocated || 10;
-      let emergency = existing?.emergencyAllocated || 4;
-      let annual = existing?.annualAllocated || 15;
-      let paternity = isFemale ? 0 : (existing?.paternityAllocated || 15);
-      let maternity = isMale ? 0 : (existing?.maternityAllocated || 120);
-      let compOff = existing?.compOffAllocated || 16;
+      // Core Quotas dynamically resolved based on employee's Leave Policy Configuration
+      const coreQuotas = getCoreLeaveQuotaFromPolicies(emp || existing || {}, policies);
 
-      if (selectedLeaveType === 'ALL_PACKAGE') {
-        casual = 10;
-        medical = 10;
-        emergency = 4;
-        annual = 15;
-        paternity = isMale ? 15 : 0;
-        maternity = isFemale ? 120 : 0;
+      let casual = existing?.casualAllocated ?? coreQuotas.casual;
+      let medical = existing?.medicalAllocated ?? coreQuotas.medical;
+      let emergency = existing?.emergencyAllocated ?? coreQuotas.emergency;
+      let annual = existing?.annualAllocated ?? coreQuotas.annual;
+
+      // Paternity, Maternity, Bereavement, and Compensatory leaves must ONLY be allocated manually.
+      // Retain existing manual allocations if already configured, otherwise 0.
+      let paternity = isFemale ? 0 : (existing?.paternityAllocated || 0);
+      let maternity = isMale ? 0 : (existing?.maternityAllocated || 0);
+      let compOff = existing?.compOffAllocated || 0;
+      let bereavementAlloc = existing?.bereavementAllocated || 0;
+
+      if (selectedLeaveType === 'ALL_CONFIGURED' || selectedLeaveType === 'ALL_PACKAGE') {
+        // Based on Leave Configuration: Only add casual, annual, emergency, and medical leave!
+        casual = coreQuotas.casual;
+        medical = coreQuotas.medical;
+        emergency = coreQuotas.emergency;
+        annual = coreQuotas.annual;
       } else if (selectedLeaveType === 'Casual Leave') {
         casual = totalDaysInput;
       } else if (selectedLeaveType === 'Medical Leave') {
@@ -363,14 +347,6 @@ export default function LeaveAllocationsPage() {
         emergency = totalDaysInput;
       } else if (selectedLeaveType === 'Annual Leave') {
         annual = totalDaysInput;
-      } else if (selectedLeaveType === 'Paternity Leave') {
-        paternity = isFemale ? 0 : totalDaysInput;
-        maternity = 0;
-      } else if (selectedLeaveType === 'Maternity Leave') {
-        maternity = isMale ? 0 : totalDaysInput;
-        paternity = 0;
-      } else if (selectedLeaveType === 'Compensatory Leave') {
-        compOff = totalDaysInput * 8;
       }
 
       return {
@@ -381,7 +357,7 @@ export default function LeaveAllocationsPage() {
         department: emp?.department || existing?.department || "Founder's Office",
         designation: emp?.designation || existing?.designation || 'Staff',
         gender: emp?.gender || existing?.gender || '',
-        leaveGroup: existing?.leaveGroup || 'Standard Full-time',
+        leaveGroup: existing?.leaveGroup || emp?.leaveGroup || (coreQuotas.policyName.includes('DSP') ? 'DSP Faculty Group' : coreQuotas.policyName.includes('Probationary') ? 'Probationary Staff' : 'Standard Full-time'),
         casualAllocated: casual,
         casualUsed: existing?.casualUsed ?? 0,
         medicalAllocated: medical,
@@ -396,6 +372,7 @@ export default function LeaveAllocationsPage() {
         paternityUsed: existing?.paternityUsed ?? 0,
         compOffAllocated: compOff,
         compOffUsed: existing?.compOffUsed ?? 0,
+        bereavementAllocated: bereavementAlloc,
         bereavementUsed: existing?.bereavementUsed ?? 0,
         unpaidUsed: existing?.unpaidUsed ?? 0,
         fiscalYear: allocationYear.includes('-') ? allocationYear : `${allocationYear}-${Number(allocationYear) + 1}`,
@@ -410,7 +387,7 @@ export default function LeaveAllocationsPage() {
     setAllocations(mergedList);
     setShowAllocateModal(false);
     await saveBulkLeaveAllocations(itemsToSave);
-    showToastMsg(`Allocated leave quotas to ${itemsToSave.length} employees successfully`);
+    showToastMsg(`Allocated core leave quotas (CL, ML, EL, AL) to ${itemsToSave.length} employees based on Leave Configuration`);
   };
 
   const empCodeToProfile = useMemo(() => {
@@ -620,10 +597,10 @@ export default function LeaveAllocationsPage() {
               ) : (
                 filtered.map((item) => {
                   const totalAlloc =
-                    (item.casualAllocated || 10) +
-                    (item.medicalAllocated || 10) +
-                    (item.emergencyAllocated || 4) +
-                    (item.annualAllocated || 15);
+                    (item.casualAllocated ?? 0) +
+                    (item.medicalAllocated ?? 0) +
+                    (item.emergencyAllocated ?? 0) +
+                    (item.annualAllocated ?? 0);
                   const totalUsed =
                     (item.casualUsed || 0) +
                     (item.medicalUsed || 0) +
@@ -631,6 +608,13 @@ export default function LeaveAllocationsPage() {
                     (item.annualUsed || 0);
                   const totalRemaining = totalAlloc - totalUsed;
                   const isSelected = selectedIds.includes(item.id);
+
+                  const hasManualAllocations = Boolean(
+                    (item.paternityAllocated && item.paternityAllocated > 0) ||
+                    (item.maternityAllocated && item.maternityAllocated > 0) ||
+                    (item.bereavementAllocated && item.bereavementAllocated > 0) ||
+                    (item.compOffAllocated && item.compOffAllocated > 0)
+                  );
 
                   return (
                     <tr
@@ -660,6 +644,21 @@ export default function LeaveAllocationsPage() {
                             <div className="text-[10px] font-mono text-muted-foreground">
                               {item.employeeCode} &bull; {item.department}
                             </div>
+                            {hasManualAllocations && (
+                              <div className="flex items-center gap-1 mt-1 text-[10px] font-semibold text-amber-500">
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                                  Manual:{' '}
+                                  {[
+                                    item.paternityAllocated ? `PL ${item.paternityAllocated}d` : null,
+                                    item.maternityAllocated ? `MAT ${item.maternityAllocated}d` : null,
+                                    item.bereavementAllocated ? `BL ${item.bereavementAllocated}d` : null,
+                                    item.compOffAllocated ? `CO ${item.compOffAllocated}h` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(', ')}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -670,27 +669,27 @@ export default function LeaveAllocationsPage() {
                       </td>
                       <td className="py-3.5 px-4 font-mono text-xs">
                         <span className="font-bold text-emerald-500">
-                          {(item.casualAllocated || 10) - (item.casualUsed || 0)}
+                          {(item.casualAllocated ?? 0) - (item.casualUsed || 0)}
                         </span>
-                        <span className="text-muted-foreground"> / {item.casualAllocated || 10}d</span>
+                        <span className="text-muted-foreground"> / {item.casualAllocated ?? 0}d</span>
                       </td>
                       <td className="py-3.5 px-4 font-mono text-xs">
                         <span className="font-bold text-rose-500">
-                          {(item.medicalAllocated || 10) - (item.medicalUsed || 0)}
+                          {(item.medicalAllocated ?? 0) - (item.medicalUsed || 0)}
                         </span>
-                        <span className="text-muted-foreground"> / {item.medicalAllocated || 10}d</span>
+                        <span className="text-muted-foreground"> / {item.medicalAllocated ?? 0}d</span>
                       </td>
                       <td className="py-3.5 px-4 font-mono text-xs">
                         <span className="font-bold text-orange-500">
-                          {(item.emergencyAllocated || 4) - (item.emergencyUsed || 0)}
+                          {(item.emergencyAllocated ?? 0) - (item.emergencyUsed || 0)}
                         </span>
-                        <span className="text-muted-foreground"> / {item.emergencyAllocated || 4}d</span>
+                        <span className="text-muted-foreground"> / {item.emergencyAllocated ?? 0}d</span>
                       </td>
                       <td className="py-3.5 px-4 font-mono text-xs">
                         <span className="font-bold text-blue-500">
-                          {(item.annualAllocated || 15) - (item.annualUsed || 0)}
+                          {(item.annualAllocated ?? 0) - (item.annualUsed || 0)}
                         </span>
-                        <span className="text-muted-foreground"> / {item.annualAllocated || 15}d</span>
+                        <span className="text-muted-foreground"> / {item.annualAllocated ?? 0}d</span>
                       </td>
                       <td className="py-3.5 px-4">
                         <span className="px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-extrabold text-xs">
@@ -789,8 +788,8 @@ export default function LeaveAllocationsPage() {
 
             <form onSubmit={handleSaveAllocation} className="space-y-4 text-xs">
               {editingSingleItem ? (
-                /* Single Employee Form */
-                <div className="space-y-3">
+                /* Single Employee Form with Explicit Core and Manual Sections */
+                <div className="space-y-4">
                   <div className="space-y-1">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                       Employee
@@ -798,143 +797,214 @@ export default function LeaveAllocationsPage() {
                     <input
                       type="text"
                       readOnly
-                      value={`${singleFormData.employeeName} (${singleFormData.employeeCode})`}
+                      value={`${singleFormData.employeeName} (${singleFormData.employeeCode}) • ${singleFormData.department}`}
                       className="w-full h-10 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                        Casual Leave (CL Days)
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={singleFormData.casualAllocated}
-                        onChange={(e) =>
-                          setSingleFormData({ ...singleFormData, casualAllocated: Number(e.target.value) })
-                        }
-                        className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      />
+                  {/* Section 1: Core Quotas (Based on Leave Configuration) */}
+                  <div className="p-3.5 rounded-2xl bg-surface/50 border border-border/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black uppercase tracking-wider text-amber-500">
+                        Core Quotas (Based on Leave Configuration)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const emp = employees.find((e) => e.code === singleFormData.employeeCode);
+                          const core = getCoreLeaveQuotaFromPolicies(emp || singleFormData, policies);
+                          setSingleFormData({
+                            ...singleFormData,
+                            casualAllocated: core.casual,
+                            medicalAllocated: core.medical,
+                            emergencyAllocated: core.emergency,
+                            annualAllocated: core.annual,
+                          });
+                          showToastMsg(`Reset core quotas to ${core.policyName} defaults (${core.totalDays}d)`);
+                        }}
+                        className="text-[10px] font-bold text-amber-500 hover:text-amber-600 underline cursor-pointer"
+                      >
+                        Reset to Policy Defaults
+                      </button>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                        Medical Leave (ML Days)
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={singleFormData.medicalAllocated}
-                        onChange={(e) =>
-                          setSingleFormData({ ...singleFormData, medicalAllocated: Number(e.target.value) })
-                        }
-                        className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                          Casual Leave (CL Days)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={singleFormData.casualAllocated}
+                          onChange={(e) =>
+                            setSingleFormData({ ...singleFormData, casualAllocated: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                          Medical Leave (ML Days)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={singleFormData.medicalAllocated}
+                          onChange={(e) =>
+                            setSingleFormData({ ...singleFormData, medicalAllocated: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                          Emergency Leave (EL Days)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={singleFormData.emergencyAllocated}
+                          onChange={(e) =>
+                            setSingleFormData({ ...singleFormData, emergencyAllocated: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                          Annual Leave (AL Days)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={singleFormData.annualAllocated}
+                          onChange={(e) =>
+                            setSingleFormData({ ...singleFormData, annualAllocated: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                        Emergency Leave (EL Days)
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={singleFormData.emergencyAllocated}
-                        onChange={(e) =>
-                          setSingleFormData({ ...singleFormData, emergencyAllocated: Number(e.target.value) })
-                        }
-                        className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      />
+                  {/* Section 2: Manual Leave Allocations */}
+                  <div className="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-3">
+                    <div>
+                      <span className="text-[11px] font-black uppercase tracking-wider text-foreground block">
+                        Manual Leave Allocations (Special &amp; Conditional Leaves)
+                      </span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Paternity, Maternity, Bereavement, and Compensatory leaves are allocated manually per employee.
+                      </p>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                        Annual Leave (AL Days)
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={singleFormData.annualAllocated}
-                        onChange={(e) =>
-                          setSingleFormData({ ...singleFormData, annualAllocated: Number(e.target.value) })
-                        }
-                        className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      />
+
+                    {/* Parental Leave depending on gender */}
+                    {(() => {
+                      const singleEmp = employees.find((e) => e.code === singleFormData.employeeCode);
+                      const singleGender = (singleEmp?.gender || singleFormData.gender || '').toUpperCase().trim();
+                      const isSingleMale = singleGender === 'MALE' || singleGender === 'M';
+                      const isSingleFemale = singleGender === 'FEMALE' || singleGender === 'F';
+
+                      return (
+                        <div className="grid grid-cols-2 gap-3">
+                          {isSingleMale ? (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-foreground block">
+                                Paternity Leave (PL Days) <span className="text-amber-500">*Manual</span>
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={singleFormData.paternityAllocated ?? 0}
+                                onChange={(e) =>
+                                  setSingleFormData({ ...singleFormData, paternityAllocated: Number(e.target.value), maternityAllocated: 0 })
+                                }
+                                className="w-full h-9 px-3 rounded-xl bg-surface border border-amber-500/50 text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 block">
+                                Paternity Leave (Prohibited for Female)
+                              </label>
+                              <input
+                                type="text"
+                                disabled
+                                value="0 Days (Prohibited)"
+                                className="w-full h-9 px-3 rounded-xl bg-surface/40 border border-border/50 text-xs font-semibold text-muted-foreground cursor-not-allowed"
+                              />
+                            </div>
+                          )}
+
+                          {isSingleFemale ? (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-foreground block">
+                                Maternity Leave (MAT Days) <span className="text-amber-500">*Manual</span>
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={singleFormData.maternityAllocated ?? 0}
+                                onChange={(e) =>
+                                  setSingleFormData({ ...singleFormData, maternityAllocated: Number(e.target.value), paternityAllocated: 0 })
+                                }
+                                className="w-full h-9 px-3 rounded-xl bg-surface border border-amber-500/50 text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 block">
+                                Maternity Leave (Prohibited for Male)
+                              </label>
+                              <input
+                                type="text"
+                                disabled
+                                value="0 Days (Prohibited)"
+                                className="w-full h-9 px-3 rounded-xl bg-surface/40 border border-border/50 text-xs font-semibold text-muted-foreground cursor-not-allowed"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-foreground block">
+                          Bereavement Leave (BL Days) <span className="text-amber-500">*Manual</span>
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={singleFormData.bereavementAllocated ?? 0}
+                          placeholder="0"
+                          onChange={(e) =>
+                            setSingleFormData({ ...singleFormData, bereavementAllocated: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase tracking-wider text-foreground block">
+                          Compensatory Leave (CO Hours) <span className="text-amber-500">*Manual</span>
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={singleFormData.compOffAllocated ?? 0}
+                          placeholder="0"
+                          onChange={(e) =>
+                            setSingleFormData({ ...singleFormData, compOffAllocated: Number(e.target.value) })
+                          }
+                          className="w-full h-9 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
                     </div>
                   </div>
-
-                  {/* Parental Leave depending on gender */}
-                  {(() => {
-                    const singleEmp = employees.find((e) => e.code === singleFormData.employeeCode);
-                    const singleGender = (singleEmp?.gender || singleFormData.gender || '').toUpperCase().trim();
-                    const isSingleMale = singleGender === 'MALE' || singleGender === 'M';
-                    const isSingleFemale = singleGender === 'FEMALE' || singleGender === 'F';
-
-                    if (isSingleMale) {
-                      return (
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                              Paternity Leave (PL Days)
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={singleFormData.paternityAllocated ?? 15}
-                              onChange={(e) =>
-                                setSingleFormData({ ...singleFormData, paternityAllocated: Number(e.target.value), maternityAllocated: 0 })
-                              }
-                              className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 block">
-                              Maternity Leave (Prohibited for Male)
-                            </label>
-                            <input
-                              type="text"
-                              disabled
-                              value="0 Days (Prohibited)"
-                              className="w-full h-10 px-3 rounded-xl bg-surface/40 border border-border/50 text-xs font-semibold text-muted-foreground cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-                      );
-                    } else if (isSingleFemale) {
-                      return (
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                              Maternity Leave (MAT Days)
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              value={singleFormData.maternityAllocated ?? 120}
-                              onChange={(e) =>
-                                setSingleFormData({ ...singleFormData, maternityAllocated: Number(e.target.value), paternityAllocated: 0 })
-                              }
-                              className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 block">
-                              Paternity Leave (Prohibited for Female)
-                            </label>
-                            <input
-                              type="text"
-                              disabled
-                              value="0 Days (Prohibited)"
-                              className="w-full h-10 px-3 rounded-xl bg-surface/40 border border-border/50 text-xs font-semibold text-muted-foreground cursor-not-allowed"
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
                 </div>
               ) : (
                 /* Bulk Allocation Form Matching Screenshot 3 */
@@ -1051,7 +1121,7 @@ export default function LeaveAllocationsPage() {
                   </div>
 
                   {/* Leave Type Dropdown */}
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                       Leave Type <span className="text-amber-500">*</span>
                     </label>
@@ -1060,17 +1130,18 @@ export default function LeaveAllocationsPage() {
                       onChange={(e) => setSelectedLeaveType(e.target.value)}
                       className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
                     >
-                      <option value="ALL_PACKAGE">
-                        All Standard Quotas (Package: CL 10d, ML 10d, EL 4d, AL 15d)
+                      <option value="ALL_CONFIGURED">
+                        All Standard Quotas (Package: CL, ML, EL, AL from Leave Configuration)
                       </option>
                       <option value="Casual Leave">Casual Leave (CL)</option>
                       <option value="Medical Leave">Medical Leave (ML)</option>
                       <option value="Emergency Leave">Emergency Leave (EL)</option>
                       <option value="Annual Leave">Annual Leave (AL)</option>
-                      <option value="Paternity Leave">Paternity Leave (15 Days)</option>
-                      <option value="Maternity Leave">Maternity Leave (120 Days)</option>
-                      <option value="Compensatory Leave">Compensatory Leave (Hours)</option>
                     </select>
+
+                    <p className="text-[11px] text-amber-500 font-medium">
+                      ℹ️ Leave allocation only adds Casual, Annual, Emergency, and Medical leaves based on Leave Configuration. Paternity, Maternity, Bereavement, and Compensatory leaves are allocated manually per employee.
+                    </p>
                   </div>
 
                   {/* Year & Total Days Row */}
@@ -1096,8 +1167,12 @@ export default function LeaveAllocationsPage() {
                         type="number"
                         min={1}
                         required
-                        disabled={selectedLeaveType === 'ALL_PACKAGE'}
-                        value={selectedLeaveType === 'ALL_PACKAGE' ? 39 : totalDaysInput}
+                        disabled={selectedLeaveType === 'ALL_CONFIGURED' || selectedLeaveType === 'ALL_PACKAGE'}
+                        value={
+                          selectedLeaveType === 'ALL_CONFIGURED' || selectedLeaveType === 'ALL_PACKAGE'
+                            ? 39
+                            : totalDaysInput
+                        }
                         onChange={(e) => setTotalDaysInput(Number(e.target.value))}
                         className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-70"
                       />

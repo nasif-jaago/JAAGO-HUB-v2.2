@@ -60,7 +60,7 @@ export async function GET(request: Request) {
 
     // 4. Compute counted First-In and Last-Out across 2-Way Sources (BioTime & GPS)
     const firstCheckIn = effectiveToday?.countedCheckInAt || record?.first_check_in_at || record?.check_in_at || null;
-    const countedCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
+    let countedCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
 
     // 5. Derive state machine status based on latest punch
     const hasCheckedInToday = Boolean(firstCheckIn);
@@ -75,6 +75,67 @@ export async function GET(request: Request) {
       isCheckedIn = Boolean(firstCheckIn) && !record?.check_out_at;
     }
 
+    // 5.1 Auto Check-Out Safety Net: If time has passed 11:30 PM (23:30 Asia/Dhaka), force close
+    const cutoffIso = new Date(`${businessDate}T${cutoffLocal || '23:30'}:00+06:00`).toISOString();
+    const isPastCutoff = Date.now() >= new Date(cutoffIso).getTime();
+    let isAutoCheckout = Boolean(record?.is_auto_checkout || effectiveToday?.isAutoCheckout);
+
+    if (hasCheckedInToday && (!countedCheckOut || isCheckedIn) && isPastCutoff) {
+      countedCheckOut = cutoffIso;
+      isCheckedIn = false;
+      isAutoCheckout = true;
+
+      // Persist auto-checkout to Supabase if not yet recorded
+      if (record && !record.check_out_at) {
+        const facts = {
+          employeeId: canonicalEmpId,
+          businessDate,
+          firstCheckInAt: firstCheckIn,
+          lastCheckOutAt: cutoffIso,
+          checkInAt: record.check_in_at || firstCheckIn,
+          checkOutAt: cutoffIso,
+          calcMethod,
+        };
+        const closedSeconds = calculateWorkedSeconds(facts, calcMethod, cutoffIso);
+        const closedMinutes = Math.floor(closedSeconds / 60);
+        const closedDisplay = formatWorkingHours(closedSeconds);
+
+        (async () => {
+          try {
+            await supabase
+              .from('attendance_records')
+              .update({
+                check_out_at: cutoffIso,
+                last_check_out_at: cutoffIso,
+                check_out_source: 'auto',
+                is_auto_checkout: true,
+                needs_review: true,
+                worked_seconds: closedSeconds,
+                worked_minutes: closedMinutes,
+                worked_display: closedDisplay,
+                status: record.status === 'absent' ? 'present' : (record.status || 'present'),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', record.id);
+
+            await supabase.from('attendance_events').insert({
+              employee_id: canonicalEmpId,
+              event_type: 'check_out',
+              punch_type: 'check_out',
+              source: 'auto',
+              attempted_at: cutoffIso,
+              captured_at: cutoffIso,
+              device_info: 'System Auto-Checkout Worker (11:30 PM)',
+              result: 'accepted',
+              is_within_geofence: true,
+            });
+          } catch (err: unknown) {
+            console.error('Error auto-updating attendance record:', err);
+          }
+        })();
+      }
+    }
+
     const lastCheckOut = countedCheckOut;
 
     const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'CHECKED_OUT' = !hasCheckedInToday
@@ -83,7 +144,7 @@ export async function GET(request: Request) {
       ? 'CHECKED_IN'
       : 'CHECKED_OUT';
 
-    // 6. Compute Working Hours Today (Live vs Final)
+    // 6. Compute Working Hours Today (Live vs Final capped at cutoff)
     let workedSeconds = 0;
     let workedDisplay = '0h 00m';
 
@@ -116,16 +177,16 @@ export async function GET(request: Request) {
         first_check_in_at: firstCheckIn,
         last_check_out_at: lastCheckOut,
         check_in_time_local: effectiveToday?.countedCheckInTimeLocal || (firstCheckIn ? new Date(firstCheckIn).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'),
-        check_out_time_local: effectiveToday?.countedCheckOutTimeLocal || (lastCheckOut ? new Date(lastCheckOut).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'),
+        check_out_time_local: isAutoCheckout ? '11:30 PM' : (effectiveToday?.countedCheckOutTimeLocal || (lastCheckOut ? new Date(lastCheckOut).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--')),
         check_in_source: effectiveToday?.checkInSource || record?.check_in_source || 'gps',
-        check_out_source: effectiveToday?.checkOutSource || record?.check_out_source || (lastCheckOut ? 'gps' : 'none'),
+        check_out_source: isAutoCheckout ? 'auto' : (effectiveToday?.checkOutSource || record?.check_out_source || (lastCheckOut ? 'gps' : 'none')),
         primary_source: effectiveToday?.primarySource || (record?.check_in_source === 'gps' ? 'Web Portal (GPS)' : 'BioTime Terminal'),
         source_breakdown: effectiveToday?.sourceBreakdown || null,
         worked_seconds: workedSeconds,
         worked_display: workedDisplay,
-        status: effectiveToday?.status || record?.status || (shift.isScheduledWorkingDay ? 'absent' : 'weekly_off'),
-        needs_review: Boolean(record?.needs_review || record?.is_auto_checkout),
-        is_auto_checkout: Boolean(record?.is_auto_checkout),
+        status: isAutoCheckout ? 'Present' : (effectiveToday?.status || record?.status || (shift.isScheduledWorkingDay ? 'absent' : 'weekly_off')),
+        needs_review: Boolean(record?.needs_review || record?.is_auto_checkout || isAutoCheckout),
+        is_auto_checkout: Boolean(record?.is_auto_checkout || isAutoCheckout),
         buttons: {
           check_in_enabled: true,
           check_out_enabled: true,

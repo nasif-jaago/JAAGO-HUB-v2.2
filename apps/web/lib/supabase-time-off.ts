@@ -97,6 +97,7 @@ export interface LeaveAllocationItem {
   paternityUsed: number;
   compOffAllocated: number;
   compOffUsed: number;
+  bereavementAllocated?: number;
   bereavementUsed: number;
   unpaidUsed: number;
   fiscalYear: string; // e.g. '2026-2027'
@@ -990,6 +991,48 @@ export function saveDeletedAllocationKeys(keys: string[]): void {
   } catch {}
 }
 
+/**
+ * Resolves the 4 Core Leave Type Quotas (Casual, Medical, Emergency, Annual)
+ * based on the active Leave Policy Configuration matching the employee's group/department.
+ * Paternity, Maternity, Bereavement, Compensatory, and other leaves are NOT included here,
+ * as they must be allocated manually per individual employee.
+ */
+export function getCoreLeaveQuotaFromPolicies(
+  emp: { department?: string; leaveGroup?: string; probationaryStatus?: string; [key: string]: any },
+  policies: LeavePolicyConfig[]
+): { casual: number; medical: number; emergency: number; annual: number; totalDays: number; policyName: string } {
+  const isDsp = emp?.department === 'Digital School Program' || emp?.leaveGroup === 'DSP Faculty Group';
+  const isProbation = emp?.probationaryStatus === 'Probationary' || emp?.leaveGroup === 'Probationary Staff';
+
+  const matchedPolicy = policies?.find((p) => {
+    if (!p.isActive) return false;
+    if (emp?.leaveGroup && (p.applicableGroup === emp.leaveGroup || p.name === emp.leaveGroup)) {
+      return true;
+    }
+    if (isDsp && (p.applicableGroup === 'DSP Faculty Group' || p.name.includes('DSP'))) {
+      return true;
+    }
+    if (isProbation && (p.applicableGroup === 'Probationary Staff' || p.name.includes('Probationary'))) {
+      return true;
+    }
+    return false;
+  }) || policies?.find((p) => p.applicableGroup === 'Standard Full-time') || (policies && policies[0]);
+
+  const cl = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Casual Leave')?.entitlementDays ?? (isProbation ? 0 : isDsp ? 12 : 10);
+  const ml = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Medical Leave')?.entitlementDays ?? (isProbation ? 3 : 10);
+  const el = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Emergency Leave')?.entitlementDays ?? (isProbation ? 3 : 4);
+  const al = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Annual Leave')?.entitlementDays ?? (isProbation ? 0 : isDsp ? 10 : 15);
+
+  return {
+    casual: cl,
+    medical: ml,
+    emergency: el,
+    annual: al,
+    totalDays: cl + ml + el + al,
+    policyName: matchedPolicy?.name || 'Standard Full-time Employee Policy',
+  };
+}
+
 // ── LEAVE ALLOCATIONS ─────────────────────────────────────────────────────
 export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
   const deletedKeysSet = new Set(getDeletedAllocationKeys());
@@ -1015,8 +1058,11 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
     } catch {}
   }
 
-  // 2. Fetch approved requests to calculate used balances
-  const requests = await fetchLeaveRequests();
+  // 2. Fetch approved requests to calculate used balances and policies to resolve configurations
+  const [requests, policies] = await Promise.all([
+    fetchLeaveRequests(),
+    fetchLeavePolicies(),
+  ]);
   const approvedReqs = requests.filter((r) => r.status === 'Approved');
 
   // 3. Load any custom cached allocations
@@ -1078,28 +1124,35 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
     const isMale = g === 'MALE' || g === 'M';
     const isFemale = g === 'FEMALE' || g === 'F';
 
-    // Base allocations (from custom cache, or employee profile fields, or standard defaults)
-    const casualAlloc = existing?.casualAllocated ?? (emp.casualLeaveAllocated ? Number(emp.casualLeaveAllocated) : isProbation ? 0 : isDsp ? 12 : 10);
-    const medicalAlloc = existing?.medicalAllocated ?? (emp.sickLeaveAllocated ? Number(emp.sickLeaveAllocated) : isProbation ? 3 : 10);
-    const emergencyAlloc = existing?.emergencyAllocated ?? (emp.specialLeaveAllocated ? Number(emp.specialLeaveAllocated) : isProbation ? 3 : 4);
-    const annualAlloc = existing?.annualAllocated ?? (emp.earnedLeaveAllocated ? Number(emp.earnedLeaveAllocated) : isProbation ? 0 : 15);
+    // Base allocations: core leaves (CL, ML, EL, AL) dynamically determined from Leave Policy Configuration
+    const coreQuotas = getCoreLeaveQuotaFromPolicies(emp, policies);
 
-    // Auto fix Parental Leaves based on Employee Profile Gender
+    const casualAlloc = existing?.casualAllocated ?? (emp.casualLeaveAllocated ? Number(emp.casualLeaveAllocated) : coreQuotas.casual);
+    const medicalAlloc = existing?.medicalAllocated ?? (emp.sickLeaveAllocated ? Number(emp.sickLeaveAllocated) : coreQuotas.medical);
+    const emergencyAlloc = existing?.emergencyAllocated ?? (emp.specialLeaveAllocated ? Number(emp.specialLeaveAllocated) : coreQuotas.emergency);
+    const annualAlloc = existing?.annualAllocated ?? (emp.earnedLeaveAllocated ? Number(emp.earnedLeaveAllocated) : coreQuotas.annual);
+
+    // Parental, Bereavement, Compensatory and Other leaves must ONLY be allocated manually.
+    // They are NEVER automatically allocated.
     let maternityAlloc = 0;
     let paternityAlloc = 0;
+    let compOffAlloc = 0;
+    let bereavementAlloc = 0;
 
-    if (isMale) {
-      paternityAlloc = existing?.paternityAllocated && existing.paternityAllocated > 0 ? existing.paternityAllocated : (isProbation ? 7 : 15);
-      maternityAlloc = 0; // Strictly prohibited for Male
-    } else if (isFemale) {
-      maternityAlloc = existing?.maternityAllocated && existing.maternityAllocated > 0 ? existing.maternityAllocated : (isProbation ? 90 : 120);
-      paternityAlloc = 0; // Strictly prohibited for Female
-    } else {
-      maternityAlloc = 0;
-      paternityAlloc = 0;
+    if (existing) {
+      if (isMale) {
+        paternityAlloc = existing.paternityAllocated || 0;
+        maternityAlloc = 0; // Strictly prohibited for Male
+      } else if (isFemale) {
+        maternityAlloc = existing.maternityAllocated || 0;
+        paternityAlloc = 0; // Strictly prohibited for Female
+      } else {
+        maternityAlloc = existing.maternityAllocated || 0;
+        paternityAlloc = existing.paternityAllocated || 0;
+      }
+      compOffAlloc = existing.compOffAllocated || 0;
+      bereavementAlloc = existing.bereavementAllocated || 0;
     }
-
-    const compOffAlloc = existing?.compOffAllocated ?? 16;
 
     const allocationItem: LeaveAllocationItem = {
       id: existing?.id || `alloc-${emp.code}`,
@@ -1125,6 +1178,7 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
       paternityUsed: plUsed,
       compOffAllocated: compOffAlloc,
       compOffUsed: coUsed,
+      bereavementAllocated: bereavementAlloc,
       bereavementUsed: blUsed,
       unpaidUsed: unpaidUsed,
       fiscalYear: existing?.fiscalYear || '2026-2027',
@@ -1141,8 +1195,10 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
       const isFemale = g === 'FEMALE' || g === 'F';
       resultMap.set(code, {
         ...item,
-        maternityAllocated: isMale ? 0 : item.maternityAllocated,
-        paternityAllocated: isFemale ? 0 : item.paternityAllocated,
+        maternityAllocated: isMale ? 0 : (item.maternityAllocated || 0),
+        paternityAllocated: isFemale ? 0 : (item.paternityAllocated || 0),
+        compOffAllocated: item.compOffAllocated || 0,
+        bereavementAllocated: item.bereavementAllocated || 0,
       });
     }
   }

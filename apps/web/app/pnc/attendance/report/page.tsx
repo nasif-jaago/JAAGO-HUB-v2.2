@@ -193,6 +193,14 @@ export default function AttendanceReportPage() {
         });
 
         if (match) {
+          const isAuto = Boolean(
+            match.isAutoCheckout ||
+            match.status === 'Auto Check Out' ||
+            (match.checkOutTime && (match.checkOutTime.includes('11:30') || match.checkOutTime === '23:30')) ||
+            (match.notes && match.notes.toLowerCase().includes('auto check-out'))
+          );
+          const effectiveCheckOut = isAuto ? (match.checkOutTime && match.checkOutTime !== '--:--' ? match.checkOutTime : '11:30 PM') : (match.checkOutTime || 'N/A');
+
           return {
             id: `rep-${emp.id || index}-${targetDate}`,
             employeeId: emp.id || `emp-${emp.code}`,
@@ -204,10 +212,10 @@ export default function AttendanceReportPage() {
             avatarUrl: emp.avatarUrl || '',
             date: targetDate,
             checkInTime: match.checkInTime || 'N/A',
-            checkOutTime: match.checkOutTime || 'N/A',
+            checkOutTime: effectiveCheckOut,
             lateBy: match.lateByMin ? `${match.lateByMin} min` : 'N/A',
             earlyOutBy: match.earlyOutByMin ? `${match.earlyOutByMin} min` : 'N/A',
-            status: match.status || 'Present',
+            status: isAuto ? 'Auto Check Out' : (match.status || 'Present'),
           };
         }
 
@@ -249,6 +257,42 @@ export default function AttendanceReportPage() {
             status: isHalf ? 'Half Day' : 'Leave',
             halfDayType: effectiveHalfType,
             leaveType: matchingLeave.leaveType,
+          };
+        }
+
+        // Check day of week for weekend / weekly off (0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat)
+        const targetDayOfWeek = new Date(targetDate).getUTCDay();
+        const weekendRule = emp.weekendDays || (emp as any).weeklyOff || 'Friday & Saturday';
+
+        let isOffDay = false;
+        if (weekendRule.includes('Friday & Saturday')) {
+          isOffDay = targetDayOfWeek === 5 || targetDayOfWeek === 6; // Friday & Saturday
+        } else if (weekendRule.includes('Friday Only')) {
+          isOffDay = targetDayOfWeek === 5; // Friday
+        } else if (weekendRule.includes('Saturday Only')) {
+          isOffDay = targetDayOfWeek === 6; // Saturday
+        } else if (weekendRule.includes('Sunday to Thursday')) {
+          isOffDay = targetDayOfWeek === 5 || targetDayOfWeek === 6;
+        } else {
+          isOffDay = targetDayOfWeek === 5 || targetDayOfWeek === 6;
+        }
+
+        if (isOffDay) {
+          return {
+            id: `rep-${emp.id || index}-${targetDate}`,
+            employeeId: emp.id || `emp-${emp.code}`,
+            employeeCode: emp.code,
+            employeeName: emp.name,
+            department: emp.department || 'General',
+            designation: emp.designation || 'Staff Member',
+            branch: emp.branch || 'Head Office (Banani)',
+            avatarUrl: emp.avatarUrl || '',
+            date: targetDate,
+            checkInTime: 'N/A',
+            checkOutTime: 'N/A',
+            lateBy: 'N/A',
+            earlyOutBy: 'N/A',
+            status: 'Weekend',
           };
         }
 
@@ -418,9 +462,10 @@ export default function AttendanceReportPage() {
   // Status counts
   const statusCounts = React.useMemo(() => {
     const all = reportRows.length;
-    const present = reportRows.filter((r) => r.status === 'Present' || r.status === 'Late').length;
+    const present = reportRows.filter((r) => r.status === 'Present' || r.status === 'Late' || r.status === 'Auto Check Out').length;
     const absent = reportRows.filter((r) => r.status === 'Absent').length;
     const late = reportRows.filter((r) => r.status === 'Late').length;
+    const autoCheckOut = reportRows.filter((r) => r.status === 'Auto Check Out').length;
     const earlyOut = reportRows.filter((r) => r.earlyOutBy !== 'N/A').length;
     const checkedIn = reportRows.filter((r) => r.checkInTime !== 'N/A').length;
     const checkedOut = reportRows.filter((r) => r.checkOutTime !== 'N/A').length;
@@ -428,7 +473,7 @@ export default function AttendanceReportPage() {
     const leave = reportRows.filter((r) => r.status === 'Leave').length;
     const holiday = reportRows.filter((r) => r.status === 'Holiday').length;
     const weekend = reportRows.filter((r) => r.status === 'Weekend').length;
-    return { all, present, absent, late, earlyOut, checkedIn, checkedOut, halfDay, leave, holiday, weekend };
+    return { all, present, absent, late, autoCheckOut, earlyOut, checkedIn, checkedOut, halfDay, leave, holiday, weekend };
   }, [reportRows]);
 
   // Filtering
@@ -444,7 +489,8 @@ export default function AttendanceReportPage() {
 
     const matchesStatusTab =
       activeStatusTab === 'All' ||
-      (activeStatusTab === 'Present' && (r.status === 'Present' || r.status === 'Late')) ||
+      (activeStatusTab === 'Present' && (r.status === 'Present' || r.status === 'Late' || r.status === 'Auto Check Out')) ||
+      (activeStatusTab === 'Auto Check Out' && r.status === 'Auto Check Out') ||
       (activeStatusTab === 'Absent' && r.status === 'Absent') ||
       (activeStatusTab === 'Late' && r.status === 'Late') ||
       (activeStatusTab === 'Early Out' && r.earlyOutBy !== 'N/A') ||
@@ -756,6 +802,7 @@ export default function AttendanceReportPage() {
           {[
             { id: 'All', label: `All ${statusCounts.all}` },
             { id: 'Present', label: `Present ${statusCounts.present}` },
+            { id: 'Auto Check Out', label: `Auto Check Out ${statusCounts.autoCheckOut}` },
             { id: 'Absent', label: `Absent ${statusCounts.absent}` },
             { id: 'Late', label: `Late ${statusCounts.late}` },
             { id: 'Early Out', label: `Early Out ${statusCounts.earlyOut}` },
@@ -881,7 +928,15 @@ export default function AttendanceReportPage() {
 
                     {/* Status badge */}
                     <td className="py-4 px-3">
-                      {row.status === 'Present' ? (
+                      {row.status === 'Auto Check Out' ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[11px] font-bold whitespace-nowrap">
+                          Auto Check Out
+                        </span>
+                      ) : row.status === 'Weekend' ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-surface border border-border/80 text-muted-foreground text-[11px] font-bold whitespace-nowrap">
+                          Off Day
+                        </span>
+                      ) : row.status === 'Present' ? (
                         <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[11px] font-bold">
                           Present
                         </span>

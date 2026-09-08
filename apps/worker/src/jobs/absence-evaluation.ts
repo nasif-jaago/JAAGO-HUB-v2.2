@@ -78,9 +78,20 @@ export async function runAbsenceEvaluationJob(targetDate?: string): Promise<Abse
       continue; // Already has an attendance record today
     }
 
-    if (isWeekend) {
+    // Per-employee off day evaluation
+    const weekendRule = (emp as any).weekend_days || (emp as any).weekendDays || 'Friday & Saturday';
+    let isEmpOffDay = isWeekend;
+    if (weekendRule.includes('Friday Only')) {
+      isEmpOffDay = dayOfWeek === 5;
+    } else if (weekendRule.includes('Saturday Only')) {
+      isEmpOffDay = dayOfWeek === 6;
+    } else if (weekendRule.includes('Sunday to Thursday')) {
+      isEmpOffDay = dayOfWeek === 5 || dayOfWeek === 6;
+    }
+
+    if (isEmpOffDay) {
       skippedWeeklyOffCount++;
-      continue; // Skip weekend days
+      continue; // Skip off days
     }
 
     // Insert Absent record per §3.7

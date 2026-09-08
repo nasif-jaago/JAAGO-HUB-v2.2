@@ -20,6 +20,9 @@ const PUBLIC_API_PATHS = [
   '/api/v1/auth/login',
   '/api/v1/auth/forgot-password',
   '/api/v1/biotime/push',
+  '/api/v1/attendance/auto-checkout',
+  '/api/v1/attendance/me/today',
+  '/api/v1/attendance/me/summary',
   '/health',
 ];
 

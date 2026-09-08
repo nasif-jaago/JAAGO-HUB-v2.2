@@ -1,6 +1,6 @@
 import { getSupabaseAdminClient } from '@jaago/auth';
 import type { ShiftSnapshot } from '@jaago/core-domain';
-import { getAttendanceDate } from '@jaago/core-domain';
+import { getLocalDateString } from '@jaago/core-domain';
 import { INITIAL_GPS_LOCATIONS } from './supabase-gps';
 
 export interface GPSPayload {
@@ -252,13 +252,14 @@ export async function resolveEmployeeShiftSnapshot(
 }
 
 /**
- * Gets the current business date string (YYYY-MM-DD) based on §3.1 cutoff rules (default 23:30 Asia/Dhaka).
+ * Gets the current business date string (YYYY-MM-DD) in the specified timezone.
+ * Resets automatically after midnight (00:00 / 12:00 AM) to start a new day.
  */
 export function getCurrentBusinessDate(
   timeZone: string = 'Asia/Dhaka',
-  cutoffLocal: string = '23:30'
+  _cutoffLocal?: string
 ): string {
-  return getAttendanceDate(new Date(), cutoffLocal, timeZone);
+  return getLocalDateString(new Date(), timeZone);
 }
 
 /**

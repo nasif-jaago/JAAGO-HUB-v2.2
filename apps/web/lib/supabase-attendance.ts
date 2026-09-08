@@ -914,7 +914,7 @@ export async function fetchAttendanceLogsFromSupabase(
               device: (r.device as AttendanceLogItem['device']) || (r.check_in_source === 'gps' ? 'Web Portal' : 'Device Login'),
               date: r.date,
               checkInTime: r.checkInTime || '09:00 AM',
-              checkOutTime: r.checkOutTime,
+              checkOutTime: (r.is_auto_checkout || r.isAutoCheckout) ? (r.checkOutTime && r.checkOutTime !== '--:--' ? r.checkOutTime : '11:30 PM') : r.checkOutTime,
               lateByMin: Number(r.lateByMin || r.late_by_minutes || 0),
               earlyOutByMin: 0,
               locationName: r.locationName || r.location_name || 'JAAGO HQ (Banani)',
@@ -993,9 +993,15 @@ export function getEmployeeMonthlyAttendanceStats(employeeCodeOrId: string, mont
   const logs = getEmployeeAttendanceLogs(employeeCodeOrId);
   const monthLogs = logs.filter((l) => l.date && l.date.startsWith(targetMonth));
 
-  const presentDays = monthLogs.filter((l) => l.status === 'Present' || l.status === 'Late' || l.status === 'Auto Check Out').length;
+  const presentDays = monthLogs.filter((l) => l.status === 'Present' || l.status === 'Late' || l.status === 'Auto Check Out' || l.isAutoCheckout).length;
   const lateDays = monthLogs.filter((l) => l.status === 'Late' || (l.lateByMin !== undefined && l.lateByMin > 0)).length;
-  const autoCheckouts = monthLogs.filter((l) => (l.status === 'Auto Check Out' || l.isAutoCheckout) && l.status !== 'Present').length;
+  const autoCheckouts = monthLogs.filter(
+    (l) =>
+      l.isAutoCheckout === true ||
+      l.status === 'Auto Check Out' ||
+      (l.checkOutTime && (l.checkOutTime.includes('11:30') || l.checkOutTime === '23:30')) ||
+      (l.notes && l.notes.toLowerCase().includes('auto check-out'))
+  ).length;
   const absentDays = monthLogs.filter((l) => l.status === 'Absent').length;
   const leaveDays = monthLogs.filter((l) => l.status === 'Leave' || l.status === 'On Duty' || l.status === 'Half Day').length;
   const targetDays = 22;

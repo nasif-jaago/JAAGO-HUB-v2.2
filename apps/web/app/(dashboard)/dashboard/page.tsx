@@ -326,7 +326,12 @@ export default function DashboardPage() {
       window.addEventListener('jaago_attendance_regularization_updated', refreshMonthlyMetrics);
 
       // Daily Session & Rollover Hydration strictly scoped to the active logged-in user
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Dhaka',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
 
       // Clean any legacy un-scoped global punch items that may pollute across different accounts
       localStorage.removeItem('jaago_is_checked_in');
@@ -382,8 +387,21 @@ export default function DashboardPage() {
           const savedCheckOutTime = localStorage.getItem(`jaago_att_${userKey}_last_checkout_time`);
           const alreadyAutoCheckedOut = localStorage.getItem(`jaago_att_${userKey}_auto_checked_out`) === 'true';
 
-          if (savedCheckInTime) setCheckInTime(savedCheckInTime);
-          if (savedCheckOutTime) setCheckOutTime(savedCheckOutTime);
+          // If no check-in today, both check-in and check-out MUST be '--:--' (new day / unstarted day)
+          if (!savedCheckInTime || savedCheckInTime === '--:--') {
+            setIsCheckedIn(false);
+            setCheckInTime('--:--');
+            setCheckOutTime('--:--');
+            setElapsedSeconds(0);
+            localStorage.removeItem(`jaago_att_${userKey}_last_checkout_time`);
+          } else {
+            setCheckInTime(savedCheckInTime);
+            if (savedCheckOutTime && savedCheckOutTime !== '--:--') {
+              setCheckOutTime(savedCheckOutTime);
+            } else {
+              setCheckOutTime('--:--');
+            }
+          }
 
           if (savedState === 'true' && savedTime) {
             // User is currently checked in — check if we need auto-checkout on hydration
@@ -499,17 +517,24 @@ export default function DashboardPage() {
       const initialDiff = Math.max(0, Math.floor((currentServerNow - firstCheckInTimestamp) / 1000));
       setElapsedSeconds(initialDiff);
 
-      interval = setInterval(() => {
-        const now = new Date();
-        const curHours = now.getHours();
-        const curMins = now.getMinutes();
+      // Check immediate 11:30 PM cutoff condition
+      const checkDhakaCutoff = () => {
+        const nowServer = new Date(Date.now() + serverTimeOffset);
+        const dhakaTimeStr = nowServer.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour12: false });
+        const [dhHourStr, dhMinStr] = dhakaTimeStr.split(':');
+        const dhHours = parseInt(dhHourStr || '0', 10);
+        const dhMins = parseInt(dhMinStr || '0', 10);
+        return (dhHours === 23 && dhMins >= 30) || dhHours > 23;
+      };
 
-        // Auto Check-out ONLY during 23:30-23:59 window, once per day
-        if (curHours === 23 && curMins >= 30) {
-          const alreadyDone = localStorage.getItem('jaago_auto_checked_out') === 'true';
-          if (!alreadyDone) {
-            performAutoCheckOut('11:30 PM');
-          }
+      if (checkDhakaCutoff()) {
+        performAutoCheckOut('11:30 PM');
+        return;
+      }
+
+      interval = setInterval(() => {
+        if (checkDhakaCutoff()) {
+          performAutoCheckOut('11:30 PM');
           return;
         }
 
@@ -713,6 +738,13 @@ export default function DashboardPage() {
       localStorage.setItem(`jaago_att_${activeKey}_auto_checked_out`, 'true');
     }
 
+    const dhakaDateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Dhaka',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+
     // Record to unified attendance store
     recordLocalAttendanceLog({
       employeeId: user.id,
@@ -721,17 +753,31 @@ export default function DashboardPage() {
       designation: user.jobTitle,
       department: user.department,
       branch: 'Head Office (Banani)',
-      date: new Date().toISOString().slice(0, 10),
+      date: dhakaDateStr,
       checkInTime: checkInTime || '09:00 AM',
       checkOutTime: autoTimeStr,
       status: 'Present',
       device: 'Web Portal',
+      isAutoCheckout: true,
       notes: 'Auto check-out generated after 11:30 PM (Shift End)',
     });
 
+    // Call backend API to persist auto-checkout in Supabase
+    fetch('/api/v1/attendance/auto-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employeeId: user.id || user.employeeCode,
+        cutoffTimeLocal: '23:30',
+      }),
+    }).catch((err) => console.error('Auto-checkout backend sync error:', err));
+
+    const currentMonth = dhakaDateStr.slice(0, 7);
+    const updatedStats = getEmployeeMonthlyAttendanceStats(user.employeeCode || user.id, currentMonth);
+
     setMonthlyMetrics((prev) => ({
       ...prev,
-      autoCheckouts: prev.autoCheckouts + 1,
+      autoCheckouts: Math.max(prev.autoCheckouts + 1, updatedStats.autoCheckouts),
     }));
 
     showToast('System Notice: Auto check-out completed at 11:30 PM.', 'info');
@@ -816,12 +862,14 @@ export default function DashboardPage() {
           }
         } else {
           setFirstCheckInTimestamp(null);
+          setIsCheckedIn(false);
           setCheckInTime('--:--');
-          setElapsedSeconds(worked_seconds || 0);
+          setCheckOutTime('--:--');
+          setElapsedSeconds(0);
         }
 
         let resolvedOutTime = '--:--';
-        if (last_check_out_at) {
+        if (first_check_in_at && last_check_out_at) {
           resolvedOutTime = todayJson.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
             timeZone: 'Asia/Dhaka',
             hour: '2-digit',
@@ -1008,7 +1056,7 @@ export default function DashboardPage() {
 
   // Canonical day status flags
   const hasCheckedInToday = Boolean(firstCheckInTimestamp || (checkInTime && checkInTime !== '--:--'));
-  const hasCheckedOutToday = Boolean(checkOutTime && checkOutTime !== '--:--');
+  const hasCheckedOutToday = Boolean(hasCheckedInToday && checkOutTime && checkOutTime !== '--:--');
 
   // Dedicated Check-In Action with Live GPS Geofence Verification & Multi-punch Counting
   const handleCheckInAction = async () => {
@@ -1350,8 +1398,8 @@ export default function DashboardPage() {
                 : 'bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white shadow-md shadow-rose-500/25 cursor-pointer active:scale-[0.98]'
             }`}
           >
-            {hasCheckedOutToday ? <CheckCircle2 className="h-4 w-4 stroke-[2.5]" /> : <Flag className="h-4 w-4 stroke-[2.5]" />}
-            <span>{hasCheckedOutToday ? `OUT: ${checkOutTime}` : 'CHECK OUT'}</span>
+            {hasCheckedInToday && hasCheckedOutToday ? <CheckCircle2 className="h-4 w-4 stroke-[2.5]" /> : <Flag className="h-4 w-4 stroke-[2.5]" />}
+            <span>{hasCheckedInToday && hasCheckedOutToday ? `OUT: ${checkOutTime}` : 'CHECK OUT'}</span>
           </button>
         </div>
 
@@ -1761,7 +1809,7 @@ export default function DashboardPage() {
                       ? 'text-rose-900 dark:text-rose-200'
                       : 'text-rose-950 dark:text-rose-100'
                   }`}>
-                    {checkOutTime || '--:--'}
+                    {hasCheckedInToday && hasCheckedOutToday ? (checkOutTime || '--:--') : '--:--'}
                   </div>
                 </div>
               </button>

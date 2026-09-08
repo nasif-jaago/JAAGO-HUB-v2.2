@@ -86,7 +86,7 @@ export function getLocalDateString(
  */
 export function getAttendanceDate(
   instant: Date | string,
-  cutoffLocal: string = '23:30',
+  cutoffLocal: string = '24:00',
   timeZone: string = 'Asia/Dhaka'
 ): string {
   const date = typeof instant === 'string' ? new Date(instant) : instant;
@@ -99,11 +99,11 @@ export function getAttendanceDate(
   const cutoffMinutes = parseTimeToMinutes(cutoffLocal);
   const localDateStr = getLocalDateString(date, timeZone);
 
-  if (totalLocalMinutes < cutoffMinutes) {
+  if (cutoffMinutes >= 1440 || totalLocalMinutes < cutoffMinutes) {
     return localDateStr;
   }
 
-  // Roll into next calendar date
+  // Roll into next calendar date (only if a cross-midnight shift cutoff < 24:00 is explicitly configured)
   const [y, m, d] = localDateStr.split('-').map(Number);
   const nextDate = new Date(Date.UTC(y!, m! - 1, d! + 1));
   const ny = nextDate.getUTCFullYear();

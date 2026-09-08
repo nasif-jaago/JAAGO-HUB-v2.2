@@ -29,7 +29,7 @@ export interface EffectiveAttendanceDay {
   countedCheckInTimeLocal: string; // e.g. "08:58 AM"
   countedCheckOutTimeLocal: string; // e.g. "06:10 PM" or "--:--"
   checkInSource: 'gps' | 'biotime' | 'manual' | 'none';
-  checkOutSource: 'gps' | 'biotime' | 'manual' | 'none';
+  checkOutSource: 'gps' | 'biotime' | 'manual' | 'auto' | 'none';
   primarySource: 'Web Portal (GPS)' | 'BioTime Terminal' | 'Merged (GPS + BioTime)' | 'Manual' | 'None';
   workedSeconds: number;
   workedDisplay: string;
@@ -46,7 +46,7 @@ export interface EffectiveAttendanceDay {
     biotimePunchCount: number;
     gpsPunchCount: number;
     countedCheckInSource: 'gps' | 'biotime' | 'none';
-    countedCheckOutSource: 'gps' | 'biotime' | 'none';
+    countedCheckOutSource: 'gps' | 'biotime' | 'auto' | 'none';
   };
   notes?: string | undefined;
 }
@@ -201,7 +201,7 @@ export function computeEffectiveAttendanceDay(params: {
 
   // 3. Compute Counted Check-Out = MAX(all valid check-outs occurring after Check-In) -> Last Check-Out
   let countedCheckOutIso: string | null = null;
-  let checkOutSource: 'gps' | 'biotime' | 'manual' | 'none' = 'none';
+  let checkOutSource: 'gps' | 'biotime' | 'manual' | 'auto' | 'none' = 'none';
   let winningOutPunchId: string | undefined;
 
   const validCheckOutCandidates = checkOutCandidates.filter((c) => {
@@ -225,6 +225,17 @@ export function computeEffectiveAttendanceDay(params: {
     }
   }
 
+  // 3.1 Auto Check-out Safety Net: If isAutoCheckout is explicitly flagged or time passed 23:30 cutoff for this date
+  const cutoffIso = new Date(`${businessDate}T23:30:00+06:00`).toISOString();
+  const isPastCutoff = Date.now() >= new Date(cutoffIso).getTime();
+  let effectiveIsAuto = Boolean(isAutoCheckout);
+
+  if (countedCheckInIso && (!countedCheckOutIso || isAutoCheckout) && (isAutoCheckout || isPastCutoff)) {
+    countedCheckOutIso = cutoffIso;
+    checkOutSource = 'auto';
+    effectiveIsAuto = true;
+  }
+
   // 4. Determine Primary Source Badge
   let primarySource: 'Web Portal (GPS)' | 'BioTime Terminal' | 'Merged (GPS + BioTime)' | 'Manual' | 'None' = 'None';
   const hasGps = Boolean(gpsCheckInAt || gpsCheckOutAt || gpsPunches.length > 0);
@@ -238,15 +249,16 @@ export function computeEffectiveAttendanceDay(params: {
     primarySource = 'Web Portal (GPS)';
   }
 
-  // 6. Compute Worked Seconds & Formatted Display
+  // 6. Compute Worked Seconds & Formatted Display (Capped at 23:30 cutoff)
   let workedSeconds = 0;
   if (countedCheckInIso && countedCheckOutIso) {
     const inMs = new Date(countedCheckInIso).getTime();
     const outMs = new Date(countedCheckOutIso).getTime();
     workedSeconds = Math.max(0, Math.floor((outMs - inMs) / 1000));
   } else if (countedCheckInIso && nowUtc) {
+    const cutoffMs = new Date(`${businessDate}T23:30:00+06:00`).getTime();
     const inMs = new Date(countedCheckInIso).getTime();
-    const nowMs = new Date(nowUtc).getTime();
+    const nowMs = Math.min(new Date(nowUtc).getTime(), cutoffMs);
     workedSeconds = Math.max(0, Math.floor((nowMs - inMs) / 1000));
   }
   const workedDisplay = formatWorkingHours(workedSeconds);
@@ -258,7 +270,7 @@ export function computeEffectiveAttendanceDay(params: {
 
   if (leaveStatus) {
     derivedStatus = leaveStatus;
-  } else if (isAutoCheckout) {
+  } else if (effectiveIsAuto) {
     derivedStatus = 'Auto Check Out';
   } else if (countedCheckInIso) {
     const { hour, minute } = getLocalHourAndMinute(countedCheckInIso, 'Asia/Dhaka');
