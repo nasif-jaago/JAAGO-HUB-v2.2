@@ -30,6 +30,7 @@ const PUBLIC_API_PATHS = [
   '/api/v1/attendance/regularization',
   '/api/v1/attendance/geofence',
   '/api/v1/emails/regularization-notification',
+  '/api/v1/workflows',
   '/health',
 ];
 

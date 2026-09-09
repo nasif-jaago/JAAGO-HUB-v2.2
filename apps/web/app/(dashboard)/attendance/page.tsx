@@ -43,7 +43,6 @@ import {
 import {
   AttendanceRegularizationItem,
   getLocalRegularizations,
-  saveLocalRegularizations,
   submitAttendanceRegularization,
   calculateShiftStandardTimes,
 } from '@/lib/supabase-regularization';
@@ -314,8 +313,16 @@ export default function AttendancePage() {
         });
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
-          saveLocalRegularizations(json.data);
-          setRegularizations(json.data);
+          // Merge server data with local cache without recursive event ping-pong
+          const currentLocal = getLocalRegularizations();
+          const combinedMap = new Map<string, AttendanceRegularizationItem>();
+          currentLocal.forEach((r) => combinedMap.set(r.id, r));
+          json.data.forEach((r: AttendanceRegularizationItem) => combinedMap.set(r.id, r));
+          const merged = Array.from(combinedMap.values());
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('jaago_attendance_regularizations_v2', JSON.stringify(merged));
+          }
+          setRegularizations(merged);
         }
       } catch {}
     };
@@ -335,8 +342,6 @@ export default function AttendancePage() {
     const handleAttUpdated = () => {
       loadUserLogs();
       setRegularizations(getLocalRegularizations());
-      syncLiveRegularizations();
-      refreshTodaySession();
     };
 
     const handleUserUpdated = (e: any) => {
@@ -365,8 +370,7 @@ export default function AttendancePage() {
 
     const handleRegUpdated = () => {
       setRegularizations(getLocalRegularizations());
-      setAllLogs(getLocalAttendanceLogs());
-      syncLiveRegularizations();
+      loadUserLogs();
     };
 
     window.addEventListener('jaago_attendance_updated', handleAttUpdated);
@@ -421,8 +425,29 @@ export default function AttendancePage() {
       const supaLogs = await fetchAttendanceLogsFromSupabase(true, codeOrId || undefined);
       const localLogs = getLocalAttendanceLogs();
       const combinedMap = new Map<string, AttendanceLogItem>();
-      localLogs.forEach((l) => combinedMap.set(l.id || `${l.employeeCode}_${l.date}`, l));
-      (supaLogs || []).forEach((l) => combinedMap.set(l.id || `${l.employeeCode}_${l.date}`, l));
+      localLogs.forEach((l) => {
+        const key = `${(l.employeeCode || '').toLowerCase().trim()}_${l.date}`;
+        combinedMap.set(key, l);
+      });
+      (supaLogs || []).forEach((l) => {
+        const key = `${(l.employeeCode || '').toLowerCase().trim()}_${l.date}`;
+        const existing = combinedMap.get(key);
+        if (existing) {
+          combinedMap.set(key, {
+            ...existing,
+            ...l,
+            locationName: l.locationName || existing.locationName,
+            branch: l.branch || existing.branch,
+            allPunches: (l.allPunches && l.allPunches.length > 0) ? l.allPunches : existing.allPunches,
+            primarySource: l.primarySource || existing.primarySource,
+            checkInSource: l.checkInSource || existing.checkInSource,
+            checkOutSource: l.checkOutSource || existing.checkOutSource,
+            sourceBreakdown: l.sourceBreakdown || existing.sourceBreakdown,
+          });
+        } else {
+          combinedMap.set(key, l);
+        }
+      });
       setAllLogs(Array.from(combinedMap.values()));
     } catch (err) {
       console.warn('Error loading logs for user:', err);
@@ -502,6 +527,13 @@ export default function AttendancePage() {
             deviceBadge = 'RFID Scanner';
           }
 
+          const resolvedLocationName =
+            json.data.effectiveRecord?.locationName ||
+            json.data.effectiveRecord?.branch ||
+            json.data.locationName ||
+            user.organization ||
+            'JAAGO Foundation';
+
           const todayLogItem: AttendanceLogItem = {
             id: `att-today-${todayDateStr}`,
             employeeId: user.id || empCodeOrId,
@@ -510,6 +542,7 @@ export default function AttendancePage() {
             designation: user.jobTitle,
             department: user.department,
             branch: user.organization || 'JAAGO Foundation',
+            locationName: resolvedLocationName,
             date: todayDateStr,
             checkInTime: inTime,
             checkOutTime: outTime,
@@ -536,11 +569,17 @@ export default function AttendancePage() {
             designation: todayLogItem.designation,
             department: todayLogItem.department,
             branch: todayLogItem.branch,
+            locationName: todayLogItem.locationName,
             date: todayLogItem.date,
             checkInTime: todayLogItem.checkInTime,
             checkOutTime: todayLogItem.checkOutTime,
             status: todayLogItem.status,
             device: todayLogItem.device,
+            primarySource: todayLogItem.primarySource,
+            checkInSource: todayLogItem.checkInSource,
+            checkOutSource: todayLogItem.checkOutSource,
+            allPunches: todayLogItem.allPunches,
+            sourceBreakdown: todayLogItem.sourceBreakdown,
             notes: todayLogItem.notes,
           });
 
@@ -647,25 +686,43 @@ export default function AttendancePage() {
   };
 
   const getExistingRegularization = (log: AttendanceLogItem): AttendanceRegularizationItem | undefined => {
+    if (!log) return undefined;
     const logId = (log.id || '').trim();
     const logDate = (log.date || '').trim();
     const logCode = (log.employeeCode || '').trim().toLowerCase();
     const logName = (log.employeeName || '').trim().toLowerCase();
     const logEmpId = (log.employeeId || '').trim().toLowerCase();
 
+    const userCode = (user.employeeCode || '').trim().toLowerCase();
+    const userName = (user.fullName || '').trim().toLowerCase();
+    const userId = (user.id || '').trim().toLowerCase();
+
     return regularizations.find((r) => {
-      // Direct ID match
+      // 1. Direct ID match
       if (logId && r.attendanceLogId && r.attendanceLogId === logId) return true;
       if (logId && r.id === logId) return true;
+      if (r.attendanceLogId && (r.attendanceLogId.includes(logDate) || r.id.includes(logDate))) {
+        if (logCode && (r.attendanceLogId.includes(logCode) || r.employeeCode?.toLowerCase() === logCode)) return true;
+        if (userCode && (r.attendanceLogId.includes(userCode) || r.employeeCode?.toLowerCase() === userCode)) return true;
+      }
 
-      // Match by date + employee
+      // 2. Match by date + employee (resilient across code, name, id)
       if (r.date === logDate) {
         const rCode = (r.employeeCode || '').trim().toLowerCase();
         const rName = (r.employeeName || '').trim().toLowerCase();
         const rEmpId = (r.employeeId || '').trim().toLowerCase();
+
+        // 2a. Employee code match
         if (logCode && rCode && logCode === rCode) return true;
-        if (logName && rName && logName === rName) return true;
+        if (userCode && rCode && userCode === rCode) return true;
+
+        // 2b. Employee ID match
         if (logEmpId && rEmpId && logEmpId === rEmpId) return true;
+        if (userId && rEmpId && userId === rEmpId) return true;
+
+        // 2c. Employee Name match (support exact & substring e.g. "Nasif Kamal" vs "Nasif Kamal - (FO...)")
+        if (logName && rName && (logName === rName || logName.includes(rName) || rName.includes(logName))) return true;
+        if (userName && rName && (userName === rName || userName.includes(rName) || rName.includes(userName))) return true;
       }
 
       return false;
@@ -834,14 +891,40 @@ export default function AttendancePage() {
         dailyMap.set(d, log);
       } else {
         const existing = dailyMap.get(d)!;
-        // Prefer Merged/RFID or the entry with richer punch data / earlier check in
-        if (
+        const preferNew =
           log.primarySource === 'Merged (GPS + BioTime)' ||
           (log.allPunches && log.allPunches.length > (existing.allPunches?.length || 0)) ||
-          (!existing.checkOutTime && log.checkOutTime)
-        ) {
-          dailyMap.set(d, log);
-        }
+          (!existing.checkOutTime && log.checkOutTime);
+
+        const primary = preferNew ? log : existing;
+        const secondary = preferNew ? existing : log;
+
+        const resolvedLocation =
+          (primary.locationName && primary.locationName !== 'JAAGO HQ (Banani)'
+            ? primary.locationName
+            : secondary.locationName) ||
+          primary.locationName ||
+          secondary.locationName ||
+          'JAAGO Foundation';
+
+        const resolvedPunches =
+          primary.allPunches && primary.allPunches.length > 0
+            ? primary.allPunches
+            : secondary.allPunches || [];
+
+        const merged: AttendanceLogItem = {
+          ...secondary,
+          ...primary,
+          locationName: resolvedLocation,
+          allPunches: resolvedPunches,
+          primarySource: primary.primarySource || secondary.primarySource,
+          checkInSource: primary.checkInSource || secondary.checkInSource,
+          checkOutSource: primary.checkOutSource || secondary.checkOutSource,
+          sourceBreakdown: primary.sourceBreakdown || secondary.sourceBreakdown,
+          notes: primary.notes || secondary.notes,
+        };
+
+        dailyMap.set(d, merged);
       }
     });
 
