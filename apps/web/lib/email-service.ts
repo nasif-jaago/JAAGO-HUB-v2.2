@@ -1514,15 +1514,15 @@ export function createTransporterForServer(server: EmailServerItem): nodemailer.
     port: server.port,
     secure,
     auth: {
-      user: server.username,
-      pass: password,
+      user: server.username ? server.username.trim() : '',
+      pass: password ? password.trim() : undefined,
     },
     tls: {
-      rejectUnauthorized: true,
+      rejectUnauthorized: false,
     },
-    connectionTimeout: 2500,
-    greetingTimeout: 2000,
-    socketTimeout: 3000,
+    connectionTimeout: 5000,
+    greetingTimeout: 4000,
+    socketTimeout: 6000,
   } as any);
 }
 
