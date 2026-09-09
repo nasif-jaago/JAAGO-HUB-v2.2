@@ -37,7 +37,18 @@ jobs:
         run: npm run build:all
 
       - name: Validation checks
-        run: npm run typecheck && npm run lint
+        run: |
+          echo "🔍 Running validation checks..."
+          npm run typecheck || {
+            echo "❌ Type checking failed!"
+            exit 1
+          }
+          
+          npm run lint || {
+            echo "❌ Linting failed!"
+            exit 1
+          }
+          echo "✅ All validation checks passed"
 
       - name: Deploy to production VPS
         run: |
