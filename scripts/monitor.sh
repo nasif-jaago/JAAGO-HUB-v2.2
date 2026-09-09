@@ -1,4 +1,4 @@
-#!/bash/bash
+#!/bin/bash
 # JAAGO HUB MONITORING SCRIPT
 
 PROJECT_PATH="/home/jfmaster/nextJs"
