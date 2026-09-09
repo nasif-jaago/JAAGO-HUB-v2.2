@@ -160,7 +160,25 @@ export async function POST(request: Request) {
     const earliestCheckInTs = Math.min(...validCheckInTimes);
     const firstCheckInAt = new Date(earliestCheckInTs).toISOString();
     const firstCheckInLocationId = existingRecord?.check_in_location_id || geoResult.matchedLocationId;
-    const previousLastCheckOut = existingRecord?.last_check_out_at || effectiveToday?.countedCheckOutAt || null;
+    let previousLastCheckOut = existingRecord?.last_check_out_at || effectiveToday?.countedCheckOutAt || null;
+
+    // When an employee performs a check-in, discard any previous synthetic auto-checkout or future checkout
+    if (previousLastCheckOut) {
+      const isAuto = existingRecord?.is_auto_checkout || existingRecord?.check_out_source === 'auto' || effectiveToday?.isAutoCheckout;
+      const isFuture = new Date(previousLastCheckOut).getTime() > Date.now();
+      if (isAuto || isFuture) {
+        previousLastCheckOut = null;
+      }
+    }
+
+    // Expunge any synthetic auto-checkout events recorded prematurely for today
+    await supabase
+      .from('attendance_events')
+      .delete()
+      .eq('employee_id', canonicalEmpId)
+      .eq('source', 'auto')
+      .gte('attempted_at', `${businessDate}T00:00:00+06:00`)
+      .lte('attempted_at', `${businessDate}T23:59:59+06:00`);
 
     const facts = {
       employeeId: canonicalEmpId,

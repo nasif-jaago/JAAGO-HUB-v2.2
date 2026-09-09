@@ -58,27 +58,49 @@ export async function GET(request: Request) {
     // 3. Resolve shift snapshot
     const shift = await resolveEmployeeShiftSnapshot(canonicalEmpId, businessDate);
 
-    // 4. Compute counted First-In and Last-Out across 2-Way Sources (BioTime & GPS)
+    // 4. Compute cutoff & time threshold
+    const cutoffIso = new Date(`${businessDate}T${cutoffLocal || '23:30'}:00+06:00`).toISOString();
+    const isPastCutoff = Date.now() >= new Date(cutoffIso).getTime();
+
+    // Compute counted First-In and Last-Out across 2-Way Sources (BioTime & GPS)
     const firstCheckIn = effectiveToday?.countedCheckInAt || record?.first_check_in_at || record?.check_in_at || null;
     let countedCheckOut = effectiveToday?.countedCheckOutAt || record?.last_check_out_at || record?.check_out_at || null;
 
-    // 5. Derive state machine status based on latest punch
-    const hasCheckedInToday = Boolean(firstCheckIn);
-    const allPunches = effectiveToday?.allPunches || [];
-    let isCheckedIn = false;
+    // Discard any synthetic auto-checkout or future checkout if current time is not past cutoff
+    const isAutoRecord = Boolean(
+      record?.is_auto_checkout ||
+      effectiveToday?.isAutoCheckout ||
+      record?.check_out_source === 'auto' ||
+      effectiveToday?.checkOutSource === 'auto'
+    );
+    const isFutureCheckOut = Boolean(countedCheckOut && new Date(countedCheckOut).getTime() > Date.now());
 
+    if (!isPastCutoff && (isAutoRecord || isFutureCheckOut)) {
+      countedCheckOut = null;
+    }
+
+    // 5. Derive state machine status based on valid historical punches only
+    const hasCheckedInToday = Boolean(firstCheckIn);
+    const allPunches = (effectiveToday?.allPunches || []).filter((p) => {
+      const isAuto = p.source === 'auto' || Boolean(p.deviceInfo && p.deviceInfo.toLowerCase().includes('auto-checkout'));
+      // Omit synthetic auto-checkout events dated in the future
+      if (isAuto && new Date(p.punchAt).getTime() > Date.now()) {
+        return false;
+      }
+      return true;
+    });
+
+    let isCheckedIn = false;
     if (allPunches.length > 0) {
       const sorted = [...allPunches].sort((a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime());
       const latest = sorted[sorted.length - 1]!;
       isCheckedIn = latest.punchType === 'check_in';
     } else {
-      isCheckedIn = Boolean(firstCheckIn) && !record?.check_out_at;
+      isCheckedIn = Boolean(firstCheckIn) && !countedCheckOut;
     }
 
-    // 5.1 Auto Check-Out Safety Net: If time has passed 11:30 PM (23:30 Asia/Dhaka), force close
-    const cutoffIso = new Date(`${businessDate}T${cutoffLocal || '23:30'}:00+06:00`).toISOString();
-    const isPastCutoff = Date.now() >= new Date(cutoffIso).getTime();
-    let isAutoCheckout = Boolean(record?.is_auto_checkout || effectiveToday?.isAutoCheckout);
+    // 5.1 Auto Check-Out Safety Net: Force close ONLY after time has passed 11:30 PM (23:30 Asia/Dhaka)
+    let isAutoCheckout = isAutoRecord && isPastCutoff;
 
     if (hasCheckedInToday && (!countedCheckOut || isCheckedIn) && isPastCutoff) {
       countedCheckOut = cutoffIso;
@@ -177,16 +199,16 @@ export async function GET(request: Request) {
         first_check_in_at: firstCheckIn,
         last_check_out_at: lastCheckOut,
         check_in_time_local: effectiveToday?.countedCheckInTimeLocal || (firstCheckIn ? new Date(firstCheckIn).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'),
-        check_out_time_local: isAutoCheckout ? '11:30 PM' : (effectiveToday?.countedCheckOutTimeLocal || (lastCheckOut ? new Date(lastCheckOut).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--')),
+        check_out_time_local: isAutoCheckout ? '11:30 PM' : (lastCheckOut ? new Date(lastCheckOut).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--'),
         check_in_source: effectiveToday?.checkInSource || record?.check_in_source || 'gps',
-        check_out_source: isAutoCheckout ? 'auto' : (effectiveToday?.checkOutSource || record?.check_out_source || (lastCheckOut ? 'gps' : 'none')),
+        check_out_source: isAutoCheckout ? 'auto' : (lastCheckOut ? (effectiveToday?.checkOutSource || record?.check_out_source || 'gps') : 'none'),
         primary_source: effectiveToday?.primarySource || (record?.check_in_source === 'gps' ? 'Web Portal (GPS)' : 'BioTime Terminal'),
         source_breakdown: effectiveToday?.sourceBreakdown || null,
         worked_seconds: workedSeconds,
         worked_display: workedDisplay,
-        status: isAutoCheckout ? 'Present' : (effectiveToday?.status || record?.status || (shift.isScheduledWorkingDay ? 'absent' : 'weekly_off')),
-        needs_review: Boolean(record?.needs_review || record?.is_auto_checkout || isAutoCheckout),
-        is_auto_checkout: Boolean(record?.is_auto_checkout || isAutoCheckout),
+        status: isAutoCheckout ? 'Present' : (effectiveToday?.status === 'Auto Check Out' && !isPastCutoff ? (firstCheckIn ? 'Present' : 'absent') : (effectiveToday?.status || record?.status || (shift.isScheduledWorkingDay ? (firstCheckIn ? 'Present' : 'absent') : 'weekly_off'))),
+        needs_review: Boolean(record?.needs_review && isPastCutoff),
+        is_auto_checkout: isAutoCheckout,
         buttons: {
           check_in_enabled: true,
           check_out_enabled: true,

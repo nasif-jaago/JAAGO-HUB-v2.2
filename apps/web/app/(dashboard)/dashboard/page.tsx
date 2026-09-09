@@ -891,6 +891,7 @@ export default function DashboardPage() {
               localStorage.setItem(`jaago_att_${activeKey}_first_checkin_time`, todayJson.data.check_in_time_local || '--:--');
             }
             localStorage.removeItem(`jaago_att_${activeKey}_last_checkout_time`);
+            localStorage.removeItem(`jaago_att_${activeKey}_auto_checked_out`);
           } else {
             localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'false');
             localStorage.removeItem(`jaago_att_${activeKey}_checkin_timestamp`);

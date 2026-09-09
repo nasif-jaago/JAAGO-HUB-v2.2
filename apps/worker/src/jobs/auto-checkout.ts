@@ -130,6 +130,13 @@ export async function runAutoCheckoutJob(targetDate?: string): Promise<AutoCheck
       }
 
       const recCutoffUtc = new Date(`${recDate}T23:30:00+06:00`).toISOString();
+      const cutoffTimeMs = new Date(recCutoffUtc).getTime();
+
+      // Guard: Never auto-checkout if real time has not yet passed cutoff for this record's date
+      if (Date.now() < cutoffTimeMs) {
+        continue;
+      }
+
       const lastOut = recCutoffUtc;
 
       const facts = {

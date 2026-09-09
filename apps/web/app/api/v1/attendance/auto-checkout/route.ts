@@ -135,6 +135,13 @@ async function processAutoCheckout(options?: {
       }
 
       const recCutoffIso = new Date(`${recDate}T${cutoffTime}:00+06:00`).toISOString();
+      const cutoffTimeMs = new Date(recCutoffIso).getTime();
+
+      // Guard: Never auto-checkout if real time has not yet passed cutoff for this record's date
+      if (Date.now() < cutoffTimeMs) {
+        continue;
+      }
+
       const lastOut = recCutoffIso;
 
       const facts = {
