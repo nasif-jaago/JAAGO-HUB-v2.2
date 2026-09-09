@@ -40,6 +40,8 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+          check-latest: true
+          cache-version: 'v2'  # Force cache refresh to fix Node.js 20 issue
 
       - name: 📦 Install dependencies (fast)
         run: npm ci --prefer-offline
