@@ -1,0 +1,249 @@
+name: 🚀 JAAGO HUB Auto-Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PROJECT_PATH: /home/jfmaster/nextJs
+  BACKUP_DIR: /home/jfmaster/backups
+  LOG_DIR: /home/jfmaster/nextJs/log
+  NODE_ENV: production
+  LOG_LEVEL: info
+  
+  # SSH Configuration
+  VPS_HOST: ${{ secrets.VPS_HOST }}
+  VPS_USER: ${{ secrets.VPS_USER }}
+  VPS_PORT: ${{ secrets.VPS_PORT }}
+  VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+
+jobs:
+  deploy:
+    runs-on: centos-latest  # Using CentOS (Almalinux-compatible)
+    environment: production
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build project
+        run: npm run build
+
+      - name: 🧪 Run type checks
+        run: npm run typecheck
+
+      - name: 🔍 Run linter
+        run: npm run lint
+
+      - name: 🚀 Deploy to production
+        run: |
+          tar -czf deploy-package.tar.gz \
+            apps/ packages/ modules/ tooling/ \
+            .editorconfig .gitignore .npmrc \
+            .prettierrc package.json package-lock.json \
+            turbo.json tsconfig.base.json
+          
+          echo "Deployment package created: deploy-package.tar.gz"
+          
+      - name: Upload deployment package
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: deploy-package.tar.gz
+
+  deploy-job:
+    runs-on: centos-latest  # Using CentOS (Almalinux-compatible)
+    environment: production
+    needs: deploy
+    
+    steps:
+      - name: 📥 Download deployment package
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-package
+
+      - name: 🚀 Deploy to production
+        run: |
+          echo "Starting deployment to production VPS..."
+          echo "Project path: ${{ env.PROJECT_PATH }}"
+          
+          # SSH command to deploy on VPS with custom port
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no "
+            set -e
+            
+            PROJECT_PATH=\"${{ env.PROJECT_PATH }}\"
+            BACKUP_DIR=\"/home/jfmaster/backups\"
+            
+            echo \"=== Starting Deployment at $(date) ===\"
+            echo \"Project Path: \$PROJECT_PATH\"
+            
+            # Navigate to project
+            cd "\$PROJECT_PATH" || exit 1
+            
+            # Create backup
+            git stash push -m \"pre-deploy-$(date +%Y%m%d-%H%M%S)\" || true
+            tar -czf "\$BACKUP_DIR/current-$(date +%Y%m%d-%H%M%S).tar.gz" . || {
+              echo \"ERROR: Backup failed\"
+              exit 1
+            }
+            echo \"✓ Backup created successfully\"
+            
+            # Clean and extract
+            rm -rf *
+            tar -xzf /tmp/deploy-package.tar.gz
+            rm /tmp/deploy-package.tar.gz
+            
+            # Restore stashed changes
+            git stash pop 2>/dev/null || true
+            
+            # Install and build
+            npm ci || {
+              echo \"ERROR: npm install failed\"
+              exit 1
+            }
+            echo \"✓ Dependencies installed successfully\"
+            
+            npm run build || {
+              echo \"ERROR: Build failed\"
+              exit 1
+            }
+            echo \"✓ Build completed successfully\"
+            
+            # Restart services (your existing supervisor command)
+            echo \"Restarting services...\"
+            if supervisorctl restart hub-jaago; then
+              echo \"✓ Services restarted successfully\"
+            else
+              echo \"ERROR: Failed to restart hub-jaago\"
+              exit 1
+            fi
+            
+            # Health check
+            echo \"Running health check...\"
+            sleep 15
+            
+            if curl -f -s --max-time 30 http://localhost:3000/api/v1/health; then
+              echo \"✓ Health check passed: /api/v1/health\"
+            else
+              echo \"ERROR: Health check failed - Application may not be running\"
+              supervisorctl stop hub-jaago
+              exit 1
+            fi
+            
+            # Verify module registration
+            echo \"Verifying module registration...\"
+            if curl -s http://localhost:3000/api/v1/modules | grep -q \"'key'\"; then
+              echo \"✓ Module registration verified\"
+            else
+              echo \"ERROR: Module registration failed\"
+              supervisorctl stop hub-jaago
+              exit 1
+            fi
+            
+            echo \"=== Deployment completed successfully at $(date) ===\"
+          " || {
+            echo \"❌ Deployment failed!\"
+            exit 1
+          }
+          
+          echo \"🎉 Production deployment completed successfully!\"
+          
+          # Success notification (optional)
+          if [ -n \"${{ secrets.SLACK_WEBHOOK }}\" ]; then
+            curl -X POST \"${{ secrets.SLACK_WEBHOOK }}\" \
+                 -H 'Content-type: application/json' \
+                 --data "{\"text\":\"🚀 JAAGO HUB deployed successfully!\"}"
+          fi
+
+  rollback:
+    runs-on: centos-latest  # Using CentOS (Almalinux-compatible)
+    environment: production
+    if: failure()  # Run only on deployment failure
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔄 Execute rollback
+        run: |
+          echo "Starting emergency rollback..."
+          
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} -p ${{ secrets.VPS_PORT }} -o StrictHostKeyChecking=no "
+            PROJECT_PATH=\"${{ env.PROJECT_PATH }}\"
+            BACKUP_DIR=\"/home/jfmaster/backups\"
+            
+            echo "=== Starting Rollback at $(date) ==="
+            
+            cd \"$PROJECT_PATH\" || exit 1
+            
+            LATEST_BACKUP=\$(ls -t \"$BACKUP_DIR\"/current-*.tar.gz 2>/dev/null | head -1)
+            
+            if [ -z "\$LATEST_BACKUP" ]; then
+              echo "ERROR: No backup found to rollback to"
+              exit 1
+            fi
+            
+            echo "Rolling back to: \$LATEST_BACKUP"
+            
+            # Stop service
+            echo "Stopping hub-jaago service..."
+            supervisorctl stop hub-jaago || {
+              echo "ERROR: Failed to stop hub-jaago"
+              exit 1
+            }
+            
+            # Restore backup
+            echo "Restoring backup..."
+            rm -rf *
+            tar -xzf "\$LATEST_BACKUP"
+            rm "\$LATEST_BACKUP"
+            
+            # Install and restart
+            echo "Installing dependencies..."
+            npm ci || {
+              echo "ERROR: npm install failed during rollback"
+              exit 1
+            }
+            
+            echo "Starting service..."
+            supervisorctl start hub-jaago || {
+              echo "ERROR: Failed to start hub-jaago after rollback"
+              exit 1
+            }
+            
+            # Verify rollback
+            echo "Running health check..."
+            sleep 10
+            
+            if curl -f -s --max-time 30 http://localhost:3000/api/v1/health; then
+              echo "✓ Rollback successful and health check passed"
+            else
+              echo "ERROR: Rollback successful but health check failed"
+              supervisorctl stop hub-jaago
+              exit 1
+            fi
+            
+            echo "=== Rollback completed at $(date) ==="
+          " || {
+            echo "❌ Rollback failed!"
+            exit 1
+          }
+          
+          echo \"🔄 Rollback completed successfully!\"
+          
+          # Rollback notification (optional)
+          if [ -n \"${{ secrets.SLACK_WEBHOOK }}\" ]; then
+            curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+                 -H 'Content-type: application/json' \
+                 --data "{\"text\":\"⚠️ JAAGO HUB ROLLED BACK at $(date)\"}"
+          fi
