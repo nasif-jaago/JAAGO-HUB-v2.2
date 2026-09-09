@@ -41,25 +41,104 @@ jobs:
           node-version: '24'
           cache: 'npm'
           check-latest: true
-          cache-version: 'v2'  # Force cache refresh to fix Node.js 20 issue
+          cache-dependency-path: 'package-lock.json'
 
       - name: 📦 Install dependencies (fast)
-        run: npm ci --prefer-offline
-        timeout-minutes: 10
+        run: |
+          echo "🔧 Installing dependencies with npm ci..."
+          if ! command -v npm >/dev/null 2>&1; then
+            echo "❌ npm not found! This is required for dependency installation."
+            exit 127
+          fi
+          
+          if [ ! -f "package.json" ]; then
+            echo "❌ package.json not found. Cannot install dependencies."
+            exit 127
+          fi
+          
+          echo "📋 package.json found, attempting npm install..."
+          if ! npm ci --prefer-offline; then
+            echo "❌ npm install failed! Trying with npm install instead..."
+            npm install || {
+              echo "❌ Both npm ci and npm install failed!"
+              echo "Troubleshooting:
+1. Check network connectivity
+2. Verify package-lock.json exists
+3. Check disk space
+4. Check for syntax errors in package.json"
+              exit 127
+            }
+          fi
+          echo "✅ Dependencies installed successfully"
+        timeout-minutes: 15
         env:
           NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
 
       - name: 🏗️ Build project (optimized)
-        run: npm run build
-        timeout-minutes: 15
+        run: |
+          echo "🔨 Starting build process..."
+          if ! command -v turbo >/dev/null 2>&1; then
+            echo "❌ turbo not found! Installing turbo...
+            npm install -g turbo || {
+              echo "❌ Failed to install turbo globally"
+              echo "This might be due to:
+1. Network issues
+2. Permission problems
+3. Node.js version incompatibility"
+              exit 127
+            }
+          fi
+          echo "✅ turbo found or installed successfully"
+          
+          echo "🏗️ Running turbo build..."
+          if ! npm run build; then
+            echo "❌ Build failed!"
+            echo "Common causes:
+1. Missing dependencies after npm install
+2. TypeScript compilation errors
+3. Missing required build tools
+4. Configuration issues"
+            exit 127
+          fi
+        timeout-minutes: 20
 
       - name: 🧪 Run type checks
-        run: npm run typecheck
-        timeout-minutes: 5
+        run: |
+          echo "🔍 Running type checks..."
+          if ! command -v npx >/dev/null 2>&1; then
+            echo "❌ npx not found! This is required for running scripts."
+            exit 127
+          fi
+          
+          echo "🔬 Running npm run typecheck..."
+          if ! npm run typecheck; then
+            echo "❌ Type checking failed!"
+            echo "This might be due to:
+1. TypeScript configuration issues
+2. Missing @types packages
+3. Syntax errors in TypeScript files"
+            exit 127
+          fi
+        timeout-minutes: 10
 
       - name: 🔍 Run linter
-        run: npm run lint
-        timeout-minutes: 5
+        run: |
+          echo "🔍 Running linter..."
+          if ! command -v npx >/dev/null 2>&1; then
+            echo "❌ npx not found! This is required for running scripts."
+            exit 127
+          fi
+          
+          echo "🔬 Running npm run lint..."
+          if ! npm run lint; then
+            echo "❌ Linting failed!"
+            echo "This might be due to:
+1. Lint configuration issues
+2. Code style violations
+3. Missing required dependencies"
+            exit 127
+          fi
+        timeout-minutes: 10
 
       - name: 📦 Create deployment package (optimized)
         id: create-package
@@ -87,10 +166,12 @@ jobs:
           echo "📦 Package size: $(du -h deploy-package.tar.gz | cut -f1)"
           
           # Check if package was created
-          if [ -f "deploy-package.tar.gz" ]; then
+          if [ -f "deploy-package.tar.gz" ]; and [ -s "deploy-package.tar.gz" ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Deployment package creation failed!"
+            echo "The package file is missing or empty."
+            exit 127
           fi
         env:
           HUSKY: '0'
