@@ -794,25 +794,25 @@ export function calculateWorkingHoursString(checkInTime?: string, checkOutTime?:
  * Persists an attendance punch into local and Supabase stores, then notifies the app
  */
 export function recordLocalAttendanceLog(logData: {
-  employeeId?: string;
+  employeeId?: string | undefined;
   employeeCode: string;
   employeeName: string;
-  designation?: string;
-  department?: string;
-  branch?: string;
-  avatarUrl?: string;
-  checkInTime?: string;
-  checkOutTime?: string;
+  designation?: string | undefined;
+  department?: string | undefined;
+  branch?: string | undefined;
+  avatarUrl?: string | undefined;
+  checkInTime?: string | undefined;
+  checkOutTime?: string | undefined;
   date: string; // YYYY-MM-DD
-  status?: AttendanceLogItem['status'];
-  device?: AttendanceLogItem['device'];
-  locationName?: string;
-  checkInLat?: number;
-  checkInLng?: number;
-  checkOutLat?: number;
-  checkOutLng?: number;
-  isAutoCheckout?: boolean;
-  notes?: string;
+  status?: AttendanceLogItem['status'] | undefined;
+  device?: AttendanceLogItem['device'] | undefined;
+  locationName?: string | undefined;
+  checkInLat?: number | undefined;
+  checkInLng?: number | undefined;
+  checkOutLat?: number | undefined;
+  checkOutLng?: number | undefined;
+  isAutoCheckout?: boolean | undefined;
+  notes?: string | undefined;
 }): AttendanceLogItem {
   const currentLogs = getLocalAttendanceLogs();
   const existingIdx = currentLogs.findIndex(
@@ -945,10 +945,14 @@ export async function fetchAttendanceLogsFromSupabase(
     cacheKey,
     async () => {
       try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
         const url = employeeCodeOrId
           ? `/api/v1/attendance/logs?employeeId=${encodeURIComponent(employeeCodeOrId)}`
           : '/api/v1/attendance/logs';
-        const res = await fetch(url, { cache: 'no-store' });
+        const res = await fetch(url, { cache: 'no-store', headers });
         const json = await res.json();
 
         if (res.ok && json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -996,8 +1000,14 @@ export async function fetchAttendanceLogsFromSupabase(
           if (remoteLogs.length > 0) {
             const currentLogs = getLocalAttendanceLogs();
             const logMap = new Map<string, AttendanceLogItem>();
-            currentLogs.forEach((l) => logMap.set(l.id || `${l.employeeCode}_${l.date}`, l));
-            remoteLogs.forEach((l) => logMap.set(l.id || `${l.employeeCode}_${l.date}`, l));
+            currentLogs.forEach((l) => {
+              const k = `${(l.employeeCode || l.employeeId || '').toLowerCase().trim()}_${l.date}`;
+              logMap.set(k, l);
+            });
+            remoteLogs.forEach((l) => {
+              const k = `${(l.employeeCode || l.employeeId || '').toLowerCase().trim()}_${l.date}`;
+              logMap.set(k, l);
+            });
             const merged = Array.from(logMap.values());
             saveLocalAttendanceLogs(merged);
             return remoteLogs;
@@ -1036,6 +1046,43 @@ export function getEmployeeAttendanceLogs(employeeCodeOrId: string, employeeName
 
     return false;
   });
+
+  // Check if today's recorded punch exists for this employee in localStorage session
+  if (typeof window !== 'undefined' && normalizedKey) {
+    const todayDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+    const hasTodayInFiltered = filtered.some((l) => l.date === todayDateStr);
+
+    if (!hasTodayInFiltered) {
+      const activeKey = normalizedKey.replace(/[^a-z0-9]/g, '_');
+      const firstIn = localStorage.getItem(`jaago_att_${activeKey}_first_checkin_time`);
+      const lastOut = localStorage.getItem(`jaago_att_${activeKey}_last_checkout_time`);
+      const workedSec = parseInt(localStorage.getItem(`jaago_att_${activeKey}_worked_seconds`) || '0', 10);
+
+      if (firstIn && firstIn !== '--:--') {
+        filtered.unshift({
+          id: `att-today-${normalizedKey}-${todayDateStr}`,
+          employeeId: employeeCodeOrId,
+          employeeCode: employeeCodeOrId,
+          employeeName: employeeName || 'Staff Member',
+          designation: 'Staff',
+          department: "Founder's Office JFT",
+          branch: 'JAAGO Foundation',
+          date: todayDateStr,
+          checkInTime: firstIn,
+          checkOutTime: lastOut && lastOut !== '--:--' ? lastOut : undefined,
+          status: 'Present',
+          device: 'Web Portal',
+          workedSeconds: workedSec,
+          workedDisplay: workedSec > 0 ? `${Math.floor(workedSec / 3600)}h ${Math.floor((workedSec % 3600) / 60)}m` : undefined,
+          timestamp: new Date().toLocaleString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          createdBy: employeeName || employeeCodeOrId,
+          notes: 'Attendance verified (Live Session)',
+        });
+      }
+    }
+  }
 
   return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }

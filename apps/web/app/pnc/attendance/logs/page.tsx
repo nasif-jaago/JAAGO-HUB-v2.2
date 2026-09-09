@@ -26,6 +26,7 @@ import {
 } from '@/lib/supabase-attendance';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
 import { fetchLeaveRequests } from '@/lib/supabase-time-off';
+import { formatDisplayDate } from '@/lib/date-format';
 import {
   useOrganizationScope,
   matchesSelectedOrg,
@@ -117,28 +118,37 @@ export default function AttendanceLogsPage() {
     setLogs(loadedLogs);
 
     Promise.all([
-      fetchAttendanceLogsFromSupabase(),
+      fetchAttendanceLogsFromSupabase(true),
       fetchEmployeesFromSupabase(),
       fetchLeaveRequests(),
-    ]).then(([, emps]) => {
+    ]).then(([attLogs, emps]) => {
       if (emps && emps.length > 0) {
         setEmployees(emps);
       }
-      setLogs(getLocalAttendanceLogs());
+      if (attLogs && attLogs.length > 0) {
+        setLogs(attLogs);
+      } else {
+        setLogs(getLocalAttendanceLogs());
+      }
     });
 
     const handleUpdate = () => {
-      setLogs(getLocalAttendanceLogs());
+      fetchAttendanceLogsFromSupabase(true).then((rem) => {
+        if (rem && rem.length > 0) setLogs(rem);
+        else setLogs(getLocalAttendanceLogs());
+      });
     };
     window.addEventListener('jaago_attendance_updated', handleUpdate);
     window.addEventListener('jaago_attendance_regularization_updated', handleUpdate);
     window.addEventListener('jaago_leave_request_updated', handleUpdate);
     window.addEventListener('jaago_leave_allocation_updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
     return () => {
       window.removeEventListener('jaago_attendance_updated', handleUpdate);
       window.removeEventListener('jaago_attendance_regularization_updated', handleUpdate);
       window.removeEventListener('jaago_leave_request_updated', handleUpdate);
       window.removeEventListener('jaago_leave_allocation_updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
     };
   }, []);
 
@@ -714,7 +724,7 @@ export default function AttendanceLogsPage() {
                     {/* Timestamp & Working Times */}
                     <td className="py-4 px-4">
                       <div className="text-foreground font-mono font-bold text-xs">
-                        {log.date || log.timestamp}
+                        {formatDisplayDate(log.date || log.timestamp)}
                       </div>
                       {log.status === 'Leave' ? (
                         <div className="text-[11px] text-purple-400 font-semibold pt-0.5 max-w-[220px] truncate">

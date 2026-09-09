@@ -36,6 +36,7 @@ import {
 } from '@/lib/use-organization-scope';
 import { createNotification, dismissNotificationForEntity } from '@/lib/notifications';
 import { getCurrentUserSession } from '@/lib/user-profile-sync';
+import { formatDisplayDate } from '@/lib/date-format';
 
 const LEAVE_TYPES: LeaveType[] = [
   'Casual Leave',
@@ -238,7 +239,7 @@ export default function LeaveRequestsPage() {
       targetEmployeeCode: req.employeeCode,
       targetEmail: empEmail,
       title: `Leave Request Approved (${req.leaveType})`,
-      message: `Your leave application for ${req.leaveType} (${req.totalDays} Days) from ${req.fromDate} to ${req.toDate} has been approved by ${approverName}.`,
+      message: `Your leave application for ${req.leaveType} (${req.totalDays} Days) from ${formatDisplayDate(req.fromDate)} to ${formatDisplayDate(req.toDate)} has been approved by ${approverName}.`,
       category: 'time_off',
       actionUrl: '/leaves',
       relatedEntity: { type: 'leave_request', id: req.id },
@@ -746,8 +747,8 @@ export default function LeaveRequestsPage() {
 
                   <div className="text-xs font-mono text-muted-foreground flex items-center space-x-2">
                     <span>
-                      {req.fromDate}
-                      {req.toDate && req.toDate !== req.fromDate ? ` to ${req.toDate}` : ''}
+                      {formatDisplayDate(req.fromDate)}
+                      {req.toDate && req.toDate !== req.fromDate ? ` to ${formatDisplayDate(req.toDate)}` : ''}
                     </span>
                   </div>
 
@@ -1229,7 +1230,7 @@ export default function LeaveRequestsPage() {
                             ? '0.5 Day (2nd Half / PM)'
                             : `${r.totalDays}d Full Day`}
                         </span>{' '}
-                        &bull; {r.fromDate} &bull; <em>&ldquo;{r.reason}&rdquo;</em>
+                        &bull; {formatDisplayDate(r.fromDate)} &bull; <em>&ldquo;{r.reason}&rdquo;</em>
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -1298,7 +1299,7 @@ export default function LeaveRequestsPage() {
                     ? '0.5 Day • Half Day (2nd Half / PM)'
                     : `${refusalModalReq.totalDays} Days • Full Day`}
                 </span>{' '}
-                ({refusalModalReq.fromDate} to {refusalModalReq.toDate})
+                ({formatDisplayDate(refusalModalReq.fromDate)} to {formatDisplayDate(refusalModalReq.toDate)})
               </div>
               <div className="text-muted-foreground italic">
                 Reason: &ldquo;{refusalModalReq.reason}&rdquo;

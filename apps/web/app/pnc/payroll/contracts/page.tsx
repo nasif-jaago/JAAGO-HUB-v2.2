@@ -42,6 +42,7 @@ import { ContractDocumentModal } from '@/components/contracts/ContractDocumentMo
 import { ContractPivotTable } from '@/components/contracts/ContractPivotTable';
 import { NewContractModal } from '@/components/contracts/NewContractModal';
 import { ContractHistoryModal } from '@/components/contracts/ContractHistoryModal';
+import { formatDisplayDate } from '@/lib/date-format';
 
 export type GroupByDimension =
   | 'None'
@@ -397,17 +398,7 @@ export default function EmploymentContractsPage() {
   };
 
   const formatDateShort = (dateStr?: string | null) => {
-    if (!dateStr) return '—';
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
+    return formatDisplayDate(dateStr);
   };
 
   // Find exact employee profile for selected document

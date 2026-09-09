@@ -50,6 +50,7 @@ import {
   saveStoredCustomContracts,
   deriveContractStatus,
 } from '@/lib/contracts-engine';
+import { formatDisplayDate } from '@/lib/date-format';
 import {
   getEmployeeAttendanceLogs,
   fetchAttendanceLogsFromSupabase,
@@ -306,7 +307,7 @@ export function EmployeeProfileDetail({
         console.error('Error loading organization metadata:', err);
       }
 
-      fetchAttendanceLogsFromSupabase().then(() => {
+      fetchAttendanceLogsFromSupabase(true).then(() => {
         if (isMounted) {
           setAttendanceRefresh((prev) => prev + 1);
         }
@@ -315,17 +316,19 @@ export function EmployeeProfileDetail({
     loadMetadata();
 
     const handleAttUpdate = () => {
-      fetchAttendanceLogsFromSupabase().then(() => {
+      fetchAttendanceLogsFromSupabase(true).then(() => {
         setAttendanceRefresh((prev) => prev + 1);
       }).catch(() => {
         setAttendanceRefresh((prev) => prev + 1);
       });
     };
     window.addEventListener('jaago_attendance_updated', handleAttUpdate);
+    window.addEventListener('storage', handleAttUpdate);
 
     return () => {
       isMounted = false;
       window.removeEventListener('jaago_attendance_updated', handleAttUpdate);
+      window.removeEventListener('storage', handleAttUpdate);
     };
   }, []);
 
@@ -465,6 +468,15 @@ export function EmployeeProfileDetail({
 
   // Track original for diff logging
   const originalStateRef = useRef<FullEmployeeProfile>(formData);
+
+  useEffect(() => {
+    const targetCode = formData.code || formData.id;
+    if (targetCode) {
+      fetchAttendanceLogsFromSupabase(true, targetCode).then(() => {
+        setAttendanceRefresh((prev) => prev + 1);
+      }).catch(() => {});
+    }
+  }, [formData.code, formData.id]);
 
   // Dynamically compute all unique departments (Supabase master + all employee departments + current profile)
   const dynamicDepartments = useMemo(() => {
@@ -773,7 +785,7 @@ export function EmployeeProfileDetail({
       userName: currentUser.fullName || 'Nasif Kamal',
       userRole: currentUser.jobTitle || 'Coordinator',
       field: 'Employment Contract',
-      oldValue: formData.contractEndDate ? `Ended: ${formData.contractEndDate}` : 'Active Base Contract',
+      oldValue: formData.contractEndDate ? `Ended: ${formatDisplayDate(formData.contractEndDate)}` : 'Active Base Contract',
       newValue: `Contract Ref: ${newContract.contractNo} (Wage: ৳${wageNum.toLocaleString()}, Type: ${newContract.contractType})`,
       actionType: 'update',
     };
@@ -2712,7 +2724,7 @@ export function EmployeeProfileDetail({
                                   {c.contractNo || `CON-${c.employeeCode}`}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground">
-                                  {c.effectiveDate ? `Effective: ${c.effectiveDate}` : 'Base Profile Record'}
+                                  {c.effectiveDate ? `Effective: ${formatDisplayDate(c.effectiveDate)}` : 'Base Profile Record'}
                                 </span>
                               </div>
                             </div>
@@ -2720,7 +2732,7 @@ export function EmployeeProfileDetail({
 
                           <td className="py-3.5 px-4 font-medium">
                             <div className="text-foreground">
-                              {c.startDate} <span className="text-muted-foreground">&rarr;</span> {c.endDate || 'Permanent'}
+                              {formatDisplayDate(c.startDate)} <span className="text-muted-foreground">&rarr;</span> {c.endDate ? formatDisplayDate(c.endDate) : 'Permanent'}
                             </div>
                             <span className="text-[10px] text-muted-foreground">
                               {c.endDate ? 'Fixed-Term Contract' : 'Permanent Employment'}
@@ -3579,7 +3591,7 @@ export function EmployeeProfileDetail({
                             </td>
                             <td className="py-3 px-3">
                               <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px] text-foreground">
-                                <span>{req.fromDate} &rarr; {req.toDate}</span>
+                                <span>{formatDisplayDate(req.fromDate)} &rarr; {formatDisplayDate(req.toDate)}</span>
                                 {isFirstHalf ? (
                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9.5px] font-sans font-bold bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
                                     🌅 1st Half (AM)
@@ -3840,7 +3852,7 @@ export function EmployeeProfileDetail({
                         return (
                           <tr key={log.id} className="hover:bg-surface/40 transition">
                             <td className="py-3 px-4 font-mono text-[11px] text-foreground font-bold">
-                              {log.date}
+                              {formatDisplayDate(log.date)}
                             </td>
                             <td className="py-3 px-3 font-semibold text-emerald-500 font-mono">
                               {log.checkInTime || '--:--'}

@@ -28,6 +28,7 @@ import {
   getLocalRegularizations,
 } from '@/lib/supabase-regularization';
 import { dismissNotificationForEntity } from '@/lib/notifications';
+import { formatDisplayDate, formatDisplayDateTime } from '@/lib/date-format';
 
 interface WorkflowInstance {
   id: string;
@@ -135,7 +136,7 @@ function WorkflowsContent() {
             combined.unshift({
               id: reg.id,
               definitionKey: 'attendance_regularization',
-              title: `Attendance Regularization (${reg.date}) - ${reg.employeeName}`,
+              title: `Attendance Regularization (${formatDisplayDate(reg.date)}) - ${reg.employeeName}`,
               entityType: 'attendance_regularization',
               entityId: reg.id,
               requesterId: reg.employeeCode,
@@ -510,14 +511,14 @@ function WorkflowsContent() {
         if (isReg) {
           return (
             <div className="text-xs font-mono text-muted-foreground space-y-0.5">
-              <div className="font-bold text-foreground">{row.metadata.date}</div>
+              <div className="font-bold text-foreground">{formatDisplayDate(row.metadata.date)}</div>
               <div className="text-[10px] text-amber-500 font-semibold">1 Day Regularization</div>
             </div>
           );
         }
         return (
           <div className="text-xs font-mono text-muted-foreground">
-            {row.metadata.startDate} &rarr; {row.metadata.endDate}
+            {formatDisplayDate(row.metadata.startDate)} &rarr; {formatDisplayDate(row.metadata.endDate)}
           </div>
         );
       },
@@ -817,7 +818,7 @@ function WorkflowsContent() {
                         <span className="text-muted-foreground">&bull;</span>
                         <span className="font-medium text-foreground">{item.metadata.leaveType}</span>
                         <span className="text-muted-foreground">&bull;</span>
-                        <span className="font-mono text-muted-foreground">{isReg ? item.metadata.date : `${item.metadata.totalDays} Day(s)`}</span>
+                        <span className="font-mono text-muted-foreground">{isReg ? formatDisplayDate(item.metadata.date) : `${item.metadata.totalDays} Day(s)`}</span>
                       </div>
                       <div className="text-muted-foreground text-[11px]">
                         {isReg ? (
@@ -826,7 +827,7 @@ function WorkflowsContent() {
                           </span>
                         ) : (
                           <span>
-                            Duration: {item.metadata.startDate} &rarr; {item.metadata.endDate} &bull; Dept: {item.metadata.department}
+                            Duration: {formatDisplayDate(item.metadata.startDate)} &rarr; {formatDisplayDate(item.metadata.endDate)} &bull; Dept: {item.metadata.department}
                           </span>
                         )}
                       </div>
@@ -1007,7 +1008,7 @@ function WorkflowsContent() {
                     <div>
                       <span className="text-muted-foreground">Leave Dates:</span>
                       <div className="font-bold text-foreground">
-                        {selectedInstance.metadata.startDate} &rarr; {selectedInstance.metadata.endDate}
+                        {formatDisplayDate(selectedInstance.metadata.startDate)} &rarr; {formatDisplayDate(selectedInstance.metadata.endDate)}
                       </div>
                     </div>
                     <div>
@@ -1108,12 +1109,7 @@ function WorkflowsContent() {
                         {hist.comment && <p className="text-muted-foreground italic">&ldquo;{hist.comment}&rdquo;</p>}
                       </div>
                       <span className="font-mono text-[10px] text-muted-foreground whitespace-nowrap">
-                        {new Date(hist.timestamp).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {formatDisplayDateTime(hist.timestamp)}
                       </span>
                     </div>
                   ))}
@@ -1196,8 +1192,8 @@ function WorkflowsContent() {
               </div>
               <div className="text-muted-foreground">
                 {refusalModalInstance.definitionKey === 'attendance_regularization'
-                  ? `Attendance Regularization for ${refusalModalInstance.metadata.date} (Adjusted: ${refusalModalInstance.metadata.adjustedCheckIn} - ${refusalModalInstance.metadata.adjustedCheckOut})`
-                  : `${refusalModalInstance.metadata.leaveType} • ${refusalModalInstance.metadata.totalDays} Days (${refusalModalInstance.metadata.startDate} to ${refusalModalInstance.metadata.endDate})`}
+                  ? `Attendance Regularization for ${formatDisplayDate(refusalModalInstance.metadata.date)} (Adjusted: ${refusalModalInstance.metadata.adjustedCheckIn} - ${refusalModalInstance.metadata.adjustedCheckOut})`
+                  : `${refusalModalInstance.metadata.leaveType} • ${refusalModalInstance.metadata.totalDays} Days (${formatDisplayDate(refusalModalInstance.metadata.startDate)} to ${formatDisplayDate(refusalModalInstance.metadata.endDate)})`}
               </div>
             </div>
 

@@ -302,8 +302,20 @@ export async function submitAttendanceRegularization(data: {
   const id = `reg-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   const nowIso = new Date().toISOString();
 
-  const supervisorName = data.supervisorName || 'Nasif Kamal';
-  const supervisorEmail = data.supervisorEmail || 'nasif.kamal@jaago.com.bd';
+  const supervisorName = data.supervisorName || 'S M Nayeem Rahman';
+  let supervisorEmail = data.supervisorEmail;
+  if (!supervisorEmail || supervisorEmail.includes('hub.jaago')) {
+    const supLower = supervisorName.toLowerCase();
+    if (supLower.includes('nayeem')) {
+      supervisorEmail = 'nayeem.rahman@jaago.com.bd';
+    } else if (supLower.includes('korvi')) {
+      supervisorEmail = 'korvi@jaago.com.bd';
+    } else if (supLower.includes('nasif')) {
+      supervisorEmail = 'nasif.kamal@jaago.com.bd';
+    } else {
+      supervisorEmail = 'hr@jaago.com.bd';
+    }
+  }
 
   const newItem: AttendanceRegularizationItem = {
     id,

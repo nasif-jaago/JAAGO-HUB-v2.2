@@ -34,6 +34,7 @@ import {
   BioTimePunchLog,
   INITIAL_BIOTIME_CONFIG,
 } from '@/lib/biotime-data';
+import { formatDisplayDate } from '@/lib/date-format';
 
 export default function BioTimeControlCenterPage() {
   const [devices, setDevices] = useState<BioTimeDevice[]>([]);
@@ -504,7 +505,7 @@ export default function BioTimeControlCenterPage() {
               <Clock className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
               <span>{new Date(config.lastSyncTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</span>
             </div>
-            <div className="text-[10px] text-muted-foreground">{new Date(config.lastSyncTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+            <div className="text-[10px] text-muted-foreground">{formatDisplayDate(config.lastSyncTime)}</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
             <Zap className="w-5 h-5" />
@@ -734,7 +735,7 @@ export default function BioTimeControlCenterPage() {
                     </td>
                     <td className="p-2.5 font-mono text-[10px]">
                       <div>{new Date(log.punchTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}</div>
-                      <div className="text-muted-foreground">{new Date(log.punchTime).toLocaleDateString('en-US', { timeZone: 'Asia/Dhaka', month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                      <div className="text-muted-foreground">{formatDisplayDate(log.punchTime)}</div>
                     </td>
                     <td className="p-2.5 text-center">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20">

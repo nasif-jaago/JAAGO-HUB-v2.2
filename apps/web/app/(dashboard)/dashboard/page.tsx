@@ -28,6 +28,7 @@ import {
   calculateWorkingHoursString,
   AttendanceLogItem,
 } from '@/lib/supabase-attendance';
+import { invalidateCache } from '@/lib/data-cache';
 import {
   PublicHolidayItem,
   fetchPublicHolidays,
@@ -41,6 +42,7 @@ import {
   evaluateGpsMatch,
 } from '@/lib/supabase-gps';
 import { fetchOnDutyRequestsFromSupabase } from '@/lib/supabase-onduty';
+import { formatDisplayDate } from '@/lib/date-format';
 import Link from 'next/link';
 
 export default function DashboardPage() {
@@ -807,7 +809,7 @@ export default function DashboardPage() {
       setMyAttendanceLogs(personalLogs);
 
       // Fetch fresh remote attendance logs asynchronously
-      fetchAttendanceLogsFromSupabase(false, empId || user.employeeCode).then((remote) => {
+      fetchAttendanceLogsFromSupabase(true, empId || user.employeeCode).then((remote) => {
         if (remote && remote.length > 0) {
           const userLogs = getEmployeeAttendanceLogs(empId || user.employeeCode || user.id);
           setMyAttendanceLogs(userLogs);
@@ -962,6 +964,21 @@ export default function DashboardPage() {
               ? 'Counted from earliest BioTime/GPS check-in & latest check-out'
               : 'Attendance verified',
           };
+
+          recordLocalAttendanceLog({
+            employeeId: todayItem.employeeId,
+            employeeCode: todayItem.employeeCode,
+            employeeName: todayItem.employeeName,
+            designation: todayItem.designation,
+            department: todayItem.department,
+            branch: todayItem.branch,
+            date: todayItem.date,
+            checkInTime: todayItem.checkInTime,
+            checkOutTime: todayItem.checkOutTime,
+            status: todayItem.status,
+            device: todayItem.device,
+            notes: todayItem.notes,
+          });
 
           setMyAttendanceLogs((prev) => {
             const exists = prev.some((l) => l.date === todayDateStr);
@@ -1144,6 +1161,27 @@ export default function DashboardPage() {
         errorMsg: null,
       });
 
+      const dhakaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+      const inTimeStr = new Date(firstIn).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true });
+
+      recordLocalAttendanceLog({
+        employeeId: user.id || user.employeeCode,
+        employeeCode: user.employeeCode || '',
+        employeeName: user.fullName || 'Staff Member',
+        designation: user.jobTitle,
+        department: user.department,
+        branch: matchedSite || 'Head Office (Banani)',
+        date: dhakaDate,
+        checkInTime: inTimeStr,
+        status: checkInJson.data?.status === 'late' ? 'Late' : 'Present',
+        device: 'Web Portal',
+        notes: checkInJson.message || 'GPS Geofence Verified Check-in',
+      });
+      invalidateCache('pnc_attendance_logs');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jaago_attendance_updated'));
+      }
+
       showToast(checkInJson.message || `Checked in successfully at ${matchedSite}!`, 'success');
       await refreshCanonicalAttendance(user.employeeCode || user.id);
     } catch {
@@ -1238,6 +1276,30 @@ export default function DashboardPage() {
         accuracy: coords.accuracy,
         errorMsg: null,
       });
+
+      const dhakaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+      const outTimeStr = record?.last_check_out_at
+        ? new Date(record.last_check_out_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true })
+        : now.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true });
+
+      recordLocalAttendanceLog({
+        employeeId: user.id || user.employeeCode,
+        employeeCode: user.employeeCode || '',
+        employeeName: user.fullName || 'Staff Member',
+        designation: user.jobTitle,
+        department: user.department,
+        branch: 'Head Office (Banani)',
+        date: dhakaDate,
+        checkInTime: checkInTime || '09:00 AM',
+        checkOutTime: outTimeStr,
+        status: 'Present',
+        device: 'Web Portal',
+        notes: 'GPS Geofence Verified Check-out',
+      });
+      invalidateCache('pnc_attendance_logs');
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('jaago_attendance_updated'));
+      }
 
       showToast(checkOutJson.message || `Checked out successfully! Total working time: ${checkOutJson.derived?.workedDisplay || '0h 00m'}.`, 'success');
       await refreshCanonicalAttendance(user.employeeCode || user.id);
@@ -1600,7 +1662,7 @@ export default function DashboardPage() {
                   <div key={`mob-log-${log.id || log.date}-${idx}`} className={`p-3.5 rounded-2xl border space-y-1.5 ${isToday ? 'bg-primary/5 border-primary/30' : 'bg-surface/50 border-border/70'}`}>
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-bold text-xs text-foreground flex items-center space-x-1.5">
-                        <span>{log.date}</span>
+                        <span>{formatDisplayDate(log.date)}</span>
                         {isToday && (
                           <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-amber-500/20 text-amber-500">
                             Today
@@ -2474,7 +2536,7 @@ export default function DashboardPage() {
                         return (
                           <tr key={`table-log-${log.id || log.date}-${idx}`} className={`hover:bg-surface/60 transition ${isToday ? 'bg-primary/5' : ''}`}>
                             <td className="py-3 px-4 font-mono text-[11px] text-foreground font-bold flex items-center space-x-1.5">
-                              <span>{log.date}</span>
+                              <span>{formatDisplayDate(log.date)}</span>
                               {isToday && (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-amber-500/20 text-amber-500">
                                   Today

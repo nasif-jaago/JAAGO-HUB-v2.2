@@ -23,6 +23,13 @@ const PUBLIC_API_PATHS = [
   '/api/v1/attendance/auto-checkout',
   '/api/v1/attendance/me/today',
   '/api/v1/attendance/me/summary',
+  '/api/v1/attendance/logs',
+  '/api/v1/attendance/effective',
+  '/api/v1/attendance/check-in',
+  '/api/v1/attendance/check-out',
+  '/api/v1/attendance/regularization',
+  '/api/v1/attendance/geofence',
+  '/api/v1/emails/regularization-notification',
   '/health',
 ];
 

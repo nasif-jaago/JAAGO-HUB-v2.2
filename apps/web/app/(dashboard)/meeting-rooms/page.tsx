@@ -35,6 +35,7 @@ import {
   formatDayDisplay,
 } from '@/lib/meeting-rooms';
 import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
+import { formatDisplayDate } from '@/lib/date-format';
 
 export default function MeetingRoomsPage() {
   const [viewMode, setViewMode] = useState<'CARDS' | 'LIST' | 'CALENDAR'>('CARDS');
@@ -1310,7 +1311,7 @@ export default function MeetingRoomsPage() {
                       >
                         <div>
                           <span className="font-bold text-foreground">{b.title}</span>
-                          <span className="text-muted-foreground ml-2">({b.date})</span>
+                          <span className="text-muted-foreground ml-2">({formatDisplayDate(b.date)})</span>
                         </div>
                         <span className="font-mono text-amber-600 dark:text-amber-400 font-bold">
                           {b.startTime} - {b.endTime}

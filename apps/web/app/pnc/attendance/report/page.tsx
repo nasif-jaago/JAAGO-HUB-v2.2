@@ -36,6 +36,7 @@ import {
   DepartmentItem,
 } from '@/lib/supabase-organization';
 import { TimePickerInput } from '@/components/ui/time-picker-input';
+import { formatDisplayDate } from '@/lib/date-format';
 
 interface ReportRow {
   id: string;
@@ -341,7 +342,7 @@ export default function AttendanceReportPage() {
     async function loadInitialData() {
       const [emps, , leaves, branchList, deptList] = await Promise.all([
         fetchEmployeesFromSupabase(),
-        fetchAttendanceLogsFromSupabase(),
+        fetchAttendanceLogsFromSupabase(true),
         fetchLeaveRequests(),
         fetchBranchesFromSupabase(),
         fetchDepartmentsFromSupabase(),
@@ -579,7 +580,7 @@ export default function AttendanceReportPage() {
           <div className="text-center">
             <h2 className="text-base font-black text-foreground">{monthName}</h2>
             <p className="text-[11px] font-semibold text-primary">
-              Selected: {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+              Selected: {formatDisplayDate(selectedDate)}
             </p>
           </div>
 
@@ -885,7 +886,7 @@ export default function AttendanceReportPage() {
 
                     {/* Date */}
                     <td className="py-4 px-3 text-muted-foreground font-semibold">
-                      {row.date}
+                      {formatDisplayDate(row.date)}
                     </td>
 
                     {/* Check in time */}

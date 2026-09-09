@@ -45,6 +45,7 @@ import {
   GraduationCap,
 } from 'lucide-react';
 import { EmployeeToUserModal } from '@/components/admin/employee-to-user-modal';
+import { formatDisplayDate } from '@/lib/date-format';
 import {
   INITIAL_ROLES,
   RoleItem,
@@ -1151,7 +1152,7 @@ export default function UserManagementPage() {
 
                       {/* Last Login */}
                       <td className="p-4 text-muted-foreground font-mono text-[11px]">
-                        {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
+                        {user.lastLoginAt ? formatDisplayDate(user.lastLoginAt) : 'Never'}
                       </td>
 
                       {/* Create Employee Column (Before Actions) */}

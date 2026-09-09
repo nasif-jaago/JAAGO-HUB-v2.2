@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { BioTimeDevice } from '@/lib/biotime-data';
 import { FullEmployeeProfile, fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
+import { formatDisplayDate } from '@/lib/date-format';
 
 export interface BioTimeReconciledRow {
   id: string;
@@ -610,7 +611,7 @@ export default function BioTimeLogsPage() {
 
                       {/* 7. DATE */}
                       <td className="p-2.5 font-mono text-[10px] text-muted-foreground">
-                        {new Date(row.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {formatDisplayDate(row.date)}
                       </td>
 
                       {/* 8. CHECK IN (First Punch) */}

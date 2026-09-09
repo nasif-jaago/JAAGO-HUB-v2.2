@@ -17,6 +17,7 @@ import {
   LeaveType,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
+import { formatDisplayDate } from '@/lib/date-format';
 
 export default function OnLeaveCalendarPage() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequestItem[]>([]);
@@ -361,7 +362,7 @@ export default function OnLeaveCalendarPage() {
                 <div className="flex items-center space-x-2 font-mono text-[11px] text-muted-foreground">
                   <Calendar className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
                   <span>
-                    {req.fromDate} &rarr; {req.toDate}
+                    {formatDisplayDate(req.fromDate)} &rarr; {formatDisplayDate(req.toDate)}
                   </span>
                   {req.halfDayType && req.halfDayType !== 'Full Day' && (
                     <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500 text-[10px] font-bold">

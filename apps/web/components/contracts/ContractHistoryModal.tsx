@@ -11,6 +11,7 @@ import {
   EmploymentContractVersion,
   deriveContractStatus,
 } from '@/lib/contracts-engine';
+import { formatDisplayDate } from '@/lib/date-format';
 
 interface ContractHistoryModalProps {
   isOpen: boolean;
@@ -138,7 +139,7 @@ export function ContractHistoryModal({
                           Effective Date
                         </span>
                         <span className="font-bold text-amber-500 font-mono">
-                          {version.effectiveDate}
+                          {formatDisplayDate(version.effectiveDate)}
                         </span>
                       </div>
                       <div>
@@ -146,7 +147,7 @@ export function ContractHistoryModal({
                           Contract Window
                         </span>
                         <span className="font-bold text-foreground font-mono">
-                          {version.startDate} → {version.endDate || 'Permanent'}
+                          {formatDisplayDate(version.startDate)} → {version.endDate ? formatDisplayDate(version.endDate) : 'Permanent'}
                         </span>
                       </div>
                     </div>

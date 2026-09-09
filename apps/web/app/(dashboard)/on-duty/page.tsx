@@ -29,6 +29,7 @@ import {
 } from '@/lib/supabase-onduty';
 
 import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
+import { formatDisplayDate } from '@/lib/date-format';
 
 const HOURS_LIST = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 const MINUTES_LIST = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
@@ -567,17 +568,7 @@ export default function OnDutyPage() {
 
   // Helper date formatter
   const formatDateDisplay = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('en-US', {
-        month: 'short',
-        day: '2-digit',
-        year: 'numeric',
-      });
-    } catch {
-      return dateStr;
-    }
+    return formatDisplayDate(dateStr);
   };
 
   if (!mounted) {

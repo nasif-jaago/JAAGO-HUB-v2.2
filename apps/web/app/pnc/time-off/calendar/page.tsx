@@ -18,6 +18,7 @@ import {
   PublicHolidayItem,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
+import { formatDisplayDate } from '@/lib/date-format';
 import {
   useOrganizationScope,
   matchesSelectedOrg,
@@ -363,7 +364,7 @@ export default function PnCLeaveCalendarPage() {
 Department: ${lv.department || 'General'}
 Leave Category: ${lv.leaveType}
 Duration: ${isFirstHalf ? 'Half Day — First Half (Morning / AM)' : isSecondHalf ? 'Half Day — Second Half (Afternoon / PM)' : `Full Day (${lv.totalDays} Day${lv.totalDays > 1 ? 's' : ''})`}
-Date Span: ${lv.fromDate}${lv.toDate && lv.toDate !== lv.fromDate ? ` to ${lv.toDate}` : ''}
+Date Span: ${formatDisplayDate(lv.fromDate)}${lv.toDate && lv.toDate !== lv.fromDate ? ` to ${formatDisplayDate(lv.toDate)}` : ''}
 Status: ${lv.status}
 Reason: "${lv.reason}"`;
 

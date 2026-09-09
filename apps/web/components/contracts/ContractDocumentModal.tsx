@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { EmploymentContractVersion } from '@/lib/contracts-engine';
 import { FullEmployeeProfile } from '@/lib/supabase-employees';
+import { formatDisplayDate } from '@/lib/date-format';
 
 interface ContractDocumentModalProps {
   contract: EmploymentContractVersion | null;
@@ -188,16 +189,7 @@ export function ContractDocumentModal({
   };
 
   const formatDateNumeric = (dateStr?: string | null) => {
-    if (!dateStr || dateStr === '-') return '—';
-    try {
-      const d = new Date(dateStr);
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}.${month}.${year}`;
-    } catch {
-      return dateStr;
-    }
+    return formatDisplayDate(dateStr);
   };
 
   const getSalutationName = (fullName?: string | null) => {

@@ -43,6 +43,7 @@ import {
   savePolicyToSupabase,
   deletePolicyFromSupabase,
 } from '@/lib/supabase-organization';
+import { formatDisplayDate } from '@/lib/date-format';
 import { resizeAndCropImage } from '@/lib/supabase-storage';
 import { hasPermission } from '@/lib/rbac-guard';
 import { matchesSelectedOrg } from '@/lib/use-organization-scope';
@@ -1256,7 +1257,7 @@ export default function OrganizationPage() {
                         </div>
 
                         <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
-                          <span>Uploaded: {pol.uploadedAt ? new Date(pol.uploadedAt).toLocaleDateString() : '8/10/2026'}</span>
+                          <span>Uploaded: {formatDisplayDate(pol.uploadedAt || '2026-08-10')}</span>
                           <div className="flex items-center space-x-3">
                             <button
                               type="button"

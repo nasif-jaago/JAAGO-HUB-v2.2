@@ -38,6 +38,7 @@ import {
   getCurrentUserSession,
 } from '@/lib/user-profile-sync';
 import { createNotification } from '@/lib/notifications';
+import { formatDisplayDate } from '@/lib/date-format';
 
 // ── MODERN CIRCULAR PROGRESS DONUT RING ──
 function CircularProgress({
@@ -1251,7 +1252,7 @@ export default function MyLeavePage() {
                       </td>
                       <td className="py-3.5 px-4 font-mono text-[11px] text-foreground">
                         <div>
-                          {req.fromDate} &rarr; {req.toDate}
+                          {formatDisplayDate(req.fromDate)} &rarr; {formatDisplayDate(req.toDate)}
                         </div>
                         {req.halfDayType && req.halfDayType !== 'Full Day' && (
                           <span className="text-[10px] font-bold text-amber-500 font-sans">
@@ -1363,7 +1364,7 @@ export default function MyLeavePage() {
                 <div className="p-3 rounded-xl bg-surface/50 border border-border">
                   <div className="text-[10px] uppercase font-bold text-muted-foreground">Dates &amp; Shift</div>
                   <div className="font-mono font-bold text-foreground pt-0.5">
-                    {selectedRequest.fromDate} &rarr; {selectedRequest.toDate}
+                    {formatDisplayDate(selectedRequest.fromDate)} &rarr; {formatDisplayDate(selectedRequest.toDate)}
                   </div>
                   {selectedRequest.halfDayType && selectedRequest.halfDayType !== 'Full Day' && (
                     <div className="text-[10px] text-amber-500 font-bold">Shift: {selectedRequest.halfDayType}</div>

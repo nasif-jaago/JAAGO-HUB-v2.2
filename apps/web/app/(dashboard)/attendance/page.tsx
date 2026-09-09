@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
 import {
   Clock,
   Calendar,
@@ -18,9 +17,8 @@ import {
   Fingerprint,
   Layers,
   Smartphone,
-  ExternalLink,
-  FileText,
-  BarChart3,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
 import {
@@ -49,6 +47,7 @@ import {
   submitAttendanceRegularization,
   calculateShiftStandardTimes,
 } from '@/lib/supabase-regularization';
+import { formatDisplayDate, getWeekdayShort } from '@/lib/date-format';
 
 export default function AttendancePage() {
   const [, setMounted] = useState(false);
@@ -479,6 +478,79 @@ export default function AttendancePage() {
           } else {
             setElapsedSeconds(worked_seconds || 0);
           }
+
+          const todayDateStr = json.data.businessDate || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+          const inTime = json.data.check_in_time_local || new Date(first_check_in_at).toLocaleTimeString('en-US', {
+            timeZone: 'Asia/Dhaka',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+          const outTime = last_check_out_at
+            ? json.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
+                timeZone: 'Asia/Dhaka',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+              })
+            : undefined;
+
+          let deviceBadge: AttendanceLogItem['device'] = 'Web Portal';
+          if (json.data.primary_source === 'BioTime Terminal') {
+            deviceBadge = 'Device Login';
+          } else if (json.data.primary_source === 'Merged (GPS + BioTime)') {
+            deviceBadge = 'RFID Scanner';
+          }
+
+          const todayLogItem: AttendanceLogItem = {
+            id: `att-today-${todayDateStr}`,
+            employeeId: user.id || empCodeOrId,
+            employeeCode: user.employeeCode || empCodeOrId,
+            employeeName: user.fullName || 'Staff Member',
+            designation: user.jobTitle,
+            department: user.department,
+            branch: user.organization || 'JAAGO Foundation',
+            date: todayDateStr,
+            checkInTime: inTime,
+            checkOutTime: outTime,
+            status: json.data.status === 'Late' || json.data.status === 'late' ? 'Late' : 'Present',
+            device: deviceBadge,
+            primarySource: json.data.primary_source,
+            checkInSource: json.data.check_in_source,
+            checkOutSource: json.data.check_out_source,
+            sourceBreakdown: json.data.source_breakdown,
+            allPunches: json.data.effectiveRecord?.allPunches || [],
+            timestamp: new Date(first_check_in_at).toLocaleString(),
+            createdBy: user.fullName || 'Self',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            notes: json.data.primary_source === 'Merged (GPS + BioTime)'
+              ? 'Counted from earliest BioTime/GPS check-in & latest check-out'
+              : 'Attendance verified',
+          };
+
+          recordLocalAttendanceLog({
+            employeeId: todayLogItem.employeeId,
+            employeeCode: todayLogItem.employeeCode,
+            employeeName: todayLogItem.employeeName,
+            designation: todayLogItem.designation,
+            department: todayLogItem.department,
+            branch: todayLogItem.branch,
+            date: todayLogItem.date,
+            checkInTime: todayLogItem.checkInTime,
+            checkOutTime: todayLogItem.checkOutTime,
+            status: todayLogItem.status,
+            device: todayLogItem.device,
+            notes: todayLogItem.notes,
+          });
+
+          setAllLogs((prev) => {
+            const exists = prev.some((l) => l.date === todayDateStr && (l.employeeCode === todayLogItem.employeeCode || l.employeeId === todayLogItem.employeeId));
+            if (exists) {
+              return prev.map((l) => (l.date === todayDateStr ? { ...l, ...todayLogItem } : l));
+            }
+            return [todayLogItem, ...prev];
+          });
         } else {
           setFirstCheckInTimestamp(null);
           setElapsedSeconds(worked_seconds || 0);
@@ -635,26 +707,34 @@ export default function AttendancePage() {
           (reqEmpName && e.name?.toLowerCase() === reqEmpName.toLowerCase())
       );
 
-      const isNasif =
-        reqEmpCode.toUpperCase() === 'FO032507061190' ||
-        reqEmpName.toLowerCase().includes('nasif');
+      const targetSupervisorName = matchedEmp?.supervisor || user.manager || 'S M Nayeem Rahman';
+      let supervisorName = targetSupervisorName;
+      let supervisorEmail = 'nayeem.rahman@jaago.com.bd';
 
-      let supervisorName = isNasif
-        ? 'Korvi Rakshand (Founder & ED)'
-        : (matchedEmp?.supervisor || user.manager || 'HR Administrator');
-      let supervisorEmail = isNasif
-        ? 'korvi@jaago.com.bd'
-        : 'hr@jaago.com.bd';
+      const supProfile = employees.find(
+        (e) =>
+          (e.name && e.name.toLowerCase().trim() === targetSupervisorName.toLowerCase().trim()) ||
+          (e.code && e.code.toLowerCase().trim() === targetSupervisorName.toLowerCase().trim()) ||
+          (targetSupervisorName && e.name && (
+            targetSupervisorName.toLowerCase().includes(e.name.toLowerCase().trim()) ||
+            e.name.toLowerCase().includes(targetSupervisorName.toLowerCase().trim())
+          ))
+      );
 
-      if (!isNasif && matchedEmp?.supervisor) {
-        const supProfile = employees.find(
-          (e) =>
-            e.name?.toLowerCase() === matchedEmp.supervisor?.toLowerCase() ||
-            e.code?.toLowerCase() === matchedEmp.supervisor?.toLowerCase()
-        );
-        if (supProfile?.workEmail || supProfile?.personalEmail) {
-          supervisorEmail = supProfile.workEmail || supProfile.personalEmail || supervisorEmail;
-        }
+      if (supProfile?.workEmail && supProfile.workEmail.includes('@') && !supProfile.workEmail.includes('hub.jaago')) {
+        supervisorEmail = supProfile.workEmail;
+      } else if (supProfile?.personalEmail && supProfile.personalEmail.includes('@')) {
+        supervisorEmail = supProfile.personalEmail;
+      }
+
+      // Explicit fail-safes for known organizational supervisors
+      const supLower = targetSupervisorName.toLowerCase();
+      if (supLower.includes('nayeem')) {
+        supervisorEmail = 'nayeem.rahman@jaago.com.bd';
+      } else if (supLower.includes('korvi')) {
+        supervisorEmail = 'korvi@jaago.com.bd';
+      } else if (supLower.includes('nasif')) {
+        supervisorEmail = 'nasif.kamal@jaago.com.bd';
       }
 
       await submitAttendanceRegularization({
@@ -680,7 +760,7 @@ export default function AttendancePage() {
       });
 
       setRegularizations(getLocalRegularizations());
-      showToast(`Attendance regularization for ${log.date} submitted to supervisor!`, 'success');
+      showToast(`Attendance regularization for ${formatDisplayDate(log.date)} submitted to supervisor!`, 'success');
       setRegModal(null);
     } catch (err: any) {
       showToast(err?.message || 'Failed to submit regularization request', 'error');
@@ -923,6 +1003,66 @@ export default function AttendancePage() {
     );
   };
 
+  const handleExportCSV = () => {
+    if (filteredLogs.length === 0) {
+      showToast('No attendance records to export.', 'info');
+      return;
+    }
+
+    const headers = [
+      'Date',
+      'Day',
+      'Check In',
+      'Check In Source',
+      'Check Out',
+      'Check Out Source',
+      'Location',
+      'Latitude',
+      'Longitude',
+      'Working Hours',
+      'Status',
+      'Notes / Verification',
+      'Regularization Status',
+    ];
+
+    const rows = filteredLogs.map((log) => {
+      const duration = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
+      const locName = log.locationName || log.branch || 'JAAGO HQ (Banani)';
+      const lat = log.checkInLat ?? 23.7937;
+      const lng = log.checkInLng ?? 90.4066;
+      const reg = getExistingRegularization(log);
+      const regStatus = reg?.status || (isRowEligibleForRegularization(log) ? 'Eligible' : '--');
+      const note = log.notes || (log.status === 'Auto Check Out' ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified');
+
+      return [
+        `"${formatDisplayDate(log.date)}"`,
+        `"${getWeekdayShort(log.date)}"`,
+        `"${log.checkInTime || '--:--'}"`,
+        `"${log.checkInSource || log.device || 'GPS'}"`,
+        `"${log.checkOutTime || '--:--'}"`,
+        `"${log.status === 'Auto Check Out' ? 'Auto (11:30 PM)' : (log.checkOutSource || log.device || '--')}"`,
+        `"${locName.replace(/"/g, '""')}"`,
+        `"${lat.toFixed(4)}"`,
+        `"${lng.toFixed(4)}"`,
+        `"${duration}"`,
+        `"${log.status}"`,
+        `"${note.replace(/"/g, '""')}"`,
+        `"${regStatus}"`,
+      ].join(',');
+    });
+
+    // Use UTF-8 BOM (\uFEFF) for optimal Excel compatibility on Windows
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `JAAGO_Attendance_Log_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Exported ${filteredLogs.length} attendance records to CSV successfully!`);
+  };
+
   return (
     <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 space-y-6 select-none relative">
       {/* ── FLOATING TOAST NOTIFICATION ── */}
@@ -963,41 +1103,11 @@ export default function AttendancePage() {
           </div>
         </div>
 
-        {/* ── Attendance Subsystem Navigation Switcher ── */}
-        <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-card border border-border/80 shadow-xs">
-          <button
-            type="button"
-            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-primary text-primary-foreground shadow-sm cursor-default"
-          >
+        {/* ── Active View Pill ── */}
+        <div className="flex items-center">
+          <span className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-primary text-primary-foreground shadow-sm select-none">
             My Attendance &amp; Punch
-          </button>
-          <Link
-            href="/pnc/attendance/logs"
-            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface transition"
-            title="View All Employee Attendance Logs (People & Culture)"
-          >
-            <FileText className="h-3.5 w-3.5" />
-            <span>Org Logs</span>
-            <ExternalLink className="h-3 w-3 opacity-60" />
-          </Link>
-          <Link
-            href="/pnc/attendance/report"
-            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface transition"
-            title="Attendance Audit & Shift Report"
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            <span>Shift Report</span>
-            <ExternalLink className="h-3 w-3 opacity-60" />
-          </Link>
-          <Link
-            href="/pnc/biotime"
-            className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-surface transition"
-            title="BioTime Biometric Machine Sync"
-          >
-            <Fingerprint className="h-3.5 w-3.5 text-amber-500" />
-            <span>BioTime Sync</span>
-            <ExternalLink className="h-3 w-3 opacity-60" />
-          </Link>
+          </span>
         </div>
       </div>
 
@@ -1149,17 +1259,45 @@ export default function AttendancePage() {
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════ */}
-      {/* ── 5. ATTENDANCE LOGS TABLE (WITH GPS COORDINATES & REGULARIZATION) ─ */}
+      {/* ── 5. ATTENDANCE LOGS TABLE (EXCEL SPREADSHEET VIEW) ──────────────── */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-card border border-border/80 rounded-3xl overflow-hidden shadow-md">
+      <div className="bg-card border border-border/80 rounded-2xl overflow-hidden shadow-sm">
+        {/* ── EXCEL SPREADSHEET TOOLBAR ── */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-surface/70 border-b border-border/80 text-xs">
+          <div className="flex items-center space-x-2.5">
+            <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 font-bold text-[11px] select-none">
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+              <span>Spreadsheet View</span>
+            </div>
+            <span className="text-muted-foreground font-medium text-xs">
+              Showing <strong className="text-foreground font-bold">{filteredLogs.length}</strong> record{filteredLogs.length !== 1 ? 's' : ''}
+              {selectedIds.length > 0 && (
+                <span className="ml-1.5 text-amber-500 font-bold">({selectedIds.length} selected)</span>
+              )}
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-surface hover:bg-surface/80 border border-border text-foreground font-bold text-xs shadow-2xs transition cursor-pointer active:scale-95"
+              title="Download attendance records as Excel-compatible CSV file"
+            >
+              <Download className="h-3.5 w-3.5 text-emerald-500" />
+              <span>Export CSV</span>
+            </button>
+          </div>
+        </div>
+
         {viewGrouping === 'month-grouped' ? (
           // Month-wise Grouped View
           <div className="divide-y divide-border/60">
             {monthGroupedLogs.length > 0 ? (
               monthGroupedLogs.map(([monthKey, logsInMonth]) => (
-                <div key={monthKey} className="p-5 space-y-3">
+                <div key={monthKey} className="p-4 space-y-2.5">
                   {/* Month Header Banner */}
-                  <div className="flex items-center justify-between bg-surface/50 border border-border px-4 py-2.5 rounded-2xl">
+                  <div className="flex items-center justify-between bg-surface/50 border border-border px-3.5 py-2 rounded-xl">
                     <div className="flex items-center space-x-2">
                       <Calendar className="h-4 w-4 text-amber-500" />
                       <span className="font-extrabold text-sm text-foreground">
@@ -1178,19 +1316,19 @@ export default function AttendancePage() {
                   </div>
 
                   {/* Month Subtable */}
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto rounded-xl border border-border/70">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="border-b border-border/60 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                          <th className="py-3 px-3">Date</th>
-                          <th className="py-3 px-3">Check In</th>
-                          <th className="py-3 px-3">Check Out</th>
-                          <th className="py-3 px-3">GPS Location &amp; Coordinates</th>
-                          <th className="py-3 px-3">Working Hours</th>
-                          <th className="py-3 px-3">Status</th>
-                          <th className="py-3 px-3">Notes / Verification</th>
-                          <th className="py-3 px-3 text-center">Regularization</th>
-                          <th className="py-3 px-3 text-right">Actions</th>
+                        <tr className="border-b border-border/80 bg-surface/80 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">
+                          <th className="py-2 px-2.5 w-[120px] whitespace-nowrap border-r border-border/50">Date &amp; Day</th>
+                          <th className="py-2 px-2.5 w-[100px] whitespace-nowrap border-r border-border/50">Check In</th>
+                          <th className="py-2 px-2.5 w-[100px] whitespace-nowrap border-r border-border/50">Check Out</th>
+                          <th className="py-2 px-2.5 min-w-[160px] border-r border-border/50">GPS Location &amp; Coordinates</th>
+                          <th className="py-2 px-2.5 w-[90px] whitespace-nowrap border-r border-border/50">Working Hours</th>
+                          <th className="py-2 px-2.5 w-[95px] whitespace-nowrap border-r border-border/50">Status</th>
+                          <th className="py-2 px-2.5 w-[150px] max-w-[160px] whitespace-nowrap border-r border-border/50">Notes / Verification</th>
+                          <th className="py-2 px-2.5 w-[110px] whitespace-nowrap text-center border-r border-border/50">Regularization</th>
+                          <th className="py-2 px-2.5 w-[85px] whitespace-nowrap text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40 font-medium">
@@ -1229,9 +1367,9 @@ export default function AttendancePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-border/70 bg-surface/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                <tr className="border-b border-border/80 bg-surface/80 text-[10px] font-bold uppercase tracking-wider text-muted-foreground select-none">
                   {isSuperAdmin && (
-                    <th className="py-4 px-4 w-10 text-center">
+                    <th className="py-2 px-2.5 w-9 text-center border-r border-border/50">
                       <input
                         type="checkbox"
                         checked={
@@ -1243,18 +1381,18 @@ export default function AttendancePage() {
                       />
                     </th>
                   )}
-                  <th className="py-4 px-4">Date &amp; Day</th>
-                  <th className="py-4 px-3">Check In</th>
-                  <th className="py-4 px-3">Check Out</th>
-                  <th className="py-4 px-4">GPS Location &amp; Coordinates</th>
-                  <th className="py-4 px-3">Working Hours</th>
-                  <th className="py-4 px-3">Status</th>
-                  <th className="py-4 px-4">Notes / Verification</th>
-                  <th className="py-4 px-4 text-center">Regularization</th>
-                  <th className="py-4 px-4 text-right">Actions</th>
+                  <th className="py-2 px-2.5 w-[120px] whitespace-nowrap border-r border-border/50">Date &amp; Day</th>
+                  <th className="py-2 px-2.5 w-[100px] whitespace-nowrap border-r border-border/50">Check In</th>
+                  <th className="py-2 px-2.5 w-[100px] whitespace-nowrap border-r border-border/50">Check Out</th>
+                  <th className="py-2 px-2.5 min-w-[160px] border-r border-border/50">GPS Location &amp; Coordinates</th>
+                  <th className="py-2 px-2.5 w-[90px] whitespace-nowrap border-r border-border/50">Working Hours</th>
+                  <th className="py-2 px-2.5 w-[95px] whitespace-nowrap border-r border-border/50">Status</th>
+                  <th className="py-2 px-2.5 w-[150px] max-w-[160px] whitespace-nowrap border-r border-border/50">Notes / Verification</th>
+                  <th className="py-2 px-2.5 w-[110px] whitespace-nowrap text-center border-r border-border/50">Regularization</th>
+                  <th className="py-2 px-2.5 w-[85px] whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/50 font-medium">
+              <tbody className="divide-y divide-border/40 font-medium">
                 {filteredLogs.length > 0 ? (
                   filteredLogs.map((log) => {
                     const duration = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
@@ -1268,11 +1406,11 @@ export default function AttendancePage() {
                     return (
                       <tr
                         key={log.id}
-                        className="hover:bg-surface/50 transition duration-150 group"
+                        className={`hover:bg-amber-500/[0.04] dark:hover:bg-amber-500/[0.06] transition-colors duration-100 border-b border-border/40 group ${isToday ? 'bg-primary/5' : 'odd:bg-background even:bg-surface/20'}`}
                       >
                         {/* Checkbox (Super Admin only) */}
                         {isSuperAdmin && (
-                          <td className="py-4 px-4 text-center">
+                          <td className="py-1.5 px-2.5 text-center border-r border-border/30">
                             <input
                               type="checkbox"
                               checked={selectedIds.includes(log.id)}
@@ -1283,41 +1421,35 @@ export default function AttendancePage() {
                         )}
 
                         {/* Date & Day */}
-                        <td className="py-4 px-4">
+                        <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
                           <div className="flex items-center space-x-1.5">
-                            <span className="font-mono font-bold text-foreground text-xs sm:text-[13px]">
-                              {log.date}
+                            <span className="font-mono tabular-nums font-bold text-foreground text-xs">
+                              {formatDisplayDate(log.date)}
                             </span>
                             {isToday && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                              <span className="px-1.5 py-0.2 rounded text-[8.5px] font-black uppercase bg-amber-500/20 text-amber-500 border border-amber-500/30">
                                 Today
                               </span>
                             )}
                           </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {(() => {
-                              try {
-                                return new Date(log.date).toLocaleDateString('en-US', { weekday: 'short' });
-                              } catch {
-                                return '';
-                              }
-                            })()}
+                          <div className="text-[10px] text-muted-foreground font-medium">
+                            {getWeekdayShort(log.date)}
                           </div>
                         </td>
 
                         {/* Check In Time & Source */}
-                        <td className="py-4 px-3">
-                          <div className="font-mono font-bold text-emerald-500 text-xs sm:text-[13px]">
+                        <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
+                          <div className="font-mono tabular-nums font-bold text-emerald-500 text-xs">
                             {log.checkInTime || '--:--'}
                           </div>
                           <div className="flex items-center gap-1 mt-0.5">
                             {log.checkInSource === 'BIOTIME' || log.device === 'BioTime Terminal' ? (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
                                 <Fingerprint className="w-2.5 h-2.5" />
                                 BioTime
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-muted text-muted-foreground border border-border">
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-muted text-muted-foreground border border-border">
                                 <Smartphone className="w-2.5 h-2.5" />
                                 {log.device || 'GPS'}
                               </span>
@@ -1326,7 +1458,7 @@ export default function AttendancePage() {
                               <button
                                 type="button"
                                 onClick={() => setPunchAuditModal({ isOpen: true, log })}
-                                className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 border border-amber-500/20 cursor-pointer"
+                                className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8.5px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25 border border-amber-500/20 cursor-pointer"
                                 title={`View all ${log.allPunches.length} punches`}
                               >
                                 <Layers className="w-2.5 h-2.5" />
@@ -1337,22 +1469,22 @@ export default function AttendancePage() {
                         </td>
 
                         {/* Check Out Time & Source */}
-                        <td className="py-4 px-3">
-                          <div className="font-mono font-bold text-rose-500 text-xs sm:text-[13px]">
+                        <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
+                          <div className="font-mono tabular-nums font-bold text-rose-500 text-xs">
                             {log.checkOutTime || (isToday && isCheckedIn ? 'In Progress' : '--:--')}
                           </div>
                           <div className="flex items-center gap-1 mt-0.5">
                             {log.status === 'Auto Check Out' || log.isAutoCheckout ? (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
                                 Auto (11:30 PM)
                               </span>
                             ) : log.checkOutSource?.toUpperCase() === 'BIOTIME' ? (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
                                 <Fingerprint className="w-2.5 h-2.5" />
                                 BioTime
                               </span>
                             ) : log.checkOutTime ? (
-                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-muted text-muted-foreground border border-border">
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-muted text-muted-foreground border border-border">
                                 <Smartphone className="w-2.5 h-2.5" />
                                 {log.device || 'GPS'}
                               </span>
@@ -1363,19 +1495,19 @@ export default function AttendancePage() {
                         </td>
 
                         {/* GPS Coordinate Location Name */}
-                        <td className="py-4 px-4">
-                          <div className="flex items-start space-x-2">
-                            <MapPin className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                            <div className="space-y-0.5">
-                              <div className="font-bold text-foreground text-xs sm:text-[13px]">
+                        <td className="py-1.5 px-2.5 border-r border-border/30">
+                          <div className="flex items-start space-x-1.5 min-w-0">
+                            <MapPin className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <div className="font-bold text-foreground text-xs truncate max-w-[170px]" title={locName}>
                                 {locName}
                               </div>
-                              <div className="font-mono text-[10px] text-muted-foreground flex items-center space-x-1.5">
-                                <span>Lat: {lat.toFixed(4)}, Lng: {lng.toFixed(4)}</span>
+                              <div className="font-mono tabular-nums text-[10px] text-muted-foreground flex items-center space-x-1 whitespace-nowrap">
+                                <span>Lat: {lat.toFixed(3)}, Lng: {lng.toFixed(3)}</span>
                                 <button
                                   type="button"
                                   onClick={() => setGpsDetailModal({ isOpen: true, log })}
-                                  className="text-primary hover:underline font-bold ml-1 cursor-pointer"
+                                  className="text-primary hover:underline font-bold text-[10px] ml-1 cursor-pointer"
                                   title="View GPS Map Audit"
                                 >
                                   View
@@ -1386,8 +1518,8 @@ export default function AttendancePage() {
                         </td>
 
                         {/* Working Hours Duration */}
-                        <td className="py-4 px-3">
-                          <div className="font-mono font-extrabold text-foreground text-xs">
+                        <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
+                          <div className="font-mono tabular-nums font-extrabold text-foreground text-xs">
                             {isToday && isCheckedIn ? formatTime(elapsedSeconds) : duration}
                           </div>
                           <div className="text-[10px] text-muted-foreground">
@@ -1396,60 +1528,64 @@ export default function AttendancePage() {
                         </td>
 
                         {/* Status Badge */}
-                        <td className="py-4 px-3">
+                        <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
                           {log.status === 'Present' ? (
-                            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[11px] font-black">
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black">
                               Present
                             </span>
                           ) : log.status === 'Late' ? (
-                            <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[11px] font-black">
+                            <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black">
                               Late {log.lateByMin ? `+${log.lateByMin}m` : ''}
                             </span>
                           ) : log.status === 'Auto Check Out' || log.isAutoCheckout ? (
-                            <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[11px] font-black">
+                            <span className="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px] font-black">
                               Auto Check Out
                             </span>
                           ) : log.status === 'Absent' ? (
-                            <span className="px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-500 border border-rose-500/30 text-[11px] font-black">
+                            <span className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-500 border border-rose-500/30 text-[10px] font-black">
                               Absent
                             </span>
                           ) : log.status === 'Leave' ? (
-                            <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[11px] font-black">
+                            <span className="px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[10px] font-black">
                               Leave
                             </span>
                           ) : (
-                            <span className="px-2.5 py-1 rounded-lg bg-surface text-muted-foreground border border-border text-[11px] font-bold">
+                            <span className="px-2 py-0.5 rounded-md bg-surface text-muted-foreground border border-border text-[10px] font-bold">
                               {log.status}
                             </span>
                           )}
                         </td>
 
-                        {/* Notes / Verification */}
-                        <td className="py-4 px-4">
+                        {/* Notes / Verification (Auto-adjusted & reduced width) */}
+                        <td className="py-1.5 px-2.5 w-[150px] max-w-[160px] border-r border-border/30">
                           {isOnDutyRecord(log) ? (
-                            <div className="flex items-center space-x-1.5">
-                              <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[11px] font-black tracking-wide shadow-xs">
-                                <Radio className="h-3 w-3 text-amber-500 animate-pulse" />
-                                <span>On Duty</span>
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="text-xs text-muted-foreground max-w-xs truncate">
-                              {log.notes || (log.status === 'Auto Check Out' ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified')}
-                            </div>
-                          )}
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold tracking-wide whitespace-nowrap shadow-2xs">
+                              <Radio className="h-2.5 w-2.5 text-amber-500 animate-pulse" />
+                              <span>On Duty</span>
+                            </span>
+                          ) : (() => {
+                            const noteText = log.notes || (log.status === 'Auto Check Out' ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified');
+                            return (
+                              <div
+                                className="text-[11px] text-muted-foreground truncate max-w-[145px] cursor-help"
+                                title={noteText}
+                              >
+                                {noteText}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* ── REGULARIZATION COLUMN ── */}
-                        <td className="py-4 px-4 text-center">
+                        <td className="py-1.5 px-2.5 text-center whitespace-nowrap border-r border-border/30">
                           {(() => {
                             if (existingReg?.status === 'Approved') {
                               return (
                                 <span
-                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[11px] font-black tracking-wide shadow-xs"
+                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black tracking-wide shadow-2xs"
                                   title={`Regularized (Approved by ${existingReg.approvedBy || 'Supervisor'}): ${existingReg.reason}`}
                                 >
-                                  <CheckCircle2 className="h-3.5 w-3.5 mr-0.5 text-emerald-500" />
+                                  <CheckCircle2 className="h-3 w-3 mr-0.5 text-emerald-500" />
                                   <span>R.Approved</span>
                                 </span>
                               );
@@ -1458,10 +1594,10 @@ export default function AttendancePage() {
                             if (existingReg?.status === 'Pending') {
                               return (
                                 <span
-                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[11px] font-black tracking-wide shadow-xs"
+                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-2xs"
                                   title="Regularization request submitted and pending supervisor review"
                                 >
-                                  <Clock className="h-3.5 w-3.5 mr-0.5 animate-spin text-amber-500" />
+                                  <Clock className="h-3 w-3 mr-0.5 animate-spin text-amber-500" />
                                   <span>Pending</span>
                                 </span>
                               );
@@ -1472,17 +1608,17 @@ export default function AttendancePage() {
                                 <button
                                   type="button"
                                   onClick={() => handleOpenRegularizationModal(log)}
-                                  className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[10px] font-black transition cursor-pointer active:scale-95 shadow-xs"
+                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[9.5px] font-black transition cursor-pointer active:scale-95 shadow-2xs"
                                   title={`Refused by ${existingReg.approvedBy || 'Supervisor'}${existingReg.refusalNote ? `: "${existingReg.refusalNote}"` : ''} - Click to re-apply`}
                                 >
-                                  <XCircle className="h-3.5 w-3.5 mr-0.5 text-rose-500 group-hover:text-white" />
+                                  <XCircle className="h-3 w-3 mr-0.5 text-rose-500 group-hover:text-white" />
                                   <span>R.Refused</span>
                                 </button>
                               );
                             }
 
                             if (!eligibleForReg) {
-                              return <span className="text-muted-foreground/30 font-bold">--</span>;
+                              return <span className="text-muted-foreground/30 font-bold text-xs">--</span>;
                             }
 
                             // If eligible and not regularized yet: Show Regularize button
@@ -1490,7 +1626,7 @@ export default function AttendancePage() {
                               <button
                                 type="button"
                                 onClick={() => handleOpenRegularizationModal(log)}
-                                className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[11px] font-black tracking-wide shadow-xs transition duration-150 cursor-pointer inline-flex items-center space-x-1.5 active:scale-95"
+                                className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[10.5px] font-black tracking-wide shadow-2xs transition duration-150 cursor-pointer inline-flex items-center space-x-1 active:scale-95"
                                 title="Click to regularize check-in/out times based on shift"
                               >
                                 <span>Regularize</span>
@@ -1500,26 +1636,26 @@ export default function AttendancePage() {
                         </td>
 
                         {/* Actions Column */}
-                        <td className="py-4 px-4 text-right">
-                          <div className="flex items-center justify-end space-x-1">
+                        <td className="py-1.5 px-2.5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end space-x-0.5">
                             {/* View Punch Breakdown / Audit */}
                             <button
                               type="button"
                               onClick={() => setPunchAuditModal({ isOpen: true, log })}
-                              className="p-1.5 rounded-lg hover:bg-cyan-500/10 text-muted-foreground hover:text-cyan-600 transition cursor-pointer"
+                              className="p-1 rounded-md hover:bg-cyan-500/10 text-muted-foreground hover:text-cyan-600 transition cursor-pointer"
                               title="View Multi-Source Punch Audit (BioTime + GPS)"
                             >
-                              <Fingerprint className="h-4 w-4" />
+                              <Fingerprint className="h-3.5 w-3.5" />
                             </button>
 
                             {/* View GPS Details - Available to all */}
                             <button
                               type="button"
                               onClick={() => setGpsDetailModal({ isOpen: true, log })}
-                              className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-primary transition cursor-pointer"
+                              className="p-1 rounded-md hover:bg-surface text-muted-foreground hover:text-primary transition cursor-pointer"
                               title="View GPS details"
                             >
-                              <Globe className="h-4 w-4" />
+                              <Globe className="h-3.5 w-3.5" />
                             </button>
 
                             {/* Edit & Delete - Restricted to Super Admin */}
@@ -1528,15 +1664,15 @@ export default function AttendancePage() {
                                 <button
                                   type="button"
                                   onClick={() => handleOpenEditModal(log)}
-                                  className="p-1.5 rounded-lg hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
+                                  className="p-1 rounded-md hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
                                   title="Edit Record (Super Admin)"
                                 >
                                   <Pencil className="h-3.5 w-3.5" />
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleDeleteRecord(log.id, `${log.employeeName} (${log.date})`)}
-                                  className="p-1.5 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition cursor-pointer"
+                                  onClick={() => handleDeleteRecord(log.id, `${log.employeeName} (${formatDisplayDate(log.date)})`)}
+                                  className="p-1 rounded-md hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition cursor-pointer"
                                   title="Delete Record (Super Admin Only)"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -1595,7 +1731,7 @@ export default function AttendancePage() {
             <div className="flex items-center justify-between p-3 rounded-2xl bg-surface/70 border border-border text-xs">
               <div>
                 <span className="text-[10px] uppercase font-bold text-muted-foreground block">Date</span>
-                <span className="font-mono font-bold text-foreground">{regModal.log.date}</span>
+                <span className="font-mono font-bold text-foreground">{formatDisplayDate(regModal.log.date)}</span>
               </div>
               <div className="text-right">
                 <span className="text-[10px] uppercase font-bold text-muted-foreground block">Assigned Shift</span>
@@ -1723,7 +1859,20 @@ export default function AttendancePage() {
               {/* Assigned Supervisor Info */}
               <div className="p-2.5 rounded-xl bg-surface/50 border border-border/80 text-[11px] text-muted-foreground flex items-center justify-between">
                 <span>Direct Supervisor:</span>
-                <strong className="text-foreground">{user.manager || 'Founder & Executive Director'}</strong>
+                <strong className="text-foreground">
+                  {(() => {
+                    const log = regModal?.log;
+                    const emp = log
+                      ? employees.find(
+                          (e) =>
+                            (log.employeeCode && e.code?.toLowerCase() === log.employeeCode.toLowerCase()) ||
+                            (log.employeeId && e.id === log.employeeId) ||
+                            (log.employeeName && e.name?.toLowerCase() === log.employeeName.toLowerCase())
+                        )
+                      : null;
+                    return emp?.supervisor || user.manager || 'S M Nayeem Rahman';
+                  })()}
+                </strong>
               </div>
 
               {/* Action Buttons */}
@@ -1794,7 +1943,7 @@ export default function AttendancePage() {
               </div>
               <div className="p-3 rounded-xl bg-surface/60 border border-border">
                 <div className="text-[10px] font-bold text-muted-foreground uppercase">Business Date</div>
-                <div className="font-bold font-mono text-foreground pt-0.5">{gpsDetailModal.log.date}</div>
+                <div className="font-bold font-mono text-foreground pt-0.5">{formatDisplayDate(gpsDetailModal.log.date)}</div>
               </div>
               <div className="p-3 rounded-xl bg-surface/60 border border-border">
                 <div className="text-[10px] font-bold text-muted-foreground uppercase">Latitude Coordinate</div>
@@ -2248,36 +2397,43 @@ function AttendanceLogRow({
   const lng = log.checkInLng ?? 90.4066;
 
   return (
-    <tr className="hover:bg-surface/50 transition duration-150">
-      <td className="py-3.5 px-3">
-        <span className="font-mono font-bold text-foreground">{log.date}</span>
+    <tr className="hover:bg-amber-500/[0.04] dark:hover:bg-amber-500/[0.06] transition-colors duration-100 border-b border-border/40 odd:bg-background even:bg-surface/20">
+      <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
+        <span className="font-mono tabular-nums font-bold text-foreground text-xs">{formatDisplayDate(log.date)}</span>
+        <div className="text-[10px] text-muted-foreground font-medium">
+          {getWeekdayShort(log.date)}
+        </div>
       </td>
-      <td className="py-3.5 px-3">
-        <div className="font-mono font-bold text-emerald-500">{log.checkInTime || '--:--'}</div>
+      <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
+        <div className="font-mono tabular-nums font-bold text-emerald-500 text-xs">{log.checkInTime || '--:--'}</div>
         <div className="flex items-center gap-1 mt-0.5">
           {log.checkInSource === 'BIOTIME' || log.device === 'BioTime Terminal' ? (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
               <Fingerprint className="w-2.5 h-2.5" />
               BioTime
             </span>
           ) : (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-muted text-muted-foreground border border-border">
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-muted text-muted-foreground border border-border">
               <Smartphone className="w-2.5 h-2.5" />
               {log.device || 'GPS'}
             </span>
           )}
         </div>
       </td>
-      <td className="py-3.5 px-3">
-        <div className="font-mono font-bold text-rose-500">{log.checkOutTime || '--:--'}</div>
+      <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
+        <div className="font-mono tabular-nums font-bold text-rose-500 text-xs">{log.checkOutTime || '--:--'}</div>
         <div className="flex items-center gap-1 mt-0.5">
-          {log.checkOutSource?.toUpperCase() === 'BIOTIME' ? (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+          {log.status === 'Auto Check Out' || log.isAutoCheckout ? (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              Auto (11:30 PM)
+            </span>
+          ) : log.checkOutSource?.toUpperCase() === 'BIOTIME' ? (
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
               <Fingerprint className="w-2.5 h-2.5" />
               BioTime
             </span>
           ) : log.checkOutTime ? (
-            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-muted text-muted-foreground border border-border">
+            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-muted text-muted-foreground border border-border">
               <Smartphone className="w-2.5 h-2.5" />
               {log.device || 'GPS'}
             </span>
@@ -2286,17 +2442,36 @@ function AttendanceLogRow({
           )}
         </div>
       </td>
-      <td className="py-3.5 px-3">
-        <div className="flex items-center space-x-1.5">
-          <MapPin className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-          <span className="font-bold text-foreground">{locName}</span>
-          <span className="font-mono text-[10px] text-muted-foreground">({lat.toFixed(3)}, {lng.toFixed(3)})</span>
+      <td className="py-1.5 px-2.5 border-r border-border/30">
+        <div className="flex items-start space-x-1.5 min-w-0">
+          <MapPin className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+          <div className="min-w-0">
+            <div className="font-bold text-foreground text-xs truncate max-w-[170px]" title={locName}>
+              {locName}
+            </div>
+            <div className="font-mono tabular-nums text-[10px] text-muted-foreground flex items-center space-x-1 whitespace-nowrap">
+              <span>Lat: {lat.toFixed(3)}, Lng: {lng.toFixed(3)}</span>
+              <button
+                type="button"
+                onClick={() => onViewGps(log)}
+                className="text-primary hover:underline font-bold text-[10px] ml-1 cursor-pointer"
+                title="View GPS Map Audit"
+              >
+                View
+              </button>
+            </div>
+          </div>
         </div>
       </td>
-      <td className="py-3.5 px-3 font-mono font-bold text-foreground">
-        {duration}
+      <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
+        <div className="font-mono tabular-nums font-extrabold text-foreground text-xs">
+          {duration}
+        </div>
+        <div className="text-[10px] text-muted-foreground">
+          Target: 8.0h
+        </div>
       </td>
-      <td className="py-3.5 px-3">
+      <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
         {log.status === 'Present' ? (
           <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black">
             Present
@@ -2324,29 +2499,35 @@ function AttendanceLogRow({
         )}
       </td>
       {/* Notes / Verification */}
-      <td className="py-3.5 px-3">
+      <td className="py-1.5 px-2.5 w-[150px] max-w-[160px] border-r border-border/30">
         {isOnDuty ? (
-          <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-xs">
+          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold tracking-wide whitespace-nowrap shadow-2xs">
             <Radio className="h-2.5 w-2.5 text-amber-500 animate-pulse" />
             <span>On Duty</span>
           </span>
-        ) : (
-          <span className="text-[10px] text-muted-foreground truncate block max-w-[140px]">
-            {log.notes || (log.status === 'Auto Check Out' ? 'Auto check-out' : 'GPS Geofence Verified')}
-          </span>
-        )}
+        ) : (() => {
+          const noteText = log.notes || (log.status === 'Auto Check Out' ? 'Auto check-out generated after 11:30 PM' : 'GPS Geofence Verified');
+          return (
+            <div
+              className="text-[11px] text-muted-foreground truncate max-w-[145px] cursor-help"
+              title={noteText}
+            >
+              {noteText}
+            </div>
+          );
+        })()}
       </td>
 
       {/* Regularization Column */}
-      <td className="py-3.5 px-3 text-center">
+      <td className="py-1.5 px-2.5 text-center whitespace-nowrap border-r border-border/30">
         {(() => {
           if (existingReg?.status === 'Approved') {
             return (
               <span
-                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black"
+                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black tracking-wide shadow-2xs"
                 title={`Regularized (Approved by ${existingReg.approvedBy || 'Supervisor'}): ${existingReg.reason}`}
               >
-                <CheckCircle2 className="h-2.5 w-2.5" />
+                <CheckCircle2 className="h-3 w-3 mr-0.5 text-emerald-500" />
                 <span>R.Approved</span>
               </span>
             );
@@ -2355,10 +2536,10 @@ function AttendanceLogRow({
           if (existingReg?.status === 'Pending') {
             return (
               <span
-                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black"
+                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-2xs"
                 title="Regularization request submitted and pending supervisor review"
               >
-                <Clock className="h-2.5 w-2.5 animate-spin" />
+                <Clock className="h-3 w-3 mr-0.5 animate-spin text-amber-500" />
                 <span>Pending</span>
               </span>
             );
@@ -2369,24 +2550,25 @@ function AttendanceLogRow({
               <button
                 type="button"
                 onClick={() => onRegularize(log)}
-                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[9px] font-black transition cursor-pointer"
+                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[9.5px] font-black transition cursor-pointer active:scale-95 shadow-2xs"
                 title={`Refused by ${existingReg.approvedBy || 'Supervisor'}${existingReg.refusalNote ? `: "${existingReg.refusalNote}"` : ''} - Click to re-apply`}
               >
-                <XCircle className="h-2.5 w-2.5 mr-0.5 text-rose-500" />
+                <XCircle className="h-3 w-3 mr-0.5 text-rose-500 group-hover:text-white" />
                 <span>R.Refused</span>
               </button>
             );
           }
 
           if (!isEligibleForReg) {
-            return <span className="text-muted-foreground/30 font-bold">--</span>;
+            return <span className="text-muted-foreground/30 font-bold text-xs">--</span>;
           }
 
           return (
             <button
               type="button"
               onClick={() => onRegularize(log)}
-              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-xs transition cursor-pointer inline-flex items-center space-x-1 active:scale-95"
+              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[10.5px] font-black tracking-wide shadow-2xs transition duration-150 cursor-pointer inline-flex items-center space-x-1 active:scale-95"
+              title="Click to regularize check-in/out times based on shift"
             >
               <span>Regularize</span>
             </button>
@@ -2395,15 +2577,15 @@ function AttendanceLogRow({
       </td>
 
       {/* Actions */}
-      <td className="py-3.5 px-3 text-right">
-        <div className="flex items-center justify-end space-x-1">
+      <td className="py-1.5 px-2.5 text-right whitespace-nowrap">
+        <div className="flex items-center justify-end space-x-0.5">
           {/* View Punch Breakdown / Audit */}
           {onViewPunches && (
             <button
               type="button"
               onClick={() => onViewPunches(log)}
               className="p-1 rounded-md hover:bg-cyan-500/10 text-muted-foreground hover:text-cyan-600 transition cursor-pointer"
-              title="View Multi-Source Punch Audit"
+              title="View Multi-Source Punch Audit (BioTime + GPS)"
             >
               <Fingerprint className="h-3.5 w-3.5" />
             </button>
@@ -2414,7 +2596,7 @@ function AttendanceLogRow({
             type="button"
             onClick={() => onViewGps(log)}
             className="p-1 rounded-md hover:bg-surface text-muted-foreground hover:text-primary transition cursor-pointer"
-            title="View GPS Coordinates"
+            title="View GPS details"
           >
             <Globe className="h-3.5 w-3.5" />
           </button>
@@ -2428,15 +2610,15 @@ function AttendanceLogRow({
                 className="p-1 rounded-md hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
                 title="Edit Record (Super Admin)"
               >
-                <Pencil className="h-3 w-3" />
+                <Pencil className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
-                onClick={() => onDelete(log.id, `${log.employeeName} (${log.date})`)}
+                onClick={() => onDelete(log.id, `${log.employeeName} (${formatDisplayDate(log.date)})`)}
                 className="p-1 rounded-md hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 transition cursor-pointer"
                 title="Delete Record (Super Admin Only)"
               >
-                <Trash2 className="h-3 w-3" />
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             </>
           )}

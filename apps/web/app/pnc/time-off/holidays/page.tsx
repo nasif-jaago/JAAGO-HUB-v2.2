@@ -23,6 +23,7 @@ import {
   savePublicHoliday,
   deletePublicHoliday,
 } from '@/lib/supabase-time-off';
+import { formatDisplayDate } from '@/lib/date-format';
 import {
   fetchDepartmentsFromSupabase,
   DepartmentItem,
@@ -409,7 +410,7 @@ export default function PublicHolidaysPage() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 font-mono text-foreground font-semibold">
-                        {h.date} {h.endDate ? `→ ${h.endDate}` : ''}
+                        {formatDisplayDate(h.date)} {h.endDate ? `→ ${formatDisplayDate(h.endDate)}` : ''}
                       </td>
                       <td className="py-3.5 px-4 font-bold text-foreground">
                         {h.totalDays} {h.totalDays === 1 ? 'day' : 'days'}

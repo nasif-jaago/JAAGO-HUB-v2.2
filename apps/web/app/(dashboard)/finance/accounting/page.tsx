@@ -12,6 +12,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { EnterpriseTable, ColumnDef } from '@jaago/ui';
+import { formatDisplayDate } from '@/lib/date-format';
 
 interface JournalLine {
   accountId: string;
@@ -137,7 +138,7 @@ export default function FinanceAccountingPage() {
     {
       key: 'date',
       header: 'Date',
-      accessor: (row) => <span className="font-mono text-xs text-muted-foreground">{row.date}</span>,
+      accessor: (row) => <span className="font-mono text-xs text-muted-foreground">{formatDisplayDate(row.date)}</span>,
     },
     {
       key: 'memo',

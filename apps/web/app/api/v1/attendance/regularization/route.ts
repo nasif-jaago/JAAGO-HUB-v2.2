@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       let resolvedSupervisorName = itemData.supervisorName;
       let resolvedSupervisorEmail = itemData.supervisorEmail;
 
-      if (!resolvedSupervisorName || !resolvedSupervisorEmail) {
+      if (!resolvedSupervisorName || !resolvedSupervisorEmail || resolvedSupervisorEmail.includes('hub.jaago')) {
         if (itemData.employeeCode || itemData.employeeId) {
           try {
             const supabase = getSupabase();
@@ -78,12 +78,32 @@ export async function POST(request: NextRequest) {
                   .limit(1)
                   .maybeSingle();
                 if (sup?.work_email || sup?.personal_email) {
-                  resolvedSupervisorEmail = sup.work_email || sup.personal_email;
+                  const candidate = sup.work_email || sup.personal_email;
+                  if (candidate && !candidate.includes('hub.jaago')) {
+                    resolvedSupervisorEmail = candidate;
+                  }
                 }
               }
             }
           } catch {}
         }
+      }
+
+      // Explicit fail-safes for known organizational executives
+      const supLower = (resolvedSupervisorName || '').toLowerCase();
+      if (supLower.includes('nayeem')) {
+        resolvedSupervisorEmail = 'nayeem.rahman@jaago.com.bd';
+      } else if (supLower.includes('korvi')) {
+        resolvedSupervisorEmail = 'korvi@jaago.com.bd';
+      } else if (supLower.includes('nasif')) {
+        resolvedSupervisorEmail = 'nasif.kamal@jaago.com.bd';
+      }
+
+      if (!resolvedSupervisorName) {
+        resolvedSupervisorName = 'S M Nayeem Rahman';
+      }
+      if (!resolvedSupervisorEmail || resolvedSupervisorEmail.includes('hub.jaago')) {
+        resolvedSupervisorEmail = 'nayeem.rahman@jaago.com.bd';
       }
 
       const item: ServerRegularizationItem = {
@@ -106,8 +126,8 @@ export async function POST(request: NextRequest) {
         calculatedHours: itemData.calculatedHours || '8.0h',
         reason: itemData.reason,
         notes: itemData.notes,
-        supervisorName: resolvedSupervisorName || 'Nasif Kamal',
-        supervisorEmail: resolvedSupervisorEmail || 'nasif.kamal@jaago.com.bd',
+        supervisorName: resolvedSupervisorName,
+        supervisorEmail: resolvedSupervisorEmail,
         status: 'Pending',
         appliedAt: nowIso,
         createdAt: nowIso,

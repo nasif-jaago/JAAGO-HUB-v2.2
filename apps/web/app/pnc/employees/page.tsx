@@ -50,6 +50,7 @@ import {
   FullEmployeeProfile,
   EmployeeStatus,
 } from '@/components/pnc/employee-profile-detail';
+import { formatDisplayDate } from '@/lib/date-format';
 import {
   fetchEmployeesFromSupabase,
   saveEmployeeToSupabase,
@@ -1017,7 +1018,7 @@ function toCanonicalOrgName(raw: string): string {
     ) {
       return (
         <span className="font-mono text-[11px] text-muted-foreground">
-          {val ? String(val).slice(0, 10) : '—'}
+          {formatDisplayDate(val)}
         </span>
       );
     }

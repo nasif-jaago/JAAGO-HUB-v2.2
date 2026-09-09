@@ -53,6 +53,7 @@ import {
   fetchLeaveAllocations,
   fetchPublicHolidays,
 } from '@/lib/supabase-time-off';
+import { formatDisplayDate } from '@/lib/date-format';
 import {
   fetchOrganizationsFromSupabase,
   fetchDepartmentsFromSupabase,
@@ -164,7 +165,7 @@ export default function PnCDashboardPage() {
         orgs,
       ] = await Promise.all([
         fetchEmployeesFromSupabase(),
-        fetchAttendanceLogsFromSupabase(),
+        fetchAttendanceLogsFromSupabase(true),
         fetchLeaveRequests(),
         fetchLeaveAllocations(),
         fetchPublicHolidays(),
@@ -807,7 +808,7 @@ export default function PnCDashboardPage() {
                       </span>
                     </h2>
                     <p className="text-xs text-white/70 font-semibold pt-0.5">
-                      {new Date().toLocaleDateString('en-US', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}
+                      {new Date().toLocaleDateString('en-US', { weekday: 'long' })}, {formatDisplayDate(new Date())}
                     </p>
                   </div>
                 </div>
@@ -1248,7 +1249,7 @@ export default function PnCDashboardPage() {
                     <div className="flex items-center justify-between text-[11px] text-white/70">
                       <div className="flex items-center space-x-1">
                         <Calendar className="h-3 w-3 text-amber-400" />
-                        <span>{req.fromDate} &rarr; {req.toDate}</span>
+                        <span>{formatDisplayDate(req.fromDate)} &rarr; {formatDisplayDate(req.toDate)}</span>
                       </div>
                       <span className="text-[10px] italic truncate max-w-[130px] text-white/80">&ldquo;{req.reason}&rdquo;</span>
                     </div>
@@ -1442,7 +1443,7 @@ export default function PnCDashboardPage() {
                       <div className="text-[10px] text-white/70">{h.type} Holiday &bull; {h.totalDays} {h.totalDays === 1 ? 'Day' : 'Days'}</div>
                     </div>
                     <span className="px-2.5 py-1 rounded-xl bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 font-extrabold text-[11px]">
-                      {h.date}
+                      {formatDisplayDate(h.date)}
                     </span>
                   </div>
                 ))}
@@ -2231,7 +2232,7 @@ export default function PnCDashboardPage() {
                         <div>
                           <div className="font-extrabold text-white text-sm">{log.employeeName}</div>
                           <div className="text-white/70">
-                            {log.employeeCode} &bull; {log.department} &bull; {log.date}
+                            {log.employeeCode} &bull; {log.department} &bull; {formatDisplayDate(log.date)}
                           </div>
                         </div>
                       </div>
@@ -2281,7 +2282,7 @@ export default function PnCDashboardPage() {
                           </span>
                         </div>
                         <div className="text-white/70">
-                          {req.fromDate} &rarr; {req.toDate} ({req.totalDays} Days)
+                          {formatDisplayDate(req.fromDate)} &rarr; {formatDisplayDate(req.toDate)} ({req.totalDays} Days)
                         </div>
                         <div className="text-[11px] text-white/60 italic">&ldquo;{req.reason}&rdquo;</div>
                       </div>
@@ -2332,7 +2333,7 @@ export default function PnCDashboardPage() {
                         <div className="text-white/70">{h.type} Holiday &bull; {h.totalDays} Days</div>
                       </div>
                       <span className="px-3 py-1.5 rounded-xl bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 font-black text-xs">
-                        {h.date}
+                        {formatDisplayDate(h.date)}
                       </span>
                     </div>
                   ))}
