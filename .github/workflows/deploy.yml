@@ -73,7 +73,30 @@ jobs:
       - name: 🏗️ Build project (optimized)
         run: |
           echo "🔨 Starting build process..."
-          echo "✅ turbo found in dependencies"
+          echo "✅ turbo found in dependencies, ensuring local availability..."
+          
+          # Ensure turbo is available in local node_modules
+          if [ -f "node_modules/.bin/turbo" ]; then
+            echo "✅ turbo found in local node_modules"
+            # Add local bin to PATH
+            export PATH="$PWD/node_modules/.bin:$PATH"
+          elif command -v turbo >/dev/null 2>&1; then
+            echo "✅ turbo found in system PATH"
+          else
+            echo "❌ turbo not found! Installing..."
+            # Install turbo locally if not found
+            if ! npm install turbo@2.3.3; then
+              echo "❌ Failed to install turbo"
+              echo "This might be due to:"
+              echo "1. Network issues"
+              echo "2. Permission problems"
+              echo "3. Node.js version incompatibility"
+              exit 127
+            fi
+            export PATH="$PWD/node_modules/.bin:$PATH"
+          fi
+          
+          echo "✅ turbo is available"
           
           echo "🏗️ Running turbo build..."
           if ! npm run build; then
@@ -86,7 +109,9 @@ jobs:
             echo "5. Yarn configuration issues - ensure Corepack is enabled or use npm install"
             exit 127
           fi
-        timeout-minutes: 90
+        timeout-minutes: 120
+        env:
+          PATH: "$PWD/node_modules/.bin:$PATH"
 
       - name: 📦 Create deployment package
         run: |
