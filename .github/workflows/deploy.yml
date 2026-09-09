@@ -1,4 +1,4 @@
-name: 🚀 JAAGO HUB Auto-Deploy
+name: 🚀 JAAGO HUB Auto-Deploy (Simplified)
 
 on:
   push:
@@ -11,153 +11,77 @@ env:
   LOG_DIR: /home/jfmaster/nextJs/log
   NODE_ENV: production
   LOG_LEVEL: info
-  
-  # SSH Configuration
-  VPS_HOST: ${{ secrets.VPS_HOST }}
-  VPS_USER: ${{ secrets.VPS_USER }}
-  VPS_PORT: ${{ secrets.VPS_PORT }}
-  VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
 
 jobs:
-  # 🎯 QUALITY & BUILD PHASE (Fast, parallel execution)
-  quality-build:
-    runs-on: ubuntu-latest  # More available runners
+  deploy:
+    runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 30
-    outputs:
-      package-created: ${{ steps.create-package.outputs.exists }}
-      node-version: ${{ steps.setup-node.outputs.node-version }}
+    timeout-minutes: 60
     
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1  # Only latest commit for faster checkout
+          fetch-depth: 1
 
       - name: 🔧 Setup Node.js with caching
-        id: setup-node
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
           cache: 'npm'
-          check-latest: true
           cache-dependency-path: 'package-lock.json'
 
-      - name: 📦 Install dependencies (fast)
+      - name: 📦 Install dependencies
         run: |
-          echo "🔧 Installing dependencies with npm ci..."
-          if ! command -v npm >/dev/null 2>&1; then
-            echo "❌ npm not found! This is required for dependency installation."
-            exit 127
-          fi
-          
-          if [ ! -f "package.json" ]; then
-            echo "❌ package.json not found. Cannot install dependencies."
-            exit 127
-          fi
-          
-          echo "📋 package.json found, attempting npm install..."
-          if ! npm ci --prefer-offline; then
-            echo "❌ npm install failed! Trying with npm install..."
+          echo "🔧 Installing dependencies..."
+          npm ci --prefer-offline || {
+            echo "❌ npm ci failed, trying npm install..."
             npm install || {
-              echo "❌ Both npm ci and npm install failed!"
-              echo "Troubleshooting: Check network connectivity, verify package-lock.json exists, check disk space"
-              exit 127
+              echo "❌ npm install failed!"
+              exit 1
             }
-          fi
-          echo "✅ Dependencies installed successfully"
-        timeout-minutes: 45
-        env:
-          NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
+          }
+          echo "✅ Dependencies installed"
 
-      - name: 📦 Create deployment package
+      - name: 🏗️ Build application
         run: |
-          echo "📦 Creating deployment package..."
-          npm run package:deploy
-          
-          if [ ! -f "deploy_ready.zip" ]; then
-            echo "❌ Deployment package creation failed!"
-            echo "The package file is missing or empty."
-            exit 127
-          fi
-          
-          unzip -l deploy_ready.zip | head -20
-          echo "✅ Deployment package created successfully"
-        timeout-minutes: 10
-        env:
-          HUSKY: '0'
-
-      - name: 🧪 Run type checks
-        run: |
-          echo "🔍 Running type checks..."
-          if ! command -v npx >/dev/null 2>&1; then
-            echo "❌ npx not found! This is required for running scripts."
-            exit 127
-          fi
-          
-          echo "🔬 Running npm run typecheck..."
-          if ! npm run typecheck; then
-            echo "❌ Type checking failed!"
-            echo "This might be due to:"
-            echo "1. TypeScript configuration issues"
-            echo "2. Missing @types packages"
-            echo "3. Syntax errors in TypeScript files"
-            exit 127
-          fi
-        timeout-minutes: 60
-        env:
-          HUSKY: '0'
-
-  # 🚀 PRODUCTION DEPLOYMENT (Parallel with quality build)
-  deploy-production:
-    runs-on: ubuntu-latest  # More available runners
-    environment: production
-    needs: quality-build
-    timeout-minutes: 60
-    
-    steps:
-      - name: 📥 Download deployment package
-        uses: actions/download-artifact@v4
-        with:
-          name: deployment-package
-
-      - name: 🔍 Validate package integrity
-        run: |
-          echo "📦 Validating deployment package..."
-          if [ ! -f "deploy_ready.zip" ]; then
-            echo "❌ ERROR: Deployment package not found!"
+          echo "🔨 Starting build process..."
+          npm run build:all || {
+            echo "❌ Build failed!"
+            echo "Troubleshooting:
+  - Check for TypeScript errors in apps/web
+  - Verify all dependencies are installed
+  - Check package-lock.json integrity
+  "
             exit 1
-          fi
-          
-          PACKAGE_SIZE=$(du -h deploy_ready.zip | cut -f1)
-          echo "✅ Package size: $PACKAGE_SIZE"
-          
-          mkdir -p test-extract
-          unzip -q deploy_ready.zip -d test-extract || {
-            echo "❌ ERROR: Package validation failed!"
-            rm -rf test-extract
+          }
+          echo "✅ Build completed successfully"
+
+      - name: 🧪 Run validation checks
+        run: |
+          echo "🔍 Running validation checks..."
+          npm run typecheck || {
+            echo "❌ Type checking failed!"
             exit 1
           }
           
-          if [ ! -f "test-extract/package.json" ] || [ ! -f "test-extract/apps/package.json" ]; then
-            echo "❌ ERROR: Required package files missing!"
-            rm -rf test-extract
+          npm run lint || {
+            echo "❌ Linting failed!"
             exit 1
-          fi
-          
-          rm -rf test-extract
-          echo "✅ Package validation successful!"
+          }
+          echo "✅ All validation checks passed"
 
-      - name: 🚀 Deploy to production VPS (optimized)
+      - name: 🚀 Deploy to production VPS (direct checkout)
         run: |
-          echo "🚀 Starting optimized deployment to production VPS..."
+          echo "🚀 Starting deployment to production VPS (direct checkout)..."
           echo "🏗️ Project path: ${{ env.PROJECT_PATH }}"
           echo "🔐 Using SSH port: ${{ secrets.VPS_PORT }}"
           
-          ssh -o ConnectTimeout=30 
-              -o StrictHostKeyChecking=no 
-              -o UserKnownHostsFile=/dev/null
-              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 
+          # Execute deployment via SSH - DIRECT CHECKOUT APPROACH
+          ssh -o ConnectTimeout=30 \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
               -p ${{ secrets.VPS_PORT }} "
             set -euo pipefail
             
@@ -166,25 +90,30 @@ jobs:
             LOG_DIR="${{ env.LOG_DIR }}"
             
             echo "=== 🚀 Starting Deployment at $(date) ==="
-            echo "📍 Project Path: $PROJECT_PATH"
+            echo "📍 Project Path: \$PROJECT_PATH"
             
+            # Create backup
             BACKUP_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-            git stash push -m "pre-deploy-$BACKUP_TIMESTAMP" || true
+            git stash push -m "pre-deploy-\$BACKUP_TIMESTAMP" || true
             
             echo "💾 Creating deployment backup..."
-            tar -czf "$BACKUP_DIR/current-$BACKUP_TIMESTAMP.tar.gz" . || {
+            tar -czf "\$BACKUP_DIR/current-\$BACKUP_TIMESTAMP.tar.gz" . || {
               echo "❌ ERROR: Backup creation failed"
               exit 1
             }
             echo "✅ Backup created successfully"
             
             echo "🧹 Cleaning project directory..."
-            cd "$PROJECT_PATH" || exit 1
+            cd "\$PROJECT_PATH" || exit 1
             rm -rf *
             
-            echo "📦 Deploying new package..."
-            unzip -q /tmp/deploy_ready.zip
-            rm /tmp/deploy_ready.zip
+            echo "📦 Deploying new code from checkout..."
+            # The deployment package should already be present in the checkout
+            # If using the simplified workflow, we just copy the entire project
+            cp -r /home/runner/work/JAAGO-HUB-v2.2/* . || {
+              echo "❌ ERROR: Failed to copy project files"
+              exit 1
+            }
             
             echo "🔄 Restoring git changes..."
             git stash pop 2>/dev/null || true
@@ -222,18 +151,18 @@ jobs:
               exit 1
             fi
             
-            MODULE_RESPONSE=$(curl -s http://localhost:3000/api/v1/modules)
-            if echo "$MODULE_RESPONSE" | grep -q "'key'"; then
+            MODULE_RESPONSE=$(curl -s "http://localhost:3000/api/v1/modules")
+            if echo "\$MODULE_RESPONSE" | grep -q "'key'"; then
               echo "✅ Module registration verified"
             else
               echo "❌ ERROR: Module registration failed"
-              echo "📋 Module response: $MODULE_RESPONSE"
+              echo "📋 Module response: \$MODULE_RESPONSE"
               supervisorctl stop hub-jaago
               exit 1
             fi
             
             echo "🎉 === Deployment completed successfully at $(date) ==="
-            echo "Deployment successful at $(date)" > "$PROJECT_PATH/deployment-success.marker"
+            echo "Deployment successful at $(date)" > "\$PROJECT_PATH/deployment-success.marker"
           " || {
             echo "❌ ❌ DEPLOYMENT FAILED!"
             echo "🔄 Initiating emergency rollback..."
@@ -242,27 +171,17 @@ jobs:
           
           echo "🎉 🎉 🎉 Production deployment completed successfully!"
 
-  # 🔄 EMERGENCY ROLLBACK (Independent of other jobs)
-  emergency-rollback:
-    runs-on: ubuntu-latest
-    environment: production
-    if: failure()  # Run only on deployment failure
-    timeout-minutes: 45
-    
-    steps:
-      - name: 📥 Checkout code for rollback
-        uses: actions/checkout@v4
-
-      - name: 🔄 Execute emergency rollback
+      - name: 🔄 Emergency rollback (on failure)
+        if: failure()
         run: |
           echo "🚨 Starting EMERGENCY ROLLBACK at $(date)..."
           echo "📍 Target environment: production"
           echo "🔐 Using SSH port: ${{ secrets.VPS_PORT }}"
           
-          ssh -o ConnectTimeout=30 
-              -o StrictHostKeyChecking=no 
-              -o UserKnownHostsFile=/dev/null
-              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 
+          ssh -o ConnectTimeout=30 \
+              -o StrictHostKeyChecking=no \
+              -o UserKnownHostsFile=/dev/null \
+              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
               -p ${{ secrets.VPS_PORT }} "
             set -euo pipefail
             
@@ -272,19 +191,19 @@ jobs:
             
             echo "=== 🚀 Starting Rollback at $(date) ==="
             
-            cd "$PROJECT_PATH" || {
+            cd "\$PROJECT_PATH" || {
               echo "❌ ERROR: Cannot access project directory"
               exit 1
             }
             
-            LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/current-*.tar.gz 2>/dev/null | head -1)
+            LATEST_BACKUP=$(ls -t "\$BACKUP_DIR"/current-*.tar.gz 2>/dev/null | head -1)
             
-            if [ -z "$LATEST_BACKUP" ]; then
+            if [ -z "\$LATEST_BACKUP" ]; then
               echo "❌ ERROR: No backup found to rollback to"
               exit 1
             fi
             
-            echo "🔄 Rolling back to: $LATEST_BACKUP"
+            echo "🔄 Rolling back to: \$LATEST_BACKUP"
             
             echo "🛑 Stopping hub-jaago service..."
             if supervisorctl stop hub-jaago; then
@@ -296,8 +215,8 @@ jobs:
             
             echo "🔄 Restoring backup..."
             rm -rf *
-            tar -xzf "$LATEST_BACKUP"
-            rm "$LATEST_BACKUP"
+            tar -xzf "\$LATEST_BACKUP"
+            rm "\$LATEST_BACKUP"
             
             echo "📥 Installing dependencies..."
             npm ci --prefer-offline || {
@@ -342,7 +261,7 @@ jobs:
           
           echo "🔄 🚨 Emergency rollback completed successfully!"
           
-          # Rollback notification
+          # Rollback notification (optional)
           if [ -n "${{ secrets.SLACK_WEBHOOK }}" ]; then
             curl -X POST "${{ secrets.SLACK_WEBHOOK }}" \
                  -H 'Content-type: application/json' \
