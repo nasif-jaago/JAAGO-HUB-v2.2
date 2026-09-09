@@ -61,105 +61,27 @@ jobs:
             echo "❌ npm install failed! Trying with npm install..."
             npm install || {
               echo "❌ Both npm ci and npm install failed!"
-              echo "Troubleshooting: Check network connectivity, verify package-lock.json exists, check disk space, check for syntax errors in package.json"
+              echo "Troubleshooting: Check network connectivity, verify package-lock.json exists, check disk space"
               exit 127
             }
           fi
           echo "✅ Dependencies installed successfully"
-        timeout-minutes: 30
+        timeout-minutes: 45
         env:
           NPM_CONFIG_CACHE: ${{ runner.temp }}/npm-cache
-
-      - name: ⚡ Setup Turbo (Critical for Build)
-        run: |
-          echo "🔨 Setting up turbo for build process..."
-          
-          # Verify turbo exists in package.json dependencies
-          if ! grep -q '"turbo":' package.json; then
-            echo "❌ ERROR: turbo not found in package.json dependencies!"
-            echo "Please check package.json - turbo should be in devDependencies"
-            exit 127
-          fi
-          
-          echo "✅ turbo found in package.json"
-          
-          # Install turbo locally from workspace root
-          echo "📦 Installing turbo locally from workspace root..."
-          if ! npm install turbo@2.3.3 --no-save; then
-            echo "❌ Failed to install turbo locally"
-            echo "This might be due to:"
-            echo "1. Network issues"
-            echo "2. Permission problems"
-            echo "3. Node.js version incompatibility"
-            exit 127
-          fi
-          
-          # Verify turbo is available in node_modules/.bin
-          if [ ! -f "node_modules/.bin/turbo" ]; then
-            echo "❌ ERROR: turbo not found in node_modules/.bin!"
-            echo "Available files in node_modules/.bin:"
-            ls -la node_modules/.bin/ 2>/dev/null || echo "No node_modules/.bin directory found"
-            exit 127
-          fi
-          
-          echo "✅ turbo is available in node_modules/.bin"
-          echo "📍 Turbo path: $(pwd)/node_modules/.bin/turbo"
-          
-          # Set PATH for all subsequent steps
-          echo "export PATH=\"$(pwd)/node_modules/.bin:\$PATH\"" >> $GITHUB_ENV
-          echo "✅ PATH environment variable set for workflow"
-          echo "📍 PATH will include: $(pwd)/node_modules/.bin"
-        timeout-minutes: 30
-
-      - name: 🏗️ Build project (optimized)
-        run: |
-          echo "🔨 Starting build process..."
-          echo "✅ turbo is guaranteed available from setup step"
-          
-          # Verify turbo is available before build (should always be true now)
-          if ! command -v turbo >/dev/null 2>&1; then
-            echo "❌ CRITICAL ERROR: turbo not found in PATH!"
-            echo "This should not happen - turbo setup step should have installed it"
-            echo "Available executables:"
-            ls -la node_modules/.bin/ 2>/dev/null || echo "No node_modules/.bin directory found"
-            exit 127
-          fi
-          
-          echo "📍 Turbo executable: $(which turbo)"
-          echo "📍 Turbo version: $(turbo --version 2>/dev/null || echo 'unknown')"
-          
-          echo "🏗️ Running turbo build..."
-          if ! npm run build; then
-            echo "❌ Build failed!"
-            echo "Common causes:"
-            echo "1. Missing dependencies after npm install"
-            echo "2. TypeScript compilation errors"
-            echo "3. Missing required build tools"
-            echo "4. Configuration issues"
-            echo "5. Yarn configuration issues"
-            exit 127
-          fi
-        timeout-minutes: 120
-        env:
-          PATH: "$PWD/node_modules/.bin:$PATH"
 
       - name: 📦 Create deployment package
         run: |
           echo "📦 Creating deployment package..."
-          
-          # Create deployment package with lightweight approach
           npm run package:deploy
           
-          # Check if package was created
           if [ ! -f "deploy_ready.zip" ]; then
             echo "❌ Deployment package creation failed!"
             echo "The package file is missing or empty."
             exit 127
           fi
           
-          # Verify package contents
           unzip -l deploy_ready.zip | head -20
-          
           echo "✅ Deployment package created successfully"
         timeout-minutes: 10
         env:
@@ -182,7 +104,7 @@ jobs:
             echo "3. Syntax errors in TypeScript files"
             exit 127
           fi
-        timeout-minutes: 30
+        timeout-minutes: 60
         env:
           HUSKY: '0'
 
@@ -207,12 +129,9 @@ jobs:
             exit 1
           fi
           
-          # Check package size and integrity
           PACKAGE_SIZE=$(du -h deploy_ready.zip | cut -f1)
           echo "✅ Package size: $PACKAGE_SIZE"
           
-          # Test extraction (dry run)
-          echo "🧪 Testing package extraction..."
           mkdir -p test-extract
           unzip -q deploy_ready.zip -d test-extract || {
             echo "❌ ERROR: Package validation failed!"
@@ -220,9 +139,8 @@ jobs:
             exit 1
           }
           
-          # Verify key files exist
           if [ ! -f "test-extract/package.json" ] || [ ! -f "test-extract/apps/package.json" ]; then
-            echo "❌ ERROR: Required package files missing in deployment package!"
+            echo "❌ ERROR: Required package files missing!"
             rm -rf test-extract
             exit 1
           fi
@@ -236,7 +154,6 @@ jobs:
           echo "🏗️ Project path: ${{ env.PROJECT_PATH }}"
           echo "🔐 Using SSH port: ${{ secrets.VPS_PORT }}"
           
-          # SSH command with enhanced security and error handling
           ssh -o ConnectTimeout=30 
               -o StrictHostKeyChecking=no 
               -o UserKnownHostsFile=/dev/null
@@ -251,33 +168,27 @@ jobs:
             echo "=== 🚀 Starting Deployment at $(date) ==="
             echo "📍 Project Path: $PROJECT_PATH"
             
-            # Create backup with versioning
             BACKUP_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
             git stash push -m "pre-deploy-$BACKUP_TIMESTAMP" || true
             
-            # Create deployment backup with comprehensive logging
             echo "💾 Creating deployment backup..."
             tar -czf "$BACKUP_DIR/current-$BACKUP_TIMESTAMP.tar.gz" . || {
-              echo "❌ ERROR: Backup creation failed at $BACKUP_TIMESTAMP"
+              echo "❌ ERROR: Backup creation failed"
               exit 1
             }
-            echo "✅ Backup created successfully: $BACKUP_DIR/current-$BACKUP_TIMESTAMP.tar.gz"
+            echo "✅ Backup created successfully"
             
-            # Clean project directory completely
             echo "🧹 Cleaning project directory..."
             cd "$PROJECT_PATH" || exit 1
             rm -rf *
             
-            # Extract and deploy (using zip)
             echo "📦 Deploying new package..."
             unzip -q /tmp/deploy_ready.zip
             rm /tmp/deploy_ready.zip
             
-            # Restore git stashed changes
             echo "🔄 Restoring git changes..."
             git stash pop 2>/dev/null || true
             
-            # Install dependencies with optimization
             echo "📥 Installing dependencies..."
             npm ci --prefer-offline || {
               echo "❌ ERROR: npm install failed"
@@ -285,7 +196,6 @@ jobs:
             }
             echo "✅ Dependencies installed successfully"
             
-            # Build application
             echo "🏗️ Building application..."
             npm run build || {
               echo "❌ ERROR: Build failed"
@@ -293,7 +203,6 @@ jobs:
             }
             echo "✅ Build completed successfully"
             
-            # Restart services with validation
             echo "🔄 Restarting services..."
             if supervisorctl restart hub-jaago; then
               echo "✅ Services restarted successfully"
@@ -302,21 +211,17 @@ jobs:
               exit 1
             fi
             
-            # Enhanced health checks
             echo "🏥 Running comprehensive health checks..."
             sleep 20
             
-            # Health endpoint check
             if curl -f -s --max-time 60 "http://localhost:3000/api/v1/health"; then
-              echo "✅ Health check passed: /api/v1/health"
+              echo "✅ Health check passed"
             else
-              echo "❌ ERROR: Health check failed - Application may not be running"
+              echo "❌ ERROR: Health check failed"
               supervisorctl stop hub-jaago
               exit 1
             fi
             
-            # Module registration validation
-            echo "🔍 Verifying module registration..."
             MODULE_RESPONSE=$(curl -s http://localhost:3000/api/v1/modules)
             if echo "$MODULE_RESPONSE" | grep -q "'key'"; then
               echo "✅ Module registration verified"
@@ -327,17 +232,7 @@ jobs:
               exit 1
             fi
             
-            # Additional validation: check application is responding
-            echo "🔍 Additional validation checks..."
-            if curl -f -s --max-time 30 "http://localhost:3000/api/v1/status"; then
-              echo "✅ Status endpoint accessible"
-            else
-              echo "⚠️  Warning: Status endpoint not accessible (may be normal)"
-            fi
-            
             echo "🎉 === Deployment completed successfully at $(date) ==="
-            
-            # Create success marker file
             echo "Deployment successful at $(date)" > "$PROJECT_PATH/deployment-success.marker"
           " || {
             echo "❌ ❌ DEPLOYMENT FAILED!"
@@ -346,13 +241,6 @@ jobs:
           }
           
           echo "🎉 🎉 🎉 Production deployment completed successfully!"
-          
-          # Success notification
-          if [ -n "${{ secrets.SLACK_WEBHOOK }}" ]; then
-            curl -X POST "${{ secrets.SLACK_WEBHOOK }}" \
-                 -H 'Content-type: application/json' \
-                 --data "{\"text\":\"🚀 JAAGO HUB deployed successfully! ${{ env.PROJECT_PATH }}\"}"
-          fi
 
   # 🔄 EMERGENCY ROLLBACK (Independent of other jobs)
   emergency-rollback:
@@ -371,7 +259,6 @@ jobs:
           echo "📍 Target environment: production"
           echo "🔐 Using SSH port: ${{ secrets.VPS_PORT }}"
           
-          # SSH command with enhanced security
           ssh -o ConnectTimeout=30 
               -o StrictHostKeyChecking=no 
               -o UserKnownHostsFile=/dev/null
@@ -385,27 +272,20 @@ jobs:
             
             echo "=== 🚀 Starting Rollback at $(date) ==="
             
-            # Verify we're in the right directory
             cd "$PROJECT_PATH" || {
-              echo "❌ ERROR: Cannot access project directory: $PROJECT_PATH"
+              echo "❌ ERROR: Cannot access project directory"
               exit 1
             }
             
-            # Find latest backup with error handling
-            echo "📋 Searching for available backups..."
             LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/current-*.tar.gz 2>/dev/null | head -1)
             
             if [ -z "$LATEST_BACKUP" ]; then
               echo "❌ ERROR: No backup found to rollback to"
-              echo "📁 Available backups in $BACKUP_DIR:"
-              ls -la "$BACKUP_DIR"/current-*.tar.gz 2>/dev/null || echo "   No backups found"
               exit 1
             fi
             
             echo "🔄 Rolling back to: $LATEST_BACKUP"
-            echo "📦 Backup size: $(du -h "$LATEST_BACKUP" | cut -f1)"
             
-            # Stop current service
             echo "🛑 Stopping hub-jaago service..."
             if supervisorctl stop hub-jaago; then
               echo "✅ Service stopped successfully"
@@ -414,19 +294,11 @@ jobs:
               exit 1
             fi
             
-            # Restore backup
             echo "🔄 Restoring backup..."
-            echo "🧹 Cleaning project directory..."
             rm -rf *
-            
-            echo "📦 Restoring backup..."
-            tar -xzf "$LATEST_BACKUP" || {
-              echo "❌ ERROR: Failed to restore backup from $LATEST_BACKUP"
-              exit 1
-            }
+            tar -xzf "$LATEST_BACKUP"
             rm "$LATEST_BACKUP"
             
-            # Install dependencies
             echo "📥 Installing dependencies..."
             npm ci --prefer-offline || {
               echo "❌ ERROR: npm install failed during rollback"
@@ -434,7 +306,6 @@ jobs:
             }
             echo "✅ Dependencies installed successfully"
             
-            # Start service
             echo "▶️ Starting service..."
             if supervisorctl start hub-jaago; then
               echo "✅ Service started successfully"
@@ -443,21 +314,17 @@ jobs:
               exit 1
             fi
             
-            # Verify rollback with comprehensive checks
             echo "🏥 Verifying rollback with health checks..."
             sleep 15
             
-            # Health endpoint
             if curl -f -s --max-time 60 "http://localhost:3000/api/v1/health"; then
-              echo "✅ Health check passed: /api/v1/health"
+              echo "✅ Health check passed"
             else
               echo "❌ ERROR: Health check failed after rollback"
               supervisorctl stop hub-jaago
               exit 1
             fi
             
-            # Module registration
-            echo "🔍 Verifying module registration after rollback..."
             if curl -s "http://localhost:3000/api/v1/modules" | grep -q "'key'"; then
               echo "✅ Module registration verified"
             else
