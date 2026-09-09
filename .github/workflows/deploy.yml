@@ -148,7 +148,7 @@ jobs:
               exit 1
             fi
             
-            MODULE_RESPONSE=\$(curl -s "http://localhost:3000/api/v1/modules")
+            MODULE_RESPONSE=$(curl -s "http://localhost:3000/api/v1/modules")
             if echo "\$MODULE_RESPONSE" | grep -q "'key'"; then
               echo "✅ Module registration verified"
             else
@@ -193,7 +193,7 @@ jobs:
               exit 1
             }
             
-            LATEST_BACKUP=\$(ls -t "\$BACKUP_DIR"/current-*.tar.gz 2>/dev/null | head -1)
+            LATEST_BACKUP=$(ls -t "\$BACKUP_DIR"/current-*.tar.gz 2>/dev/null | head -1)
             
             if [ -z "\$LATEST_BACKUP" ]; then
               echo "❌ ERROR: No backup found to rollback to"
