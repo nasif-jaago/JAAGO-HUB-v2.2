@@ -420,8 +420,24 @@ function WorkflowsContent() {
       const itemSupervisorName = (item.metadata.supervisorName || '').toLowerCase().trim();
       const itemSupervisorEmail = (item.metadata.supervisorEmail || '').toLowerCase().trim();
       const isSupervisor =
-        (userName && itemSupervisorName && (itemSupervisorName.includes(userName) || userName.includes(itemSupervisorName))) ||
-        (userEmail && itemSupervisorEmail && itemSupervisorEmail === userEmail);
+        (userName && itemSupervisorName && (
+          itemSupervisorName.includes(userName) ||
+          userName.includes(itemSupervisorName) ||
+          (userName.includes('nayeem') && itemSupervisorName.includes('nayeem')) ||
+          (userName.includes('nasif') && itemSupervisorName.includes('nasif'))
+        )) ||
+        (userEmail && itemSupervisorEmail && (
+          itemSupervisorEmail === userEmail ||
+          (userEmail.includes('nayeem') && (itemSupervisorEmail.includes('nayeem') || itemSupervisorName.includes('nayeem'))) ||
+          (userEmail.includes('nasif') && (itemSupervisorEmail.includes('nasif') || itemSupervisorName.includes('nasif')))
+        )) ||
+        // Team Lead direct subordinates mapping (Nasif Kamal & Md. Nazmul Hossain report to S M Nayeem Rahman)
+        (userName.includes('nayeem') && (
+          itemRequesterCode === 'fo032507061190' ||
+          itemRequesterCode === 'dc01242809848' ||
+          itemRequesterName.includes('nasif') ||
+          itemRequesterName.includes('nazmul')
+        ));
 
       return isSupervisor;
     });
@@ -693,7 +709,7 @@ function WorkflowsContent() {
             <GitPullRequest className="h-4 w-4 text-primary" />
           </div>
           <div className="text-3xl font-black tracking-tight text-foreground font-mono">
-            {instances.length}
+            {scopedInstances.length}
           </div>
           <div className="text-[11px] text-muted-foreground">Direct subordinates &amp; team requests</div>
         </div>
@@ -723,7 +739,7 @@ function WorkflowsContent() {
                 : 'text-muted-foreground hover:text-foreground hover:bg-surface'
             }`}
           >
-            ALL ({instances.length})
+            ALL ({scopedInstances.length})
           </button>
 
           <button
@@ -795,16 +811,16 @@ function WorkflowsContent() {
                 </p>
               </div>
             </div>
-            <span className="text-xs font-mono text-muted-foreground">{instances.length} Total Logs</span>
+            <span className="text-xs font-mono text-muted-foreground">{scopedInstances.length} Total Logs</span>
           </div>
 
           <div className="space-y-3">
-            {instances.length === 0 ? (
+            {scopedInstances.length === 0 ? (
               <div className="py-12 text-center text-xs text-muted-foreground">
-                No workflow requests or decision history found.
+                No workflow requests or decision history found for your role.
               </div>
             ) : (
-              instances.map((item) => {
+              scopedInstances.map((item) => {
                 const isReg = item.definitionKey === 'attendance_regularization';
                 return (
                   <div

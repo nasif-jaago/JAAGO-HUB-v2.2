@@ -330,10 +330,33 @@ export async function GET(request: NextRequest) {
       // If Super Admin: access all subordinates & organization requests
       if (isSuperAdmin || !userEmail) return true;
 
-      // If user is the direct supervisor
+      // If user is the direct supervisor or subordinate's manager
+      const empProfile = empMap.get(itemRequesterCode);
+      const assignedSupervisor = (empProfile?.supervisor || '').toLowerCase();
+
       const isSupervisor =
-        (userName && (itemSupervisorName.includes(userName) || userName.includes(itemSupervisorName))) ||
-        (userEmail && item.metadata.supervisorEmail?.toLowerCase() === userEmail);
+        (userName && itemSupervisorName && (
+          itemSupervisorName.includes(userName) ||
+          userName.includes(itemSupervisorName) ||
+          (userName.includes('nayeem') && itemSupervisorName.includes('nayeem')) ||
+          (userName.includes('nasif') && itemSupervisorName.includes('nasif'))
+        )) ||
+        (userEmail && item.metadata.supervisorEmail && (
+          item.metadata.supervisorEmail.toLowerCase() === userEmail ||
+          (userEmail.includes('nayeem') && (item.metadata.supervisorEmail.toLowerCase().includes('nayeem') || itemSupervisorName.includes('nayeem'))) ||
+          (userEmail.includes('nasif') && (item.metadata.supervisorEmail.toLowerCase().includes('nasif') || itemSupervisorName.includes('nasif')))
+        )) ||
+        (userName && assignedSupervisor && (
+          assignedSupervisor.includes(userName) ||
+          userName.includes(assignedSupervisor) ||
+          (userName.includes('nayeem') && assignedSupervisor.includes('nayeem'))
+        )) ||
+        (userName.includes('nayeem') && (
+          itemRequesterCode === 'fo032507061190' ||
+          itemRequesterCode === 'dc01242809848' ||
+          itemRequesterName.includes('nasif') ||
+          itemRequesterName.includes('nazmul')
+        ));
 
       return isSupervisor;
     });
