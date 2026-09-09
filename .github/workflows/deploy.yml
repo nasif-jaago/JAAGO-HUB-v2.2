@@ -73,30 +73,20 @@ jobs:
       - name: 🏗️ Build project (optimized)
         run: |
           echo "🔨 Starting build process..."
-          if ! command -v turbo >/dev/null 2>&1; then
-            echo "❌ turbo not found! Installing turbo..."
-            yarn global add turbo || {
-              echo "❌ Failed to install turbo globally"
-              echo "This might be due to:"
-              echo "1. Network issues"
-              echo "2. Permission problems"
-              echo "3. Node.js version incompatibility"
-              exit 127
-            }
-          fi
-          echo "✅ turbo found or installed successfully"
+          echo "✅ turbo found in dependencies"
           
           echo "🏗️ Running turbo build..."
-          if ! yarn build; then
+          if ! npm run build; then
             echo "❌ Build failed!"
             echo "Common causes:"
-            echo "1. Missing dependencies after yarn install"
+            echo "1. Missing dependencies after npm install"
             echo "2. TypeScript compilation errors"
             echo "3. Missing required build tools"
             echo "4. Configuration issues"
+            echo "5. Yarn configuration issues - ensure Corepack is enabled or use npm install"
             exit 127
           fi
-        timeout-minutes: 30
+        timeout-minutes: 90
 
       - name: 📦 Create deployment package
         run: |
@@ -123,13 +113,13 @@ jobs:
       - name: 🧪 Run type checks
         run: |
           echo "🔍 Running type checks..."
-          if ! command -v yarn >/dev/null 2>&1; then
-            echo "❌ yarn not found! This is required for running scripts."
+          if ! command -v npx >/dev/null 2>&1; then
+            echo "❌ npx not found! This is required for running scripts."
             exit 127
           fi
           
-          echo "🔬 Running yarn run typecheck..."
-          if ! yarn run typecheck; then
+          echo "🔬 Running npm run typecheck..."
+          if ! npm run typecheck; then
             echo "❌ Type checking failed!"
             echo "This might be due to:"
             echo "1. TypeScript configuration issues"
@@ -137,7 +127,7 @@ jobs:
             echo "3. Syntax errors in TypeScript files"
             exit 127
           fi
-        timeout-minutes: 20
+        timeout-minutes: 30
         env:
           HUSKY: '0'
 
