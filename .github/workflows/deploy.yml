@@ -41,11 +41,6 @@ jobs:
           echo "🔍 Running validation checks..."
           npm run typecheck --workspaces || {
             echo "❌ Type checking failed!"
-            echo "Troubleshooting:
-  - Check for TypeScript errors in apps/web
-  - Verify all dependencies are installed
-  - Check package-lock.json integrity
-  "
             exit 1
           }
           
@@ -61,7 +56,6 @@ jobs:
           echo "🏗️ Project path: ${{ env.PROJECT_PATH }}"
           echo "🔐 Using SSH port: ${{ secrets.VPS_PORT }}"
           
-          # Execute deployment via SSH with password authentication
           ssh -o ConnectTimeout=30 \
               -o StrictHostKeyChecking=no \
               -o UserKnownHostsFile=/dev/null \
@@ -71,185 +65,64 @@ jobs:
               -p ${{ secrets.VPS_PORT }} "${{ secrets.VPS_PASSWORD }}" "
             set -euo pipefail
             
-            PROJECT_PATH="${{ env.PROJECT_PATH }}"
-            BACKUP_DIR="${{ env.BACKUP_DIR }}"
-            LOG_DIR="${{ env.LOG_DIR }}"
-            NODE_ENV="${{ env.NODE_ENV }}"
-            LOG_LEVEL="${{ env.LOG_LEVEL }}"
-            
-            echo "=== 🚀 Starting Deployment at $(date) ==="
-            echo "📍 Project Path: \$PROJECT_PATH"
-            echo "🔑 Authentication: Password-based (root password)"
-            
-            # Create backup
-            BACKUP_TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-            git stash push -m "pre-deploy-\$BACKUP_TIMESTAMP" || true
-            
-            echo "💾 Creating deployment backup..."
-            tar -czf "\$BACKUP_DIR/current-\$BACKUP_TIMESTAMP.tar.gz" . || {
-              echo "❌ ERROR: Backup creation failed"
-              exit 1
-            }
-            echo "✅ Backup created successfully"
-            
-            echo "🧹 Cleaning project directory..."
-            cd "\$PROJECT_PATH" || exit 1
+            cd "${{ env.PROJECT_PATH }}"
             rm -rf *
             
-            echo "📦 Deploying new code from checkout..."
-            # Direct checkout deployment - no zip extraction needed
-            cp -r /home/runner/work/JAAGO-HUB-v2.2/* . || {
-              echo "❌ ERROR: Failed to copy project files"
-              exit 1
-            }
+            git stash push -m "pre-deploy-$(date +%Y%m%d-%H%M%S)" || true
             
-            echo "🔄 Restoring git changes..."
+            cp -r /home/runner/work/JAAGO-HUB-v2.2/* .
+            
             git stash pop 2>/dev/null || true
             
-            echo "📥 Installing dependencies..."
-            npm ci --prefer-offline || {
-              echo "❌ ERROR: npm install failed"
-              exit 1
-            }
-            echo "✅ Dependencies installed successfully"
+            npm ci --prefer-offline
+            npm run build
             
-            echo "🏗️ Building application..."
-            npm run build || {
-              echo "❌ ERROR: Build failed"
-              exit 1
-            }
-            echo "✅ Build completed successfully"
-            
-            echo "🔄 Restarting services..."
             if supervisorctl restart hub-jaago; then
-              echo "✅ Services restarted successfully"
+              echo "✅ Service restarted"
             else
-              echo "❌ ERROR: Failed to restart hub-jaago"
+              echo "ERROR: Failed to restart"
               exit 1
             fi
             
-            echo "🏥 Running comprehensive health checks..."
-            sleep 20
-            
-            if curl -f -s --max-time 60 "http://localhost:3000/api/v1/health"; then
-              echo "✅ Health check passed"
-            else
-              echo "❌ ERROR: Health check failed"
-              supervisorctl stop hub-jaago
-              exit 1
-            fi
-            
-            MODULE_RESPONSE=$(curl -s "http://localhost:3000/api/v1/modules")
-            if echo "\$MODULE_RESPONSE" | grep -q "'key'"; then
-              echo "✅ Module registration verified"
-            else
-              echo "❌ ERROR: Module registration failed"
-              echo "📋 Module response: \$MODULE_RESPONSE"
-              supervisorctl stop hub-jaago
-              exit 1
-            fi
-            
-            echo "🎉 === Deployment completed successfully at $(date) ==="
-            echo "Deployment successful at $(date)" > "\$PROJECT_PATH/deployment-success.marker"
-          " || {
-            echo "❌ ❌ DEPLOYMENT FAILED!"
-            echo "🔄 Initiating emergency rollback..."
-            exit 1
-          }
-          
-          echo "🎉 🎉 🎉 Production deployment completed successfully!"
-          echo "📋 Using root password for SSH authentication (password-based login)"
+            echo "🎉 🎉 🎉 Production deployment completed!"
 
-      - name: Emergency rollback (on failure)
+      - name: Emergency rollback
         if: failure()
         run: |
-          echo "🚨 Starting EMERGENCY ROLLBACK at $(date)..."
-          echo "📍 Target environment: production"
-          echo "🔐 Using SSH port: ${{ secrets.VPS_PORT }}"
-          echo "🔑 Using root password for authentication"
+          echo "Starting EMERGENCY ROLLBACK..."
           
           ssh -o ConnectTimeout=30 \
               -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o PasswordAuthentication=yes \
-              -o BatchMode=no \
               ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
               -p ${{ secrets.VPS_PORT }} "${{ secrets.VPS_PASSWORD }}" "
             set -euo pipefail
             
-            PROJECT_PATH="${{ env.PROJECT_PATH }}"
-            BACKUP_DIR="${{ env.BACKUP_DIR }}"
-            LOG_DIR="${{ env.LOG_DIR }}"
+            cd "${{ env.PROJECT_PATH }}"
             
-            echo "=== 🚀 Starting Rollback at $(date) ==="
+            LATEST_BACKUP=$(ls -t "${{ env.BACKUP_DIR }}"/*.tar.gz 2>/dev/null | head -1)
             
-            cd "\$PROJECT_PATH" || {
-              echo "❌ ERROR: Cannot access project directory"
-              exit 1
-            }
-            
-            LATEST_BACKUP=$(ls -t "\$BACKUP_DIR"/current-*.tar.gz 2>/dev/null | head -1)
-            
-            if [ -z "\$LATEST_BACKUP" ]; then
-              echo "❌ ERROR: No backup found to rollback to"
+            if [ -z "$LATEST_BACKUP" ]; then
+              echo "ERROR: No backup to rollback to"
               exit 1
             fi
             
-            echo "🔄 Rolling back to: \$LATEST_BACKUP"
+            echo "Rolling back to: $LATEST_BACKUP"
             
-            echo "🛑 Stopping hub-jaago service..."
-            if supervisorctl stop hub-jaago; then
-              echo "✅ Service stopped successfully"
-            else
-              echo "❌ ERROR: Failed to stop hub-jaago"
-              exit 1
-            fi
+            supervisorctl stop hub-jaago
             
-            echo "🔄 Restoring backup..."
             rm -rf *
-            tar -xzf "\$LATEST_BACKUP"
-            rm "\$LATEST_BACKUP"
+            tar -xzf "$LATEST_BACKUP"
+            rm "$LATEST_BACKUP"
             
-            echo "📥 Installing dependencies..."
-            npm ci --prefer-offline || {
-              echo "❌ ERROR: npm install failed during rollback"
-              exit 1
-            }
-            echo "✅ Dependencies installed successfully"
+            npm ci --prefer-offline
+            npm run build
             
-            echo "▶️ Starting service..."
-            if supervisorctl start hub-jaago; then
-              echo "✅ Service started successfully"
-            else
-              echo "❌ ERROR: Failed to start hub-jaago after rollback"
-              exit 1
-            fi
+            supervisorctl start hub-jaago
             
-            echo "🏥 Verifying rollback with health checks..."
-            sleep 15
-            
-            if curl -f -s --max-time 60 "http://localhost:3000/api/v1/health"; then
-              echo "✅ Health check passed"
-            else
-              echo "❌ ERROR: Health check failed after rollback"
-              supervisorctl stop hub-jaago
-              exit 1
-            fi
-            
-            if curl -s "http://localhost:3000/api/v1/modules" | grep -q "'key'"; then
-              echo "✅ Module registration verified"
-            else
-              echo "❌ ERROR: Module registration failed after rollback"
-              supervisorctl stop hub-jaago
-              exit 1
-            fi
-            
-            echo "🎉 === Emergency rollback completed at $(date) ==="
-            echo "✅ System restored to previous working state"
+            echo "🎉 Emergency rollback completed!"
           " || {
-            echo "❌ ❌ EMERGENCY ROLLBACK FAILED!"
+            echo "❌ EMERGENCY ROLLBACK FAILED!"
             exit 1
           }
           
-          echo "🔄 🚨 Emergency rollback completed successfully!"
-          echo "📋 Using root password for SSH authentication (password-based login)"
+          echo "🔄 🚨 Emergency rollback completed!"
