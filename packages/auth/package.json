@@ -14,8 +14,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@jaago/contracts": "*",
-    "@jaago/config": "*",
+    "@jaago/contracts": "file:../contracts",
+    "@jaago/config": "file:../config",
     "@supabase/supabase-js": "^2.47.10"
   },
   "devDependencies": {

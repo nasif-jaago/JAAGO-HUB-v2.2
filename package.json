@@ -18,7 +18,7 @@
     "start:server": "node index.js",
     "build:all": "node tooling/scripts/build-all.js",
     "build": "node tooling/scripts/build-all.js",
-    "dev": "turbo run dev --parallel",
+    "dev": "node tooling/scripts/start-dev.js",
     "dev:web": "npm run dev --workspace=@jaago/web",
     "dev:worker": "npm run dev --workspace=@jaago/worker",
     "dev:log-runner": "npm run dev --workspace=@jaago/log-runner",
