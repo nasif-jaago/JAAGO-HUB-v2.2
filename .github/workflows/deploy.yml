@@ -83,9 +83,9 @@ jobs:
           
           echo "✅ turbo found in package.json"
           
-          # Install turbo locally (should be in node_modules after npm ci)
-          echo "📦 Ensuring turbo is installed locally..."
-          if ! npm install turbo@2.3.3; then
+          # Install turbo locally from workspace root
+          echo "📦 Installing turbo locally from workspace root..."
+          if ! npm install turbo@2.3.3 --no-save; then
             echo "❌ Failed to install turbo locally"
             echo "This might be due to:"
             echo "1. Network issues"
