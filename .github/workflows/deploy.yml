@@ -80,8 +80,10 @@ jobs:
             echo "✅ turbo found in local node_modules"
             # Add local bin to PATH
             export PATH="$PWD/node_modules/.bin:$PATH"
+            echo "📍 Updated PATH: $PATH"
           elif command -v turbo >/dev/null 2>&1; then
             echo "✅ turbo found in system PATH"
+            echo "📍 Current PATH: $(which turbo)"
           else
             echo "❌ turbo not found! Installing..."
             # Install turbo locally if not found
@@ -94,9 +96,25 @@ jobs:
               exit 127
             fi
             export PATH="$PWD/node_modules/.bin:$PATH"
+            echo "📍 Updated PATH after install: $PATH"
           fi
           
           echo "✅ turbo is available"
+          
+          # Verify turbo is in PATH before running build
+          if ! command -v turbo >/dev/null 2>&1; then
+            echo "❌ ERROR: turbo not found in PATH after setup!"
+            echo "PATH: $PATH"
+            echo "Available executables:"
+            ls -la node_modules/.bin/turbo 2>/dev/null || ls node_modules/.bin/ 2>/dev/null || echo "No node_modules/.bin directory found"
+            exit 127
+          fi
+          
+          echo "📍 Turbo executable path: $(which turbo)"
+          
+          # Set PATH as environment variable for npm commands
+          echo "export PATH=\"$PWD/node_modules/.bin:\$PATH\"" >> $GITHUB_ENV
+          echo "✅ PATH environment variable set for npm"
           
           echo "🏗️ Running turbo build..."
           if ! npm run build; then
