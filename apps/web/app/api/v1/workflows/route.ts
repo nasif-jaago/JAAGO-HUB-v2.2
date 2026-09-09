@@ -303,11 +303,62 @@ export async function GET(request: NextRequest) {
 
     const instances = [...leaveInstances, ...regInstances];
 
-    // 5. Role-based & Team-based Scoping
+    // 5. Role-based & Team-based Scoping for ALL Users and Supervisors
     const isSuperAdmin =
       userRole === 'super_admin' ||
       userEmail.includes('nasif.kamal') ||
       userName.includes('nasif kamal');
+
+    // Resolve current user's employee identity across codes, emails, and names
+    const currentUserEmp =
+      (userCode ? empMap.get(userCode) : null) ||
+      (userEmail
+        ? (empRows || []).find(
+            (e: any) =>
+              (e.work_email && e.work_email.toLowerCase().trim() === userEmail) ||
+              (e.personal_email && e.personal_email.toLowerCase().trim() === userEmail)
+          )
+        : null) ||
+      (userName ? empMap.get(userName) : null);
+
+    const activeUserCodes = new Set<string>();
+    if (userCode) activeUserCodes.add(userCode.toLowerCase().trim());
+    if (currentUserEmp?.code) activeUserCodes.add(currentUserEmp.code.toLowerCase().trim());
+    if (currentUserEmp?.id) activeUserCodes.add(currentUserEmp.id.toLowerCase().trim());
+
+    const activeUserNames = new Set<string>();
+    if (userName) activeUserNames.add(userName);
+    if (currentUserEmp?.name) activeUserNames.add(currentUserEmp.name.toLowerCase().trim());
+
+    const activeUserEmails = new Set<string>();
+    if (userEmail) activeUserEmails.add(userEmail);
+    if (currentUserEmp?.work_email) activeUserEmails.add(currentUserEmp.work_email.toLowerCase().trim());
+    if (currentUserEmp?.personal_email) activeUserEmails.add(currentUserEmp.personal_email.toLowerCase().trim());
+
+    // Dynamically build subordinate codes set for the active user across the entire employee roster
+    const subordinateCodes = new Set<string>();
+    const subordinateNames = new Set<string>();
+    (empRows || []).forEach((e: any) => {
+      const sup = (e.supervisor || '').toLowerCase().trim();
+      const secSup = (e.secondary_supervisor || '').toLowerCase().trim();
+      if (!sup && !secSup) return;
+
+      const matchesSupervisor =
+        (sup &&
+          (Array.from(activeUserCodes).some((c) => sup === c) ||
+            Array.from(activeUserEmails).some((em) => sup === em) ||
+            Array.from(activeUserNames).some((n) => sup === n || sup.includes(n) || n.includes(sup)))) ||
+        (secSup &&
+          (Array.from(activeUserCodes).some((c) => secSup === c) ||
+            Array.from(activeUserEmails).some((em) => secSup === em) ||
+            Array.from(activeUserNames).some((n) => secSup === n || secSup.includes(n) || n.includes(secSup))));
+
+      if (matchesSupervisor) {
+        if (e.code) subordinateCodes.add(e.code.toLowerCase().trim());
+        if (e.id) subordinateCodes.add(e.id.toLowerCase().trim());
+        if (e.name) subordinateNames.add(e.name.toLowerCase().trim());
+      }
+    });
 
     const filtered = instances.filter((item) => {
       // Status filter
@@ -318,47 +369,70 @@ export async function GET(request: NextRequest) {
       }
 
       const itemSupervisorName = (item.metadata.supervisorName || '').toLowerCase().trim();
-      const itemRequesterCode = (item.metadata.employeeCode || '').toLowerCase().trim();
+      const itemSupervisorEmail = (item.metadata.supervisorEmail || '').toLowerCase().trim();
+      const itemRequesterCode = (item.metadata.employeeCode || item.requesterId || '').toLowerCase().trim();
       const itemRequesterName = (item.metadata.requesterName || '').toLowerCase().trim();
-      const isRequester = (userCode && itemRequesterCode === userCode.toLowerCase()) || (userName && itemRequesterName === userName);
 
       // STRICT RULE: Request owner cannot see or approve their own request in the Approvals Engine
+      const isRequester =
+        (itemRequesterCode && activeUserCodes.has(itemRequesterCode)) ||
+        (itemRequesterName &&
+          (activeUserNames.has(itemRequesterName) ||
+            Array.from(activeUserNames).some((n) => n && (n === itemRequesterName || itemRequesterName.includes(n)))));
+
       if (isRequester) {
         return false;
       }
 
       // If Super Admin: access all subordinates & organization requests
-      if (isSuperAdmin || !userEmail) return true;
+      if (isSuperAdmin || (!userEmail && !userCode && !userName)) return true;
 
-      // If user is the direct supervisor or subordinate's manager
-      const empProfile = empMap.get(itemRequesterCode);
-      const assignedSupervisor = (empProfile?.supervisor || '').toLowerCase();
+      // Check if item requester is a direct or indirect subordinate of the user
+      const isSubordinate =
+        (itemRequesterCode && subordinateCodes.has(itemRequesterCode)) ||
+        (itemRequesterName &&
+          (subordinateNames.has(itemRequesterName) ||
+            Array.from(subordinateNames).some((sn) => sn && (sn === itemRequesterName || itemRequesterName.includes(sn)))));
 
-      const isSupervisor =
-        (userName && itemSupervisorName && (
-          itemSupervisorName.includes(userName) ||
-          userName.includes(itemSupervisorName) ||
-          (userName.includes('nayeem') && itemSupervisorName.includes('nayeem')) ||
-          (userName.includes('nasif') && itemSupervisorName.includes('nasif'))
-        )) ||
-        (userEmail && item.metadata.supervisorEmail && (
-          item.metadata.supervisorEmail.toLowerCase() === userEmail ||
-          (userEmail.includes('nayeem') && (item.metadata.supervisorEmail.toLowerCase().includes('nayeem') || itemSupervisorName.includes('nayeem'))) ||
-          (userEmail.includes('nasif') && (item.metadata.supervisorEmail.toLowerCase().includes('nasif') || itemSupervisorName.includes('nasif')))
-        )) ||
-        (userName && assignedSupervisor && (
-          assignedSupervisor.includes(userName) ||
-          userName.includes(assignedSupervisor) ||
-          (userName.includes('nayeem') && assignedSupervisor.includes('nayeem'))
-        )) ||
-        (userName.includes('nayeem') && (
-          itemRequesterCode === 'fo032507061190' ||
+      if (isSubordinate) return true;
+
+      // Direct supervisor match by name, email, or code
+      const isSupervisorNameMatch =
+        itemSupervisorName &&
+        Array.from(activeUserNames).some(
+          (n) => n && (itemSupervisorName === n || itemSupervisorName.includes(n) || n.includes(itemSupervisorName))
+        );
+
+      const isSupervisorEmailMatch =
+        itemSupervisorEmail &&
+        Array.from(activeUserEmails).some(
+          (em) => em && (itemSupervisorEmail === em || itemSupervisorEmail.includes(em))
+        );
+
+      // Check assigned supervisor from empMap profile
+      const empProfile = empMap.get(itemRequesterCode) || empMap.get(itemRequesterName);
+      const assignedSupervisor = (empProfile?.supervisor || '').toLowerCase().trim();
+      const isAssignedSupervisorMatch =
+        assignedSupervisor &&
+        (Array.from(activeUserCodes).some((c) => assignedSupervisor === c) ||
+          Array.from(activeUserNames).some(
+            (n) => n && (assignedSupervisor === n || assignedSupervisor.includes(n) || n.includes(assignedSupervisor))
+          ));
+
+      // Team Lead fallback mapping (e.g. S M Nayeem Rahman -> Nasif Kamal & Md. Nazmul Hossain)
+      const isNayeemFallback =
+        Array.from(activeUserNames).some((n) => n.includes('nayeem')) &&
+        (itemRequesterCode === 'fo032507061190' ||
           itemRequesterCode === 'dc01242809848' ||
           itemRequesterName.includes('nasif') ||
-          itemRequesterName.includes('nazmul')
-        ));
+          itemRequesterName.includes('nazmul'));
 
-      return isSupervisor;
+      return Boolean(
+        isSupervisorNameMatch ||
+          isSupervisorEmailMatch ||
+          isAssignedSupervisorMatch ||
+          isNayeemFallback
+      );
     });
 
     const pendingApprovals = filtered.filter((i) => i.currentState === 'pending_approval').length;

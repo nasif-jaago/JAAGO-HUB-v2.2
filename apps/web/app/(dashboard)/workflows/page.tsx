@@ -21,7 +21,7 @@ import {
 import { EnterpriseTable, ColumnDef } from '@jaago/ui';
 import { getCurrentUserSession, UserSessionData } from '@/lib/user-profile-sync';
 import { downloadAttachment } from '@/lib/attachment-helper';
-import { isDspOnlyScoped, isDspDepartment } from '@/lib/rbac-guard';
+import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
 import {
   approveAttendanceRegularization,
   refuseAttendanceRegularization,
@@ -90,6 +90,7 @@ function WorkflowsContent() {
   const urlRequestId = searchParams.get('requestId');
 
   const [session, setSession] = useState<UserSessionData | null>(null);
+  const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [selectedInstance, setSelectedInstance] = useState<WorkflowInstance | null>(null);
   const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'HISTORY'>('ALL');
@@ -207,6 +208,10 @@ function WorkflowsContent() {
     setSession(currentSession);
     loadWorkflows(currentSession);
 
+    fetchEmployeesFromSupabase().then((emps) => {
+      if (emps && emps.length > 0) setEmployees(emps);
+    });
+
     const handleReqUpdate = () => loadWorkflows();
     window.addEventListener('jaago_leave_request_updated', handleReqUpdate);
     window.addEventListener('jaago_attendance_regularization_updated', handleReqUpdate);
@@ -224,7 +229,7 @@ function WorkflowsContent() {
     try {
       const reviewerName = session?.fullName || 'Supervisor';
       const reviewerCode = session?.employeeCode || '';
-      const reviewerEmail = session?.email || 'nasif.kamal@jaago.com.bd';
+      const reviewerEmail = session?.email || '';
 
       const isReg =
         instance.definitionKey === 'attendance_regularization' || instance.id.startsWith('reg-');
@@ -291,7 +296,7 @@ function WorkflowsContent() {
     try {
       const reviewerName = session?.fullName || 'Supervisor';
       const reviewerCode = session?.employeeCode || '';
-      const reviewerEmail = session?.email || 'nasif.kamal@jaago.com.bd';
+      const reviewerEmail = session?.email || '';
 
       const isReg =
         refusalModalInstance.definitionKey === 'attendance_regularization' ||
@@ -391,57 +396,122 @@ function WorkflowsContent() {
     }
   };
 
-  // Strictly filter out self-requests and enforce DSP scope & supervisor assignment
+  // Strictly filter out self-requests and enforce dynamic supervisor assignment across all users
   const scopedInstances = useMemo(() => {
-    const isDspScoped = typeof window !== 'undefined' ? isDspOnlyScoped() : false;
     const userEmail = (session?.email || '').toLowerCase().trim();
     const userName = (session?.fullName || '').toLowerCase().trim();
+    const userCode = (session?.employeeCode || '').toLowerCase().trim();
     const isSuperAdmin =
       (session?.roles || []).includes('super_admin') ||
       userEmail.includes('nasif.kamal') ||
       userName.includes('nasif kamal');
 
-    return instances.filter((item) => {
-      if (isDspScoped && !isDspDepartment(item.metadata?.department)) {
-        return false;
+    // Active user employee identifiers
+    const activeUserCodes = new Set<string>();
+    if (userCode) activeUserCodes.add(userCode);
+    if (session?.id) activeUserCodes.add(session.id.toLowerCase().trim());
+
+    const activeUserNames = new Set<string>();
+    if (userName) activeUserNames.add(userName);
+
+    const activeUserEmails = new Set<string>();
+    if (userEmail) activeUserEmails.add(userEmail);
+
+    // Dynamically match active employee in roster to harvest extra aliases & emails
+    const activeEmp = employees.find(
+      (e) =>
+        (userCode && e.code?.toLowerCase().trim() === userCode) ||
+        (userEmail &&
+          ((e.workEmail && e.workEmail.toLowerCase().trim() === userEmail) ||
+            (e.personalEmail && e.personalEmail.toLowerCase().trim() === userEmail))) ||
+        (userName && e.name?.toLowerCase().trim() === userName)
+    );
+
+    if (activeEmp) {
+      if (activeEmp.code) activeUserCodes.add(activeEmp.code.toLowerCase().trim());
+      if (activeEmp.id) activeUserCodes.add(activeEmp.id.toLowerCase().trim());
+      if (activeEmp.name) activeUserNames.add(activeEmp.name.toLowerCase().trim());
+      if (activeEmp.workEmail) activeUserEmails.add(activeEmp.workEmail.toLowerCase().trim());
+      if (activeEmp.personalEmail) activeUserEmails.add(activeEmp.personalEmail.toLowerCase().trim());
+    }
+
+    // Subordinate codes & names from employees roster
+    const subordinateCodes = new Set<string>();
+    const subordinateNames = new Set<string>();
+
+    employees.forEach((emp) => {
+      const sup = (emp.supervisor || '').toLowerCase().trim();
+      const secSup = (emp.secondarySupervisor || '').toLowerCase().trim();
+      if (!sup && !secSup) return;
+
+      const isMatch =
+        (sup &&
+          (Array.from(activeUserCodes).some((c) => sup === c) ||
+            Array.from(activeUserEmails).some((em) => sup === em) ||
+            Array.from(activeUserNames).some((n) => sup === n || sup.includes(n) || n.includes(sup)))) ||
+        (secSup &&
+          (Array.from(activeUserCodes).some((c) => secSup === c) ||
+            Array.from(activeUserEmails).some((em) => secSup === em) ||
+            Array.from(activeUserNames).some((n) => secSup === n || secSup.includes(n) || n.includes(secSup))));
+
+      if (isMatch) {
+        if (emp.code) subordinateCodes.add(emp.code.toLowerCase().trim());
+        if (emp.id) subordinateCodes.add(emp.id.toLowerCase().trim());
+        if (emp.name) subordinateNames.add(emp.name.toLowerCase().trim());
       }
+    });
+
+    return instances.filter((item) => {
       const itemRequesterCode = (item.metadata.employeeCode || item.requesterId || '').toLowerCase().trim();
-      const userCode = (session?.employeeCode || '').toLowerCase().trim();
       const itemRequesterName = (item.metadata.requesterName || '').toLowerCase().trim();
-
-      // Request owner cannot approve their own request in the Approvals Engine
-      if (userCode && itemRequesterCode === userCode) return false;
-      if (userName && itemRequesterName && (userName === itemRequesterName || itemRequesterName.includes(userName))) return false;
-
-      // Super Admin sees all organizational requests
-      if (isSuperAdmin) return true;
-
-      // Regular staff / supervisor only sees requests where they are the designated supervisor
       const itemSupervisorName = (item.metadata.supervisorName || '').toLowerCase().trim();
       const itemSupervisorEmail = (item.metadata.supervisorEmail || '').toLowerCase().trim();
-      const isSupervisor =
-        (userName && itemSupervisorName && (
-          itemSupervisorName.includes(userName) ||
-          userName.includes(itemSupervisorName) ||
-          (userName.includes('nayeem') && itemSupervisorName.includes('nayeem')) ||
-          (userName.includes('nasif') && itemSupervisorName.includes('nasif'))
-        )) ||
-        (userEmail && itemSupervisorEmail && (
-          itemSupervisorEmail === userEmail ||
-          (userEmail.includes('nayeem') && (itemSupervisorEmail.includes('nayeem') || itemSupervisorName.includes('nayeem'))) ||
-          (userEmail.includes('nasif') && (itemSupervisorEmail.includes('nasif') || itemSupervisorName.includes('nasif')))
-        )) ||
-        // Team Lead direct subordinates mapping (Nasif Kamal & Md. Nazmul Hossain report to S M Nayeem Rahman)
-        (userName.includes('nayeem') && (
-          itemRequesterCode === 'fo032507061190' ||
+
+      // 1. STRICT RULE: Request owner cannot see/approve their own request in the Approvals Engine
+      const isRequester =
+        (itemRequesterCode && activeUserCodes.has(itemRequesterCode)) ||
+        (itemRequesterName &&
+          (activeUserNames.has(itemRequesterName) ||
+            Array.from(activeUserNames).some((n) => n && (n === itemRequesterName || itemRequesterName.includes(n)))));
+
+      if (isRequester) return false;
+
+      // 2. Super Admin sees all organizational requests
+      if (isSuperAdmin || (!userEmail && !userCode && !userName)) return true;
+
+      // 3. Subordinate check
+      const isSubordinate =
+        (itemRequesterCode && subordinateCodes.has(itemRequesterCode)) ||
+        (itemRequesterName &&
+          (subordinateNames.has(itemRequesterName) ||
+            Array.from(subordinateNames).some((sn) => sn && (sn === itemRequesterName || itemRequesterName.includes(sn)))));
+
+      if (isSubordinate) return true;
+
+      // 4. Direct supervisor match
+      const isSupNameMatch =
+        itemSupervisorName &&
+        Array.from(activeUserNames).some(
+          (n) => n && (itemSupervisorName === n || itemSupervisorName.includes(n) || n.includes(itemSupervisorName))
+        );
+
+      const isSupEmailMatch =
+        itemSupervisorEmail &&
+        Array.from(activeUserEmails).some(
+          (em) => em && (itemSupervisorEmail === em || itemSupervisorEmail.includes(em))
+        );
+
+      // 5. Team Lead direct subordinates mapping (S M Nayeem Rahman -> Nasif Kamal & Md. Nazmul Hossain)
+      const isNayeemFallback =
+        Array.from(activeUserNames).some((n) => n.includes('nayeem')) &&
+        (itemRequesterCode === 'fo032507061190' ||
           itemRequesterCode === 'dc01242809848' ||
           itemRequesterName.includes('nasif') ||
-          itemRequesterName.includes('nazmul')
-        ));
+          itemRequesterName.includes('nazmul'));
 
-      return isSupervisor;
+      return Boolean(isSupNameMatch || isSupEmailMatch || isNayeemFallback);
     });
-  }, [instances, session]);
+  }, [instances, session, employees]);
 
   const filteredInstances = useMemo(() => {
     return scopedInstances.filter((item) => {

@@ -41,6 +41,33 @@ const STORAGE_KEY_REGULARIZATIONS = 'jaago_attendance_regularizations_v2';
  */
 export const INITIAL_REGULARIZATIONS: AttendanceRegularizationItem[] = [
   {
+    id: 'reg-1788951865163-n4tr',
+    attendanceLogId: 'att-nasif-20260903',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    department: "Founder's Office JFT",
+    designation: 'Coordinator, Tech 4 Development',
+    date: '2026-09-03',
+    originalCheckIn: '08:25 PM',
+    originalCheckOut: '11:13 PM',
+    originalStatus: 'Late',
+    originalLateByMin: 625,
+    adjustedCheckIn: '10:00 AM',
+    adjustedCheckOut: '06:00 PM',
+    adjustedStatus: 'Present',
+    workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
+    calculatedHours: '8h 00m',
+    reason: 'Late Entry Due to Official Field Work / Traffic',
+    notes: 'Shift-based auto correction & supervisor approval requested.',
+    supervisorName: 'S M Nayeem Rahman',
+    supervisorEmail: 'nayeem.rahman@jaago.com.bd',
+    status: 'Pending',
+    appliedAt: '2026-09-03T17:04:00Z',
+    createdAt: '2026-09-03T17:04:00Z',
+    updatedAt: '2026-09-03T17:04:00Z',
+  },
+  {
     id: 'reg-demo-nayeem-3',
     attendanceLogId: 'att-demo-20260830',
     employeeId: 'emp-nayeem',
@@ -145,6 +172,59 @@ export const INITIAL_REGULARIZATIONS: AttendanceRegularizationItem[] = [
     updatedAt: '2026-09-04T18:00:00Z',
   },
   {
+    id: 'reg-nasif-20260909',
+    attendanceLogId: 'att-nasif-20260909',
+    employeeId: 'emp-nasif',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    department: "Founder's Office JFT",
+    designation: 'Coordinator, Tech 4 Development',
+    date: '2026-09-09',
+    originalCheckIn: '10:48 AM',
+    originalCheckOut: '11:51 AM',
+    originalStatus: 'Late',
+    originalLateByMin: 48,
+    adjustedCheckIn: '10:00 AM',
+    adjustedCheckOut: '06:00 PM',
+    adjustedStatus: 'Present',
+    workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
+    calculatedHours: '8h 00m',
+    reason: 'Late Entry Due to Official Field Work / Traffic',
+    notes: 'Shift-based auto correction & supervisor approval requested.',
+    supervisorName: 'S M Nayeem Rahman',
+    supervisorEmail: 'nayeem.rahman@jaago.com.bd',
+    status: 'Pending',
+    appliedAt: '2026-09-09T05:22:15Z',
+    createdAt: '2026-09-09T05:22:15Z',
+    updatedAt: '2026-09-09T05:22:15Z',
+  },
+  {
+    id: 'reg-nazmul-20260908',
+    attendanceLogId: 'att-nazmul-20260908',
+    employeeId: 'emp-nazmul',
+    employeeCode: 'DC01242809848',
+    employeeName: 'Md. Nazmul Hossain',
+    department: "Founder's Office (JF)",
+    designation: 'Coordinator',
+    date: '2026-09-08',
+    originalCheckIn: '10:38 AM',
+    originalCheckOut: '06:00 PM',
+    originalStatus: 'Late',
+    originalLateByMin: 38,
+    adjustedCheckIn: '10:00 AM',
+    adjustedCheckOut: '06:00 PM',
+    adjustedStatus: 'Present',
+    workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
+    calculatedHours: '8h 00m',
+    reason: 'Field coordination and meeting with external partners.',
+    supervisorName: 'S M Nayeem Rahman',
+    supervisorEmail: 'nayeem.rahman@jaago.com.bd',
+    status: 'Pending',
+    appliedAt: '2026-09-08T09:00:00Z',
+    createdAt: '2026-09-08T09:00:00Z',
+    updatedAt: '2026-09-08T09:00:00Z',
+  },
+  {
     id: 'reg-demo-1',
     attendanceLogId: 'att-demo-20260824',
     employeeId: 'emp-nasif',
@@ -213,11 +293,13 @@ export function getLocalRegularizations(): AttendanceRegularizationItem[] {
 
     // Merge any missing seed items from INITIAL_REGULARIZATIONS
     const existingDates = new Set(list.map((i) => `${(i.employeeCode || '').toLowerCase()}_${i.date}`));
+    const existingIds = new Set(list.map((i) => i.id));
     INITIAL_REGULARIZATIONS.forEach((seed) => {
       const key = `${(seed.employeeCode || '').toLowerCase()}_${seed.date}`;
-      if (!existingDates.has(key)) {
+      if (!existingDates.has(key) && !existingIds.has(seed.id)) {
         list.push(seed);
         existingDates.add(key);
+        existingIds.add(seed.id);
         mutated = true;
       }
     });

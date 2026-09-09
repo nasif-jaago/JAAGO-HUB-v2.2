@@ -812,6 +812,11 @@ export function recordLocalAttendanceLog(logData: {
   checkOutLat?: number | undefined;
   checkOutLng?: number | undefined;
   isAutoCheckout?: boolean | undefined;
+  primarySource?: AttendanceLogItem['primarySource'] | undefined;
+  checkInSource?: AttendanceLogItem['checkInSource'] | undefined;
+  checkOutSource?: AttendanceLogItem['checkOutSource'] | undefined;
+  allPunches?: any[] | undefined;
+  sourceBreakdown?: any | undefined;
   notes?: string | undefined;
 }): AttendanceLogItem {
   const currentLogs = getLocalAttendanceLogs();
@@ -844,7 +849,7 @@ export function recordLocalAttendanceLog(logData: {
       date: existing.date,
       lateByMin: existing.lateByMin ?? 0,
       earlyOutByMin: existing.earlyOutByMin ?? 0,
-      locationName: logData.locationName || existing.locationName || 'JAAGO HQ (Banani)',
+      locationName: logData.locationName || existing.locationName || (logData.branch && logData.branch !== 'Head Office (Banani)' ? logData.branch : 'JAAGO Foundation'),
       checkInLat: logData.checkInLat ?? existing.checkInLat,
       checkInLng: logData.checkInLng ?? existing.checkInLng,
       checkOutLat: logData.checkOutLat ?? existing.checkOutLat,
@@ -854,8 +859,13 @@ export function recordLocalAttendanceLog(logData: {
       createdAt: existing.createdAt,
       designation: logData.designation || existing.designation,
       department: logData.department || existing.department,
-      branch: logData.branch || existing.branch,
+      branch: logData.branch || existing.branch || 'JAAGO Foundation',
       avatarUrl: logData.avatarUrl || existing.avatarUrl || '',
+      primarySource: logData.primarySource || existing.primarySource,
+      checkInSource: logData.checkInSource || existing.checkInSource,
+      checkOutSource: logData.checkOutSource || existing.checkOutSource,
+      allPunches: logData.allPunches || existing.allPunches,
+      sourceBreakdown: logData.sourceBreakdown || existing.sourceBreakdown,
       timestamp: nowFormatted,
       updatedAt: nowFormatted,
       notes: logData.notes || existing.notes || '',
@@ -869,7 +879,7 @@ export function recordLocalAttendanceLog(logData: {
       employeeName: logData.employeeName,
       designation: logData.designation || 'Staff Member',
       department: logData.department || 'General',
-      branch: logData.branch || 'Head Office (Banani)',
+      branch: logData.branch || 'JAAGO Foundation',
       avatarUrl: logData.avatarUrl || '',
       status: logData.status || 'Present',
       device: logData.device || 'Web Portal',
@@ -878,12 +888,17 @@ export function recordLocalAttendanceLog(logData: {
       checkOutTime: logData.checkOutTime,
       lateByMin: 0,
       earlyOutByMin: 0,
-      locationName: logData.locationName || 'JAAGO HQ (Banani)',
+      locationName: logData.locationName || (logData.branch && logData.branch !== 'Head Office (Banani)' ? logData.branch : 'JAAGO Foundation'),
       checkInLat: logData.checkInLat,
       checkInLng: logData.checkInLng,
       checkOutLat: logData.checkOutLat,
       checkOutLng: logData.checkOutLng,
       isAutoCheckout: logData.isAutoCheckout || false,
+      primarySource: logData.primarySource,
+      checkInSource: logData.checkInSource,
+      checkOutSource: logData.checkOutSource,
+      allPunches: logData.allPunches,
+      sourceBreakdown: logData.sourceBreakdown,
       createdBy: `${logData.employeeName} - (${logData.employeeCode})`,
       createdAt: nowFormatted,
       updatedAt: nowFormatted,
