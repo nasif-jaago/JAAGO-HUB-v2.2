@@ -39,12 +39,17 @@ jobs:
       - name: Validation checks
         run: |
           echo "🔍 Running validation checks..."
-          npm run typecheck || {
+          npm run typecheck --workspaces || {
             echo "❌ Type checking failed!"
+            echo "Troubleshooting:
+  - Check for TypeScript errors in apps/web
+  - Verify all dependencies are installed
+  - Check package-lock.json integrity
+  "
             exit 1
           }
           
-          npm run lint || {
+          npm run lint --workspaces || {
             echo "❌ Linting failed!"
             exit 1
           }

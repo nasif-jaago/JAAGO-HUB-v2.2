@@ -25,16 +25,44 @@ async function buildPackage(packageDir) {
     // Install dependencies if needed
     if (!fs.existsSync('node_modules')) {
       console.log(`📥 Installing dependencies for @jaago/${packageName}...`);
-      execSync('npm ci --prefer-offline', { stdio: 'inherit' });
+      try {
+        execSync('npm ci --prefer-offline', { stdio: 'inherit' });
+      } catch (installError) {
+        console.log(`⚠️  npm ci failed, trying npm install...`);
+        execSync('npm install', { stdio: 'inherit' });
+      }
     }
     
-    // Run build command
+    // Check if TypeScript is configured
     const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
-    const buildScript = packageJson.scripts?.build;
+    const hasTypeScript = packageJson.devDependencies?.typescript || packageJson.dependencies?.typescript;
+    
+    if (hasTypeScript && !packageJson.scripts?.build) {
+      console.log(`📝 Creating TypeScript build script for @jaago/${packageName}...`);
+      packageJson.scripts = packageJson.scripts || {};
+      packageJson.scripts.build = 'tsc';
+      fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2));
+    }
+    
+    // Run build command - try multiple possible build script names
+    const buildScript = packageJson.scripts?.build || 
+                       packageJson.scripts?.['build:all'] || 
+                       packageJson.scripts?.['build:app'] || 
+                       packageJson.scripts?.['build:ts'] || 
+                       packageJson.scripts?.['compile'] || 
+                       packageJson.scripts?.['build:all'];
     
     if (!buildScript) {
-      console.log(`⚠️  No build script in @jaago/${packageName}, skipping build...`);
-      return;
+      // For TypeScript packages without explicit build script, run tsc directly
+      if (hasTypeScript) {
+        console.log(`🔨 Running tsc for @jaago/${packageName}...`);
+        execSync('tsc', { stdio: 'inherit' });
+        console.log(`✅ Successfully built @jaago/${packageName} with tsc`);
+        return;
+      } else {
+        console.log(`⚠️  No build script in @jaago/${packageName}, skipping build...`);
+        return;
+      }
     }
     
     console.log(`🔨 Running build: ${buildScript}`);
