@@ -16,20 +16,20 @@
   "scripts": {
     "start": "node index.js",
     "start:server": "node index.js",
-    "build:all": "node tooling/scripts/build-all.js",
-    "build": "node tooling/scripts/build-all.js",
-    "dev": "node tooling/scripts/start-dev.js",
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
     "dev:web": "npm run dev --workspace=@jaago/web",
     "dev:worker": "npm run dev --workspace=@jaago/worker",
     "dev:log-runner": "npm run dev --workspace=@jaago/log-runner",
-    "lint": "npm run lint --workspaces",
-    "typecheck": "npm run typecheck --workspaces",
-    "test": "npm run test --workspaces",
-    "clean": "npm run clean --workspaces",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\"",
     "jaago": "tsx tooling/scripts/jaago-cli.ts",
-    "smoke-test": "tsx tooling/scripts/smoke-test.ts"
+    "smoke-test": "tsx tooling/scripts/smoke-test.ts",
+    "package:deploy": "node tooling/scripts/create-deploy-zip.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

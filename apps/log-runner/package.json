@@ -12,11 +12,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@jaago/config": "*",
-    "@jaago/contracts": "*",
-    "@jaago/core-infra": "*",
-    "@jaago/logger": "*",
-    "@jaago/observability": "*"
+    "@jaago/config": "file:../packages/config",
+    "@jaago/contracts": "file:../packages/contracts",
+    "@jaago/core-infra": "file:../packages/core-infra",
+    "@jaago/logger": "file:../packages/logger",
+    "@jaago/observability": "file:../packages/observability"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
