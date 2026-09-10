@@ -14,8 +14,11 @@ import {
   Loader2,
   Check,
   ArrowLeft,
+  Mail,
+  KeyRound,
+  RefreshCw,
 } from 'lucide-react';
-import { getSupabase, updatePassword } from '@/lib/supabase-auth';
+import { getSupabase, updatePassword, isAllowedWorkDomain, getDomainRestrictionError, requestPasswordReset } from '@/lib/supabase-auth';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -30,6 +33,15 @@ export default function ResetPasswordPage() {
   const [errorMessage, setErrorMessage] = useState('');
   const [userEmail, setUserEmail] = useState<string>('');
 
+  // Inline recovery helpers (for expired link fallback)
+  const [fallbackMode, setFallbackMode] = useState<'request' | 'otp'>('request');
+  const [requestEmail, setRequestEmail] = useState('');
+  const [requestLoading, setRequestLoading] = useState(false);
+  const [requestSuccess, setRequestSuccess] = useState('');
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+
   useEffect(() => {
     let isMounted = true;
     let authUnsubscribe: (() => void) | null = null;
@@ -39,6 +51,8 @@ export default function ResetPasswordPage() {
       try {
         const url = new URL(window.location.href);
         const code = url.searchParams.get('code');
+        const tokenHash = url.searchParams.get('token_hash') || url.searchParams.get('token');
+        const recoveryType = (url.searchParams.get('type') || 'recovery') as any;
         const error = url.searchParams.get('error');
         const errorDescription = url.searchParams.get('error_description');
 
@@ -49,7 +63,43 @@ export default function ResetPasswordPage() {
           return;
         }
 
-        // 1. If PKCE code is in the URL, exchange for session
+        // 1. Direct OTP Token Hash Verification (works across all domains & local without redirection)
+        if (tokenHash) {
+          const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: recoveryType === 'recovery' ? 'recovery' : recoveryType,
+          });
+
+          if (!verifyError && verifyData?.session?.user) {
+            if (!isMounted) return;
+            setUserEmail(verifyData.session.user.email || '');
+            setPageState('ready');
+            return;
+          } else if (verifyError) {
+            console.warn('[Reset Password] Token hash verification notice:', verifyError.message);
+          }
+        }
+
+        // 2. Hash fragment tokens (#access_token=...&refresh_token=...)
+        if (typeof window !== 'undefined' && window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          if (accessToken) {
+            const { data: sessionData, error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || '',
+            });
+            if (!setSessionError && sessionData?.session?.user) {
+              if (!isMounted) return;
+              setUserEmail(sessionData.session.user.email || '');
+              setPageState('ready');
+              return;
+            }
+          }
+        }
+
+        // 3. PKCE Code Exchange
         if (code) {
           const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) {
@@ -62,7 +112,7 @@ export default function ResetPasswordPage() {
           }
         }
 
-        // 2. Check for active session from Supabase
+        // 4. Check for active session in client
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData?.session?.user) {
           if (!isMounted) return;
@@ -71,7 +121,7 @@ export default function ResetPasswordPage() {
           return;
         }
 
-        // 3. Listen for auth state change (PASSWORD_RECOVERY or SIGNED_IN from URL hash)
+        // 5. Listen for auth state change
         const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
           if (session?.user && (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
             if (!isMounted) return;
@@ -81,12 +131,12 @@ export default function ResetPasswordPage() {
         });
         authUnsubscribe = () => authListener.subscription.unsubscribe();
 
-        // 4. Fallback timeout: if after 3.5s no valid session is established
+        // 6. Timeout: transition to expired / manual entry if no session established within 3s
         setTimeout(() => {
           if (isMounted) {
             setPageState((current) => (current === 'verifying' ? 'expired' : current));
           }
-        }, 3500);
+        }, 3000);
       } catch (err: any) {
         if (!isMounted) return;
         setPageState('expired');
@@ -156,6 +206,76 @@ export default function ResetPasswordPage() {
     }
   };
 
+  // Handler for requesting a new link directly on this page
+  const handleRequestNewLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setRequestSuccess('');
+
+    const cleanEmail = requestEmail.trim().toLowerCase();
+    if (!isAllowedWorkDomain(cleanEmail)) {
+      setErrorMessage(getDomainRestrictionError(cleanEmail));
+      return;
+    }
+
+    setRequestLoading(true);
+    try {
+      const res = await requestPasswordReset(cleanEmail);
+      setRequestSuccess(
+        res.data?.message || `Password reset link dispatched to ${cleanEmail}. Please check your inbox.`
+      );
+      if (res.data?.debug?.directResetUrl) {
+        // If debug link returned in dev, allow 1-click transition
+        console.log('[Dev Diagnostic] Direct Reset Link:', res.data.debug.directResetUrl);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to dispatch reset link.');
+    } finally {
+      setRequestLoading(false);
+    }
+  };
+
+  // Handler for manual OTP code verification
+  const handleVerifyOtpCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+
+    const cleanEmail = otpEmail.trim().toLowerCase();
+    const cleanCode = otpCode.trim();
+
+    if (!cleanEmail || !cleanCode) {
+      setErrorMessage('Both work email and verification code are required.');
+      return;
+    }
+
+    if (!isAllowedWorkDomain(cleanEmail)) {
+      setErrorMessage(getDomainRestrictionError(cleanEmail));
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const supabase = getSupabase();
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: cleanCode,
+        type: 'recovery',
+      });
+
+      if (error) throw error;
+      if (data?.session?.user) {
+        setUserEmail(data.session.user.email || cleanEmail);
+        setPageState('ready');
+      } else {
+        throw new Error('Verification code accepted, but session could not be established.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Invalid or expired verification code.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-4 sm:p-6 overflow-hidden select-none">
       {/* ── FULLSCREEN BACKGROUND WITH FROSTED BLUR ── */}
@@ -173,7 +293,7 @@ export default function ResetPasswordPage() {
       </div>
 
       {/* ── MAIN FROSTED GLASS CARD ── */}
-      <div className="relative z-10 w-full max-w-[440px] rounded-[32px] border border-white/40 bg-black/45 shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] backdrop-blur-2xl p-7 sm:p-9 space-y-6 text-white animate-in fade-in zoom-in-95 duration-300">
+      <div className="relative z-10 w-full max-w-[460px] rounded-[32px] border border-white/40 bg-black/45 shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] backdrop-blur-2xl p-7 sm:p-9 space-y-6 text-white animate-in fade-in zoom-in-95 duration-300">
         {/* Brand Header */}
         <div className="text-center space-y-2">
           <div className="inline-block rounded-2xl overflow-hidden mb-1">
@@ -216,40 +336,159 @@ export default function ResetPasswordPage() {
           </div>
         )}
 
-        {/* ── 2. EXPIRED / INVALID LINK STATE ── */}
+        {/* ── 2. EXPIRED / INVALID LINK OR DIRECT RECOVERY STATE ── */}
         {pageState === 'expired' && (
-          <div className="space-y-5 py-2 text-center">
+          <div className="space-y-4 py-1 animate-in fade-in">
             <div className="flex justify-center">
-              <div className="h-14 w-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 animate-in zoom-in">
-                <AlertTriangle className="h-7 w-7" />
+              <div className="h-12 w-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300">
+                <AlertTriangle className="h-6 w-6" />
               </div>
             </div>
-            <div className="space-y-2">
-              <h2 className="text-lg font-extrabold text-white tracking-tight drop-shadow-md">
-                Link Expired or Invalid
+
+            <div className="text-center space-y-1">
+              <h2 className="text-base font-extrabold text-white tracking-tight drop-shadow-md">
+                No Active Recovery Session
               </h2>
-              <p className="text-xs text-white/85 leading-relaxed bg-black/30 border border-white/20 rounded-2xl p-3.5">
-                {errorMessage ||
-                  'This password reset link has expired or has already been used. For your security, password links are single-use and time-limited.'}
+              <p className="text-xs text-white/80 leading-relaxed">
+                {errorMessage || 'Your reset link is expired or incomplete. You can request a fresh link or enter your OTP code directly below.'}
               </p>
             </div>
-            <div className="pt-2 space-y-2">
+
+            {/* Mode Switcher Tabs */}
+            <div className="flex rounded-xl bg-white/10 p-1 border border-white/20 text-xs font-bold">
               <button
                 type="button"
-                onClick={() => router.push('/login')}
-                className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#698a3b]/90 to-[#4d6b27]/90 hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/40 text-white font-extrabold tracking-wide text-xs uppercase shadow-lg transition active:scale-[0.98] cursor-pointer flex items-center justify-center space-x-2"
+                onClick={() => { setFallbackMode('request'); setErrorMessage(''); setRequestSuccess(''); }}
+                className={`flex-1 py-1.5 rounded-lg transition text-center cursor-pointer flex items-center justify-center space-x-1.5 ${
+                  fallbackMode === 'request'
+                    ? 'bg-white/20 text-white shadow-sm'
+                    : 'text-white/60 hover:text-white'
+                }`}
               >
-                <span>Request New Reset Link</span>
-                <ArrowRight className="h-4 w-4" />
+                <Mail className="h-3.5 w-3.5" />
+                <span>Send Reset Link</span>
               </button>
               <button
                 type="button"
-                onClick={() => router.push('/login')}
-                className="w-full py-2 text-xs text-white/70 hover:text-white font-semibold transition cursor-pointer"
+                onClick={() => { setFallbackMode('otp'); setErrorMessage(''); setRequestSuccess(''); }}
+                className={`flex-1 py-1.5 rounded-lg transition text-center cursor-pointer flex items-center justify-center space-x-1.5 ${
+                  fallbackMode === 'otp'
+                    ? 'bg-white/20 text-white shadow-sm'
+                    : 'text-white/60 hover:text-white'
+                }`}
               >
-                Back to Sign In
+                <KeyRound className="h-3.5 w-3.5" />
+                <span>Enter OTP Code</span>
               </button>
             </div>
+
+            {requestSuccess && (
+              <div className="p-3.5 rounded-2xl bg-emerald-500/25 border border-emerald-500/40 text-white text-xs font-semibold backdrop-blur-md flex items-start space-x-2">
+                <CheckCircle2 className="h-4 w-4 flex-shrink-0 mt-0.5 text-emerald-300" />
+                <div className="leading-relaxed">{requestSuccess}</div>
+              </div>
+            )}
+
+            {errorMessage && (
+              <div className="p-3 rounded-2xl bg-red-500/30 border border-red-500/50 text-white text-xs font-semibold backdrop-blur-md flex items-start space-x-2">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-red-200" />
+                <div className="leading-relaxed">{errorMessage}</div>
+              </div>
+            )}
+
+            {/* Sub-form A: Request Fresh Link */}
+            {fallbackMode === 'request' && (
+              <form onSubmit={handleRequestNewLink} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-white/90">Work Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={requestEmail}
+                    onChange={(e) => setRequestEmail(e.target.value)}
+                    placeholder="name@jaago.com.bd"
+                    className="w-full px-3.5 py-2.5 bg-white/10 border border-white/30 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] text-xs backdrop-blur-md"
+                  />
+                  <p className="text-[10px] text-white/70">
+                    Eligible: @jaago.com.bd, @jaagofoundation.org, @emkcenter.org
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={requestLoading}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#698a3b] to-[#4d6b27] hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/30 text-white font-extrabold text-xs uppercase tracking-wider shadow-md transition active:scale-[0.98] disabled:opacity-50 cursor-pointer flex items-center justify-center space-x-2"
+                >
+                  {requestLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>DISPATCHING LINK...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>DISPATCH NEW RESET LINK</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {/* Sub-form B: Enter OTP Code */}
+            {fallbackMode === 'otp' && (
+              <form onSubmit={handleVerifyOtpCode} className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-white/90">Work Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={otpEmail}
+                    onChange={(e) => setOtpEmail(e.target.value)}
+                    placeholder="name@jaago.com.bd"
+                    className="w-full px-3.5 py-2.5 bg-white/10 border border-white/30 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] text-xs backdrop-blur-md"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-white/90">Recovery Code / OTP</label>
+                  <input
+                    type="text"
+                    required
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    placeholder="e.g. 91037658"
+                    className="w-full px-3.5 py-2.5 bg-white/10 border border-white/30 rounded-xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] text-xs font-mono tracking-wider backdrop-blur-md text-center"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={otpLoading}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#698a3b] to-[#4d6b27] hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/30 text-white font-extrabold text-xs uppercase tracking-wider shadow-md transition active:scale-[0.98] disabled:opacity-50 cursor-pointer flex items-center justify-center space-x-2"
+                >
+                  {otpLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>VERIFYING CODE...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      <span>VERIFY CODE &amp; PROCEED</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            <button
+              type="button"
+              onClick={() => router.push('/login')}
+              className="w-full py-2 text-xs text-white/70 hover:text-white font-semibold transition cursor-pointer flex items-center justify-center space-x-1"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              <span>Back to Sign In</span>
+            </button>
           </div>
         )}
 
@@ -305,10 +544,10 @@ export default function ResetPasswordPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-black hover:text-black/70 transition cursor-pointer"
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-white/70 hover:text-white transition cursor-pointer"
                   aria-label="Toggle password visibility"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4 text-black" /> : <Eye className="h-4 w-4 text-black" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
@@ -332,10 +571,10 @@ export default function ResetPasswordPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-black hover:text-black/70 transition cursor-pointer"
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-white/70 hover:text-white transition cursor-pointer"
                   aria-label="Toggle confirm password visibility"
                 >
-                  {showConfirmPassword ? <EyeOff className="h-4 w-4 text-black" /> : <Eye className="h-4 w-4 text-black" />}
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>

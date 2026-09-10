@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   X,
   Send,
+  ArrowRight,
 } from 'lucide-react';
 import {
   isAllowedWorkDomain,
@@ -39,6 +40,7 @@ export default function LoginPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [forgotError, setForgotError] = useState('');
+  const [forgotResetUrl, setForgotResetUrl] = useState('');
 
   // Auto-detect OAuth redirect session, password recovery, or query error parameters
   useEffect(() => {
@@ -259,6 +261,9 @@ export default function LoginPage() {
       setForgotSuccess(
         res.data?.message || `Password reset link sent to ${cleanForgotEmail}. Please check your inbox.`
       );
+      if (res.data?.debug?.directResetUrl) {
+        setForgotResetUrl(res.data.debug.directResetUrl);
+      }
     } catch (err: any) {
       setForgotError(err.message || 'Failed to send password recovery email.');
     } finally {
@@ -487,13 +492,25 @@ export default function LoginPage() {
             )}
 
             {forgotSuccess ? (
-              <div className="p-4 rounded-2xl bg-emerald-500/25 border border-emerald-500/40 text-center space-y-2 animate-in fade-in">
+              <div className="p-4 rounded-2xl bg-emerald-500/25 border border-emerald-500/40 text-center space-y-2.5 animate-in fade-in">
                 <CheckCircle2 className="h-7 w-7 text-emerald-300 mx-auto" />
                 <div className="text-xs font-bold text-white">{forgotSuccess}</div>
+                {forgotResetUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.href = forgotResetUrl;
+                    }}
+                    className="w-full mt-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#698a3b] to-[#4d6b27] hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/40 text-white font-extrabold text-xs uppercase tracking-wider shadow-md transition cursor-pointer flex items-center justify-center space-x-1.5"
+                  >
+                    <span>Open Reset Password Screen</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(false)}
-                  className="mt-2 px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 border border-white/40 text-white font-bold text-xs uppercase tracking-wider cursor-pointer"
+                  className="mt-1 px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 border border-white/40 text-white font-bold text-xs uppercase tracking-wider cursor-pointer"
                 >
                   Return to Sign In
                 </button>

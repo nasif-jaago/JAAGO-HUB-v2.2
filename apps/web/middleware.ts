@@ -85,10 +85,21 @@ export function middleware(request: NextRequest) {
 
   // Root path routing
   if (pathname === '/') {
+    // If auth recovery tokens are attached to root, forward directly to /reset-password
+    if (search.includes('type=recovery') || search.includes('token_hash') || search.includes('token=')) {
+      const resetUrl = new URL('/reset-password', request.url);
+      resetUrl.search = search;
+      return NextResponse.redirect(resetUrl);
+    }
+
     if (isAuthenticated) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     } else {
-      return NextResponse.redirect(new URL('/login', request.url));
+      const loginUrl = new URL('/login', request.url);
+      if (search) {
+        loginUrl.search = search;
+      }
+      return NextResponse.redirect(loginUrl);
     }
   }
 
