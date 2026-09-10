@@ -137,27 +137,36 @@ export default function DashboardPage() {
         }));
       }
     };
-    // Refresh Monthly Attendance Summary Metrics dynamically from attendance logs
+    // Refresh Monthly Attendance Summary Metrics dynamically from canonical backend
     const refreshMonthlyMetrics = () => {
       try {
         const sess = getCurrentUserSession();
         const codeOrId = (sess?.employeeCode || user.employeeCode || user.id || '').trim();
         if (!codeOrId) return;
         const currentMonth = new Date().toISOString().slice(0, 7);
-        const stats = getEmployeeMonthlyAttendanceStats(codeOrId, currentMonth);
-
-        setMonthlyMetrics({
-          presentDays: stats.presentDays,
-          targetDays: stats.targetDays,
-          lateDays: stats.lateDays,
-          autoCheckouts: stats.autoCheckouts,
-          onTimePerformancePct: stats.onTimePerformancePct,
-          latePenaltyPct: stats.latePenaltyPct,
-          autoCheckoutRatePct: stats.autoCheckoutRatePct,
-          totalWorkedHours: stats.totalWorkedHours,
-          avgHoursPerDay: stats.avgHoursPerDay,
-          dailyTrend: stats.dailyTrend,
-        });
+        fetch(`/api/v1/attendance/me/summary?employeeId=${encodeURIComponent(codeOrId)}&month=${currentMonth}`)
+          .then((r) => r.json())
+          .then((res) => {
+            if (res.success && res.data) {
+              const d = res.data;
+              const avg = d.presentDays > 0 && d.totalWorkedHours
+                ? (parseFloat(d.totalWorkedHours) / d.presentDays).toFixed(1)
+                : '0.0';
+              setMonthlyMetrics((prev) => ({
+                ...prev,
+                presentDays: d.presentDays,
+                targetDays: d.targetDays || 22,
+                lateDays: d.lateDays,
+                autoCheckouts: d.autoCheckouts,
+                onTimePerformancePct: d.onTimePerformancePct ?? 100,
+                latePenaltyPct: d.latePenaltyPct ?? 0,
+                autoCheckoutRatePct: d.autoCheckoutRatePct ?? 0,
+                totalWorkedHours: d.totalWorkedHours || '0.0',
+                avgHoursPerDay: avg,
+              }));
+            }
+          })
+          .catch(() => {});
       } catch (err) {
         console.warn('Error refreshing dashboard monthly metrics:', err);
       }
@@ -431,8 +440,8 @@ export default function DashboardPage() {
               const inTs = parseInt(savedTime, 10);
               if (inTs > 0) {
                 setFirstCheckInTimestamp(inTs);
-                const diffSeconds = Math.max(0, Math.floor((Date.now() - inTs) / 1000));
-                setElapsedSeconds(savedWorkedSec + diffSeconds);
+                const diffSeconds = Math.max(0, Math.min(86400, Math.floor((Date.now() - inTs) / 1000)));
+                setElapsedSeconds(diffSeconds);
               }
             }
           } else {
@@ -790,19 +799,22 @@ export default function DashboardPage() {
   const refreshCanonicalAttendance = async (empId: string) => {
     try {
       const currentMonth = new Date().toISOString().slice(0, 7);
-      // 1. Local logs calculation
+      // 1. Seed local logs calculation only if empty to avoid flicker
       const localStats = getEmployeeMonthlyAttendanceStats(empId || user.employeeCode || user.id, currentMonth);
-      setMonthlyMetrics({
-        presentDays: localStats.presentDays,
-        targetDays: localStats.targetDays,
-        lateDays: localStats.lateDays,
-        autoCheckouts: localStats.autoCheckouts,
-        onTimePerformancePct: localStats.onTimePerformancePct,
-        latePenaltyPct: localStats.latePenaltyPct,
-        autoCheckoutRatePct: localStats.autoCheckoutRatePct,
-        totalWorkedHours: localStats.totalWorkedHours,
-        avgHoursPerDay: localStats.avgHoursPerDay,
-        dailyTrend: localStats.dailyTrend,
+      setMonthlyMetrics((prev) => {
+        if (prev.presentDays > 0) return prev;
+        return {
+          presentDays: localStats.presentDays,
+          targetDays: localStats.targetDays,
+          lateDays: localStats.lateDays,
+          autoCheckouts: localStats.autoCheckouts,
+          onTimePerformancePct: localStats.onTimePerformancePct,
+          latePenaltyPct: localStats.latePenaltyPct,
+          autoCheckoutRatePct: localStats.autoCheckoutRatePct,
+          totalWorkedHours: localStats.totalWorkedHours,
+          avgHoursPerDay: localStats.avgHoursPerDay,
+          dailyTrend: localStats.dailyTrend,
+        };
       });
 
       const personalLogs = getEmployeeAttendanceLogs(empId || user.employeeCode || user.id);
@@ -813,20 +825,6 @@ export default function DashboardPage() {
         if (remote && remote.length > 0) {
           const userLogs = getEmployeeAttendanceLogs(empId || user.employeeCode || user.id);
           setMyAttendanceLogs(userLogs);
-          const updatedStats = getEmployeeMonthlyAttendanceStats(empId || user.employeeCode || user.id, currentMonth);
-          setMonthlyMetrics((prev) => ({
-            ...prev,
-            presentDays: updatedStats.presentDays,
-            targetDays: updatedStats.targetDays,
-            lateDays: updatedStats.lateDays,
-            autoCheckouts: updatedStats.autoCheckouts,
-            onTimePerformancePct: updatedStats.onTimePerformancePct,
-            latePenaltyPct: updatedStats.latePenaltyPct,
-            autoCheckoutRatePct: updatedStats.autoCheckoutRatePct,
-            totalWorkedHours: updatedStats.totalWorkedHours,
-            avgHoursPerDay: updatedStats.avgHoursPerDay,
-            dailyTrend: updatedStats.dailyTrend,
-          }));
         }
       });
 
@@ -885,30 +883,34 @@ export default function DashboardPage() {
 
         // Synchronize client localStorage with canonical server status scoped to this employee
         const activeKey = (empId || user.employeeCode || user.id || user.fullName || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
-        if (typeof window !== 'undefined' && activeKey) {
-          if (isNowCheckedIn) {
-            localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'true');
-            if (first_check_in_at) {
-              localStorage.setItem(`jaago_att_${activeKey}_checkin_timestamp`, String(new Date(first_check_in_at).getTime()));
-              localStorage.setItem(`jaago_att_${activeKey}_first_checkin_time`, todayJson.data.check_in_time_local || '--:--');
-            }
-            localStorage.removeItem(`jaago_att_${activeKey}_last_checkout_time`);
-            localStorage.removeItem(`jaago_att_${activeKey}_auto_checked_out`);
-          } else {
-            localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'false');
-            localStorage.removeItem(`jaago_att_${activeKey}_checkin_timestamp`);
-            if (first_check_in_at) {
-              localStorage.setItem(`jaago_att_${activeKey}_first_checkin_time`, todayJson.data.check_in_time_local || '--:--');
+        const userCodeKey = (user.employeeCode || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+        const keysToSync = Array.from(new Set([activeKey, userCodeKey].filter(Boolean)));
+        if (typeof window !== 'undefined') {
+          keysToSync.forEach((k) => {
+            if (isNowCheckedIn) {
+              localStorage.setItem(`jaago_att_${k}_is_checked_in`, 'true');
+              if (first_check_in_at) {
+                localStorage.setItem(`jaago_att_${k}_checkin_timestamp`, String(new Date(first_check_in_at).getTime()));
+                localStorage.setItem(`jaago_att_${k}_first_checkin_time`, todayJson.data.check_in_time_local || '--:--');
+              }
+              localStorage.removeItem(`jaago_att_${k}_last_checkout_time`);
+              localStorage.removeItem(`jaago_att_${k}_auto_checked_out`);
             } else {
-              localStorage.removeItem(`jaago_att_${activeKey}_first_checkin_time`);
+              localStorage.setItem(`jaago_att_${k}_is_checked_in`, 'false');
+              localStorage.removeItem(`jaago_att_${k}_checkin_timestamp`);
+              if (first_check_in_at) {
+                localStorage.setItem(`jaago_att_${k}_first_checkin_time`, todayJson.data.check_in_time_local || '--:--');
+              } else {
+                localStorage.removeItem(`jaago_att_${k}_first_checkin_time`);
+              }
+              if (last_check_out_at) {
+                localStorage.setItem(`jaago_att_${k}_last_checkout_time`, resolvedOutTime);
+              } else {
+                localStorage.removeItem(`jaago_att_${k}_last_checkout_time`);
+              }
+              localStorage.setItem(`jaago_att_${k}_worked_seconds`, String(worked_seconds || 0));
             }
-            if (last_check_out_at) {
-              localStorage.setItem(`jaago_att_${activeKey}_last_checkout_time`, resolvedOutTime);
-            } else {
-              localStorage.removeItem(`jaago_att_${activeKey}_last_checkout_time`);
-            }
-            localStorage.setItem(`jaago_att_${activeKey}_worked_seconds`, String(worked_seconds || 0));
-          }
+          });
         }
 
         // Merge today session into myAttendanceLogs
@@ -920,7 +922,7 @@ export default function DashboardPage() {
             minute: '2-digit',
             hour12: true,
           });
-          const outTime = last_check_out_at
+          const outTime = (!isNowCheckedIn && last_check_out_at)
             ? todayJson.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
                 timeZone: 'Asia/Dhaka',
                 hour: '2-digit',
@@ -964,21 +966,6 @@ export default function DashboardPage() {
               ? 'Counted from earliest BioTime/GPS check-in & latest check-out'
               : 'Attendance verified',
           };
-
-          recordLocalAttendanceLog({
-            employeeId: todayItem.employeeId,
-            employeeCode: todayItem.employeeCode,
-            employeeName: todayItem.employeeName,
-            designation: todayItem.designation,
-            department: todayItem.department,
-            branch: todayItem.branch,
-            date: todayItem.date,
-            checkInTime: todayItem.checkInTime,
-            checkOutTime: todayItem.checkOutTime,
-            status: todayItem.status,
-            device: todayItem.device,
-            notes: todayItem.notes,
-          });
 
           setMyAttendanceLogs((prev) => {
             const exists = prev.some((l) => l.date === todayDateStr);
@@ -1074,7 +1061,7 @@ export default function DashboardPage() {
 
   // Canonical day status flags
   const hasCheckedInToday = Boolean(firstCheckInTimestamp || (checkInTime && checkInTime !== '--:--'));
-  const hasCheckedOutToday = Boolean(hasCheckedInToday && checkOutTime && checkOutTime !== '--:--');
+  const hasCheckedOutToday = Boolean(!isCheckedIn && hasCheckedInToday && checkOutTime && checkOutTime !== '--:--');
 
   // Dedicated Check-In Action with Live GPS Geofence Verification & Multi-punch Counting
   const handleCheckInAction = async () => {

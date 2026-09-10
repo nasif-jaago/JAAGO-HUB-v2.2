@@ -91,7 +91,9 @@ export async function GET(request: Request) {
     });
 
     let isCheckedIn = false;
-    if (allPunches.length > 0) {
+    if (!isPastCutoff && hasCheckedInToday && !record?.check_out_at) {
+      isCheckedIn = true;
+    } else if (allPunches.length > 0) {
       const sorted = [...allPunches].sort((a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime());
       const latest = sorted[sorted.length - 1]!;
       isCheckedIn = latest.punchType === 'check_in';
@@ -158,7 +160,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const lastCheckOut = countedCheckOut;
+    const lastCheckOut = isCheckedIn ? null : countedCheckOut;
 
     const state: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'CHECKED_OUT' = !hasCheckedInToday
       ? 'NOT_CHECKED_IN'

@@ -303,6 +303,7 @@ export async function getEffectiveDailyAttendance(options?: {
     { data: gpsEvents },
     { data: emps },
     { data: approvedLeaves },
+    { data: approvedOnDuty },
     serverRegs,
   ] = await Promise.all([
     gpsQuery,
@@ -310,6 +311,7 @@ export async function getEffectiveDailyAttendance(options?: {
     gpsEventsQuery,
     supabase.from('employees').select('id, code, name, designation, department, branch, avatar_url'),
     supabase.from('leave_requests').select('*').eq('status', 'Approved'),
+    supabase.from('on_duty_requests').select('*').in('status', ['APPROVED', 'Approved']),
     getServerRegularizations().catch(() => []),
   ]);
 
@@ -338,14 +340,28 @@ export async function getEffectiveDailyAttendance(options?: {
     });
   });
 
-  // Post-process bioByEmpDate so that when multiple punches exist, the last punch is recognized as check_out
-  bioByEmpDate.forEach((punches) => {
+  const todayDhakaStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+
+  // Post-process bioByEmpDate: on past days, the last punch represents departure.
+  // On current active business day, door swipes during shift hours must NOT be forced into check_out!
+  bioByEmpDate.forEach((punches, key) => {
+    const [, dateStr] = key.split('__');
+    const isPastDay = dateStr ? dateStr < todayDhakaStr : false;
+
     if (punches.length > 1) {
       punches.sort((a, b) => new Date(a.punchAt).getTime() - new Date(b.punchAt).getTime());
       const first = punches[0]!;
       const last = punches[punches.length - 1]!;
       const diffMs = new Date(last.punchAt).getTime() - new Date(first.punchAt).getTime();
-      if (diffMs >= 5 * 60 * 1000) {
+
+      const lastHour = new Date(last.punchAt).toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Dhaka',
+        hour: 'numeric',
+        hour12: false,
+      });
+      const isLateAfternoon = parseInt(lastHour || '0', 10) >= 16;
+
+      if (diffMs >= 5 * 60 * 1000 && (isPastDay || isLateAfternoon)) {
         last.punchType = 'check_out';
       }
     }
@@ -392,6 +408,16 @@ export async function getEffectiveDailyAttendance(options?: {
     const gpsPunches = gpsEventsByEmpDate.get(key) || [];
     const emp = empMap.get(empId);
 
+    const rawGpsStatus = (gpsRec?.status || '').toLowerCase().trim();
+    let initialLeaveStatus: 'Leave' | 'Half Day' | 'On Duty' | null = null;
+    if (rawGpsStatus === 'on duty' || rawGpsStatus === 'on_duty' || rawGpsStatus === 'onduty') {
+      initialLeaveStatus = 'On Duty';
+    } else if (rawGpsStatus === 'leave') {
+      initialLeaveStatus = 'Leave';
+    } else if (rawGpsStatus === 'half day' || rawGpsStatus === 'half_day') {
+      initialLeaveStatus = 'Half Day';
+    }
+
     const eff = computeEffectiveAttendanceDay({
       employeeId: empId,
       employeeCode: emp?.code || empId,
@@ -408,9 +434,14 @@ export async function getEffectiveDailyAttendance(options?: {
       shiftStartLocal: gpsRec?.shift_start_local || '10:00',
       shiftBufferMinutes: gpsRec?.shift_buffer_minutes ?? 30,
       isAutoCheckout: Boolean(gpsRec?.is_auto_checkout),
+      leaveStatus: initialLeaveStatus,
       notes: gpsRec?.notes,
       nowUtc,
     });
+
+    if (rawGpsStatus === 'absent' && eff.primarySource === 'None') {
+      eff.status = 'Absent';
+    }
 
     effectiveDays.push(eff);
   });
@@ -510,6 +541,76 @@ export async function getEffectiveDailyAttendance(options?: {
             countedCheckOutSource: 'none',
           },
           notes: `Approved Leave: ${lv.leave_type} - ${lv.reason || ''}`,
+        });
+      }
+    }
+  });
+
+  // Merge approved on-duty requests into effective attendance days
+  (approvedOnDuty || []).forEach((od: any) => {
+    const odCode = (od.employee_code || '').trim();
+    const odId = (od.employee_id || '').trim();
+    const emp = empMap.get(odId) || empMap.get(odCode);
+    if (resolvedEmpId && odId !== resolvedEmpId && odCode !== resolvedEmpId && emp?.id !== resolvedEmpId) return;
+
+    const startDateStr = od.start_date || (od.start_at ? od.start_at.slice(0, 10) : '');
+    const endDateStr = od.end_date || (od.end_at ? od.end_at.slice(0, 10) : '') || startDateStr;
+    if (!startDateStr) return;
+
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
+
+    const cur = new Date(start);
+    while (cur <= end) {
+      const dStr = cur.toISOString().split('T')[0]!;
+      cur.setDate(cur.getDate() + 1);
+
+      if (options?.date && dStr !== options.date) continue;
+      if (options?.startDate && options?.endDate && (dStr < options.startDate || dStr > options.endDate)) continue;
+      if (options?.month && !dStr.startsWith(options.month)) continue;
+
+      const existing = effectiveDays.find(
+        (d) => (d.employeeId === odId || d.employeeCode === odCode || d.employeeId === emp?.id) && d.businessDate === dStr
+      );
+
+      if (existing) {
+        existing.status = 'On Duty';
+        existing.isLate = false;
+        existing.lateByMinutes = 0;
+        existing.isAutoCheckout = false;
+        existing.notes = `Approved On-Duty: ${od.reason || 'Official outdoor duty'}`;
+      } else {
+        effectiveDays.push({
+          employeeId: odId || emp?.id || `emp-${odCode}`,
+          employeeCode: odCode || emp?.code || 'EMP',
+          employeeName: emp?.name || od.employee_name || 'Staff Member',
+          designation: emp?.designation || 'Staff',
+          department: emp?.department || "Founder's Office",
+          branch: emp?.branch || 'Head Office (Banani)',
+          avatarUrl: emp?.avatar_url || '',
+          businessDate: dStr,
+          countedCheckInAt: null,
+          countedCheckOutAt: null,
+          countedCheckInTimeLocal: od.start_time || '10:00 AM',
+          countedCheckOutTimeLocal: od.end_time || '06:00 PM',
+          checkInSource: 'none',
+          checkOutSource: 'none',
+          primarySource: 'None',
+          workedSeconds: 28800,
+          workedDisplay: '8h 00m',
+          status: 'On Duty',
+          isLate: false,
+          lateByMinutes: 0,
+          isAutoCheckout: false,
+          allPunches: [],
+          sourceBreakdown: {
+            biotimePunchCount: 0,
+            gpsPunchCount: 0,
+            countedCheckInSource: 'none',
+            countedCheckOutSource: 'none',
+          },
+          notes: `Approved On-Duty: ${od.reason || 'Official outdoor duty'}`,
         });
       }
     }

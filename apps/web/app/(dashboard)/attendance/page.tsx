@@ -511,7 +511,7 @@ export default function AttendancePage() {
             minute: '2-digit',
             hour12: true,
           });
-          const outTime = last_check_out_at
+          const outTime = (!checkedIn && last_check_out_at)
             ? json.data.check_out_time_local || new Date(last_check_out_at).toLocaleTimeString('en-US', {
                 timeZone: 'Asia/Dhaka',
                 hour: '2-digit',
@@ -561,27 +561,6 @@ export default function AttendancePage() {
               ? 'Counted from earliest BioTime/GPS check-in & latest check-out'
               : 'Attendance verified',
           };
-
-          recordLocalAttendanceLog({
-            employeeId: todayLogItem.employeeId,
-            employeeCode: todayLogItem.employeeCode,
-            employeeName: todayLogItem.employeeName,
-            designation: todayLogItem.designation,
-            department: todayLogItem.department,
-            branch: todayLogItem.branch,
-            locationName: todayLogItem.locationName,
-            date: todayLogItem.date,
-            checkInTime: todayLogItem.checkInTime,
-            checkOutTime: todayLogItem.checkOutTime,
-            status: todayLogItem.status,
-            device: todayLogItem.device,
-            primarySource: todayLogItem.primarySource,
-            checkInSource: todayLogItem.checkInSource,
-            checkOutSource: todayLogItem.checkOutSource,
-            allPunches: todayLogItem.allPunches,
-            sourceBreakdown: todayLogItem.sourceBreakdown,
-            notes: todayLogItem.notes,
-          });
 
           setAllLogs((prev) => {
             const exists = prev.some((l) => l.date === todayDateStr && (l.employeeCode === todayLogItem.employeeCode || l.employeeId === todayLogItem.employeeId));
@@ -1479,7 +1458,8 @@ export default function AttendancePage() {
                 {filteredLogs.length > 0 ? (
                   filteredLogs.map((log) => {
                     const duration = calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
-                    const isToday = log.date === new Date().toISOString().slice(0, 10);
+                    const todayDhakaStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date());
+                    const isToday = log.date === todayDhakaStr;
                     const locName = log.locationName || log.branch || 'JAAGO HQ (Banani)';
                     const lat = log.checkInLat ?? 23.7937;
                     const lng = log.checkInLng ?? 90.4066;
@@ -1554,10 +1534,12 @@ export default function AttendancePage() {
                         {/* Check Out Time & Source */}
                         <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
                           <div className="font-mono tabular-nums font-bold text-rose-500 text-xs">
-                            {log.checkOutTime || (isToday && isCheckedIn ? 'In Progress' : '--:--')}
+                            {isToday && isCheckedIn ? '--:--' : (log.checkOutTime && log.checkOutTime !== '--:--' ? log.checkOutTime : '--:--')}
                           </div>
                           <div className="flex items-center gap-1 mt-0.5">
-                            {log.status === 'Auto Check Out' || log.isAutoCheckout ? (
+                            {isToday && isCheckedIn ? (
+                              <span className="text-[10px] text-muted-foreground">--</span>
+                            ) : log.status === 'Auto Check Out' || log.isAutoCheckout ? (
                               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
                                 Auto (11:30 PM)
                               </span>
@@ -1566,7 +1548,7 @@ export default function AttendancePage() {
                                 <Fingerprint className="w-2.5 h-2.5" />
                                 BioTime
                               </span>
-                            ) : log.checkOutTime ? (
+                            ) : log.checkOutTime && log.checkOutTime !== '--:--' ? (
                               <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[8.5px] font-bold bg-muted text-muted-foreground border border-border">
                                 <Smartphone className="w-2.5 h-2.5" />
                                 {log.device || 'GPS'}
@@ -1603,7 +1585,14 @@ export default function AttendancePage() {
                         {/* Working Hours Duration */}
                         <td className="py-1.5 px-2.5 whitespace-nowrap border-r border-border/30">
                           <div className="font-mono tabular-nums font-extrabold text-foreground text-xs">
-                            {isToday && isCheckedIn ? formatTime(elapsedSeconds) : duration}
+                            {isToday && isCheckedIn ? (
+                              <span className="inline-flex items-center space-x-1.5" title={`Live elapsed: ${formatTime(elapsedSeconds)}`}>
+                                <span>{`${Math.floor(elapsedSeconds / 3600)}h ${String(Math.floor((elapsedSeconds % 3600) / 60)).padStart(2, '0')}m`}</span>
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                              </span>
+                            ) : (
+                              log.workedDisplay || duration
+                            )}
                           </div>
                           <div className="text-[10px] text-muted-foreground">
                             Target: 8.0h

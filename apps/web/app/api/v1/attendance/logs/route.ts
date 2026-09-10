@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@jaago/auth';
 import { getEffectiveDailyAttendance } from '@/lib/server-effective-attendance';
+import { resolveCanonicalEmployeeId } from '@/lib/server-attendance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -108,45 +109,41 @@ export async function POST(request: Request) {
     }
 
     // Resolve employee id
-    let resolvedEmployeeId = employeeId;
-    if (!resolvedEmployeeId || resolvedEmployeeId.startsWith('emp-')) {
-      const { data: emp } = await supabase
-        .from('employees')
-        .select('id')
-        .or(`code.eq.${employeeCode},name.ilike.%${body.employeeName || ''}%`)
-        .limit(1)
-        .maybeSingle();
-
-      if (emp?.id) {
-        resolvedEmployeeId = emp.id;
-      } else {
-        resolvedEmployeeId = '71a38594-d803-4e6d-b6e9-79767a16c4c6'; // default
-      }
-    }
+    const resolvedEmployeeId = await resolveCanonicalEmployeeId(employeeId || employeeCode || body.employeeName || '');
 
     // Parse checkInTime / checkOutTime to ISO string
     let checkInAt: string | null = null;
     let checkOutAt: string | null = null;
     const businessDate = date || new Date().toISOString().slice(0, 10);
 
-    if (checkInTime && checkInTime !== '--:--' && checkInTime !== 'N/A') {
+    const parseLocalTimeToUtcIso = (dStr: string, tStr: string): string | null => {
       try {
-        const timePart = checkInTime.replace(/\s+/g, ' ').trim();
-        const dateObj = new Date(`${businessDate} ${timePart}`);
-        if (!isNaN(dateObj.getTime())) {
-          checkInAt = dateObj.toISOString();
+        const match = tStr.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+        if (!match) {
+          const fallback = new Date(`${dStr}T${tStr}`);
+          return isNaN(fallback.getTime()) ? null : fallback.toISOString();
         }
-      } catch {}
+        let h = parseInt(match[1]!, 10);
+        const m = parseInt(match[2]!, 10);
+        const s = parseInt(match[3] || '0', 10);
+        const ampm = match[4]?.toUpperCase();
+        if (ampm === 'PM' && h < 12) h += 12;
+        if (ampm === 'AM' && h === 12) h = 0;
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const isoString = `${dStr}T${pad(h)}:${pad(m)}:${pad(s)}+06:00`;
+        const d = new Date(isoString);
+        return isNaN(d.getTime()) ? null : d.toISOString();
+      } catch {
+        return null;
+      }
+    };
+
+    if (checkInTime && checkInTime !== '--:--' && checkInTime !== 'N/A') {
+      checkInAt = parseLocalTimeToUtcIso(businessDate, checkInTime);
     }
 
     if (checkOutTime && checkOutTime !== '--:--' && checkOutTime !== 'N/A') {
-      try {
-        const timePart = checkOutTime.replace(/\s+/g, ' ').trim();
-        const dateObj = new Date(`${businessDate} ${timePart}`);
-        if (!isNaN(dateObj.getTime())) {
-          checkOutAt = dateObj.toISOString();
-        }
-      } catch {}
+      checkOutAt = parseLocalTimeToUtcIso(businessDate, checkOutTime);
     }
 
     const isLate = String(status).toLowerCase() === 'late';

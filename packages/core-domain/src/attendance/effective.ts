@@ -167,13 +167,20 @@ export function computeEffectiveAttendanceDay(params: {
       }
     }
 
-    // 2. If distinct punch occurs >= 5 minutes after first punch or in the afternoon (>= 12:00 Dhaka time), candidate for Last-Out
+    // 2. Generic punches: on a past day, the last punch represents departure.
+    // On the current active business day, door/terminal punches during shift hours (e.g. 10:18 AM) must NOT prematurely close the day!
+    // They are only checkout candidates if occurring in the late afternoon / departure window (>= 16:00 Dhaka time) or after shift end.
     if (lastBio && sortedBio.length > 1 && firstBio && firstBio.punchAt !== lastBio.punchAt) {
       const firstTime = new Date(firstBio.punchAt).getTime();
       const lastTime = new Date(lastBio.punchAt).getTime();
       const diffMinutes = (lastTime - firstTime) / (1000 * 60);
 
-      if (!isNaN(lastTime) && (diffMinutes >= 5 || lastBio.punchType === 'check_out')) {
+      const todayDhaka = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date(nowMs));
+      const isPastDay = businessDate < todayDhaka;
+      const { hour: lastHour } = getLocalHourAndMinute(lastBio.punchAt, 'Asia/Dhaka');
+      const isDepartureWindow = lastHour >= 16 || lastBio.punchType === 'check_out';
+
+      if (!isNaN(lastTime) && diffMinutes >= 5 && (isPastDay || isDepartureWindow)) {
         checkOutCandidates.push({ time: new Date(lastBio.punchAt), iso: lastBio.punchAt, source: 'biotime', punchId: lastBio.id, isSyntheticAuto: false });
       }
     }
@@ -234,14 +241,26 @@ export function computeEffectiveAttendanceDay(params: {
     const winnerOut = physicalCheckOutCandidates[0]!;
 
     // Check if there was an explicit GPS re-check-in AFTER winnerOut
-    const hasLaterGpsCheckIn = gpsPunches.some(
-      (gp) => gp.punchType === 'check_in' && new Date(gp.punchAt).getTime() > winnerOut.time.getTime() + 60_000
-    ) || Boolean(gpsCheckInAt && new Date(gpsCheckInAt).getTime() > winnerOut.time.getTime() + 60_000 && !gpsCheckOutAt);
+    const hasCanonicalClosedCheckout = Boolean(
+      gpsCheckOutAt &&
+      !isAutoCheckout &&
+      new Date(gpsCheckOutAt).getTime() >= new Date(gpsCheckInAt || 0).getTime()
+    );
+
+    const hasLaterGpsCheckIn = !hasCanonicalClosedCheckout && (
+      gpsPunches.some(
+        (gp) => gp.punchType === 'check_in' && new Date(gp.punchAt).getTime() > winnerOut.time.getTime() + 60_000
+      ) || Boolean(gpsCheckInAt && new Date(gpsCheckInAt).getTime() > winnerOut.time.getTime() + 60_000 && !gpsCheckOutAt)
+    );
 
     if (!hasLaterGpsCheckIn) {
       countedCheckOutIso = winnerOut.iso;
       checkOutSource = winnerOut.source;
       winningOutPunchId = winnerOut.punchId;
+      effectiveIsAuto = false;
+    } else if (hasCanonicalClosedCheckout && gpsCheckOutAt) {
+      countedCheckOutIso = gpsCheckOutAt;
+      checkOutSource = 'gps';
       effectiveIsAuto = false;
     }
   } else if (autoCheckOutCandidates.length > 0) {
@@ -301,6 +320,9 @@ export function computeEffectiveAttendanceDay(params: {
 
   if (leaveStatus) {
     derivedStatus = leaveStatus;
+    isLate = false;
+    lateByMinutes = 0;
+    effectiveIsAuto = false;
   } else if (effectiveIsAuto) {
     derivedStatus = 'Auto Check Out';
   } else if (countedCheckInIso) {

@@ -343,7 +343,13 @@ export function getDeletedAttendanceLogKeys(): string[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_DELETED_LOGS);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const parsed: string[] = JSON.parse(raw);
+    const clean = parsed.filter((k) => !k.includes('_2026-'));
+    if (clean.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY_DELETED_LOGS, JSON.stringify(clean));
+    }
+    return clean;
   } catch {
     return [];
   }
@@ -974,7 +980,7 @@ export async function fetchAttendanceLogsFromSupabase(
           const deletedKeysSet = new Set(getDeletedAttendanceLogKeys());
 
           const remoteLogs: AttendanceLogItem[] = json.data
-            .filter((r: any) => !deletedKeysSet.has(r.id) && !deletedKeysSet.has(`${r.employeeCode}_${r.date}`))
+            .filter((r: any) => !deletedKeysSet.has(r.id))
             .map((r: any) => ({
               id: String(r.id),
               employeeId: r.employeeId || r.employee_id,
@@ -1069,9 +1075,31 @@ export function getEmployeeAttendanceLogs(employeeCodeOrId: string, employeeName
 
     if (!hasTodayInFiltered) {
       const activeKey = normalizedKey.replace(/[^a-z0-9]/g, '_');
-      const firstIn = localStorage.getItem(`jaago_att_${activeKey}_first_checkin_time`);
-      const lastOut = localStorage.getItem(`jaago_att_${activeKey}_last_checkout_time`);
-      const workedSec = parseInt(localStorage.getItem(`jaago_att_${activeKey}_worked_seconds`) || '0', 10);
+      let firstIn = localStorage.getItem(`jaago_att_${activeKey}_first_checkin_time`);
+      let lastOut = localStorage.getItem(`jaago_att_${activeKey}_last_checkout_time`);
+      let workedSec = parseInt(localStorage.getItem(`jaago_att_${activeKey}_worked_seconds`) || '0', 10);
+
+      // Fallback: If not found under exact activeKey, search other user keys for this employee
+      if (!firstIn || firstIn === '--:--') {
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('jaago_att_') && k.endsWith('_first_checkin_time')) {
+              const val = localStorage.getItem(k);
+              if (val && val !== '--:--') {
+                const prefix = k.replace('_first_checkin_time', '');
+                const storedDate = localStorage.getItem(`${prefix}_today_date`);
+                if (!storedDate || storedDate === todayDateStr) {
+                  firstIn = val;
+                  lastOut = localStorage.getItem(`${prefix}_last_checkout_time`);
+                  workedSec = parseInt(localStorage.getItem(`${prefix}_worked_seconds`) || '0', 10);
+                  break;
+                }
+              }
+            }
+          }
+        } catch {}
+      }
 
       if (firstIn && firstIn !== '--:--') {
         filtered.unshift({
