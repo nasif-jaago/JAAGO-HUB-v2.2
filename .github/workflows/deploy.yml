@@ -1,128 +1,70 @@
-name: 🚀 JAAGO HUB Auto-Deploy (Simplified)
+name: 🚀 JAAGO HUB Auto-Deploy
 
 on:
   push:
     branches: [main]
 
-env:
-  PROJECT_PATH: /home/jfmaster/nextJs
-  BACKUP_DIR: /home/jfmaster/backups
-  LOG_DIR: /home/jfmaster/nextJs/log
-  NODE_ENV: production
-  LOG_LEVEL: info
-
 jobs:
   deploy:
+    name: Deploy to Production VPS
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 60
-    
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository files
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: 'package-lock.json'
-
-      - name: Install dependencies
-        run: npm ci --prefer-offline || npm install
-
-      - name: Build application
-        run: npm run build:all
-
-      - name: Validation checks
+      - name: Install deployment tools (sshpass & rsync)
         run: |
-          echo "🔍 Running validation checks..."
-          npm run typecheck --workspaces || {
-            echo "❌ Type checking failed!"
-            exit 1
-          }
-          
-          npm run lint --workspaces || {
-            echo "❌ Linting failed!"
-            exit 1
-          }
-          echo "✅ All validation checks passed"
+          sudo apt-get update -y
+          sudo apt-get install -y sshpass rsync
 
-      - name: Deploy to production VPS
+      - name: Push updated files to VPS
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
         run: |
-          echo "🚀 Starting deployment to production VPS..."
-          echo "🏗️ Project path: ${{ env.PROJECT_PATH }}"
-          echo "🔐 Using SSH port: ${{ secrets.VPS_PORT }}"
-          
-          ssh -o ConnectTimeout=30 \
-              -o StrictHostKeyChecking=no \
-              -o UserKnownHostsFile=/dev/null \
-              -o PasswordAuthentication=yes \
-              -o BatchMode=no \
-              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-              -p ${{ secrets.VPS_PORT }} "${{ secrets.VPS_PASSWORD }}" "
-            set -euo pipefail
-            
-            cd "${{ env.PROJECT_PATH }}"
-            rm -rf *
-            
-            git stash push -m "pre-deploy-$(date +%Y%m%d-%H%M%S)" || true
-            
-            cp -r /home/runner/work/JAAGO-HUB-v2.2/* .
-            
-            git stash pop 2>/dev/null || true
-            
-            npm ci --prefer-offline
-            npm run build
-            
-            if supervisorctl restart hub-jaago; then
-              echo "✅ Service restarted"
-            else
-              echo "ERROR: Failed to restart"
-              exit 1
-            fi
-            
-            echo "🎉 🎉 🎉 Production deployment completed!"
+          echo "🚀 Pushing updated files to VPS (/home/jfmaster/nextJs)..."
+          rsync -avz --delete-after \
+            -e "sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p ${{ secrets.VPS_PORT || '22' }}" \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='.next/' \
+            --exclude='.turbo/' \
+            --exclude='log/' \
+            --exclude='*.log' \
+            --exclude='.env*' \
+            --exclude='backups/' \
+            --exclude='*.tar.gz' \
+            ./ ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/home/jfmaster/nextJs/
 
-      - name: Emergency rollback
-        if: failure()
+      - name: Build and restart on VPS
+        env:
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
         run: |
-          echo "Starting EMERGENCY ROLLBACK..."
-          
-          ssh -o ConnectTimeout=30 \
-              -o StrictHostKeyChecking=no \
-              ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-              -p ${{ secrets.VPS_PORT }} "${{ secrets.VPS_PASSWORD }}" "
-            set -euo pipefail
-            
-            cd "${{ env.PROJECT_PATH }}"
-            
-            LATEST_BACKUP=$(ls -t "${{ env.BACKUP_DIR }}"/*.tar.gz 2>/dev/null | head -1)
-            
-            if [ -z "$LATEST_BACKUP" ]; then
-              echo "ERROR: No backup to rollback to"
-              exit 1
-            fi
-            
-            echo "Rolling back to: $LATEST_BACKUP"
-            
-            supervisorctl stop hub-jaago
-            
-            rm -rf *
-            tar -xzf "$LATEST_BACKUP"
-            rm "$LATEST_BACKUP"
-            
-            npm ci --prefer-offline
-            npm run build
-            
-            supervisorctl start hub-jaago
-            
-            echo "🎉 Emergency rollback completed!"
-          " || {
-            echo "❌ EMERGENCY ROLLBACK FAILED!"
-            exit 1
-          }
-          
-          echo "🔄 🚨 Emergency rollback completed!"
+          echo "⚡ Connecting to VPS to install, build, and restart..."
+          sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -p "${{ secrets.VPS_PORT || '22' }}" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" "
+              set -e
+
+              # Ensure Node & npm binaries are in PATH (including /opt/nvm and user NVM)
+              export PATH=\"/opt/nvm/versions/node/v22.23.2/bin:\$PATH\"
+              [ -s \"\$HOME/.nvm/nvm.sh\" ] && . \"\$HOME/.nvm/nvm.sh\" 2>/dev/null || true
+              [ -s \"\$HOME/.bashrc\" ] && . \"\$HOME/.bashrc\" 2>/dev/null || true
+
+              echo '📂 Navigating to /home/jfmaster/nextJs...'
+              cd /home/jfmaster/nextJs
+
+              echo '📥 Running npm install...'
+              npm install
+
+              echo '🏗️ Running npm run build...'
+              npm run build
+
+              echo '🔄 Restarting hub-jaago...'
+              supervisorctl restart hub-jaago || sudo supervisorctl restart hub-jaago
+
+              echo '🎉 Production deployment completed successfully!'
+            "
