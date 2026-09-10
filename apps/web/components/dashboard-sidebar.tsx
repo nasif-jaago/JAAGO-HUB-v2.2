@@ -212,20 +212,29 @@ export function DashboardSidebar({
           <Link
             href="/dashboard"
             title="JAAGO Foundation - Dashboard Home"
-            className={`inline-flex items-center justify-center p-1 rounded-2xl overflow-hidden shadow-[0_0_14px_rgba(255,230,0,0.35)] border-2 border-primary bg-surface group transition transform hover:scale-[1.03] active:scale-95 cursor-pointer ${
-              collapsed ? 'w-12 h-12' : ''
+            className={`inline-flex items-center justify-center p-1 overflow-hidden shadow-[0_0_14px_rgba(255,230,0,0.35)] border-2 border-primary bg-surface group transition transform hover:scale-[1.03] active:scale-95 cursor-pointer ${
+              collapsed ? 'w-12 h-12 rounded-full' : 'rounded-2xl'
             }`}
           >
-            <Image
-              src="/jaago-logo.png"
-              alt="JAAGO Foundation"
-              width={160}
-              height={80}
-              priority
-              className={`${
-                collapsed ? 'w-9 h-9 object-contain' : 'w-auto h-14 sm:h-16 object-contain'
-              } block rounded-xl`}
-            />
+            {collapsed ? (
+              <Image
+                src="/jaago-logo-round.png"
+                alt="JAAGO Foundation"
+                width={44}
+                height={44}
+                priority
+                className="w-10 h-10 object-contain rounded-full"
+              />
+            ) : (
+              <Image
+                src="/jaago-logo.png"
+                alt="JAAGO Foundation"
+                width={160}
+                height={80}
+                priority
+                className="w-auto h-14 sm:h-16 object-contain block rounded-xl"
+              />
+            )}
           </Link>
         </div>
 

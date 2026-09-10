@@ -16,13 +16,25 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'JAAGO HUB v2.2 — Enterprise NGO Platform',
+  title: 'JAAGO',
   description: 'Enterprise Modular ERP for JAAGO Foundation Bangladesh',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/icon-192.png', type: 'image/png', sizes: '192x192' },
+      { url: '/jaago-logo-round.png', type: 'image/png', sizes: '512x512' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'JAAGO HUB',
+    title: 'JAAGO',
   },
 };
 

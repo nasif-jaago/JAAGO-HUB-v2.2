@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { signOutUser } from '@/lib/supabase-auth';
 import {
   fetchUserNotifications,
@@ -236,9 +237,19 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         <div className="hidden sm:flex items-center space-x-2 text-xs sm:text-sm font-semibold tracking-wide">
           <Link
             href="/dashboard"
-            className="text-primary font-black tracking-wider hover:opacity-85 transition cursor-pointer"
+            className="inline-flex items-center gap-2 text-primary font-black tracking-wider hover:opacity-85 transition cursor-pointer group"
           >
-            JAAGO HUB
+            <span className="relative flex items-center justify-center h-7 w-7 rounded-full overflow-hidden bg-[#fece0a] shadow-xs ring-1 ring-primary/30 group-hover:scale-105 transition-transform shrink-0">
+              <Image
+                src="/jaago-logo-round.png"
+                alt="JAAGO"
+                width={28}
+                height={28}
+                className="w-full h-full object-contain"
+                priority
+              />
+            </span>
+            <span>JAAGO HUB</span>
           </Link>
           <Link
             href="/dashboard"
@@ -259,9 +270,19 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
       {/* Center on Mobile: JAAGO HUB Brand */}
       <Link
         href="/dashboard"
-        className="sm:hidden text-base font-black tracking-wider text-foreground hover:opacity-85 transition cursor-pointer"
+        className="sm:hidden flex items-center gap-2 text-base font-black tracking-wider text-foreground hover:opacity-85 transition cursor-pointer"
       >
-        <span className="text-primary">JAAGO</span> HUB
+        <span className="relative flex items-center justify-center h-6 w-6 rounded-full overflow-hidden bg-[#fece0a] shadow-xs ring-1 ring-primary/30 shrink-0">
+          <Image
+            src="/jaago-logo-round.png"
+            alt="JAAGO"
+            width={24}
+            height={24}
+            className="w-full h-full object-contain"
+            priority
+          />
+        </span>
+        <span><span className="text-primary">JAAGO</span> HUB</span>
       </Link>
 
       {/* Right: Actions */}

@@ -3,6 +3,8 @@ const STATIC_ASSETS = [
   '/',
   '/manifest.json',
   '/jaago-logo.png',
+  '/jaago-logo-round.png',
+  '/favicon.ico',
 ];
 
 self.addEventListener('install', (event) => {
