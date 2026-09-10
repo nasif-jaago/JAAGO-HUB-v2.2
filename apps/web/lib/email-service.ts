@@ -1507,16 +1507,21 @@ export function createTransporterForServer(server: EmailServerItem): nodemailer.
     }
   }
 
+  if (!password && process.env.SMTP_PASSWORD) {
+    password = process.env.SMTP_PASSWORD;
+  }
+
   const secure = server.encryption === 'ssl_tls' || server.port === 465;
+  const authConfig = (server.username && password) ? {
+    user: server.username.trim(),
+    pass: password.trim(),
+  } : undefined;
 
   return nodemailer.createTransport({
     host: server.host,
     port: server.port,
     secure,
-    auth: {
-      user: server.username ? server.username.trim() : '',
-      pass: password ? password.trim() : undefined,
-    },
+    ...(authConfig ? { auth: authConfig } : {}),
     tls: {
       rejectUnauthorized: false,
     },

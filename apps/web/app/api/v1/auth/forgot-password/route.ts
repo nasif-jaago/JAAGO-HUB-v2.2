@@ -105,15 +105,29 @@ export const POST = createApiHandler({
         throw new Error(linkError?.message || 'Failed to generate secure password recovery link.');
       }
 
-      const resetActionLink = linkData.properties.action_link;
+      const hashedToken = linkData.properties?.hashed_token;
+      const directResetUrl = `${origin}/reset-password?token_hash=${hashedToken}&type=recovery`;
+      const resetActionLink = linkData.properties?.action_link || directResetUrl;
 
-      // 4. Dispatch Email via Central SMTP Service (Brevo SMTP)
+      // 4. Dual-Channel Delivery:
+      // Channel A: Native Supabase Auth delivery (if configured in Supabase Cloud)
+      try {
+        await supabaseAdmin.auth.resetPasswordForEmail(cleanEmail, {
+          redirectTo: `${origin}/reset-password`,
+        });
+      } catch (supaErr: any) {
+        logger.info('AUTH', 'user.reset_password.native_supabase_note', {
+          metadata: { email: cleanEmail, note: supaErr?.message },
+        });
+      }
+
+      // Channel B: Central Outbound Mailer Service (Brevo SMTP with branded template)
       const mailResult = await sendEmail({
         templateKey: 'auth.password_reset',
         to: cleanEmail,
         variables: {
           email: cleanEmail,
-          resetUrl: resetActionLink,
+          resetUrl: directResetUrl,
         },
         module: 'auth',
       });
@@ -128,9 +142,20 @@ export const POST = createApiHandler({
         });
       }
 
+      const isDev = process.env.NODE_ENV !== 'production' || origin.includes('localhost') || origin.includes('127.0.0.1');
+
       return Response.json({
         success: true,
         message: `Password reset instructions have been dispatched to ${cleanEmail}. Please check your inbox.`,
+        ...(isDev
+          ? {
+              debug: {
+                directResetUrl,
+                actionLink: resetActionLink,
+                emailOtp: linkData.properties?.email_otp,
+              },
+            }
+          : {}),
       });
     } catch (err: any) {
       logger.error('AUTH', 'user.reset_password.failed', { metadata: { email: cleanEmail, error: err.message } });
