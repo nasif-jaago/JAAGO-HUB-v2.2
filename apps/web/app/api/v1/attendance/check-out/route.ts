@@ -67,6 +67,17 @@ export async function POST(request: Request) {
     ]);
     const effectiveToday = effectiveList[0] || null;
 
+    // Also check attendance_events table for accepted check-in events today
+    const { data: acceptedCheckInEvents } = await supabase
+      .from('attendance_events')
+      .select('attempted_at')
+      .eq('employee_id', canonicalEmpId)
+      .eq('result', 'accepted')
+      .eq('punch_type', 'check_in')
+      .gte('attempted_at', `${businessDate}T00:00:00.000Z`)
+      .order('attempted_at', { ascending: true })
+      .limit(5);
+
     // Check if an existing check-in exists across any source today
     const candidateCheckIns = [
       record?.first_check_in_at,
@@ -75,13 +86,19 @@ export async function POST(request: Request) {
       ...(effectiveToday?.allPunches || [])
         .filter((p) => p.punchType === 'check_in')
         .map((p) => p.punchAt),
+      ...(acceptedCheckInEvents || []).map((e) => e.attempted_at),
     ].filter(Boolean) as string[];
 
     const validCheckInTimes = candidateCheckIns
       .map((iso) => new Date(iso).getTime())
       .filter((ts) => !isNaN(ts) && ts > 0);
 
-    const firstCheckInAt = validCheckInTimes.length > 0 ? new Date(Math.min(...validCheckInTimes)).toISOString() : nowUtc;
+    // If no check-in evidence found from any source, use nowUtc as fallback
+    // (allows checkout even when BioTime sync is delayed)
+    const firstCheckInAt = validCheckInTimes.length > 0
+      ? new Date(Math.min(...validCheckInTimes)).toISOString()
+      : nowUtc;
+
 
     // 3. Server-side Geofence Verification (Invariant I6)
     const geoPayload: GPSPayload = {
@@ -152,16 +169,17 @@ export async function POST(request: Request) {
     }
 
     // 5. Shift Snapshot Reconstruction from frozen record (Invariant I7)
+    // record may be null when check-in was via BioTime only — use safe fallback defaults
     const shiftSnapshot = {
-      shiftId: record.shift_id || 'shift-standard',
-      shiftName: record.shift_name || 'Standard Shift',
-      shiftTimezone: record.shift_timezone || 'Asia/Dhaka',
-      shiftStartLocal: record.shift_start_local || '10:00',
-      shiftEndLocal: record.shift_end_local || '18:00',
-      shiftBufferMinutes: record.shift_buffer_minutes ?? 30,
-      shiftAutoCheckoutLocal: record.shift_auto_checkout_local || '23:30',
-      shiftCrossesMidnight: Boolean(record.shift_crosses_midnight),
-      isScheduledWorkingDay: Boolean(record.is_scheduled_working_day),
+      shiftId: record?.shift_id || 'shift-standard',
+      shiftName: record?.shift_name || 'Standard Shift',
+      shiftTimezone: record?.shift_timezone || 'Asia/Dhaka',
+      shiftStartLocal: record?.shift_start_local || '10:00',
+      shiftEndLocal: record?.shift_end_local || '18:00',
+      shiftBufferMinutes: record?.shift_buffer_minutes ?? 30,
+      shiftAutoCheckoutLocal: record?.shift_auto_checkout_local || '23:30',
+      shiftCrossesMidnight: Boolean(record?.shift_crosses_midnight),
+      isScheduledWorkingDay: Boolean(record?.is_scheduled_working_day ?? true),
     };
 
     // 6. Anchor first_check_in and update last_check_out_at
@@ -194,7 +212,7 @@ export async function POST(request: Request) {
       lastCheckOutAt,
       checkInAt: record?.check_in_at || firstCheckInAt,
       checkOutAt: nowUtc,
-      checkInSource: record?.check_in_source || 'gps',
+      checkInSource: record?.check_in_source || effectiveToday?.checkInSource || 'gps',
       checkOutSource: 'gps' as const,
       calcMethod,
       punches: punchesList || [],
@@ -208,7 +226,7 @@ export async function POST(request: Request) {
       employee_id: canonicalEmpId,
       business_date: businessDate,
       first_check_in_at: firstCheckInAt,
-      check_in_at: firstCheckInAt,
+      check_in_at: record?.check_in_at || firstCheckInAt,
       check_out_at: nowUtc,
       last_check_out_at: nowUtc,
       check_out_source: 'gps',
@@ -218,6 +236,8 @@ export async function POST(request: Request) {
       check_out_accuracy_m: accuracy,
       is_auto_checkout: false,
       worked_minutes: derived.workedMinutes,
+      worked_seconds: derived.workedSeconds,
+      worked_display: derived.workedDisplay,
       status: derived.status,
       updated_at: nowUtc,
     };

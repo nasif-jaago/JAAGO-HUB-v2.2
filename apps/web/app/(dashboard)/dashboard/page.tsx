@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [checkInTime, setCheckInTime] = useState<string>('--:--');
   const [checkOutTime, setCheckOutTime] = useState<string>('--:--');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [frozenWorkedSeconds, setFrozenWorkedSeconds] = useState<number | null>(null); // Locked once checked out
   const [firstCheckInTimestamp, setFirstCheckInTimestamp] = useState<number | null>(null);
   const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
   const [publicHolidays, setPublicHolidays] = useState<PublicHolidayItem[]>([]);
@@ -523,6 +524,9 @@ export default function DashboardPage() {
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isCheckedIn && firstCheckInTimestamp) {
+      // Clear any frozen checkout seconds — we are now live
+      setFrozenWorkedSeconds(null);
+
       // Immediate initial tick on state change
       const currentServerNow = Date.now() + serverTimeOffset;
       const initialDiff = Math.max(0, Math.floor((currentServerNow - firstCheckInTimestamp) / 1000));
@@ -558,6 +562,11 @@ export default function DashboardPage() {
       if (interval) clearInterval(interval);
     };
   }, [isCheckedIn, firstCheckInTimestamp, serverTimeOffset]);
+
+  // Effective display seconds: use frozen value when checked out, live value when checked in
+  const displaySeconds = !isCheckedIn && frozenWorkedSeconds !== null
+    ? frozenWorkedSeconds
+    : elapsedSeconds;
 
 
   // Format seconds to HH:MM:SS (Hour, Minutes, Seconds together as 00:00:00)
@@ -740,6 +749,7 @@ export default function DashboardPage() {
     setIsCheckedIn(false);
     setCheckOutTime(autoTimeStr);
     setElapsedSeconds(newTotal);
+    if (newTotal > 0) setFrozenWorkedSeconds(newTotal); // Freeze counter at auto-checkout
 
     if (typeof window !== 'undefined' && activeKey) {
       localStorage.setItem(`jaago_att_${activeKey}_is_checked_in`, 'false');
@@ -857,8 +867,12 @@ export default function DashboardPage() {
             const currentServerNow = Date.now() + offset;
             const liveDiff = Math.max(0, Math.floor((currentServerNow - inTs) / 1000));
             setElapsedSeconds(liveDiff);
-          } else {
-            setElapsedSeconds(worked_seconds || 0);
+            setFrozenWorkedSeconds(null); // Clear freeze when live
+          } else if (worked_seconds && worked_seconds > 0) {
+            // Only update if server returns a valid positive worked_seconds
+            // This prevents background polls with stale/zero data from resetting the counter
+            setElapsedSeconds(worked_seconds);
+            setFrozenWorkedSeconds(worked_seconds); // Freeze the display
           }
         } else {
           setFirstCheckInTimestamp(null);
@@ -1249,8 +1263,13 @@ export default function DashboardPage() {
         setCheckOutTime(now.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: '2-digit', minute: '2-digit', hour12: true }));
       }
 
-      if (record?.worked_seconds !== undefined) {
+      // Immediately freeze the worked seconds display so background polls can't reset it to 0
+      if (record?.worked_seconds !== undefined && record.worked_seconds > 0) {
         setElapsedSeconds(record.worked_seconds);
+        setFrozenWorkedSeconds(record.worked_seconds);
+      } else if (checkOutJson.derived?.workedSeconds !== undefined && checkOutJson.derived.workedSeconds > 0) {
+        setElapsedSeconds(checkOutJson.derived.workedSeconds);
+        setFrozenWorkedSeconds(checkOutJson.derived.workedSeconds);
       }
 
       setGpsTracker({
@@ -1290,8 +1309,9 @@ export default function DashboardPage() {
 
       showToast(checkOutJson.message || `Checked out successfully! Total working time: ${checkOutJson.derived?.workedDisplay || '0h 00m'}.`, 'success');
       await refreshCanonicalAttendance(user.employeeCode || user.id);
-    } catch {
-      showToast('Check-out failed. Please try again.', 'error');
+    } catch (err: any) {
+      console.error('[CHECK-OUT] Client-side error:', err);
+      showToast(err?.message || 'Check-out failed. Please try again.', 'error');
     } finally {
       setIsPunching(false);
     }
@@ -1378,7 +1398,7 @@ export default function DashboardPage() {
             className="text-4xl sm:text-5xl font-black tracking-tight text-foreground font-mono py-1"
             aria-live="polite"
           >
-            {formatTime(elapsedSeconds)}
+            {formatTime(displaySeconds)}
           </div>
 
           {/* Subtitle */}
@@ -1935,7 +1955,7 @@ export default function DashboardPage() {
                 className="text-3xl sm:text-4xl lg:text-[38px] font-black font-mono tracking-tight text-foreground pt-1.5"
                 aria-live="polite"
               >
-                {formatTime(elapsedSeconds)}
+                {formatTime(displaySeconds)}
               </div>
             </div>
             <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
@@ -2463,7 +2483,7 @@ export default function DashboardPage() {
                 <span>Worked Hours Today</span>
               </div>
               <div className="text-base font-black font-mono text-foreground">
-                {formatTime(elapsedSeconds)}
+                {formatTime(displaySeconds)}
               </div>
               <div className="text-[10px] text-muted-foreground">Schedule: 8h target</div>
             </div>
@@ -2514,7 +2534,7 @@ export default function DashboardPage() {
                         const todayStr = new Date().toISOString().slice(0, 10);
                         const isToday = log.date === todayStr;
                         const duration = isToday && isCheckedIn
-                          ? formatTime(elapsedSeconds)
+                          ? formatTime(displaySeconds)
                           : calculateWorkingHoursString(log.checkInTime, log.checkOutTime);
                         const checkOutDisplay = isToday && isCheckedIn && (!log.checkOutTime || log.checkOutTime === '--:--')
                           ? '--:-- (Active)'
