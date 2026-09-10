@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans, Inter } from 'next/font/google';
+import { LoadingProvider } from '@/components/providers/loading-provider';
 import './globals.css';
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -60,7 +61,7 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-screen bg-background text-foreground font-sans antialiased selection:bg-brand selection:text-primary-foreground"
       >
-        {children}
+        <LoadingProvider>{children}</LoadingProvider>
       </body>
     </html>
   );

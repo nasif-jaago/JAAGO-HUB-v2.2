@@ -35,8 +35,11 @@ import {
   INITIAL_BIOTIME_CONFIG,
 } from '@/lib/biotime-data';
 import { formatDisplayDate } from '@/lib/date-format';
+import { JaagoSpinner } from '@/components/ui/jaago-loading-overlay';
+import { useLoading } from '@/components/providers/loading-provider';
 
 export default function BioTimeControlCenterPage() {
+  const { withLoading } = useLoading();
   const [devices, setDevices] = useState<BioTimeDevice[]>([]);
   const [config, setConfig] = useState<BioTimeConfig>(INITIAL_BIOTIME_CONFIG);
   const [punchLogs, setPunchLogs] = useState<BioTimePunchLog[]>([]);
@@ -137,24 +140,26 @@ export default function BioTimeControlCenterPage() {
   // Trigger Instant BioTime Sync
   const handleTriggerSync = async () => {
     setIsSyncing(true);
-    try {
-      const res = await fetch('/api/v1/biotime/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ forceAll: true }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast(data.message || '✓ BioTime Sync Complete!');
-        await loadBioTimeData();
-      } else {
-        showToast(data.error || 'Failed to sync BioTime', 'error');
+    await withLoading(async () => {
+      try {
+        const res = await fetch('/api/v1/biotime/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ forceAll: true }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast(data.message || '✓ BioTime Sync Complete!');
+          await loadBioTimeData();
+        } else {
+          showToast(data.error || 'Failed to sync BioTime', 'error');
+        }
+      } catch {
+        showToast('Network error during BioTime sync', 'error');
+      } finally {
+        setIsSyncing(false);
       }
-    } catch {
-      showToast('Network error during BioTime sync', 'error');
-    } finally {
-      setIsSyncing(false);
-    }
+    }, 'Synchronizing BioTime 8.5 hardware & punches...');
   };
 
   // Ping Single Device
@@ -356,9 +361,8 @@ export default function BioTimeControlCenterPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-xs text-muted-foreground font-medium">Initializing BioTime 8.5 Control Center & Hardware Engine...</p>
+      <div className="min-h-[70vh] flex flex-col items-center justify-center">
+        <JaagoSpinner size="lg" message="Initializing BioTime 8.5 Control Center & Hardware Engine..." />
       </div>
     );
   }

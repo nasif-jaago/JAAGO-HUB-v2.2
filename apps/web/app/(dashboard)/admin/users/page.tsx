@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { EmployeeToUserModal } from '@/components/admin/employee-to-user-modal';
 import { formatDisplayDate } from '@/lib/date-format';
+import { JaagoSpinner } from '@/components/ui/jaago-loading-overlay';
 import {
   INITIAL_ROLES,
   RoleItem,
@@ -1002,9 +1003,8 @@ export default function UserManagementPage() {
             <tbody className="divide-y divide-border/60 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="p-8 text-center text-muted-foreground">
-                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-                    <span>Loading users directory...</span>
+                  <td colSpan={9} className="p-10 text-center">
+                    <JaagoSpinner size="sm" message="Loading users directory..." />
                   </td>
                 </tr>
               ) : users.length === 0 ? (

@@ -495,20 +495,20 @@ export default function PnCLayout({
   return (
     <div className={`min-h-screen ${isDashboard ? 'bg-transparent' : 'bg-background'} text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden`}>
       <RouteProgressBar />
-      {/* ── Dashboard ONLY Fullscreen Background (JAAGO School Children) ── */}
+      {/* ── Dashboard ONLY Fullscreen Background (Chalkboard & Stationery Theme) ── */}
       {isDashboard && (
         <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden pointer-events-none select-none bg-black">
           <Image
-            src="/pnc-bg-children.jpg"
-            alt="JAAGO Children Background"
+            src="/pnc-bg-stationery.jpg"
+            alt="People & Culture Dashboard Background"
             fill
             priority
             sizes="100vw"
             quality={95}
-            className="object-cover object-center w-full h-full opacity-85"
+            className="object-cover object-center w-full h-full opacity-90"
           />
           {/* Subtle Dark Gradient Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/50" />
         </div>
       )}
 

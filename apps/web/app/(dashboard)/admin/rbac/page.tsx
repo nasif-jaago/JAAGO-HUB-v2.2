@@ -28,6 +28,7 @@ import {
   PermissionModuleGroup,
   normalizeRoleKey,
 } from '@/lib/rbac-data';
+import { JaagoSpinner } from '@/components/ui/jaago-loading-overlay';
 
 interface UserRecord {
   id: string;
@@ -515,9 +516,8 @@ export default function AdminRbacPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-xs text-muted-foreground font-medium">Loading RBAC Permission Matrix & Policy Engine...</p>
+      <div className="min-h-[70vh] flex flex-col items-center justify-center">
+        <JaagoSpinner size="lg" message="Loading RBAC Permission Matrix & Policy Engine..." />
       </div>
     );
   }

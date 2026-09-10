@@ -86,8 +86,10 @@ import {
 } from '@/lib/supabase-organization';
 import { getLocalShifts, ShiftItem } from '@/lib/supabase-attendance';
 import { hasPermission, isDspDepartment, isDspOnlyScoped } from '@/lib/rbac-guard';
+import { useLoading } from '@/components/providers/loading-provider';
 
 export default function PnCEmployeesPage() {
+  const { withLoading } = useLoading();
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
 
   // ── RBAC PERMISSION STATE ──
@@ -1172,62 +1174,64 @@ function toCanonicalOrgName(raw: string): string {
   const handleProcessImport = async () => {
     if (!importParsedResult || importParsedResult.employees.length === 0) return;
     setIsProcessingImport(true);
-    try {
-      const newOrUpdated = importParsedResult.employees;
+    await withLoading(async () => {
+      try {
+        const newOrUpdated = importParsedResult.employees;
 
-      // 1. High-Performance Bulk Sync directly to Supabase PostgREST
-      const importRes = await bulkImportEmployeesToSupabase(newOrUpdated);
-      if (!importRes.success && importRes.error) {
-        throw new Error(importRes.error);
+        // 1. High-Performance Bulk Sync directly to Supabase PostgREST
+        const importRes = await bulkImportEmployeesToSupabase(newOrUpdated);
+        if (!importRes.success && importRes.error) {
+          throw new Error(importRes.error);
+        }
+
+        // 2. Merge into state and local storage
+        const existingMap = new Map(employees.map((e) => [e.code.toLowerCase(), e]));
+        newOrUpdated.forEach((emp) => {
+          existingMap.set(emp.code.toLowerCase(), emp);
+        });
+        const mergedList = Array.from(existingMap.values());
+
+        setEmployees(mergedList);
+        persistEmployees(mergedList);
+
+        // 3. Re-fetch Master Organization Data to instantly reflect newly auto-defined entities
+        const [freshOrgs, freshBranches, freshDepts, freshDesigs] = await Promise.all([
+          fetchOrganizationsFromSupabase(),
+          fetchBranchesFromSupabase(),
+          fetchDepartmentsFromSupabase(),
+          fetchDesignationsFromSupabase(),
+        ]);
+        if (freshOrgs) setMasterOrganizations(freshOrgs);
+        if (freshBranches) setMasterBranches(freshBranches);
+        if (freshDepts) setMasterDepartments(freshDepts);
+        if (freshDesigs) setMasterDesignations(freshDesigs);
+
+        // 4. Reset active filters so user sees all imported records immediately
+        setSelectedOrg('');
+        setSelectedDept('');
+        setSelectedBranch('');
+        setSelectedDesignation('');
+        setSearchQuery('');
+
+        setShowImportModal(false);
+        setImportFile(null);
+        setImportParsedResult(null);
+
+        const totalCount = importRes.totalUpserted || newOrUpdated.length;
+        const deptCount = importRes.autoDefined?.departments || 0;
+        const desigCount = importRes.autoDefined?.designations || 0;
+        const branchCount = importRes.autoDefined?.branches || 0;
+
+        setToastMessage(
+          `✓ Successfully imported & synchronized ${totalCount} employee records! Auto-defined ${deptCount} departments, ${desigCount} designations, and ${branchCount} branches.`
+        );
+        setTimeout(() => setToastMessage(null), 6000);
+      } catch (err: any) {
+        alert(err.message || 'Import processing error');
+      } finally {
+        setIsProcessingImport(false);
       }
-
-      // 2. Merge into state and local storage
-      const existingMap = new Map(employees.map((e) => [e.code.toLowerCase(), e]));
-      newOrUpdated.forEach((emp) => {
-        existingMap.set(emp.code.toLowerCase(), emp);
-      });
-      const mergedList = Array.from(existingMap.values());
-
-      setEmployees(mergedList);
-      persistEmployees(mergedList);
-
-      // 3. Re-fetch Master Organization Data to instantly reflect newly auto-defined entities
-      const [freshOrgs, freshBranches, freshDepts, freshDesigs] = await Promise.all([
-        fetchOrganizationsFromSupabase(),
-        fetchBranchesFromSupabase(),
-        fetchDepartmentsFromSupabase(),
-        fetchDesignationsFromSupabase(),
-      ]);
-      if (freshOrgs) setMasterOrganizations(freshOrgs);
-      if (freshBranches) setMasterBranches(freshBranches);
-      if (freshDepts) setMasterDepartments(freshDepts);
-      if (freshDesigs) setMasterDesignations(freshDesigs);
-
-      // 4. Reset active filters so user sees all imported records immediately
-      setSelectedOrg('');
-      setSelectedDept('');
-      setSelectedBranch('');
-      setSelectedDesignation('');
-      setSearchQuery('');
-
-      setShowImportModal(false);
-      setImportFile(null);
-      setImportParsedResult(null);
-
-      const totalCount = importRes.totalUpserted || newOrUpdated.length;
-      const deptCount = importRes.autoDefined?.departments || 0;
-      const desigCount = importRes.autoDefined?.designations || 0;
-      const branchCount = importRes.autoDefined?.branches || 0;
-
-      setToastMessage(
-        `✓ Successfully imported & synchronized ${totalCount} employee records! Auto-defined ${deptCount} departments, ${desigCount} designations, and ${branchCount} branches.`
-      );
-      setTimeout(() => setToastMessage(null), 6000);
-    } catch (err: any) {
-      alert(err.message || 'Import processing error');
-    } finally {
-      setIsProcessingImport(false);
-    }
+    }, 'Importing and synchronizing employee records with Supabase...');
   };
 
   // Helper for Status Badge in Table
@@ -1526,43 +1530,45 @@ function toCanonicalOrgName(raw: string): string {
     if (targetCodes.length === 0) return;
 
     setIsApplyingMassUpdate(true);
-    try {
-      const targetSet = new Set(targetCodes);
-      const updatedList = employees.map((emp) => {
-        if (targetSet.has(emp.code)) {
-          return {
-            ...emp,
-            [field]: newValue,
-          };
+    await withLoading(async () => {
+      try {
+        const targetSet = new Set(targetCodes);
+        const updatedList = employees.map((emp) => {
+          if (targetSet.has(emp.code)) {
+            return {
+              ...emp,
+              [field]: newValue,
+            };
+          }
+          return emp;
+        });
+
+        // 1. Update local state & cache immediately
+        setEmployees(updatedList);
+        persistEmployees(updatedList);
+
+        // 2. Filter only updated records to send to Supabase bulk endpoint
+        const modifiedRecords = updatedList.filter((emp) => targetSet.has(emp.code));
+        const res = await bulkImportEmployeesToSupabase(modifiedRecords);
+
+        if (!res.success && res.error) {
+          throw new Error(res.error);
         }
-        return emp;
-      });
 
-      // 1. Update local state & cache immediately
-      setEmployees(updatedList);
-      persistEmployees(updatedList);
+        setToastMessage(
+          `✓ Successfully updated ${fieldLabel} to "${newValue}" for ${targetCodes.length} employee${targetCodes.length > 1 ? 's' : ''}!`
+        );
+        setTimeout(() => setToastMessage(null), 6000);
 
-      // 2. Filter only updated records to send to Supabase bulk endpoint
-      const modifiedRecords = updatedList.filter((emp) => targetSet.has(emp.code));
-      const res = await bulkImportEmployeesToSupabase(modifiedRecords);
-
-      if (!res.success && res.error) {
-        throw new Error(res.error);
+        // Close confirmation modal
+        setConfirmMassUpdateData(null);
+        setConfirmSearchQuery('');
+      } catch (err: any) {
+        alert(`Mass update error: ${err?.message || 'Failed to update employees in database'}`);
+      } finally {
+        setIsApplyingMassUpdate(false);
       }
-
-      setToastMessage(
-        `✓ Successfully updated ${fieldLabel} to "${newValue}" for ${targetCodes.length} employee${targetCodes.length > 1 ? 's' : ''}!`
-      );
-      setTimeout(() => setToastMessage(null), 6000);
-
-      // Close confirmation modal
-      setConfirmMassUpdateData(null);
-      setConfirmSearchQuery('');
-    } catch (err: any) {
-      alert(`Mass update error: ${err?.message || 'Failed to update employees in database'}`);
-    } finally {
-      setIsApplyingMassUpdate(false);
-    }
+    }, `Batch-updating ${targetCodes.length} employee records in Supabase...`);
   };
 
   // Memoized options for Inline Quick Cell Popover
@@ -1611,39 +1617,47 @@ function toCanonicalOrgName(raw: string): string {
   // Bulk Actions Handlers
   const handleArchiveSelected = async () => {
     if (selectedCodes.length === 0) return;
-    const updated = employees.map((e) =>
-      selectedCodes.includes(e.code) ? { ...e, status: 'Archived' as EmployeeStatus, isArchived: true } : e
-    );
-    persistEmployees(updated);
-    await archiveEmployeesInSupabase(selectedCodes);
-    setSelectedCodes([]);
+    await withLoading(async () => {
+      const updated = employees.map((e) =>
+        selectedCodes.includes(e.code) ? { ...e, status: 'Archived' as EmployeeStatus, isArchived: true } : e
+      );
+      persistEmployees(updated);
+      await archiveEmployeesInSupabase(selectedCodes);
+      setSelectedCodes([]);
+    }, `Archiving ${selectedCodes.length} employee record(s)...`);
   };
 
   const handleUnarchiveSelected = async () => {
     if (selectedCodes.length === 0) return;
-    const updated = employees.map((e) =>
-      selectedCodes.includes(e.code) ? { ...e, status: 'Active' as EmployeeStatus, isArchived: false } : e
-    );
-    persistEmployees(updated);
-    await unarchiveEmployeesInSupabase(selectedCodes);
-    setSelectedCodes([]);
+    await withLoading(async () => {
+      const updated = employees.map((e) =>
+        selectedCodes.includes(e.code) ? { ...e, status: 'Active' as EmployeeStatus, isArchived: false } : e
+      );
+      persistEmployees(updated);
+      await unarchiveEmployeesInSupabase(selectedCodes);
+      setSelectedCodes([]);
+    }, `Restoring ${selectedCodes.length} employee record(s)...`);
   };
 
   const handleDeleteEmployee = async (code: string) => {
-    const updated = employees.filter((e) => e.code !== code);
-    persistEmployees(updated);
-    if (selectedProfile?.code === code) {
-      setSelectedProfile(null);
-    }
-    await deleteEmployeesFromSupabase([code]);
+    await withLoading(async () => {
+      const updated = employees.filter((e) => e.code !== code);
+      persistEmployees(updated);
+      if (selectedProfile?.code === code) {
+        setSelectedProfile(null);
+      }
+      await deleteEmployeesFromSupabase([code]);
+    }, 'Deleting employee record from database...');
   };
 
   const handleDeleteSelected = async () => {
     if (selectedCodes.length === 0) return;
-    const updated = employees.filter((e) => !selectedCodes.includes(e.code));
-    persistEmployees(updated);
-    await deleteEmployeesFromSupabase(selectedCodes);
-    setSelectedCodes([]);
+    await withLoading(async () => {
+      const updated = employees.filter((e) => !selectedCodes.includes(e.code));
+      persistEmployees(updated);
+      await deleteEmployeesFromSupabase(selectedCodes);
+      setSelectedCodes([]);
+    }, `Deleting ${selectedCodes.length} employee record(s) from database...`);
   };
 
   // If a profile is selected, render the rich tab-wise Employee Profile Detail View
@@ -1770,6 +1784,37 @@ function toCanonicalOrgName(raw: string): string {
               <span>EXPORT</span>
             </button>
           )}
+
+          <button
+            onClick={async () => {
+              await withLoading(async () => {
+                const remoteData = await fetchEmployeesFromSupabase(true);
+                if (remoteData !== null) {
+                  setEmployees(remoteData);
+                  try {
+                    localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(remoteData));
+                  } catch {}
+                }
+                const [freshOrgs, freshBranches, freshDepts, freshDesigs] = await Promise.all([
+                  fetchOrganizationsFromSupabase(),
+                  fetchBranchesFromSupabase(),
+                  fetchDepartmentsFromSupabase(),
+                  fetchDesignationsFromSupabase(),
+                ]);
+                if (freshOrgs) setMasterOrganizations(freshOrgs);
+                if (freshBranches) setMasterBranches(freshBranches);
+                if (freshDepts) setMasterDepartments(freshDepts);
+                if (freshDesigs) setMasterDesignations(freshDesigs);
+                setToastMessage('✓ Synchronized all records with Supabase');
+                setTimeout(() => setToastMessage(null), 3000);
+              }, 'Syncing employee directory from Supabase...');
+            }}
+            className="px-4 py-2 rounded-2xl bg-card border border-border text-xs font-bold text-foreground hover:border-primary/50 transition flex items-center space-x-2 shadow-sm cursor-pointer"
+            title="Sync latest employee records from Supabase"
+          >
+            <RotateCw className="h-3.5 w-3.5 text-muted-foreground" />
+            <span>SYNC</span>
+          </button>
         </div>
       </div>
 

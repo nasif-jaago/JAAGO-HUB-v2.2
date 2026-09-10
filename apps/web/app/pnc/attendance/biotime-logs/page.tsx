@@ -27,6 +27,8 @@ import {
 import { BioTimeDevice } from '@/lib/biotime-data';
 import { FullEmployeeProfile, fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import { formatDisplayDate } from '@/lib/date-format';
+import { JaagoSpinner } from '@/components/ui/jaago-loading-overlay';
+import { useLoading } from '@/components/providers/loading-provider';
 
 export interface BioTimeReconciledRow {
   id: string;
@@ -59,6 +61,7 @@ export interface BioTimeMappingItem {
 }
 
 export default function BioTimeLogsPage() {
+  const { withLoading } = useLoading();
   const [rows, setRows] = useState<BioTimeReconciledRow[]>([]);
   const [devices, setDevices] = useState<BioTimeDevice[]>([]);
   const [mappings, setMappings] = useState<BioTimeMappingItem[]>([]);
@@ -202,24 +205,26 @@ export default function BioTimeLogsPage() {
   // Trigger manual sync
   const handleSync = async () => {
     setIsSyncing(true);
-    try {
-      const res = await fetch('/api/v1/biotime/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ forceAll: true }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showToast(data.message || '✓ Synchronized live punches with Supabase attendance!');
-        await Promise.all([fetchReconciledLogs(1, pageSize), fetchMappings()]);
-      } else {
-        showToast(data.error || 'Failed to sync punches', 'error');
+    await withLoading(async () => {
+      try {
+        const res = await fetch('/api/v1/biotime/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ forceAll: true }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast(data.message || '✓ Synchronized live punches with Supabase attendance!');
+          await Promise.all([fetchReconciledLogs(1, pageSize), fetchMappings()]);
+        } else {
+          showToast(data.error || 'Failed to sync punches', 'error');
+        }
+      } catch {
+        showToast('Network error during sync', 'error');
+      } finally {
+        setIsSyncing(false);
       }
-    } catch {
-      showToast('Network error during sync', 'error');
-    } finally {
-      setIsSyncing(false);
-    }
+    }, 'Synchronizing live BioTime punches with database...');
   };
 
   // Save manual employee mapping
@@ -265,9 +270,8 @@ export default function BioTimeLogsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center space-y-3">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-xs text-muted-foreground font-medium">Reconciling BioTime check-in &amp; check-out records...</p>
+      <div className="min-h-[70vh] flex flex-col items-center justify-center">
+        <JaagoSpinner size="lg" message="Reconciling BioTime check-in & check-out records..." />
       </div>
     );
   }
