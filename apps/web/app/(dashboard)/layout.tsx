@@ -129,7 +129,7 @@ export default function DashboardLayout({
         {/* ── Main App Content Area (Smoothly expands when sidebar is collapsed) ── */}
         <div
           className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
-            !sidebarCollapsed ? 'lg:pl-72' : 'pl-0'
+            !sidebarCollapsed ? 'lg:pl-[228px]' : 'pl-0'
           }`}
         >
           <DashboardHeader
@@ -142,7 +142,7 @@ export default function DashboardLayout({
               }
             }}
           />
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+          <main className="flex-1 px-4 sm:px-6 lg:px-8 pt-2 sm:pt-2.5 pb-6 lg:pb-8 overflow-y-auto">
             {children}
           </main>
         </div>

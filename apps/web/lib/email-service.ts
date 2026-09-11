@@ -253,7 +253,7 @@ Support: pnc@jaago.com.bd | IT Helpdesk: it-support@jaago.com.bd
       { key: 'designation', name: 'Designation', description: 'Job Title / Role', required: true, sample: 'Team Lead' },
       { key: 'department', name: 'Department', description: 'Department Name', required: true, sample: "Founder's Office (JF)" },
       { key: 'workEmail', name: 'Work Email', description: 'Institutional email address', required: true, sample: 'hub.jaago@jaago.com.bd' },
-      { key: 'tempPassword', name: 'Temporary Password', description: 'Auto-generated temporary password for initial login', required: true, sample: 'Jaago@2026!k9Q2' },
+      { key: 'tempPassword', name: 'Temporary Password', description: 'Auto-generated temporary password for initial login', required: true, sample: 'Temporary-Pass-Sample-Only' },
       { key: 'loginUrl', name: 'Login URL', description: 'Direct portal authentication link', required: true, sample: 'https://hub.jaago.com.bd/login' },
     ],
     isActive: true,

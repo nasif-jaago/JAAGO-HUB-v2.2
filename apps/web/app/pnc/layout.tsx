@@ -493,10 +493,10 @@ export default function PnCLayout({
   const isDashboard = pathname === '/pnc' || pathname === '/pnc/';
 
   return (
-    <div className={`min-h-screen ${isDashboard ? 'bg-transparent' : 'bg-background'} text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden`}>
+    <div className={`min-h-screen ${isDashboard && theme === 'dark' ? 'bg-transparent' : 'bg-background'} text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden`}>
       <RouteProgressBar />
-      {/* ── Dashboard ONLY Fullscreen Background (Chalkboard & Stationery Theme) ── */}
-      {isDashboard && (
+      {/* ── Dashboard ONLY Fullscreen Background (Chalkboard & Stationery Theme - Dark Mode Only) ── */}
+      {isDashboard && theme === 'dark' && (
         <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden pointer-events-none select-none bg-black">
           <Image
             src="/pnc-bg-stationery.jpg"
@@ -525,14 +525,14 @@ export default function PnCLayout({
       <aside
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border text-sidebar-foreground transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-[0_0_50px_rgba(0,0,0,0.4)] overflow-hidden ${
+        className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border text-sidebar-foreground transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-2xl overflow-hidden ${
           sidebarCollapsed
-            ? '-translate-x-full w-72 pointer-events-none opacity-0'
-            : 'translate-x-0 w-72 pointer-events-auto opacity-100'
+            ? '-translate-x-full w-[228px] pointer-events-none opacity-0'
+            : 'translate-x-0 w-[228px] pointer-events-auto opacity-100'
         }`}
       >
         {/* Top Header Card: P&C Brand Badge */}
-        <div className="p-4 border-b border-sidebar-border/70 space-y-3 bg-surface/40 relative">
+        <div className="p-4 border-b border-sidebar-border space-y-3 bg-sidebar relative">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="h-10 w-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center font-black text-sm shadow-md flex-shrink-0">
@@ -554,7 +554,7 @@ export default function PnCLayout({
                 e.stopPropagation();
                 setSidebarCollapsed(true);
               }}
-              className="p-1.5 rounded-lg bg-surface/70 hover:bg-surface border border-sidebar-border text-sidebar-muted hover:text-sidebar-foreground transition shadow-sm cursor-pointer"
+              className="p-1.5 rounded-lg bg-surface/70 hover:bg-sidebar-foreground/10 border border-sidebar-border text-sidebar-muted hover:text-sidebar-foreground transition shadow-sm cursor-pointer"
               title="Hide Sidebar"
               aria-label="Hide Sidebar"
             >
@@ -565,7 +565,7 @@ export default function PnCLayout({
           {/* Back to JAAGO HUB button */}
           <Link
             href="/dashboard"
-            className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:text-primary bg-surface/50 hover:bg-primary/10 border border-sidebar-border/70 hover:border-primary/40 transition shadow-sm"
+            className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:text-primary bg-sidebar-foreground/5 hover:bg-primary/10 border border-sidebar-border hover:border-primary/40 transition shadow-sm"
           >
             <ArrowLeft className="h-3.5 w-3.5 text-primary" />
             <span className="uppercase tracking-wider text-[10px]">BACK TO JAAGO HUB</span>
@@ -580,11 +580,11 @@ export default function PnCLayout({
               href="/pnc"
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
                 pathname === '/pnc'
-                  ? 'bg-gradient-to-r from-amber-500/20 to-amber-500/5 text-amber-400 font-black border border-amber-500/30 shadow-sm shadow-amber-500/10'
-                  : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
+                  ? 'bg-gradient-to-r from-amber-500/20 to-amber-500/5 text-amber-600 dark:text-amber-400 font-black border border-amber-500/30 shadow-sm shadow-amber-500/10'
+                  : 'text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
               }`}
             >
-              <LayoutDashboard className="h-4 w-4 text-amber-400 flex-shrink-0" />
+              <LayoutDashboard className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">DASHBOARD</span>
             </Link>
           )}
@@ -595,11 +595,11 @@ export default function PnCLayout({
               href="/pnc/employees"
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
                 pathname === '/pnc/employees'
-                  ? 'bg-gradient-to-r from-amber-500/20 to-amber-500/5 text-amber-400 font-black border border-amber-500/30 shadow-sm shadow-amber-500/10'
-                  : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
+                  ? 'bg-gradient-to-r from-amber-500/20 to-amber-500/5 text-amber-600 dark:text-amber-400 font-black border border-amber-500/30 shadow-sm shadow-amber-500/10'
+                  : 'text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
               }`}
             >
-              <Users className="h-4 w-4 text-amber-400/90 flex-shrink-0" />
+              <Users className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">EMPLOYEES</span>
             </Link>
           )}
@@ -616,8 +616,8 @@ export default function PnCLayout({
                   pathname.startsWith('/pnc/departments') ||
                   pathname.startsWith('/pnc/projects') ||
                   pathname.startsWith('/pnc/insurance')
-                    ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
+                    ? 'text-amber-600 dark:text-amber-400 font-black bg-sidebar-foreground/[0.06]'
+                    : 'text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
@@ -657,8 +657,8 @@ export default function PnCLayout({
                     href="/pnc/organization"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/organization'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Organization &amp; Branches
@@ -667,8 +667,8 @@ export default function PnCLayout({
                     href="/pnc/designations"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/designations'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Designations
@@ -677,8 +677,8 @@ export default function PnCLayout({
                     href="/pnc/teams"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/teams'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Teams
@@ -687,8 +687,8 @@ export default function PnCLayout({
                     href="/pnc/departments"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/departments'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Departments
@@ -697,8 +697,8 @@ export default function PnCLayout({
                     href="/pnc/projects"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/projects'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Projects
@@ -707,8 +707,8 @@ export default function PnCLayout({
                     href="/pnc/insurance"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/insurance'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Insurance Info
@@ -725,8 +725,8 @@ export default function PnCLayout({
                 onClick={() => toggleSection('timeOff')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/time-off')
-                    ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
+                    ? 'text-amber-600 dark:text-amber-400 font-black bg-sidebar-foreground/[0.06]'
+                    : 'text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
@@ -749,8 +749,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/calendar"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/calendar' || pathname === '/pnc/time-off'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Leave Calendar
@@ -759,8 +759,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/requests"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/requests'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Leave Requests
@@ -769,8 +769,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/allocations"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/allocations'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Allocations
@@ -779,8 +779,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/holidays"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/holidays'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Public Holidays
@@ -789,8 +789,8 @@ export default function PnCLayout({
                     href="/pnc/time-off/config"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/time-off/config'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Leave Config
@@ -807,8 +807,8 @@ export default function PnCLayout({
                 onClick={() => toggleSection('attendance')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/attendance')
-                    ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
+                    ? 'text-amber-600 dark:text-amber-400 font-black bg-sidebar-foreground/[0.06]'
+                    : 'text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
@@ -833,8 +833,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/logs"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/attendance/logs' || pathname === '/pnc/attendance'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Attendance Logs
@@ -843,8 +843,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/on-duty"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/attendance/on-duty'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; On Duty Logs
@@ -853,8 +853,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/report"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/attendance/report'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Attendance Report
@@ -863,8 +863,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/shifts"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname === '/pnc/attendance/shifts'
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; Working Hours &amp; Schedules
@@ -873,8 +873,8 @@ export default function PnCLayout({
                     href="/pnc/attendance/biotime-logs"
                     className={`block py-1 px-2 rounded-lg uppercase text-[10px] font-bold transition ${
                       pathname.startsWith('/pnc/attendance/biotime-logs')
-                        ? 'text-amber-400 font-black bg-amber-500/15'
-                        : 'hover:text-amber-400 hover:bg-white/[0.04]'
+                        ? 'text-amber-600 dark:text-amber-400 font-black bg-amber-500/15'
+                        : 'hover:text-amber-600 dark:hover:text-amber-400 hover:bg-sidebar-foreground/[0.06]'
                     }`}
                   >
                     &bull; BioTime Log
@@ -886,7 +886,7 @@ export default function PnCLayout({
 
           {/* APPRAISALS */}
           {permissionsState.canAccessAppraisals && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
                 <Award className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">APPRAISALS</span>
@@ -902,8 +902,8 @@ export default function PnCLayout({
                 onClick={() => toggleSection('payroll')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/payroll')
-                    ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
+                    ? 'text-amber-600 dark:text-amber-400 font-black bg-sidebar-foreground/[0.06]'
+                    : 'text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
@@ -920,32 +920,32 @@ export default function PnCLayout({
                 <div className="pl-6 space-y-1 text-xs text-sidebar-muted border-l border-sidebar-border/70 ml-4 py-1">
                   <Link
                     href="/pnc/payroll"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
-                      pathname === '/pnc/payroll' ? 'text-amber-400 font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-600 dark:hover:text-amber-400 ${
+                      pathname === '/pnc/payroll' ? 'text-amber-600 dark:text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; Overview
                   </Link>
                   <Link
                     href="/pnc/payroll/contracts"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
-                      pathname === '/pnc/payroll/contracts' ? 'text-amber-400 font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-600 dark:hover:text-amber-400 ${
+                      pathname === '/pnc/payroll/contracts' ? 'text-amber-600 dark:text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; Contracts
                   </Link>
                   <Link
                     href="/pnc/payroll/pay-runs"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
-                      pathname.startsWith('/pnc/payroll/pay-runs') ? 'text-amber-400 font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-600 dark:hover:text-amber-400 ${
+                      pathname.startsWith('/pnc/payroll/pay-runs') ? 'text-amber-600 dark:text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; Pay Runs
                   </Link>
                   <Link
                     href="/pnc/payroll/payslips"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
-                      pathname.startsWith('/pnc/payroll/payslips') ? 'text-amber-400 font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-600 dark:hover:text-amber-400 ${
+                      pathname.startsWith('/pnc/payroll/payslips') ? 'text-amber-600 dark:text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; Payslips
@@ -957,7 +957,7 @@ export default function PnCLayout({
 
           {/* REQUESTS */}
           {permissionsState.canAccessRequests && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
                 <FileText className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">REQUESTS</span>
@@ -968,7 +968,7 @@ export default function PnCLayout({
 
           {/* REPORTS */}
           {permissionsState.canAccessReports && (
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground transition cursor-pointer">
+            <div className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground transition cursor-pointer">
               <div className="flex items-center space-x-2.5">
                 <BarChart3 className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                 <span className="uppercase tracking-wider text-[11px]">REPORTS</span>
@@ -979,7 +979,7 @@ export default function PnCLayout({
 
           {/* ANNOUNCEMENTS */}
           {permissionsState.canAccessAnnouncements && (
-            <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground transition cursor-pointer">
+            <div className="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground transition cursor-pointer">
               <Megaphone className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
               <span className="uppercase tracking-wider text-[11px]">ANNOUNCEMENTS</span>
             </div>
@@ -991,8 +991,8 @@ export default function PnCLayout({
               href="/admin/rbac"
               className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                 pathname.startsWith('/admin/rbac')
-                  ? 'bg-amber-500/15 text-amber-400 font-black border border-amber-500/30'
-                  : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
+                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-black border border-amber-500/30'
+                  : 'text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
               }`}
             >
               <ShieldAlert className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
@@ -1007,8 +1007,8 @@ export default function PnCLayout({
                 onClick={() => toggleSection('settings')}
                 className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
                   pathname.startsWith('/pnc/settings') || pathname.includes('/biotime') || pathname === '/pnc/organization'
-                    ? 'text-amber-400 font-black bg-white/[0.04]'
-                    : 'text-sidebar-foreground/80 hover:bg-surface hover:text-sidebar-foreground'
+                    ? 'text-amber-600 dark:text-amber-400 font-black bg-sidebar-foreground/[0.06]'
+                    : 'text-sidebar-foreground/80 hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
@@ -1025,32 +1025,32 @@ export default function PnCLayout({
                 <div className="pl-6 space-y-1 text-xs text-sidebar-muted border-l border-sidebar-border/70 ml-4 py-1">
                   <Link
                     href="/pnc/organization"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
-                      pathname === '/pnc/organization' ? 'text-amber-400 font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-600 dark:hover:text-amber-400 ${
+                      pathname === '/pnc/organization' ? 'text-amber-600 dark:text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; Configuration
                   </Link>
                   <Link
                     href="/pnc/settings/payroll"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
-                      pathname === '/pnc/settings/payroll' ? 'text-amber-400 font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-600 dark:hover:text-amber-400 ${
+                      pathname === '/pnc/settings/payroll' ? 'text-amber-600 dark:text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; Payroll Configuration
                   </Link>
                   <Link
                     href="/pnc/settings/payroll-structure"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
-                      pathname === '/pnc/settings/payroll-structure' ? 'text-amber-400 font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-600 dark:hover:text-amber-400 ${
+                      pathname === '/pnc/settings/payroll-structure' ? 'text-amber-600 dark:text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; Payroll Structure
                   </Link>
                   <Link
                     href="/pnc/settings/biotime"
-                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-400 ${
-                      pathname.includes('/biotime') ? 'text-amber-400 font-black' : ''
+                    className={`block py-1 uppercase text-[10px] font-bold transition hover:text-amber-600 dark:hover:text-amber-400 ${
+                      pathname.includes('/biotime') ? 'text-amber-600 dark:text-amber-400 font-black' : ''
                     }`}
                   >
                     &bull; BioTime Device Sync
@@ -1062,7 +1062,7 @@ export default function PnCLayout({
         </div>
 
         {/* Bottom User Card & Log Out */}
-        <div className="p-3.5 border-t border-sidebar-border/70 bg-surface/40 space-y-3">
+        <div className="p-3.5 border-t border-sidebar-border bg-sidebar space-y-3">
           <div className="flex items-center space-x-3">
             {currentUser.avatarUrl ? (
               <img
@@ -1109,7 +1109,7 @@ export default function PnCLayout({
       {/* ═══════════════════════════════════════════════════════════ */}
       <div
         className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
-          !sidebarCollapsed ? 'md:pl-72' : 'pl-0'
+          !sidebarCollapsed ? 'md:pl-[228px]' : 'pl-0'
         }`}
       >
         {/* Top Header Bar */}
@@ -1123,7 +1123,7 @@ export default function PnCLayout({
                   setSidebarCollapsed(true);
                 }
               }}
-              className="p-1.5 rounded-xl hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
+              className="p-1.5 rounded-xl hover:bg-sidebar-foreground/10 text-muted-foreground hover:text-foreground transition cursor-pointer"
               title="Toggle Sidebar"
             >
               <Menu className="h-5 w-5" />
@@ -1152,7 +1152,7 @@ export default function PnCLayout({
                 suppressHydrationWarning
                 value={selectedOrg}
                 onChange={(e) => handleOrgChange(e.target.value)}
-                className="appearance-none pl-8 pr-7 py-1.5 bg-surface hover:bg-surface/80 border border-border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 backdrop-blur-md transition cursor-pointer shadow-xs max-w-[160px] sm:max-w-[210px] truncate"
+                className="appearance-none pl-8 pr-7 py-1.5 bg-surface hover:bg-sidebar-foreground/10 border border-border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 backdrop-blur-md transition cursor-pointer shadow-xs max-w-[160px] sm:max-w-[210px] truncate"
                 title="Select Active Organization"
               >
                 <option value="ALL" className="bg-card text-foreground font-bold">
@@ -1175,7 +1175,7 @@ export default function PnCLayout({
                 value={isDspScoped ? 'Digital School Program' : selectedDept}
                 onChange={(e) => handleDeptChange(e.target.value)}
                 disabled={isDspScoped}
-                className={`appearance-none pl-8 pr-7 py-1.5 bg-surface hover:bg-surface/80 border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 backdrop-blur-md transition shadow-xs max-w-[150px] sm:max-w-[200px] truncate ${
+                className={`appearance-none pl-8 pr-7 py-1.5 bg-surface hover:bg-sidebar-foreground/10/80 border rounded-xl text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 backdrop-blur-md transition shadow-xs max-w-[150px] sm:max-w-[200px] truncate ${
                   isDspScoped
                     ? 'border-amber-500/50 bg-amber-500/10 text-amber-500 cursor-not-allowed'
                     : 'border-border cursor-pointer'
@@ -1200,7 +1200,7 @@ export default function PnCLayout({
             {/* Theme Mode Switcher (3-Way: Dark / Light / Espresso) */}
             <button
               onClick={cycleTheme}
-              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition flex items-center justify-center cursor-pointer"
+              className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-sidebar-foreground/10 transition flex items-center justify-center cursor-pointer"
               title={`Theme: ${
                 theme === 'dark'
                   ? 'Matte Black (Click for Light Mode)'
@@ -1215,13 +1215,13 @@ export default function PnCLayout({
               {theme === 'espresso' && <Coffee className="h-4 w-4 text-primary" />}
             </button>
 
-            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer" title="Search">
+            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-sidebar-foreground/10 transition cursor-pointer" title="Search">
               <Search className="h-4 w-4" />
             </button>
-            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer" title="Notifications">
+            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-sidebar-foreground/10 transition cursor-pointer" title="Notifications">
               <Bell className="h-4 w-4" />
             </button>
-            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer" title="Help">
+            <button className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-sidebar-foreground/10 transition cursor-pointer" title="Help">
               <HelpCircle className="h-4 w-4" />
             </button>
           </div>
@@ -1254,7 +1254,7 @@ export default function PnCLayout({
             </div>
           </main>
         ) : (
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1700px] w-full mx-auto">
+          <main className="flex-1 px-4 sm:px-6 lg:px-8 pt-2 sm:pt-2.5 pb-6 lg:pb-8 max-w-[1700px] w-full mx-auto">
             {children}
           </main>
         )}

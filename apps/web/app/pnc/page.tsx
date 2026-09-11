@@ -793,7 +793,7 @@ export default function PnCDashboardPage() {
       // ═════════════════════════════════════════════════════════════
       case 'ATTENDANCE_RADAR':
         return (
-          <div className="p-6 sm:p-7 rounded-[28px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] space-y-6 text-white h-full flex flex-col justify-between">
+          <div className="p-6 sm:p-7 rounded-[28px] border border-border bg-card shadow-lg space-y-6 text-card-foreground h-full flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center space-x-2.5">
@@ -801,13 +801,13 @@ export default function PnCDashboardPage() {
                     <GripVertical className="h-5 w-5 text-amber-400 cursor-grab active:cursor-grabbing animate-pulse" />
                   )}
                   <div>
-                    <h2 className="text-lg font-black text-white flex items-center space-x-2">
+                    <h2 className="text-lg font-black text-foreground flex items-center space-x-2">
                       <span>Today&apos;s Attendance Radar</span>
                       <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                         Live
                       </span>
                     </h2>
-                    <p className="text-xs text-white/70 font-semibold pt-0.5">
+                    <p className="text-xs text-muted-foreground font-semibold pt-0.5">
                       {new Date().toLocaleDateString('en-US', { weekday: 'long' })}, {formatDisplayDate(new Date())}
                     </p>
                   </div>
@@ -818,7 +818,7 @@ export default function PnCDashboardPage() {
                     setModalFilterTab('ALL');
                     setActiveModal('ATTENDANCE_DETAILS');
                   }}
-                  className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-xs font-bold text-white transition cursor-pointer shadow-sm"
+                  className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-surface hover:bg-surface/80 border border-border text-xs font-bold text-foreground transition cursor-pointer shadow-sm"
                 >
                   <span>View Full Log</span>
                   <ArrowRight className="h-3.5 w-3.5 text-amber-300" />
@@ -833,13 +833,13 @@ export default function PnCDashboardPage() {
                     setModalFilterTab('ALL');
                     setActiveModal('ATTENDANCE_DETAILS');
                   }}
-                  className="p-3.5 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/15 hover:border-blue-400/60 shadow-md transition cursor-pointer group"
+                  className="p-3.5 rounded-2xl bg-surface/60 hover:bg-surface border border-border/70 hover:border-blue-400/60 shadow-md transition cursor-pointer group"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-2xl font-black text-white">{todayTotalScheduled}</span>
+                    <span className="text-2xl font-black text-foreground">{todayTotalScheduled}</span>
                     <div className="h-2 w-2 rounded-full bg-blue-400" />
                   </div>
-                  <div className="text-[11px] font-bold text-white/70 pt-1 group-hover:text-blue-300 transition">
+                  <div className="text-[11px] font-bold text-muted-foreground pt-1 group-hover:text-blue-300 transition">
                     Total Scheduled
                   </div>
                 </div>
@@ -856,7 +856,7 @@ export default function PnCDashboardPage() {
                     <span className="text-2xl font-black text-emerald-400">{todayPresentCount}</span>
                     <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                   </div>
-                  <div className="text-[11px] font-bold text-white/70 pt-1 group-hover:text-emerald-300 transition">
+                  <div className="text-[11px] font-bold text-muted-foreground pt-1 group-hover:text-emerald-300 transition">
                     Present
                   </div>
                 </div>
@@ -873,7 +873,7 @@ export default function PnCDashboardPage() {
                     <span className="text-2xl font-black text-rose-400">{todayAbsentCount}</span>
                     <div className="h-2 w-2 rounded-full bg-rose-400" />
                   </div>
-                  <div className="text-[11px] font-bold text-white/70 pt-1 group-hover:text-rose-300 transition">
+                  <div className="text-[11px] font-bold text-muted-foreground pt-1 group-hover:text-rose-300 transition">
                     Absent
                   </div>
                 </div>
@@ -890,7 +890,7 @@ export default function PnCDashboardPage() {
                     <span className="text-2xl font-black text-amber-300">{todayLateCount}</span>
                     <div className="h-2 w-2 rounded-full bg-amber-400" />
                   </div>
-                  <div className="text-[11px] font-bold text-white/70 pt-1 group-hover:text-amber-300 transition">
+                  <div className="text-[11px] font-bold text-muted-foreground pt-1 group-hover:text-amber-300 transition">
                     Late Arrival
                   </div>
                 </div>
@@ -907,7 +907,7 @@ export default function PnCDashboardPage() {
                     <span className="text-2xl font-black text-purple-300">{todayEarlyOutCount}</span>
                     <div className="h-2 w-2 rounded-full bg-purple-400" />
                   </div>
-                  <div className="text-[11px] font-bold text-white/70 pt-1 group-hover:text-purple-300 transition">
+                  <div className="text-[11px] font-bold text-muted-foreground pt-1 group-hover:text-purple-300 transition">
                     Early Leave
                   </div>
                 </div>
@@ -924,7 +924,7 @@ export default function PnCDashboardPage() {
                     <span className="text-2xl font-black text-cyan-300">{todayOnLeaveCount}</span>
                     <div className="h-2 w-2 rounded-full bg-cyan-400" />
                   </div>
-                  <div className="text-[11px] font-bold text-white/70 pt-1 group-hover:text-cyan-300 transition">
+                  <div className="text-[11px] font-bold text-muted-foreground pt-1 group-hover:text-cyan-300 transition">
                     On Leave
                   </div>
                 </div>
@@ -941,7 +941,7 @@ export default function PnCDashboardPage() {
                     <span className="text-2xl font-black text-teal-300">{todayOnDutyCount}</span>
                     <div className="h-2 w-2 rounded-full bg-teal-400" />
                   </div>
-                  <div className="text-[11px] font-bold text-white/70 pt-1 group-hover:text-teal-300 transition">
+                  <div className="text-[11px] font-bold text-muted-foreground pt-1 group-hover:text-teal-300 transition">
                     On Duty / Field
                   </div>
                 </div>
@@ -952,15 +952,15 @@ export default function PnCDashboardPage() {
                     setModalFilterTab('ALL');
                     setActiveModal('HOLIDAYS');
                   }}
-                  className="p-3.5 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/15 hover:border-yellow-400/60 shadow-md transition cursor-pointer group"
+                  className="p-3.5 rounded-2xl bg-surface/60 hover:bg-surface border border-border/70 hover:border-yellow-400/60 shadow-md transition cursor-pointer group"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-2xl font-black text-white">
+                    <span className="text-2xl font-black text-foreground">
                       {publicHolidays.some((h) => h.date === todayDateStr) ? 1 : 0}
                     </span>
                     <div className="h-2 w-2 rounded-full bg-yellow-400" />
                   </div>
-                  <div className="text-[11px] font-bold text-white/70 pt-1 group-hover:text-yellow-300 transition">
+                  <div className="text-[11px] font-bold text-muted-foreground pt-1 group-hover:text-yellow-300 transition">
                     Public Holiday
                   </div>
                 </div>
@@ -968,23 +968,23 @@ export default function PnCDashboardPage() {
             </div>
 
             {/* Compliance & Punctuality Gauges */}
-            <div className="pt-4 border-t border-white/15 grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-3 rounded-2xl bg-white/5 border border-white/15 text-center space-y-1">
+            <div className="pt-4 border-t border-border/70 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 rounded-2xl bg-surface/60 border border-border/70 text-center space-y-1">
                 <div className="text-xl font-black text-amber-300">{lateArrivalRatePct}%</div>
-                <div className="text-xs font-bold text-white">Late Arrival %</div>
-                <div className="text-[10px] text-white/60">(late count / present) × 100</div>
+                <div className="text-xs font-bold text-foreground">Late Arrival %</div>
+                <div className="text-[10px] text-muted-foreground">(late count / present) × 100</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-white/5 border border-white/15 text-center space-y-1">
+              <div className="p-3 rounded-2xl bg-surface/60 border border-border/70 text-center space-y-1">
                 <div className="text-xl font-black text-purple-300">{earlyOutRatePct}%</div>
-                <div className="text-xs font-bold text-white">Early Out %</div>
-                <div className="text-[10px] text-white/60">(early leave / present) × 100</div>
+                <div className="text-xs font-bold text-foreground">Early Out %</div>
+                <div className="text-[10px] text-muted-foreground">(early leave / present) × 100</div>
               </div>
 
-              <div className="p-3 rounded-2xl bg-white/5 border border-white/15 text-center space-y-1">
+              <div className="p-3 rounded-2xl bg-surface/60 border border-border/70 text-center space-y-1">
                 <div className="text-xl font-black text-rose-400">{avgAbsenceDaysPerEmployee}</div>
-                <div className="text-xs font-bold text-white">Avg. Absence Days/Emp</div>
-                <div className="text-[10px] text-white/60">absent / total workforce</div>
+                <div className="text-xs font-bold text-foreground">Avg. Absence Days/Emp</div>
+                <div className="text-[10px] text-muted-foreground">absent / total workforce</div>
               </div>
             </div>
           </div>
@@ -995,15 +995,15 @@ export default function PnCDashboardPage() {
       // ═════════════════════════════════════════════════════════════
       case 'LEAVE_OVERVIEW':
         return (
-          <div className="p-6 sm:p-7 rounded-[28px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] space-y-5 text-white h-full flex flex-col justify-between">
+          <div className="p-6 sm:p-7 rounded-[28px] border border-border bg-card shadow-lg space-y-5 text-card-foreground h-full flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 {isCustomizeMode && (
                   <GripVertical className="h-5 w-5 text-amber-400 cursor-grab active:cursor-grabbing animate-pulse" />
                 )}
                 <div>
-                  <h3 className="text-base font-black text-white">Leave Overview</h3>
-                  <p className="text-xs text-white/70 font-semibold">
+                  <h3 className="text-base font-black text-foreground">Leave Overview</h3>
+                  <p className="text-xs text-muted-foreground font-semibold">
                     {startDate} &rarr; {endDate}
                   </p>
                 </div>
@@ -1013,7 +1013,7 @@ export default function PnCDashboardPage() {
                   setModalFilterTab('ALL');
                   setActiveModal('LEAVES_OVERVIEW');
                 }}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-xs font-bold text-white transition cursor-pointer shadow-sm"
+                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-surface hover:bg-surface/80 border border-border text-xs font-bold text-foreground transition cursor-pointer shadow-sm"
               >
                 <span>View All</span>
                 <ArrowRight className="h-3.5 w-3.5 text-amber-300" />
@@ -1026,7 +1026,7 @@ export default function PnCDashboardPage() {
                 <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
                   {/* Background circle */}
                   <path
-                    className="text-white/10"
+                    className="text-border"
                     strokeWidth="3.8"
                     stroke="currentColor"
                     fill="none"
@@ -1066,19 +1066,19 @@ export default function PnCDashboardPage() {
                   />
                 </svg>
                 <div className="absolute flex flex-col items-center justify-center text-center">
-                  <span className="text-[10px] font-extrabold uppercase text-white/60">Total</span>
-                  <span className="text-2xl font-black text-white">{totalLeavesInPeriod}</span>
+                  <span className="text-[10px] font-extrabold uppercase text-muted-foreground">Total</span>
+                  <span className="text-2xl font-black text-foreground">{totalLeavesInPeriod}</span>
                 </div>
               </div>
 
               {/* Legend stats */}
-              <div className="grid grid-cols-3 gap-3 w-full pt-4 border-t border-white/15 text-center">
+              <div className="grid grid-cols-3 gap-3 w-full pt-4 border-t border-border/70 text-center">
                 <div>
                   <div className="flex items-center justify-center space-x-1 text-xs font-bold text-emerald-400">
                     <span className="h-2 w-2 rounded-full bg-emerald-400" />
                     <span>Approved</span>
                   </div>
-                  <div className="text-lg font-extrabold text-white pt-0.5">{approvedLeavesCount}</div>
+                  <div className="text-lg font-extrabold text-foreground pt-0.5">{approvedLeavesCount}</div>
                 </div>
 
                 <div>
@@ -1086,7 +1086,7 @@ export default function PnCDashboardPage() {
                     <span className="h-2 w-2 rounded-full bg-amber-400" />
                     <span>Pending</span>
                   </div>
-                  <div className="text-lg font-extrabold text-white pt-0.5">{pendingLeavesCount}</div>
+                  <div className="text-lg font-extrabold text-foreground pt-0.5">{pendingLeavesCount}</div>
                 </div>
 
                 <div>
@@ -1094,7 +1094,7 @@ export default function PnCDashboardPage() {
                     <span className="h-2 w-2 rounded-full bg-rose-400" />
                     <span>Rejected</span>
                   </div>
-                  <div className="text-lg font-extrabold text-white pt-0.5">{rejectedLeavesCount}</div>
+                  <div className="text-lg font-extrabold text-foreground pt-0.5">{rejectedLeavesCount}</div>
                 </div>
               </div>
             </div>
@@ -1106,7 +1106,7 @@ export default function PnCDashboardPage() {
       // ═════════════════════════════════════════════════════════════
       case 'ATTENDANCE_ADJUSTMENTS':
         return (
-          <div className="p-6 rounded-[28px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] space-y-4 text-white h-full flex flex-col justify-between">
+          <div className="p-6 rounded-[28px] border border-border bg-card shadow-lg space-y-4 text-card-foreground h-full flex flex-col justify-between">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -1114,13 +1114,13 @@ export default function PnCDashboardPage() {
                     <GripVertical className="h-5 w-5 text-amber-400 cursor-grab active:cursor-grabbing animate-pulse" />
                   )}
                   <div>
-                    <h3 className="text-base font-black text-white flex items-center space-x-2">
+                    <h3 className="text-base font-black text-foreground flex items-center space-x-2">
                       <span>Total Attendance Adjustments</span>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-extrabold border border-amber-500/40">
                         {totalAdjustmentsCount} Total
                       </span>
                     </h3>
-                    <p className="text-xs text-white/70 font-semibold">
+                    <p className="text-xs text-muted-foreground font-semibold">
                       {startDate} &rarr; {endDate}
                     </p>
                   </div>
@@ -1128,7 +1128,7 @@ export default function PnCDashboardPage() {
 
                 <button
                   onClick={() => setActiveModal('ADJUSTMENTS')}
-                  className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-xs font-bold text-white transition cursor-pointer shadow-sm"
+                  className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-surface hover:bg-surface/80 border border-border text-xs font-bold text-foreground transition cursor-pointer shadow-sm"
                 >
                   <span>View All</span>
                   <ArrowRight className="h-3.5 w-3.5 text-amber-300" />
@@ -1157,9 +1157,9 @@ export default function PnCDashboardPage() {
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs font-bold">
                   <span className="text-amber-300">PENDING APPROVALS</span>
-                  <span className="text-white">{pendingAdjustmentsCount} (38%)</span>
+                  <span className="text-foreground">{pendingAdjustmentsCount} (38%)</span>
                 </div>
-                <div className="h-2.5 w-full bg-white/10 rounded-full overflow-hidden">
+                <div className="h-2.5 w-full bg-surface rounded-full overflow-hidden">
                   <div className="h-full bg-amber-400 rounded-full" style={{ width: '38%' }} />
                 </div>
               </div>
@@ -1167,9 +1167,9 @@ export default function PnCDashboardPage() {
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs font-bold">
                   <span className="text-emerald-400">APPROVED ADJUSTMENTS</span>
-                  <span className="text-white">{approvedAdjustmentsCount} (59%)</span>
+                  <span className="text-foreground">{approvedAdjustmentsCount} (59%)</span>
                 </div>
-                <div className="h-2.5 w-full bg-white/10 rounded-full overflow-hidden">
+                <div className="h-2.5 w-full bg-surface rounded-full overflow-hidden">
                   <div className="h-full bg-emerald-400 rounded-full" style={{ width: '59%' }} />
                 </div>
               </div>
@@ -1177,9 +1177,9 @@ export default function PnCDashboardPage() {
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs font-bold">
                   <span className="text-rose-400">REJECTED</span>
-                  <span className="text-white">{rejectedAdjustmentsCount} (3%)</span>
+                  <span className="text-foreground">{rejectedAdjustmentsCount} (3%)</span>
                 </div>
-                <div className="h-2.5 w-full bg-white/10 rounded-full overflow-hidden">
+                <div className="h-2.5 w-full bg-surface rounded-full overflow-hidden">
                   <div className="h-full bg-rose-400 rounded-full" style={{ width: '3%' }} />
                 </div>
               </div>
@@ -1192,15 +1192,15 @@ export default function PnCDashboardPage() {
       // ═════════════════════════════════════════════════════════════
       case 'PENDING_LEAVES':
         return (
-          <div className="p-6 rounded-[28px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] space-y-4 text-white h-full flex flex-col justify-between">
+          <div className="p-6 rounded-[28px] border border-border bg-card shadow-lg space-y-4 text-card-foreground h-full flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 {isCustomizeMode && (
                   <GripVertical className="h-5 w-5 text-amber-400 cursor-grab active:cursor-grabbing animate-pulse" />
                 )}
                 <div>
-                  <h3 className="text-base font-black text-white">Pending Leave Requests</h3>
-                  <p className="text-xs text-white/70 font-semibold">Instant Action Queue</p>
+                  <h3 className="text-base font-black text-foreground">Pending Leave Requests</h3>
+                  <p className="text-xs text-muted-foreground font-semibold">Instant Action Queue</p>
                 </div>
               </div>
               <button
@@ -1208,7 +1208,7 @@ export default function PnCDashboardPage() {
                   setModalFilterTab('Pending');
                   setActiveModal('PENDING_LEAVES');
                 }}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-xs font-bold text-white transition cursor-pointer shadow-sm"
+                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-surface hover:bg-surface/80 border border-border text-xs font-bold text-foreground transition cursor-pointer shadow-sm"
               >
                 <span>View All ({pendingLeaveQueue.length})</span>
                 <ArrowRight className="h-3.5 w-3.5 text-amber-300" />
@@ -1216,17 +1216,17 @@ export default function PnCDashboardPage() {
             </div>
 
             {pendingLeaveQueue.length === 0 ? (
-              <div className="p-6 rounded-2xl bg-white/5 border border-white/15 text-center space-y-2 my-auto">
+              <div className="p-6 rounded-2xl bg-surface/60 border border-border/70 text-center space-y-2 my-auto">
                 <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
-                <p className="text-xs font-bold text-white">All leave requests reviewed!</p>
-                <p className="text-[11px] text-white/70">No pending applications requiring approval.</p>
+                <p className="text-xs font-bold text-foreground">All leave requests reviewed!</p>
+                <p className="text-[11px] text-muted-foreground">No pending applications requiring approval.</p>
               </div>
             ) : (
               <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1 no-scrollbar">
                 {pendingLeaveQueue.slice(0, 3).map((req) => (
                   <div
                     key={req.id}
-                    className="p-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/15 transition space-y-2.5"
+                    className="p-3.5 rounded-2xl bg-white/5 hover:bg-surface border border-white/15 transition space-y-2.5"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center space-x-3">
@@ -1234,8 +1234,8 @@ export default function PnCDashboardPage() {
                           {req.employeeName.charAt(0)}
                         </div>
                         <div>
-                          <div className="text-xs font-extrabold text-white">{req.employeeName}</div>
-                          <div className="text-[10px] text-white/70 font-semibold">
+                          <div className="text-xs font-extrabold text-foreground">{req.employeeName}</div>
+                          <div className="text-[10px] text-muted-foreground font-semibold">
                             {req.department || 'General'} &bull; {req.leaveType}
                           </div>
                         </div>
@@ -1246,16 +1246,16 @@ export default function PnCDashboardPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center justify-between text-[11px] text-white/70">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                       <div className="flex items-center space-x-1">
                         <Calendar className="h-3 w-3 text-amber-400" />
                         <span>{formatDisplayDate(req.fromDate)} &rarr; {formatDisplayDate(req.toDate)}</span>
                       </div>
-                      <span className="text-[10px] italic truncate max-w-[130px] text-white/80">&ldquo;{req.reason}&rdquo;</span>
+                      <span className="text-[10px] italic truncate max-w-[130px] text-muted-foreground">&ldquo;{req.reason}&rdquo;</span>
                     </div>
 
                     {/* Quick Approve / Reject Buttons */}
-                    <div className="pt-2 border-t border-white/10 flex items-center justify-end space-x-2">
+                    <div className="pt-2 border-t border-border/60 flex items-center justify-end space-x-2">
                       <button
                         onClick={() => handleRejectLeave(req)}
                         className="px-2.5 py-1 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 text-[10px] font-black uppercase transition cursor-pointer flex items-center space-x-1"
@@ -1283,18 +1283,18 @@ export default function PnCDashboardPage() {
       // ═════════════════════════════════════════════════════════════
       case 'HEADCOUNT_DEPT':
         return (
-          <div className="p-6 sm:p-7 rounded-[28px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] space-y-5 text-white h-full flex flex-col justify-between">
+          <div className="p-6 sm:p-7 rounded-[28px] border border-border bg-card shadow-lg space-y-5 text-card-foreground h-full flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 {isCustomizeMode && (
                   <GripVertical className="h-5 w-5 text-amber-400 cursor-grab active:cursor-grabbing animate-pulse" />
                 )}
                 <div>
-                  <h3 className="text-base font-black text-white">Headcount by Department</h3>
-                  <p className="text-xs text-white/70 font-semibold">Workforce talent distribution</p>
+                  <h3 className="text-base font-black text-foreground">Headcount by Department</h3>
+                  <p className="text-xs text-muted-foreground font-semibold">Workforce talent distribution</p>
                 </div>
               </div>
-              <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-white/10 border border-white/20 text-white">
+              <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-surface border border-border text-foreground">
                 {departmentDistribution.length} Departments
               </span>
             </div>
@@ -1309,15 +1309,15 @@ export default function PnCDashboardPage() {
                     setModalFilterTab('ALL');
                     setActiveModal('DEPARTMENT_ROSTER');
                   }}
-                  className="space-y-1 p-2 rounded-2xl hover:bg-white/10 transition cursor-pointer group"
+                  className="space-y-1 p-2 rounded-2xl hover:bg-surface transition cursor-pointer group"
                 >
                   <div className="flex items-center justify-between text-xs font-bold">
-                    <span className="text-white group-hover:text-amber-300 transition">{dept.name}</span>
-                    <span className="text-white/70 group-hover:text-white">
+                    <span className="text-foreground group-hover:text-amber-300 transition">{dept.name}</span>
+                    <span className="text-muted-foreground group-hover:text-foreground">
                       {dept.count} Staff ({dept.pct}%)
                     </span>
                   </div>
-                  <div className="h-2.5 w-full bg-white/10 rounded-full overflow-hidden shadow-inner">
+                  <div className="h-2.5 w-full bg-surface rounded-full overflow-hidden shadow-inner">
                     <div
                       className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-500 shadow-md"
                       style={{ width: `${Math.max(5, dept.pct)}%` }}
@@ -1334,19 +1334,19 @@ export default function PnCDashboardPage() {
       // ═════════════════════════════════════════════════════════════
       case 'CELEBRATIONS_HOLIDAYS':
         return (
-          <div className="p-6 sm:p-7 rounded-[28px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] space-y-5 text-white h-full flex flex-col justify-between">
+          <div className="p-6 sm:p-7 rounded-[28px] border border-border bg-card shadow-lg space-y-5 text-card-foreground h-full flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 {isCustomizeMode && (
                   <GripVertical className="h-5 w-5 text-amber-400 cursor-grab active:cursor-grabbing animate-pulse" />
                 )}
-                <div className="flex items-center space-x-1.5 p-1 rounded-2xl bg-white/10 border border-white/20">
+                <div className="flex items-center space-x-1.5 p-1 rounded-2xl bg-surface border border-border">
                   <button
                     onClick={() => setCultureTab('BIRTHDAYS')}
                     className={`px-3 py-1 rounded-xl text-xs font-black uppercase transition cursor-pointer ${
                       cultureTab === 'BIRTHDAYS'
                         ? 'bg-amber-400 text-slate-950 shadow-md'
-                        : 'text-white/70 hover:text-white'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Birthdays ({monthlyBirthdays.length})
@@ -1356,7 +1356,7 @@ export default function PnCDashboardPage() {
                     className={`px-3 py-1 rounded-xl text-xs font-black uppercase transition cursor-pointer ${
                       cultureTab === 'HOLIDAYS'
                         ? 'bg-amber-400 text-slate-950 shadow-md'
-                        : 'text-white/70 hover:text-white'
+                        : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     Holidays ({publicHolidays.length})
@@ -1369,7 +1369,7 @@ export default function PnCDashboardPage() {
                   setModalFilterTab('ALL');
                   setActiveModal(cultureTab === 'BIRTHDAYS' ? 'BIRTHDAYS' : 'HOLIDAYS');
                 }}
-                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-xs font-bold text-white transition cursor-pointer shadow-sm"
+                className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-surface hover:bg-surface/80 border border-border text-xs font-bold text-foreground transition cursor-pointer shadow-sm"
               >
                 <span>View All</span>
                 <ArrowRight className="h-3.5 w-3.5 text-amber-300" />
@@ -1379,7 +1379,7 @@ export default function PnCDashboardPage() {
             {/* Content Area */}
             {cultureTab === 'BIRTHDAYS' ? (
               monthlyBirthdays.length === 0 ? (
-                <div className="p-6 rounded-2xl bg-white/5 border border-white/15 text-center text-xs text-white/70 my-auto">
+                <div className="p-6 rounded-2xl bg-surface/60 border border-border/70 text-center text-xs text-muted-foreground my-auto">
                   No birthdays recorded for this month.
                 </div>
               ) : (
@@ -1405,10 +1405,10 @@ export default function PnCDashboardPage() {
                           )}
                         </div>
                         <div>
-                          <div className="text-xs font-black text-white group-hover:text-amber-300 transition">
+                          <div className="text-xs font-black text-foreground group-hover:text-amber-300 transition">
                             {bEmp.name}
                           </div>
-                          <div className="text-[10px] text-white/70 font-semibold truncate max-w-[160px]">
+                          <div className="text-[10px] text-muted-foreground font-semibold truncate max-w-[160px]">
                             {bEmp.department || 'General Staff'} &bull; {bEmp.designation}
                           </div>
                         </div>
@@ -1419,7 +1419,7 @@ export default function PnCDashboardPage() {
                           ? 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 shadow-md animate-bounce font-extrabold'
                           : bEmp.diffDays > 0 && bEmp.diffDays <= 7
                           ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                          : 'bg-white/10 text-white/70 border border-white/20'
+                          : 'bg-surface text-muted-foreground border border-border'
                       }`}>
                         {bEmp.diffDays === 0
                           ? 'Today 🎉'
@@ -1436,11 +1436,11 @@ export default function PnCDashboardPage() {
                 {upcomingHolidays.slice(0, 4).map((h) => (
                   <div
                     key={h.id}
-                    className="p-3 rounded-2xl bg-white/5 border border-white/15 flex items-center justify-between text-xs"
+                    className="p-3 rounded-2xl bg-surface/60 border border-border/70 flex items-center justify-between text-xs"
                   >
                     <div className="space-y-0.5">
-                      <div className="font-extrabold text-white">{h.title}</div>
-                      <div className="text-[10px] text-white/70">{h.type} Holiday &bull; {h.totalDays} {h.totalDays === 1 ? 'Day' : 'Days'}</div>
+                      <div className="font-extrabold text-foreground">{h.title}</div>
+                      <div className="text-[10px] text-muted-foreground">{h.type} Holiday &bull; {h.totalDays} {h.totalDays === 1 ? 'Day' : 'Days'}</div>
                     </div>
                     <span className="px-2.5 py-1 rounded-xl bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 font-extrabold text-[11px]">
                       {formatDisplayDate(h.date)}
@@ -1457,19 +1457,19 @@ export default function PnCDashboardPage() {
       // ═════════════════════════════════════════════════════════════
       case 'GENDER_COMPOSITION':
         return (
-          <div className="p-6 rounded-[28px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] space-y-4 text-white h-full flex flex-col justify-between">
+          <div className="p-6 rounded-[28px] border border-border bg-card shadow-lg space-y-4 text-card-foreground h-full flex flex-col justify-between">
             <div className="flex items-center space-x-2">
               {isCustomizeMode && (
                 <GripVertical className="h-5 w-5 text-amber-400 cursor-grab active:cursor-grabbing animate-pulse" />
               )}
               <div>
-                <h4 className="text-base font-black text-white">Gender Composition</h4>
-                <p className="text-xs text-white/70 font-semibold">Workforce talent diversity</p>
+                <h4 className="text-base font-black text-foreground">Gender Composition</h4>
+                <p className="text-xs text-muted-foreground font-semibold">Workforce talent diversity</p>
               </div>
             </div>
 
             {/* Multi-segmented bar */}
-            <div className="h-3 w-full bg-white/10 rounded-full overflow-hidden flex shadow-inner">
+            <div className="h-3 w-full bg-surface rounded-full overflow-hidden flex shadow-inner">
               <div className="h-full bg-sky-400" style={{ width: `${genderDistribution.malePct}%` }} title="Male" />
               <div className="h-full bg-amber-400" style={{ width: `${genderDistribution.femalePct}%` }} title="Female" />
               <div className="h-full bg-slate-400" style={{ width: `${genderDistribution.otherPct}%` }} title="Other" />
@@ -1479,25 +1479,25 @@ export default function PnCDashboardPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
-                  <span className="text-white/70">Male</span>
+                  <span className="text-muted-foreground">Male</span>
                 </div>
-                <span className="text-white">{genderDistribution.male} ({genderDistribution.malePct}%)</span>
+                <span className="text-foreground">{genderDistribution.male} ({genderDistribution.malePct}%)</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                  <span className="text-white/70">Female</span>
+                  <span className="text-muted-foreground">Female</span>
                 </div>
-                <span className="text-white">{genderDistribution.female} ({genderDistribution.femalePct}%)</span>
+                <span className="text-foreground">{genderDistribution.female} ({genderDistribution.femalePct}%)</span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
-                  <span className="text-white/70">Other / Undisclosed</span>
+                  <span className="text-muted-foreground">Other / Undisclosed</span>
                 </div>
-                <span className="text-white">{genderDistribution.other} ({genderDistribution.otherPct}%)</span>
+                <span className="text-foreground">{genderDistribution.other} ({genderDistribution.otherPct}%)</span>
               </div>
             </div>
           </div>
@@ -1513,7 +1513,7 @@ export default function PnCDashboardPage() {
               setModalFilterTab('ALL');
               setActiveModal('PAYROLL_OVERVIEW');
             }}
-            className="p-6 rounded-[28px] border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_12px_40px_0_rgba(0,0,0,0.6)] space-y-4 cursor-pointer hover:border-amber-400/50 transition group text-white h-full flex flex-col justify-between"
+            className="p-6 rounded-[28px] border border-border bg-card shadow-lg space-y-4 cursor-pointer hover:border-amber-400/50 transition group text-card-foreground h-full flex flex-col justify-between"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -1521,10 +1521,10 @@ export default function PnCDashboardPage() {
                   <GripVertical className="h-5 w-5 text-amber-400 cursor-grab active:cursor-grabbing animate-pulse" />
                 )}
                 <div>
-                  <h4 className="text-base font-black text-white group-hover:text-amber-300 transition">
+                  <h4 className="text-base font-black text-foreground group-hover:text-amber-300 transition">
                     Compensation &amp; Payroll Pulse
                   </h4>
-                  <p className="text-xs text-white/70 font-semibold">Monthly readiness audit</p>
+                  <p className="text-xs text-muted-foreground font-semibold">Monthly readiness audit</p>
                 </div>
               </div>
               <ArrowUpRight className="h-4 w-4 text-amber-400" />
@@ -1532,27 +1532,27 @@ export default function PnCDashboardPage() {
 
             <div className="space-y-2 pt-1 text-xs font-bold">
               <div className="flex items-center justify-between">
-                <span className="text-white/70">Est. Monthly Payroll</span>
+                <span className="text-muted-foreground">Est. Monthly Payroll</span>
                 <span className="text-amber-300">BDT {payrollSummary.totalEstimatedWage.toLocaleString()}</span>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-white/70">Bank Account Readiness</span>
+                <span className="text-muted-foreground">Bank Account Readiness</span>
                 <span className="text-emerald-400">{payrollSummary.bankReadinessPct}%</span>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-white/70">Fixed Salary Staff</span>
-                <span className="text-white">{payrollSummary.fixedWageCount}</span>
+                <span className="text-muted-foreground">Fixed Salary Staff</span>
+                <span className="text-foreground">{payrollSummary.fixedWageCount}</span>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-white/70">Hourly / Part-Time</span>
-                <span className="text-white">{payrollSummary.hourlyWageCount}</span>
+                <span className="text-muted-foreground">Hourly / Part-Time</span>
+                <span className="text-foreground">{payrollSummary.hourlyWageCount}</span>
               </div>
             </div>
 
-            <div className="pt-2 border-t border-white/10 text-[10px] text-amber-400 font-extrabold uppercase tracking-wider">
+            <div className="pt-2 border-t border-border/60 text-[10px] text-amber-400 font-extrabold uppercase tracking-wider">
               &bull; Click to inspect compensation breakdown
             </div>
           </div>
@@ -1586,7 +1586,7 @@ export default function PnCDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* ── 1. EXECUTIVE HERO COMMAND BANNER (DARK BLACK GLASS) ─── */}
       {/* ═══════════════════════════════════════════════════════════ */}
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-white/20 bg-black/70 backdrop-blur-2xl shadow-[0_8px_30px_0_rgba(0,0,0,0.5)] py-3.5 px-4 sm:py-4 sm:px-6 text-white">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border bg-card shadow-md py-3.5 px-4 sm:py-4 sm:px-6 text-foreground">
         {/* Ambient subtle glow */}
         <div className="absolute top-0 right-1/3 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
         <div className="absolute bottom-0 right-0 w-60 h-60 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
@@ -1594,15 +1594,15 @@ export default function PnCDashboardPage() {
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 relative z-10">
           {/* Left Welcome Branding */}
           <div className="space-y-1 sm:space-y-1.5 max-w-xl">
-            <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-white/10 border border-white/20 text-[10px] font-extrabold uppercase tracking-wider text-amber-300 backdrop-blur-md shadow-inner">
+            <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-surface border border-border text-[10px] font-extrabold uppercase tracking-wider text-amber-300 backdrop-blur-md shadow-inner">
               <Sparkles className="h-3 w-3" />
               <span>People &amp; Culture Intelligence &bull; JAAGO Foundation</span>
             </div>
 
-            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white drop-shadow-md">
+            <h1 className="text-lg sm:text-2xl font-black tracking-tight text-foreground drop-shadow-xs">
               Welcome back to <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-300 to-emerald-400">Workspace</span> 👋
             </h1>
-            <p className="text-[11px] sm:text-xs text-white/80 font-medium leading-normal">
+            <p className="text-[11px] sm:text-xs text-muted-foreground font-medium leading-normal">
               Track and manage workforce capacity, live attendance radar, leave authorizations, and talent growth in real-time.
             </p>
           </div>
@@ -1620,8 +1620,8 @@ export default function PnCDashboardPage() {
         </div>
 
         {/* Dynamic Date Filter Bar & Drag Customization Toolbar */}
-        <div className="mt-3 pt-2.5 border-t border-white/10 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
-          <div className="flex flex-wrap items-center gap-1 p-0.5 rounded-xl bg-black/70 border border-white/20 backdrop-blur-md">
+        <div className="mt-3 pt-2.5 border-t border-border/60 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          <div className="flex flex-wrap items-center gap-1 p-0.5 rounded-xl bg-muted/30 border border-border backdrop-blur-md">
             {(
               [
                 { key: 'TODAY', label: 'Today' },
@@ -1638,7 +1638,7 @@ export default function PnCDashboardPage() {
                 className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
                   datePreset === p.key
                     ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md scale-100 font-extrabold'
-                    : 'text-white/80 hover:text-white hover:bg-white/10'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-surface'
                 }`}
               >
                 {p.label}
@@ -1649,8 +1649,8 @@ export default function PnCDashboardPage() {
           <div className="flex flex-wrap items-center gap-2">
             {/* Date Picker Range Inputs */}
             <div className="flex items-center space-x-1.5 text-xs font-bold">
-              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-black/60 border border-white/20 backdrop-blur-md shadow-inner">
-                <span className="text-white/60 text-[9px] uppercase font-extrabold">Start:</span>
+              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-surface border border-border backdrop-blur-md shadow-inner">
+                <span className="text-muted-foreground text-[9px] uppercase font-extrabold">Start:</span>
                 <input
                   type="date"
                   value={startDate}
@@ -1658,14 +1658,14 @@ export default function PnCDashboardPage() {
                     setStartDate(e.target.value);
                     setDatePreset('CUSTOM');
                   }}
-                  className="bg-transparent text-white focus:outline-none text-[11px] font-semibold cursor-pointer"
+                  className="bg-transparent text-foreground focus:outline-none text-[11px] font-semibold cursor-pointer"
                 />
               </div>
 
-              <span className="text-white/40 font-bold text-xs">&rarr;</span>
+              <span className="text-muted-foreground font-bold text-xs">&rarr;</span>
 
-              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-black/60 border border-white/20 backdrop-blur-md shadow-inner">
-                <span className="text-white/60 text-[9px] uppercase font-extrabold">End:</span>
+              <div className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-surface border border-border backdrop-blur-md shadow-inner">
+                <span className="text-muted-foreground text-[9px] uppercase font-extrabold">End:</span>
                 <input
                   type="date"
                   value={endDate}
@@ -1673,7 +1673,7 @@ export default function PnCDashboardPage() {
                     setEndDate(e.target.value);
                     setDatePreset('CUSTOM');
                   }}
-                  className="bg-transparent text-white focus:outline-none text-[11px] font-semibold cursor-pointer"
+                  className="bg-transparent text-foreground focus:outline-none text-[11px] font-semibold cursor-pointer"
                 />
               </div>
             </div>
@@ -1685,7 +1685,7 @@ export default function PnCDashboardPage() {
                 className={`inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer shadow-md ${
                   isCustomizeMode
                     ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300'
-                    : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
+                    : 'bg-surface hover:bg-surface/80 text-foreground border border-border'
                 }`}
                 title="Toggle Drag & Drop Dashboard Rearrange Mode"
               >
@@ -1696,7 +1696,7 @@ export default function PnCDashboardPage() {
               {isCustomizeMode && (
                 <button
                   onClick={handleResetWidgetOrder}
-                  className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white border border-white/20 transition cursor-pointer"
+                  className="p-1 rounded-lg bg-surface hover:bg-surface/80 text-muted-foreground hover:text-foreground border border-border transition cursor-pointer"
                   title="Reset Layout to Standard"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
@@ -1717,10 +1717,10 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('EMPLOYEES');
           }}
-          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-amber-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-border bg-card hover:bg-surface/80 hover:border-amber-400/60 shadow-md backdrop-blur-md transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-card-foreground"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-amber-300 transition truncate pr-1">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-amber-300 transition truncate pr-1">
               TOTAL EMPLOYEES
             </span>
             <div className="h-7 w-7 rounded-xl bg-blue-500/20 border border-blue-400/40 text-blue-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
@@ -1729,13 +1729,13 @@ export default function PnCDashboardPage() {
           </div>
 
           <div className="py-1">
-            <div className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
+            <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{totalEmployeesCount}</span>
-              <span className="text-[11px] font-bold text-white/60">Staff</span>
+              <span className="text-[11px] font-bold text-muted-foreground">Staff</span>
             </div>
             <div className="text-[10px] font-bold text-emerald-400 flex items-center space-x-1 pt-0.5">
               <span>▲ 1.6%</span>
-              <span className="text-white/60 font-normal">vs prev cycle</span>
+              <span className="text-muted-foreground font-normal">vs prev cycle</span>
             </div>
           </div>
 
@@ -1745,7 +1745,7 @@ export default function PnCDashboardPage() {
               <path d="M 0 16 Q 30 12, 60 8 T 100 4" fill="none" stroke="#60A5FA" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-border/60 flex items-center justify-between text-[9px] sm:text-[10px] text-muted-foreground font-semibold">
             <span>View directory</span>
             <ArrowUpRight className="h-2.5 w-2.5 text-amber-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
@@ -1757,10 +1757,10 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('ACTIVE_WORKFORCE');
           }}
-          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-emerald-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-border bg-card hover:bg-surface/80 hover:border-emerald-400/60 shadow-md backdrop-blur-md transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-card-foreground"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-emerald-300 transition truncate pr-1">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-emerald-300 transition truncate pr-1">
               ACTIVE WORKFORCE
             </span>
             <div className="h-7 w-7 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
@@ -1769,7 +1769,7 @@ export default function PnCDashboardPage() {
           </div>
 
           <div className="py-1">
-            <div className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
+            <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{activeEmployeesCount}</span>
               <span className="text-[11px] font-bold text-emerald-400">
                 {totalEmployeesCount > 0 ? `${Math.round((activeEmployeesCount / totalEmployeesCount) * 100)}%` : '0%'}
@@ -1777,7 +1777,7 @@ export default function PnCDashboardPage() {
             </div>
             <div className="text-[10px] font-bold text-emerald-400 flex items-center space-x-1 pt-0.5">
               <span>▲ Deployment</span>
-              <span className="text-white/60 font-normal">verified live</span>
+              <span className="text-muted-foreground font-normal">verified live</span>
             </div>
           </div>
 
@@ -1787,7 +1787,7 @@ export default function PnCDashboardPage() {
               <path d="M 0 14 Q 25 15, 50 10 T 100 3" fill="none" stroke="#34D399" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-border/60 flex items-center justify-between text-[9px] sm:text-[10px] text-muted-foreground font-semibold">
             <span>Active roster</span>
             <ArrowUpRight className="h-2.5 w-2.5 text-emerald-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
@@ -1799,10 +1799,10 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('INCOMPLETE_PROFILES');
           }}
-          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-amber-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-border bg-card hover:bg-surface/80 hover:border-amber-400/60 shadow-md backdrop-blur-md transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-card-foreground"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-amber-300 transition truncate pr-1">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-amber-300 transition truncate pr-1">
               INCOMPLETE PROFILES
             </span>
             <div className="h-7 w-7 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
@@ -1813,7 +1813,7 @@ export default function PnCDashboardPage() {
           <div className="py-1">
             <div className="text-xl sm:text-2xl font-black text-amber-300 tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{incompleteProfiles.length}</span>
-              <span className="text-[11px] font-bold text-white/60">Audited</span>
+              <span className="text-[11px] font-bold text-muted-foreground">Audited</span>
             </div>
             <div className="text-[10px] font-bold text-amber-300/90 flex items-center space-x-1 pt-0.5">
               <span>▲ Requires Action</span>
@@ -1826,7 +1826,7 @@ export default function PnCDashboardPage() {
               <path d="M 0 10 L 30 14 L 60 8 L 100 12" fill="none" stroke="#FBBF24" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-border/60 flex items-center justify-between text-[9px] sm:text-[10px] text-muted-foreground font-semibold">
             <span>Fix data gaps</span>
             <ArrowUpRight className="h-2.5 w-2.5 text-amber-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
@@ -1838,10 +1838,10 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('NEW_JOINERS');
           }}
-          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-cyan-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-border bg-card hover:bg-surface/80 hover:border-cyan-400/60 shadow-md backdrop-blur-md transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-card-foreground"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-cyan-300 transition truncate pr-1">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-cyan-300 transition truncate pr-1">
               NEW JOINERS
             </span>
             <div className="h-7 w-7 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
@@ -1850,13 +1850,13 @@ export default function PnCDashboardPage() {
           </div>
 
           <div className="py-1">
-            <div className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
+            <div className="text-xl sm:text-2xl font-black text-foreground tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{newJoiners.length}</span>
               <span className="text-[11px] font-bold text-cyan-300">Onboarding</span>
             </div>
             <div className="text-[10px] font-bold text-emerald-400 flex items-center space-x-1 pt-0.5">
               <span>▲ +{newJoiners.length}</span>
-              <span className="text-white/60 font-normal">in period</span>
+              <span className="text-muted-foreground font-normal">in period</span>
             </div>
           </div>
 
@@ -1866,7 +1866,7 @@ export default function PnCDashboardPage() {
               <path d="M 0 18 L 25 14 L 50 8 L 75 12 L 100 5" fill="none" stroke="#22D3EE" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-border/60 flex items-center justify-between text-[9px] sm:text-[10px] text-muted-foreground font-semibold">
             <span>Onboarding list</span>
             <ArrowUpRight className="h-2.5 w-2.5 text-cyan-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
@@ -1878,10 +1878,10 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('ATTRITION');
           }}
-          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-rose-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-border bg-card hover:bg-surface/80 hover:border-rose-400/60 shadow-md backdrop-blur-md transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-card-foreground"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-rose-300 transition truncate pr-1">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-rose-300 transition truncate pr-1">
               ATTRITION / EXITS
             </span>
             <div className="h-7 w-7 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
@@ -1892,7 +1892,7 @@ export default function PnCDashboardPage() {
           <div className="py-1">
             <div className="text-xl sm:text-2xl font-black text-rose-300 tracking-tight flex items-baseline space-x-1.5 drop-shadow-sm">
               <span>{attritionEmployees.length}</span>
-              <span className="text-[11px] font-bold text-white/60">Exited</span>
+              <span className="text-[11px] font-bold text-muted-foreground">Exited</span>
             </div>
             <div className="text-[10px] font-bold text-rose-300/90 flex items-center space-x-1 pt-0.5">
               <span>▼ Exit reviews</span>
@@ -1905,7 +1905,7 @@ export default function PnCDashboardPage() {
               <path d="M 0 6 Q 35 12, 65 14 T 100 18" fill="none" stroke="#FB7185" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-border/60 flex items-center justify-between text-[9px] sm:text-[10px] text-muted-foreground font-semibold">
             <span>Exit reasons</span>
             <ArrowUpRight className="h-2.5 w-2.5 text-rose-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
@@ -1917,10 +1917,10 @@ export default function PnCDashboardPage() {
             setModalFilterTab('ALL');
             setActiveModal('GROWTH_RATE');
           }}
-          className="group relative p-3.5 sm:p-4 rounded-2xl border border-white/20 bg-black/70 hover:bg-black/85 hover:border-purple-400/60 shadow-[0_4px_20px_rgb(0,0,0,0.4)] backdrop-blur-2xl transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-white"
+          className="group relative p-3.5 sm:p-4 rounded-2xl border border-border bg-card hover:bg-surface/80 hover:border-purple-400/60 shadow-md backdrop-blur-md transition duration-300 transform hover:-translate-y-0.5 cursor-pointer flex flex-col justify-between overflow-hidden text-card-foreground"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-white/70 group-hover:text-purple-300 transition truncate pr-1">
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-muted-foreground group-hover:text-purple-300 transition truncate pr-1">
               GROWTH RATE (%)
             </span>
             <div className="h-7 w-7 rounded-xl bg-purple-500/20 border border-purple-400/40 text-purple-300 flex items-center justify-center group-hover:scale-110 transition shadow-inner flex-shrink-0">
@@ -1932,7 +1932,7 @@ export default function PnCDashboardPage() {
             <div className={`text-xl sm:text-2xl font-black tracking-tight flex items-baseline space-x-1 drop-shadow-sm ${growthRatePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               <span>{growthRatePct > 0 ? `+${growthRatePct}` : growthRatePct}%</span>
             </div>
-            <div className="text-[10px] font-bold text-white/70 flex items-center space-x-1 pt-0.5">
+            <div className="text-[10px] font-bold text-muted-foreground flex items-center space-x-1 pt-0.5">
               <span>{growthRatePct >= 0 ? '▲ Positive Expansion' : '▼ Contraction'}</span>
             </div>
           </div>
@@ -1943,7 +1943,7 @@ export default function PnCDashboardPage() {
               <path d="M 0 14 L 30 10 L 60 16 L 100 6" fill="none" stroke="#C084FC" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="pt-1.5 border-t border-white/10 flex items-center justify-between text-[9px] sm:text-[10px] text-white/60 font-semibold">
+          <div className="pt-1.5 border-t border-border/60 flex items-center justify-between text-[9px] sm:text-[10px] text-muted-foreground font-semibold">
             <span>Talent velocity</span>
             <ArrowUpRight className="h-2.5 w-2.5 text-purple-400 opacity-0 group-hover:opacity-100 transition" />
           </div>
@@ -1986,7 +1986,7 @@ export default function PnCDashboardPage() {
                       handleMoveWidget(widgetId, 'up');
                     }}
                     disabled={index === 0}
-                    className="p-1.5 rounded-lg bg-white/10 hover:bg-amber-400 hover:text-slate-950 text-white disabled:opacity-20 transition cursor-pointer"
+                    className="p-1.5 rounded-lg bg-surface hover:bg-amber-400 hover:text-slate-950 text-white disabled:opacity-20 transition cursor-pointer"
                     title="Move Up"
                   >
                     <ChevronUp className="h-3.5 w-3.5" />
@@ -1999,7 +1999,7 @@ export default function PnCDashboardPage() {
                       handleMoveWidget(widgetId, 'down');
                     }}
                     disabled={index === widgetOrder.length - 1}
-                    className="p-1.5 rounded-lg bg-white/10 hover:bg-amber-400 hover:text-slate-950 text-white disabled:opacity-20 transition cursor-pointer"
+                    className="p-1.5 rounded-lg bg-surface hover:bg-amber-400 hover:text-slate-950 text-white disabled:opacity-20 transition cursor-pointer"
                     title="Move Down"
                   >
                     <ChevronDown className="h-3.5 w-3.5" />
@@ -2026,9 +2026,9 @@ export default function PnCDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {activeModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
-          <div className="relative w-full max-w-4xl max-h-[90vh] rounded-[32px] border border-white/30 bg-black/85 shadow-[0_20px_60px_0_rgba(0,0,0,0.8)] backdrop-blur-3xl p-6 sm:p-8 space-y-5 text-white flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-4xl max-h-[90vh] rounded-[32px] border border-border bg-card shadow-2xl backdrop-blur-3xl p-6 sm:p-8 space-y-5 text-card-foreground flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-white/20 pb-4">
+            <div className="flex items-center justify-between border-b border-border pb-4">
               <div className="flex items-center space-x-3">
                 <div className="h-10 w-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center font-black shadow-inner">
                   {activeModal === 'EMPLOYEES' && <Users className="h-5 w-5" />}
@@ -2049,7 +2049,7 @@ export default function PnCDashboardPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-lg sm:text-xl font-black text-white">
+                  <h3 className="text-lg sm:text-xl font-black text-foreground">
                     {activeModal === 'EMPLOYEES' && 'Total Workforce Directory'}
                     {activeModal === 'ACTIVE_WORKFORCE' && 'Active Workforce Roster'}
                     {activeModal === 'NEW_JOINERS' && 'Newly Joined Employees'}
@@ -2066,7 +2066,7 @@ export default function PnCDashboardPage() {
                     {activeModal === 'ADJUSTMENTS' && 'Attendance Adjustments Queue'}
                     {activeModal === 'GROWTH_RATE' && 'Workforce Growth & Talent Velocity'}
                   </h3>
-                  <p className="text-xs text-white/70 font-semibold">
+                  <p className="text-xs text-muted-foreground font-semibold">
                     People and Culture Executive Intelligence &bull; Glass Drilldown
                   </p>
                 </div>
@@ -2079,7 +2079,7 @@ export default function PnCDashboardPage() {
                   setModalSearch('');
                   setModalFilterTab('ALL');
                 }}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition cursor-pointer"
+                className="p-2 rounded-xl bg-surface hover:bg-white/20 text-muted-foreground hover:text-foreground transition cursor-pointer"
                 title="Close Window"
               >
                 <X className="h-5 w-5" />
@@ -2089,13 +2089,13 @@ export default function PnCDashboardPage() {
             {/* Modal Search & Filter Controls */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <input
                   type="text"
                   value={modalSearch}
                   onChange={(e) => setModalSearch(e.target.value)}
                   placeholder="Search by name, employee code, designation, department..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-black/60 border border-white/25 rounded-2xl text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-amber-400 text-xs font-semibold backdrop-blur-md"
+                  className="w-full pl-10 pr-4 py-2.5 bg-surface border border-border rounded-2xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-400 text-xs font-semibold backdrop-blur-md"
                 />
               </div>
 
@@ -2163,10 +2163,10 @@ export default function PnCDashboardPage() {
                         </div>
                         <div>
                           <div className="flex items-center space-x-2">
-                            <span className="text-sm font-extrabold text-white group-hover:text-amber-300 transition">
+                            <span className="text-sm font-extrabold text-foreground group-hover:text-amber-300 transition">
                               {emp.name}
                             </span>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-white/80 border border-white/20">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface text-muted-foreground border border-border">
                               {emp.code}
                             </span>
                             <span
@@ -2179,7 +2179,7 @@ export default function PnCDashboardPage() {
                               {emp.status}
                             </span>
                           </div>
-                          <div className="text-xs text-white/70 pt-0.5">
+                          <div className="text-xs text-muted-foreground pt-0.5">
                             {emp.designation} &bull; {emp.department || 'General'}
                           </div>
                           {activeModal === 'INCOMPLETE_PROFILES' && (
@@ -2201,7 +2201,7 @@ export default function PnCDashboardPage() {
                             e.stopPropagation();
                             setSelectedProfile(emp);
                           }}
-                          className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-xs font-bold text-white transition flex items-center space-x-1"
+                          className="px-3 py-1.5 rounded-xl bg-surface hover:bg-white/20 border border-white/25 text-xs font-bold text-foreground transition flex items-center space-x-1"
                         >
                           <Eye className="h-3.5 w-3.5 text-amber-300" />
                           <span>View Profile</span>
@@ -2210,7 +2210,7 @@ export default function PnCDashboardPage() {
                     </div>
                   ))}
                   {getModalFilteredData().length === 0 && (
-                    <div className="p-8 text-center text-xs text-white/60">
+                    <div className="p-8 text-center text-xs text-muted-foreground">
                       No matching records found.
                     </div>
                   )}
@@ -2223,15 +2223,15 @@ export default function PnCDashboardPage() {
                   {getModalFilteredData().map((log: any) => (
                     <div
                       key={log.id}
-                      className="p-4 rounded-2xl bg-white/5 border border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                      className="p-4 rounded-2xl bg-surface/60 border border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                     >
                       <div className="flex items-center space-x-3">
                         <div className="h-10 w-10 rounded-2xl bg-blue-500/20 text-blue-300 font-extrabold flex items-center justify-center">
                           {log.employeeName.charAt(0)}
                         </div>
                         <div>
-                          <div className="font-extrabold text-white text-sm">{log.employeeName}</div>
-                          <div className="text-white/70">
+                          <div className="font-extrabold text-foreground text-sm">{log.employeeName}</div>
+                          <div className="text-muted-foreground">
                             {log.employeeCode} &bull; {log.department} &bull; {formatDisplayDate(log.date)}
                           </div>
                         </div>
@@ -2239,8 +2239,8 @@ export default function PnCDashboardPage() {
 
                       <div className="flex items-center space-x-4">
                         <div>
-                          <div className="text-[10px] text-white/60 uppercase font-bold">In &bull; Out</div>
-                          <div className="font-extrabold text-white">
+                          <div className="text-[10px] text-muted-foreground uppercase font-bold">In &bull; Out</div>
+                          <div className="font-extrabold text-foreground">
                             {log.checkInTime || '--:--'} &rarr; {log.checkOutTime || '--:--'}
                           </div>
                         </div>
@@ -2272,19 +2272,19 @@ export default function PnCDashboardPage() {
                   {getModalFilteredData().map((req: any) => (
                     <div
                       key={req.id}
-                      className="p-4 rounded-2xl bg-white/5 border border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                      className="p-4 rounded-2xl bg-surface/60 border border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center space-x-2">
-                          <span className="font-extrabold text-white text-sm">{req.employeeName}</span>
+                          <span className="font-extrabold text-foreground text-sm">{req.employeeName}</span>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
                             {req.leaveType}
                           </span>
                         </div>
-                        <div className="text-white/70">
+                        <div className="text-muted-foreground">
                           {formatDisplayDate(req.fromDate)} &rarr; {formatDisplayDate(req.toDate)} ({req.totalDays} Days)
                         </div>
-                        <div className="text-[11px] text-white/60 italic">&ldquo;{req.reason}&rdquo;</div>
+                        <div className="text-[11px] text-muted-foreground italic">&ldquo;{req.reason}&rdquo;</div>
                       </div>
 
                       <div className="flex items-center space-x-2">
@@ -2326,11 +2326,11 @@ export default function PnCDashboardPage() {
                   {publicHolidays.map((h) => (
                     <div
                       key={h.id}
-                      className="p-4 rounded-2xl bg-white/5 border border-white/15 flex items-center justify-between text-xs"
+                      className="p-4 rounded-2xl bg-surface/60 border border-border/70 flex items-center justify-between text-xs"
                     >
                       <div className="space-y-0.5">
-                        <div className="font-black text-white text-sm">{h.title}</div>
-                        <div className="text-white/70">{h.type} Holiday &bull; {h.totalDays} Days</div>
+                        <div className="font-black text-foreground text-sm">{h.title}</div>
+                        <div className="text-muted-foreground">{h.type} Holiday &bull; {h.totalDays} Days</div>
                       </div>
                       <span className="px-3 py-1.5 rounded-xl bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 font-black text-xs">
                         {formatDisplayDate(h.date)}
@@ -2344,23 +2344,23 @@ export default function PnCDashboardPage() {
               {activeModal === 'PAYROLL_OVERVIEW' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="p-4 rounded-2xl bg-white/5 border border-white/15 text-center space-y-1">
-                      <div className="text-xs text-white/60 uppercase font-bold">Total Monthly Load</div>
+                    <div className="p-4 rounded-2xl bg-surface/60 border border-border/70 text-center space-y-1">
+                      <div className="text-xs text-muted-foreground uppercase font-bold">Total Monthly Load</div>
                       <div className="text-xl font-black text-amber-300">
                         BDT {payrollSummary.totalEstimatedWage.toLocaleString()}
                       </div>
                     </div>
 
-                    <div className="p-4 rounded-2xl bg-white/5 border border-white/15 text-center space-y-1">
-                      <div className="text-xs text-white/60 uppercase font-bold">Bank Info Complete</div>
+                    <div className="p-4 rounded-2xl bg-surface/60 border border-border/70 text-center space-y-1">
+                      <div className="text-xs text-muted-foreground uppercase font-bold">Bank Info Complete</div>
                       <div className="text-xl font-black text-emerald-300">
                         {payrollSummary.bankAccountCount} / {totalEmployeesCount} ({payrollSummary.bankReadinessPct}%)
                       </div>
                     </div>
 
-                    <div className="p-4 rounded-2xl bg-white/5 border border-white/15 text-center space-y-1">
-                      <div className="text-xs text-white/60 uppercase font-bold">Salary Wage Types</div>
-                      <div className="text-xl font-black text-white">
+                    <div className="p-4 rounded-2xl bg-surface/60 border border-border/70 text-center space-y-1">
+                      <div className="text-xs text-muted-foreground uppercase font-bold">Salary Wage Types</div>
+                      <div className="text-xl font-black text-foreground">
                         {payrollSummary.fixedWageCount} Fixed &bull; {payrollSummary.hourlyWageCount} Hourly
                       </div>
                     </div>
@@ -2368,7 +2368,7 @@ export default function PnCDashboardPage() {
 
                   <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-1">
                     <p className="font-bold">&bull; 25-Year HR Expert Strategic Recommendation:</p>
-                    <p className="leading-relaxed text-white/80">
+                    <p className="leading-relaxed text-muted-foreground">
                       Ensure 100% bank detail verification for the {incompleteProfiles.length} audited profiles before dispatching the end-of-month salary disbursement batch.
                     </p>
                   </div>
@@ -2384,7 +2384,7 @@ export default function PnCDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════ */}
       {selectedProfile && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="relative w-full max-w-6xl max-h-[96vh] rounded-[32px] border border-white/30 bg-slate-950 shadow-2xl p-4 sm:p-6 overflow-y-auto">
+          <div className="relative w-full max-w-6xl max-h-[96vh] rounded-[32px] border border-border bg-card shadow-2xl p-4 sm:p-6 overflow-y-auto">
             <EmployeeProfileDetail
               initialData={selectedProfile}
               allEmployees={employees}

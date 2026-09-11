@@ -227,7 +227,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
       <div className="flex items-center space-x-3">
         <button
           onClick={onToggleSidebar}
-          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition cursor-pointer"
+          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 transition cursor-pointer"
           aria-label="Toggle navigation menu"
         >
           <Menu className="h-5 w-5" />
@@ -270,7 +270,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
       {/* Center on Mobile: JAAGO HUB Brand */}
       <Link
         href="/dashboard"
-        className="sm:hidden flex items-center gap-2 text-base font-black tracking-wider text-foreground hover:opacity-85 transition cursor-pointer"
+        className="sm:hidden flex items-center gap-2 text-base font-black tracking-wider text-header-foreground hover:opacity-85 transition cursor-pointer"
       >
         <span className="relative flex items-center justify-center h-6 w-6 rounded-full overflow-hidden bg-[#fece0a] shadow-xs ring-1 ring-primary/30 shrink-0">
           <Image
@@ -290,7 +290,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         {/* Desktop Search */}
         <button
           onClick={() => setShowSearchModal(true)}
-          className="hidden sm:inline-flex p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition cursor-pointer"
+          className="hidden sm:inline-flex p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 transition cursor-pointer"
           title="Search (Cmd+K)"
         >
           <Search className="h-4 w-4 hover:text-primary" />
@@ -361,7 +361,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         {/* Theme Switcher (3-Way: Dark / Light / Espresso) */}
         <button
           onClick={cycleTheme}
-          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition flex items-center justify-center cursor-pointer"
+          className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 transition flex items-center justify-center cursor-pointer"
           title={`Theme: ${
             theme === 'dark'
               ? 'Matte Black (Click for Light Mode)'
@@ -389,7 +389,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         {/* Shift Mobile View & Desktop View Button */}
         <button
           onClick={toggleViewMode}
-          className={`p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition flex items-center justify-center cursor-pointer ${
+          className={`p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 transition flex items-center justify-center cursor-pointer ${
             viewMode === 'mobile' ? 'bg-primary/20 text-primary border border-primary/40' : ''
           }`}
           title={
@@ -410,7 +410,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         <div className="relative" ref={notifMenuRef}>
           <button
             onClick={() => setShowNotifMenu(!showNotifMenu)}
-            className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-surface/30 transition relative cursor-pointer"
+            className="p-2 rounded-xl text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 transition relative cursor-pointer"
             title="Notifications"
           >
             <Bell className="h-4 w-4 hover:text-primary" />

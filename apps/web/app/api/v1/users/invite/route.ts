@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 import { logger } from '@jaago/logger';
 import { getSupabaseAdminClient } from '@jaago/auth';
 import { sendEmail } from '@/lib/email-service';
@@ -45,9 +46,9 @@ export async function POST(request: Request) {
       let userId = `inv-${Date.now()}`;
 
       // Generate random temporary password
-      const randPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const randomChars = crypto.randomBytes(6).toString('base64url');
       const randNum = Math.floor(100 + Math.random() * 900);
-      const tempPassword = `Jaago@2026!${randPart}${randNum}`;
+      const tempPassword = `Jg#${randomChars}${randNum}!`;
       const loginUrl = `${baseOrigin.replace(/\/$/, '')}/login?email=${encodeURIComponent(cleanEmail)}`;
 
       try {

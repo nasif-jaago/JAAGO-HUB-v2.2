@@ -51,17 +51,17 @@
     --ring: 45 94% 50%;
 
     /* ── Header ── */
-    --header: 38 32% 95%;              /* #F7F2E9 newspaper clean light header */
-    --header-foreground: 30 35% 14%;
-    --header-border: 38 22% 85%;
+    --header: 0 0% 100%;               /* #FFFFFF pure crisp white header */
+    --header-foreground: 240 6% 10%;   /* #18181B deep high-contrast text & icons */
+    --header-border: 240 5% 90%;       /* #E4E4E7 subtle light hairline border */
 
-    /* ── Sidebar (user + admin) ── */
-    --sidebar: 38 28% 91%;             /* #EFE7DB warm parchment sidebar */
-    --sidebar-foreground: 30 35% 14%;
-    --sidebar-muted: 32 18% 44%;
-    --sidebar-active: 45 94% 50%;
-    --sidebar-active-foreground: 30 40% 10%;
-    --sidebar-border: 38 22% 83%;
+    /* ── Sidebar (Dark Panel for Light Mode strictly matching Reference Image 2) ── */
+    --sidebar: 215 13% 14%;            /* #1F2328 sleek dark charcoal/black panel from reference */
+    --sidebar-foreground: 0 0% 92%;    /* #EBEBEB crisp high-contrast light typography & icons */
+    --sidebar-muted: 220 9% 55%;       /* #858B94 clean muted slate navigation headers */
+    --sidebar-active: 45 96% 51%;      /* #FAC00A vivid JAAGO gold active item */
+    --sidebar-active-foreground: 240 6% 6%; /* #0F0F10 bold dark text on gold */
+    --sidebar-border: 215 12% 20%;     /* #2D333B subtle dark hairline border */
 
     /* ── Charts (attendance donut + trend) ── */
     --chart-1: 45 92% 52%;   /* gold */
@@ -125,64 +125,55 @@
   }
 
   .espresso {
-    /* ── Surfaces — ESPRESSO / CULTURE (Dark Chocolate Header + Warm Sand Canvas & Pure White Cards) ── */
-    --header: 28 45% 10%;              /* #23170E deep espresso dark chocolate header */
-    --header-foreground: 43 45% 95%;   /* #F8F3EA cream text and icons */
-    --header-border: 28 35% 16%;       /* #382517 subtle dark chocolate border */
+    /* ── Surfaces — COFFEE / ESPRESSO MODE (Strictly sampled from User Reference Image) ── */
+    --header: 28 33% 12%;              /* #2A1F15 deep espresso chocolate top bar */
+    --header-foreground: 45 96% 90%;   /* #FDF8EB warm alabaster / gold controls */
+    --header-border: 28 20% 20%;       /* subtle dark chocolate border */
 
-    --background: 38 32% 93%;          /* #F5EFE6 warm sand page background */
-    --surface: 0 0% 100%;              /* #FFFFFF pure clean alabaster card base */
-    --card: 0 0% 100%;                 /* #FFFFFF */
-    --card-foreground: 28 44% 11%;     /* #26180E deep espresso text */
-    --popover: 0 0% 100%;
-    --popover-foreground: 28 44% 11%;
+    --background: 40 43% 93%;          /* #F5EFE3 warm sand/latte canvas background */
+    --surface: 41 100% 97%;            /* #FFFBF2 warm ivory alabaster card surface */
+    --card: 41 100% 97%;               /* #FFFBF2 warm ivory alabaster card base */
+    --card-foreground: 28 33% 12%;     /* #2A1F15 rich dark espresso typography */
+    --popover: 41 100% 97%;
+    --popover-foreground: 28 33% 12%;
     --elevated: 0 0% 100%;             /* #FFFFFF raised card */
 
-    --foreground: 28 44% 11%;          /* #26180E rich dark chocolate typography */
-    --muted: 38 25% 89%;               /* #EDE6D8 */
-    --muted-foreground: 32 16% 42%;    /* #7B6B5B warm taupe */
+    --foreground: 28 33% 12%;          /* #2A1F15 deep dark espresso text */
+    --muted: 39 30% 88%;               /* #EDE4D2 soft latte */
+    --muted-foreground: 28 15% 42%;    /* #7B6B5B warm coffee taupe */
 
-    --primary: 45 96% 51%;             /* #FAC00A amber JAAGO gold */
-    --primary-foreground: 28 44% 11%;  /* #26180E dark text on gold */
-    --brand: 45 96% 51%;
-    --brand-strong: 42 96% 45%;
+    --primary: 41 92% 57%;             /* #F5B82E warm honey gold from reference */
+    --primary-foreground: 28 33% 12%;  /* #2A1F15 dark espresso text on gold */
+    --brand: 41 92% 57%;
+    --brand-strong: 40 95% 50%;
 
-    --secondary: 38 28% 88%;           /* #ECE4D6 */
-    --secondary-foreground: 28 44% 12%;
-    --accent: 45 80% 90%;
-    --accent-foreground: 28 44% 12%;
-    --success: 152 65% 36%;            /* emerald from reference */
-    --warning: 38 95% 48%;
-    --destructive: 350 78% 55%;        /* rose from reference */
+    --secondary: 39 35% 88%;           /* #ECE4D6 */
+    --secondary-foreground: 28 33% 12%;
+    --accent: 41 90% 92%;
+    --accent-foreground: 28 33% 12%;
+    --success: 152 65% 36%;            /* emerald */
+    --warning: 38 95% 48%;             /* amber */
+    --destructive: 350 78% 55%;        /* rose */
     --destructive-foreground: 0 0% 100%;
-    --info: 210 85% 50%;               /* sky blue from reference */
+    --info: 210 85% 50%;               /* sky blue */
 
-    --border: 38 20% 83%;              /* #E2D9CA crisp warm sand border */
-    --input: 38 20% 83%;
-    --ring: 45 96% 51%;
+    --border: 38 30% 86%;              /* #E6DDCF warm sand hairline border */
+    --input: 38 30% 86%;
+    --ring: 41 92% 57%;
 
-    --sidebar: 38 28% 90%;             /* #EFE8DC warm wheat/parchment sidebar */
-    --sidebar-foreground: 28 44% 11%;  /* #26180E deep brown text */
-    --sidebar-muted: 32 16% 45%;       /* #857463 */
-    --sidebar-active: 45 96% 51%;      /* Gold active button */
-    --sidebar-active-foreground: 28 44% 11%;
-    --sidebar-border: 38 20% 82%;      /* #DFD5C4 */
+    /* ── Sidebar (Warm Cream / Latte Panel strictly matching Reference Image) ── */
+    --sidebar: 39 36% 88%;             /* #EDE4D2 creamy latte sidebar background */
+    --sidebar-foreground: 30 27% 20%;  /* #4A3F35 deep espresso typography */
+    --sidebar-muted: 28 11% 50%;       /* #8C7E72 warm coffee taupe headings */
+    --sidebar-active: 41 92% 57%;      /* #F5B82E honey gold active pill */
+    --sidebar-active-foreground: 28 33% 12%; /* #2A1F15 dark text on gold */
+    --sidebar-border: 39 25% 82%;      /* #DFD5C2 subtle warm border */
 
-    --chart-1: 45 96% 51%;             /* Amber Gold */
-    --chart-2: 32 16% 45%;             /* Warm taupe */
+    --chart-1: 41 92% 57%;             /* Honey Gold */
+    --chart-2: 28 15% 42%;             /* Warm taupe */
     --chart-3: 152 65% 36%;            /* Emerald */
     --chart-4: 350 78% 55%;            /* Rose */
     --chart-5: 210 85% 50%;            /* Sky Blue */
-  }
-
-  .espresso header,
-  .espresso .bg-header {
-    background-color: hsl(28 45% 10%) !important;
-    color: hsl(43 45% 95%) !important;
-    border-color: hsl(28 35% 16%) !important;
-  }
-  .espresso .text-header-foreground {
-    color: hsl(43 45% 95%) !important;
   }
 
   * { border-color: hsl(var(--border)); }
@@ -239,3 +230,305 @@
     scrollbar-width: none;
   }
 }
+
+@layer utilities {
+  /* iOS 3D App Card Architecture */
+  .ios-3d-card {
+    border-radius: 20px;
+    border: 1px solid hsl(var(--border) / 0.85);
+    background-color: hsl(var(--card));
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 6px 16px -2px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.85),
+      inset 0 -1px 0.5px rgba(0, 0, 0, 0.02);
+    position: relative;
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+  }
+
+  .dark .ios-3d-card {
+    border-color: hsl(var(--border) / 0.9);
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.35),
+      0 10px 24px -4px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.09),
+      inset 0 -1px 0.5px rgba(0, 0, 0, 0.35);
+  }
+
+  .espresso .ios-3d-card {
+    border-color: hsl(var(--border) / 0.85);
+    box-shadow:
+      0 1px 2px rgba(40, 24, 14, 0.04),
+      0 6px 18px -2px rgba(40, 24, 14, 0.06),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.9),
+      inset 0 -1px 0.5px rgba(40, 24, 14, 0.03);
+  }
+
+  .ios-3d-card-interactive {
+    cursor: pointer;
+  }
+  .ios-3d-card-interactive:hover {
+    transform: translateY(-2.5px);
+    box-shadow:
+      0 3px 6px rgba(0, 0, 0, 0.05),
+      0 14px 28px -4px rgba(0, 0, 0, 0.09),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.95);
+  }
+  .dark .ios-3d-card-interactive:hover {
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.45),
+      0 16px 32px -4px rgba(0, 0, 0, 0.55),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.14);
+  }
+  .espresso .ios-3d-card-interactive:hover {
+    box-shadow:
+      0 3px 6px rgba(40, 24, 14, 0.06),
+      0 14px 28px -4px rgba(40, 24, 14, 0.11),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.95);
+  }
+  .ios-3d-card-interactive:active {
+    transform: translateY(0) scale(0.995);
+  }
+
+  /* Block Edge Colored Accent Strips (iOS 3D Cards) */
+  .card-edge-amber {
+    border-left-width: 4.5px !important;
+    border-left-color: #f59e0b !important;
+  }
+  .card-edge-emerald {
+    border-left-width: 4.5px !important;
+    border-left-color: #10b981 !important;
+  }
+  .card-edge-blue {
+    border-left-width: 4.5px !important;
+    border-left-color: #3b82f6 !important;
+  }
+  .card-edge-rose {
+    border-left-width: 4.5px !important;
+    border-left-color: #f43f5e !important;
+  }
+  .card-edge-teal {
+    border-left-width: 4.5px !important;
+    border-left-color: #14b8a6 !important;
+  }
+  .card-edge-sky {
+    border-left-width: 4.5px !important;
+    border-left-color: #0ea5e9 !important;
+  }
+  .card-edge-indigo {
+    border-left-width: 4.5px !important;
+    border-left-color: #6366f1 !important;
+  }
+  .card-edge-purple {
+    border-left-width: 4.5px !important;
+    border-left-color: #a855f7 !important;
+  }
+
+  /* ── Dashboard Hero Identity Card (Light Mode: Exact Black Shade from Reference Image 2) ── */
+  :root:not(.dark):not(.espresso) .dashboard-hero-card {
+    background:
+      radial-gradient(ellipse at 85% 20%, rgba(255, 255, 255, 0.04) 0%, transparent 60%),
+      linear-gradient(135deg, #16181B 0%, #22262C 100%) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    color: #FFFFFF !important;
+    box-shadow:
+      0 4px 20px -2px rgba(0, 0, 0, 0.35),
+      0 2px 6px -1px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.12) !important;
+  }
+  .dark .dashboard-hero-card {
+    background: hsl(var(--card)) !important;
+    border-color: hsl(var(--border)) !important;
+    color: hsl(var(--card-foreground)) !important;
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.35),
+      0 10px 24px -4px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.08),
+      inset 0 -1px 0.5px rgba(0, 0, 0, 0.35) !important;
+  }
+  /* Coffee Mode: Hero Card strictly matched to Image 3 (Ivory Alabaster Card with Dark Espresso Text) */
+  .espresso .dashboard-hero-card {
+    background: #FFFBF2 !important;
+    border-color: #E6DDCF !important;
+    color: #2A1F15 !important;
+    box-shadow:
+      0 1px 2px rgba(40, 24, 14, 0.04),
+      0 6px 18px -2px rgba(40, 24, 14, 0.06),
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.9) !important;
+  }
+  .espresso .dashboard-hero-card h2,
+  .espresso .dashboard-hero-card .hero-user-name,
+  .espresso .dashboard-hero-card .text-white {
+    color: #2A1F15 !important;
+  }
+  .espresso .dashboard-hero-card .hero-meta-text,
+  .espresso .dashboard-hero-card .text-slate-300,
+  .espresso .dashboard-hero-card .text-slate-400,
+  .espresso .dashboard-hero-card .text-slate-500 {
+    color: #7B6B5B !important;
+  }
+  /* ── Hero Card Attendance Action Buttons (Themed based on Hero Background) ── */
+  /* Check In Button Theme Fidelity */
+  .espresso .dashboard-hero-card .hero-checkin-btn {
+    background: #E1F3EA !important;
+    border-color: #B2E4CD !important;
+    color: #0E4D34 !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkin-btn .hero-btn-icon-box {
+    background: #C4EBD8 !important;
+    color: #0E4D34 !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkin-btn .hero-btn-title,
+  .espresso .dashboard-hero-card .hero-checkin-btn .hero-btn-time {
+    color: #0E4D34 !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkin-recorded {
+    background: #EDE4D2 !important;
+    border-color: #DFD5C3 !important;
+    color: #7B6B5B !important;
+  }
+
+  /* Check Out Button: 1. Waiting / Disabled State (Sampled from Reference Image) */
+  .hero-checkout-waiting {
+    background: #C3C9D0 !important;
+    border-color: #B0B7C2 !important;
+    color: #334155 !important;
+    cursor: not-allowed !important;
+  }
+  .hero-checkout-waiting .hero-btn-icon-box {
+    background: #AAAEB7 !important;
+    color: #334155 !important;
+  }
+  .hero-checkout-waiting .hero-btn-title,
+  .hero-checkout-waiting .hero-btn-time {
+    color: #334155 !important;
+  }
+
+  .dark .hero-checkout-waiting {
+    background: #202328 !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    color: #94A3B8 !important;
+  }
+  .dark .hero-checkout-waiting .hero-btn-icon-box {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #94A3B8 !important;
+  }
+  .dark .hero-checkout-waiting .hero-btn-title,
+  .dark .hero-checkout-waiting .hero-btn-time {
+    color: #94A3B8 !important;
+  }
+
+  .espresso .dashboard-hero-card .hero-checkout-waiting {
+    background: #EDE4D2 !important;
+    border-color: #DFD5C3 !important;
+    color: #7B6B5B !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkout-waiting .hero-btn-icon-box {
+    background: #E0D5BF !important;
+    color: #7B6B5B !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkout-waiting .hero-btn-title,
+  .espresso .dashboard-hero-card .hero-checkout-waiting .hero-btn-time {
+    color: #7B6B5B !important;
+  }
+
+  /* Check Out Button: 2. Active / Ready to Check Out State */
+  .hero-checkout-active {
+    background: #FEE2E2 !important;
+    border-color: rgba(244, 63, 94, 0.4) !important;
+    color: #991B1B !important;
+    cursor: pointer !important;
+  }
+  .hero-checkout-active:hover {
+    background: #FECACA !important;
+  }
+  .hero-checkout-active .hero-btn-icon-box {
+    background: rgba(239, 68, 68, 0.2) !important;
+    color: #991B1B !important;
+  }
+  .hero-checkout-active .hero-btn-title {
+    color: #991B1B !important;
+  }
+  .hero-checkout-active .hero-btn-time {
+    color: #7F1D1D !important;
+  }
+
+  .dark .hero-checkout-active {
+    background: #3D1418 !important;
+    border-color: rgba(244, 63, 94, 0.35) !important;
+    color: #FDA4AF !important;
+  }
+  .dark .hero-checkout-active:hover {
+    background: #4E191E !important;
+  }
+  .dark .hero-checkout-active .hero-btn-icon-box {
+    background: rgba(244, 63, 94, 0.25) !important;
+    color: #FDA4AF !important;
+  }
+  .dark .hero-checkout-active .hero-btn-title {
+    color: #FDA4AF !important;
+  }
+  .dark .hero-checkout-active .hero-btn-time {
+    color: #FECDD3 !important;
+  }
+
+  .espresso .dashboard-hero-card .hero-checkout-active {
+    background: #FCE8E6 !important;
+    border-color: #F5C6C2 !important;
+    color: #7A1D1D !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkout-active:hover {
+    background: #F9D7D4 !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkout-active .hero-btn-icon-box {
+    background: #F0A8A0 !important;
+    color: #7A1D1D !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkout-active .hero-btn-title,
+  .espresso .dashboard-hero-card .hero-checkout-active .hero-btn-time {
+    color: #7A1D1D !important;
+  }
+
+  /* Check Out Button: 3. Recorded / Completed State */
+  .hero-checkout-recorded {
+    background: rgba(195, 201, 208, 0.7) !important;
+    border-color: #B0B7C2 !important;
+    color: #334155 !important;
+    cursor: default !important;
+  }
+  .hero-checkout-recorded .hero-btn-icon-box {
+    background: #AAAEB7 !important;
+    color: #334155 !important;
+  }
+  .hero-checkout-recorded .hero-btn-title,
+  .hero-checkout-recorded .hero-btn-time {
+    color: #334155 !important;
+  }
+  .dark .hero-checkout-recorded {
+    background: rgba(244, 63, 94, 0.15) !important;
+    border-color: rgba(244, 63, 94, 0.25) !important;
+    color: #FDA4AF !important;
+  }
+  .dark .hero-checkout-recorded .hero-btn-icon-box {
+    background: rgba(244, 63, 94, 0.2) !important;
+    color: #FDA4AF !important;
+  }
+  .dark .hero-checkout-recorded .hero-btn-title,
+  .dark .hero-checkout-recorded .hero-btn-time {
+    color: #FDA4AF !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkout-recorded {
+    background: #F0E6D8 !important;
+    border-color: #DFD5C3 !important;
+    color: #7B6B5B !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkout-recorded .hero-btn-icon-box {
+    background: #E0D5BF !important;
+    color: #7B6B5B !important;
+  }
+  .espresso .dashboard-hero-card .hero-checkout-recorded .hero-btn-title,
+  .espresso .dashboard-hero-card .hero-checkout-recorded .hero-btn-time {
+    color: #7B6B5B !important;
+  }
+}
+

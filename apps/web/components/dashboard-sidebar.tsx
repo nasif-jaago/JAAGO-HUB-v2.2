@@ -189,30 +189,30 @@ export function DashboardSidebar({
       onMouseLeave={onMouseLeave}
       className={`fixed top-0 bottom-0 left-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out flex flex-col justify-between select-none shadow-2xl ${
         collapsed
-          ? '-translate-x-full w-72 pointer-events-none opacity-0'
-          : 'translate-x-0 w-72 pointer-events-auto opacity-100'
+          ? '-translate-x-full w-[228px] pointer-events-none opacity-0'
+          : 'translate-x-0 w-[228px] pointer-events-auto opacity-100'
       }`}
     >
       {/* Top Section: Logo & Nav List */}
-      <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-4 no-scrollbar relative">
+      <div className="flex-1 overflow-y-auto px-2.5 py-3.5 space-y-3.5 no-scrollbar relative">
         {/* Small Hide/Collapse Button in Top-Right Corner */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             onToggle?.();
           }}
-          className="absolute top-2.5 right-2.5 p-1 rounded-lg bg-surface/80 hover:bg-surface border border-border/80 text-muted-foreground hover:text-foreground transition shadow-sm z-10 cursor-pointer"
+          className="absolute top-2 right-2 p-1 rounded-full bg-sidebar-foreground/10 hover:bg-sidebar-foreground/15 border border-sidebar-border text-sidebar-foreground/70 hover:text-sidebar-foreground transition shadow-sm z-10 cursor-pointer"
           title="Hide Sidebar"
           aria-label="Hide Sidebar"
         >
-          <ChevronLeft className="h-3.5 w-3.5 text-foreground" />
+          <ChevronLeft className="h-3.5 w-3.5 text-sidebar-foreground" />
         </button>
         {/* Official JAAGO Foundation Logo Card (Clickable to Dashboard Home) */}
         <div className="flex items-center justify-center py-1">
           <Link
             href="/dashboard"
             title="JAAGO Foundation - Dashboard Home"
-            className={`inline-flex items-center justify-center p-1 overflow-hidden shadow-[0_0_14px_rgba(255,230,0,0.35)] border-2 border-primary bg-surface group transition transform hover:scale-[1.03] active:scale-95 cursor-pointer ${
+            className={`inline-flex items-center justify-center p-1.5 overflow-hidden shadow-[0_0_14px_rgba(255,230,0,0.35)] border-2 border-primary/40 bg-[#F5C200] group transition transform hover:scale-[1.03] active:scale-95 cursor-pointer ${
               collapsed ? 'w-12 h-12 rounded-full' : 'rounded-2xl'
             }`}
           >
@@ -255,10 +255,10 @@ export function DashboardSidebar({
               onClick={() => toggleSection('dashboard')}
               title="My Dashboard"
               className={`w-full flex items-center ${
-                collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
-              } py-2.5 rounded-2xl text-xs font-black bg-primary text-primary-foreground shadow-md transition transform active:scale-95 cursor-pointer`}
+                collapsed ? 'justify-center px-2' : 'justify-between px-2.5'
+              } py-2 rounded-xl text-xs font-black bg-primary text-primary-foreground shadow-md transition transform active:scale-95 cursor-pointer`}
             >
-              <div className="flex items-center space-x-2.5">
+              <div className="flex items-center space-x-2">
                 <User className="h-4 w-4 stroke-[2.5] flex-shrink-0 text-primary-foreground" />
                 {!collapsed && <span>My Dashboard</span>}
               </div>
@@ -269,18 +269,18 @@ export function DashboardSidebar({
 
             {/* NESTED CONTENT INSIDE MY DASHBOARD */}
             {openSections['dashboard'] && !collapsed && (
-              <div className="pl-2 space-y-1.5 pt-1 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="pl-1.5 space-y-1 pt-1 animate-in fade-in slide-in-from-top-2 duration-150">
                 {/* 1.1 Overview (Active Highlighted Pill) */}
                 <Link
                   href="/dashboard"
                   title="Overview"
-                  className={`w-full flex items-center space-x-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                  className={`w-full flex items-center space-x-2 px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
                     pathname === '/dashboard'
-                      ? 'bg-primary/20 text-foreground font-black border border-primary/40'
-                      : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
+                      ? 'bg-primary/20 text-sidebar-foreground font-black border border-primary/40'
+                      : 'text-sidebar-foreground hover:bg-sidebar-foreground/10 hover:text-primary'
                   }`}
                 >
-                  <LayoutGrid className="h-4 w-4 text-foreground flex-shrink-0" />
+                  <LayoutGrid className="h-4 w-4 text-sidebar-foreground flex-shrink-0" />
                   <span>Overview</span>
                 </Link>
 
@@ -288,13 +288,13 @@ export function DashboardSidebar({
                 <Link
                   href="/dashboard/my-profile"
                   title="My Profile"
-                  className={`w-full flex items-center space-x-2.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
+                  className={`w-full flex items-center space-x-2 px-2.5 py-2 rounded-xl text-xs font-bold transition shadow-sm ${
                     pathname === '/dashboard/my-profile'
-                      ? 'bg-primary/20 text-foreground font-black border border-primary/40'
-                      : 'text-sidebar-foreground hover:bg-surface hover:text-primary'
+                      ? 'bg-primary/20 text-sidebar-foreground font-black border border-primary/40'
+                      : 'text-sidebar-foreground hover:bg-sidebar-foreground/10 hover:text-primary'
                   }`}
                 >
-                  <UserCheck className="h-4 w-4 text-foreground flex-shrink-0" />
+                  <UserCheck className="h-4 w-4 text-sidebar-foreground flex-shrink-0" />
                   <span>My Profile</span>
                 </Link>
 
@@ -303,9 +303,9 @@ export function DashboardSidebar({
                   <button
                     onClick={() => toggleSection('requests')}
                     title="Requests"
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-surface/50 cursor-pointer"
+                    className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-sidebar-foreground/10 cursor-pointer"
                   >
-                    <div className="flex items-center space-x-2.5">
+                    <div className="flex items-center space-x-2">
                       <FileText className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                       <span>Requests</span>
                     </div>
@@ -320,7 +320,7 @@ export function DashboardSidebar({
                     <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
                       <Link
                         href="/workflows"
-                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                       >
                         <FileText className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         <span>All Requests</span>
@@ -339,7 +339,7 @@ export function DashboardSidebar({
                         <Link
                           key={idx}
                           href={item.href}
-                          className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                          className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                         >
                           <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                           <span className="truncate">{item.label}</span>
@@ -354,9 +354,9 @@ export function DashboardSidebar({
                   <button
                     onClick={() => toggleSection('attendance')}
                     title="Attendance & Leave"
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-surface/50 cursor-pointer"
+                    className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-sidebar-foreground/10 cursor-pointer"
                   >
-                    <div className="flex items-center space-x-2.5">
+                    <div className="flex items-center space-x-2">
                       <Clock className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                       <span>Attendance &amp; Leave</span>
                     </div>
@@ -368,24 +368,24 @@ export function DashboardSidebar({
                   </button>
 
                   {openSections['attendance'] && (
-                    <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
+                    <div className="pl-3.5 space-y-0.5 border-l border-sidebar-border/50 ml-2.5 text-sidebar-foreground animate-in fade-in duration-100">
                       <Link
                         href="/attendance"
-                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                        className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                       >
                         <History className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         <span>Attendance</span>
                       </Link>
                       <Link
                         href="/leaves"
-                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                        className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                       >
                         <Calendar className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         <span>My Leave</span>
                       </Link>
                       <Link
                         href="/on-duty"
-                        className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                        className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                       >
                         <Radio className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         <span>On Duty</span>
@@ -399,9 +399,9 @@ export function DashboardSidebar({
                   <button
                     onClick={() => toggleSection('organization')}
                     title="Organization"
-                    className="w-full flex items-center justify-between px-3.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-surface/50 cursor-pointer"
+                    className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-bold text-sidebar-muted hover:text-sidebar-foreground transition rounded-xl hover:bg-sidebar-foreground/10 cursor-pointer"
                   >
-                    <div className="flex items-center space-x-2.5">
+                    <div className="flex items-center space-x-2">
                       <Building2 className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                       <span>Organization</span>
                     </div>
@@ -413,7 +413,7 @@ export function DashboardSidebar({
                   </button>
 
                   {openSections['organization'] && (
-                    <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3 text-sidebar-foreground animate-in fade-in duration-100">
+                    <div className="pl-3.5 space-y-0.5 border-l border-sidebar-border/50 ml-2.5 text-sidebar-foreground animate-in fade-in duration-100">
                       {[
                         { label: 'My Team', icon: Users, href: '/organization/team' },
                         { label: 'My Department', icon: Users, href: '/organization/department' },
@@ -425,7 +425,7 @@ export function DashboardSidebar({
                         <Link
                           key={idx}
                           href={item.href}
-                          className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                          className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                         >
                           <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                           <span className="truncate">{item.label}</span>
@@ -453,14 +453,14 @@ export function DashboardSidebar({
                   href="/pnc"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-foreground bg-primary/10 hover:bg-primary/20 border border-primary/30 transition text-left cursor-pointer group shadow-sm mb-1"
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-bold text-sidebar-foreground bg-primary/10 hover:bg-primary/20 border border-primary/30 transition text-left cursor-pointer group shadow-sm mb-1"
                   title="Open People and Culture Portal in New Tab"
                 >
-                  <div className="flex items-center space-x-2.5">
+                  <div className="flex items-center space-x-2">
                     <div className="h-5 w-5 rounded-md bg-[#26180E] text-primary font-black text-[9px] flex items-center justify-center flex-shrink-0">
                       P&amp;C
                     </div>
-                    <span className="font-bold text-foreground group-hover:text-primary transition">
+                    <span className="font-bold text-sidebar-foreground group-hover:text-primary transition">
                       People and Culture
                     </span>
                   </div>
@@ -498,10 +498,10 @@ export function DashboardSidebar({
                         href={dept.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full flex items-center justify-between px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer group"
+                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-foreground/10 transition text-left cursor-pointer group"
                         title={`Open ${dept.name} in New Tab`}
                       >
-                        <div className="flex items-center space-x-2.5 truncate">
+                        <div className="flex items-center space-x-2 truncate">
                           <IconComp className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition flex-shrink-0" />
                           <span className="truncate">{dept.name}</span>
                         </div>
@@ -512,7 +512,7 @@ export function DashboardSidebar({
                   return (
                     <button
                       key={idx}
-                      className="w-full flex items-center space-x-2.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-foreground hover:bg-surface transition text-left cursor-pointer"
+                      className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-foreground/10 transition text-left cursor-pointer"
                     >
                       <IconComp className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                       <span className="truncate">{dept.name}</span>
@@ -531,10 +531,10 @@ export function DashboardSidebar({
                 onClick={() => toggleSection('settings')}
                 title="Settings"
                 className={`w-full flex items-center ${
-                  collapsed ? 'justify-center px-2' : 'justify-between px-3.5'
+                  collapsed ? 'justify-center px-2' : 'justify-between px-2.5'
                 } py-2 text-xs font-bold tracking-wider text-sidebar-muted hover:text-sidebar-foreground transition cursor-pointer`}
               >
-                <div className="flex items-center space-x-2.5">
+                <div className="flex items-center space-x-2">
                   <Settings className="h-4 w-4 text-sidebar-muted flex-shrink-0" />
                   {!collapsed && <span>Settings</span>}
                 </div>
@@ -550,7 +550,7 @@ export function DashboardSidebar({
                     className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                       pathname === '/admin/users'
                         ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
                     } transition`}
                   >
                     <Users className="h-3.5 w-3.5 flex-shrink-0" />
@@ -561,7 +561,7 @@ export function DashboardSidebar({
                     className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                       pathname === '/admin/gps-coordinates'
                         ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
                     } transition`}
                   >
                     <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
@@ -572,7 +572,7 @@ export function DashboardSidebar({
                     className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                       pathname === '/admin/modules'
                         ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
                     } transition`}
                   >
                     <Boxes className="h-3.5 w-3.5 flex-shrink-0" />
@@ -580,35 +580,35 @@ export function DashboardSidebar({
                   </Link>
                   <Link
                     href="/admin/studio"
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                   >
                     <Wand2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span>Studio-lite Builder</span>
                   </Link>
                   <Link
                     href="/admin/control-center"
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                   >
                     <Cpu className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span>Control Center</span>
                   </Link>
                   <Link
                     href="/admin/logs"
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                   >
                     <Activity className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span>System Logs</span>
                   </Link>
                   <Link
                     href="/admin/api-keys"
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                   >
                     <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span>API Settings</span>
                   </Link>
                   <Link
                     href="/admin/integrations"
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-surface transition"
+                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
                   >
                     <Bot className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span>AI Agent &amp; Integrations</span>
@@ -618,7 +618,7 @@ export function DashboardSidebar({
                     className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                       pathname === '/admin/rbac'
                         ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
                     } transition`}
                   >
                     <Shield className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
@@ -629,7 +629,7 @@ export function DashboardSidebar({
                     className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                       pathname?.startsWith('/admin/email')
                         ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
                     } transition`}
                   >
                     <Mail className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
@@ -640,7 +640,7 @@ export function DashboardSidebar({
                     className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                       pathname === '/admin/about'
                         ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
-                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-surface'
+                        : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
                     } transition`}
                   >
                     <BookOpen className="h-3.5 w-3.5 flex-shrink-0" />
@@ -654,17 +654,17 @@ export function DashboardSidebar({
       </div>
 
       {/* Bottom Section: Quick Action Icons & Sign Out */}
-      <div className="p-3.5 border-t border-sidebar-border space-y-3">
+      <div className="p-2.5 border-t border-sidebar-border space-y-2.5">
         {!collapsed && (
-          <div className="flex items-center justify-center space-x-3">
-            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition cursor-pointer" title="Chat">
-              <MessageSquare className="h-4 w-4" />
+          <div className="flex items-center justify-center space-x-2.5">
+            <button className="h-8 w-8 rounded-full bg-sidebar-foreground/5 border border-sidebar-border hover:border-primary/40 flex items-center justify-center text-sidebar-foreground/70 hover:text-primary transition cursor-pointer" title="Chat">
+              <MessageSquare className="h-3.5 w-3.5" />
             </button>
-            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition cursor-pointer" title="Mail">
-              <Mail className="h-4 w-4" />
+            <button className="h-8 w-8 rounded-full bg-sidebar-foreground/5 border border-sidebar-border hover:border-primary/40 flex items-center justify-center text-sidebar-foreground/70 hover:text-primary transition cursor-pointer" title="Mail">
+              <Mail className="h-3.5 w-3.5" />
             </button>
-            <button className="h-9 w-9 rounded-full bg-surface border border-border hover:border-primary/40 flex items-center justify-center text-muted-foreground hover:text-primary transition cursor-pointer" title="Calendar">
-              <Calendar className="h-4 w-4" />
+            <button className="h-8 w-8 rounded-full bg-sidebar-foreground/5 border border-sidebar-border hover:border-primary/40 flex items-center justify-center text-sidebar-foreground/70 hover:text-primary transition cursor-pointer" title="Calendar">
+              <Calendar className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
@@ -672,11 +672,11 @@ export function DashboardSidebar({
         <button
           onClick={handleSignOut}
           title="Sign Out"
-          className={`w-full py-2.5 ${
-            collapsed ? 'px-2 justify-center' : 'px-4 justify-center space-x-2'
+          className={`w-full py-2 ${
+            collapsed ? 'px-2 justify-center' : 'px-3 justify-center space-x-2'
           } rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 font-bold text-xs uppercase tracking-wider flex items-center transition cursor-pointer`}
         >
-          <LogOut className="h-4 w-4 flex-shrink-0" />
+          <LogOut className="h-3.5 w-3.5 flex-shrink-0" />
           {!collapsed && <span>SIGN OUT</span>}
         </button>
       </div>

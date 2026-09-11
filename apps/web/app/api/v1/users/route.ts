@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 import { logger } from '@jaago/logger';
 import { getSupabaseAdmin } from '@/lib/supabase-auth';
 import { usersDatabase, deleteUsersByIds, UserItem } from '@/lib/users-db';
@@ -145,7 +146,8 @@ export async function POST(request: Request) {
 
     const cleanEmail = email.trim().toLowerCase();
     const employeeId = createEmployee ? `JFT-2026-${Math.floor(1000 + Math.random() * 9000)}` : null;
-    const initialPassword = password || `Password@123`;
+    const randomChars = crypto.randomBytes(6).toString('base64url');
+    const initialPassword = password || `Jg#${randomChars}!`;
 
     let createdId = `u-${Date.now().toString().slice(-4)}`;
 

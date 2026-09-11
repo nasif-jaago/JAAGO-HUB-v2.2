@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 import { logger } from '@jaago/logger';
 
 export const runtime = 'nodejs';
@@ -25,7 +26,9 @@ export async function POST(request: Request) {
     const cleanEmail = to.trim().toLowerCase();
     const cleanCC = typeof cc === 'string' && cc.includes('@') ? cc.trim().toLowerCase() : undefined;
     const redirectUrl = loginUrl || `${process.env.NEXT_PUBLIC_APP_URL || 'https://hub.jaago.com.bd'}/login`;
-    const tempPassword = customPass || `Jaago@2026!${Math.random().toString(36).substring(2, 6).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`;
+    const randomChars = crypto.randomBytes(6).toString('base64url');
+    const randomNum = Math.floor(100 + Math.random() * 900);
+    const tempPassword = customPass || `Jg#${randomChars}${randomNum}!`;
 
     // ── 1. Dispatch Email via Supabase Auth (Brevo SMTP) ──
     const { getSupabaseAdminClient } = await import('@jaago/auth');

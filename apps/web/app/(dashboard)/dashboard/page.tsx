@@ -13,10 +13,11 @@ import {
   Briefcase,
   Inbox,
   Timer,
-  ExternalLink,
   ChevronRight,
   ShieldCheck,
   X,
+  UserCheck,
+  BarChart2,
 } from 'lucide-react';
 import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
 import { getSupabase } from '@/lib/supabase-auth';
@@ -34,6 +35,7 @@ import {
   fetchPublicHolidays,
   fetchLeaveRequests,
   fetchLeaveAllocations,
+  LeaveRequestItem,
 } from '@/lib/supabase-time-off';
 import {
   GPSLocationItem,
@@ -58,7 +60,8 @@ export default function DashboardPage() {
   const [publicHolidays, setPublicHolidays] = useState<PublicHolidayItem[]>([]);
   const [gpsLocations, setGpsLocations] = useState<GPSLocationItem[]>([]);
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
-  const [onDutyPendingCount, setOnDutyPendingCount] = useState<number>(4);
+  const [onDutyPendingCount, setOnDutyPendingCount] = useState<number>(0);
+  const [approvedLeaves, setApprovedLeaves] = useState<LeaveRequestItem[]>([]);
   const [leaveBalance, setLeaveBalance] = useState<{
     totalAvailable: number;
     totalAllocated: number;
@@ -103,10 +106,10 @@ export default function DashboardPage() {
           id: sess.id || prev.id,
           fullName: sess.fullName,
           jobTitle: sess.jobTitle || prev.jobTitle,
-          department: sess.department || prev.department,
+          department: sess.department || prev.department || "Founder's Office JFT",
           project: sess.team || prev.project,
           manager: sess.manager || prev.manager,
-          organization: sess.organizationName || prev.organization,
+          organization: sess.organizationName || prev.organization || 'JAAGO Foundation Trust',
           avatarUrl: sess.avatarUrl || prev.avatarUrl,
           workingSchedule: sess.workingSchedule || prev.workingSchedule,
           employeeCode: sess.employeeCode || prev.employeeCode,
@@ -122,19 +125,20 @@ export default function DashboardPage() {
     window.addEventListener('jaago_view_mode_change', handleViewModeChange);
 
     const handleUserUpdated = (e: any) => {
-      if (e.detail?.user) {
-        const u = e.detail.user;
+      const u = e.detail?.user || e.detail?.employee;
+      if (u) {
         setUser((prev) => ({
           ...prev,
           id: u.id || prev.id,
-          fullName: u.fullName || prev.fullName,
-          jobTitle: u.jobTitle || prev.jobTitle,
+          fullName: u.fullName || u.name || prev.fullName,
+          jobTitle: u.jobTitle || u.designation || prev.jobTitle,
           department: u.department || prev.department,
-          manager: u.manager || prev.manager,
-          organization: u.organizationName || prev.organization,
+          project: u.project || u.team || prev.project,
+          manager: u.manager || u.supervisor || prev.manager,
+          organization: u.organizationName || u.organization || prev.organization,
           avatarUrl: u.avatarUrl || prev.avatarUrl,
           workingSchedule: u.workingSchedule || prev.workingSchedule,
-          employeeCode: u.employeeCode || prev.employeeCode,
+          employeeCode: u.employeeCode || u.code || prev.employeeCode,
         }));
       }
     };
@@ -173,6 +177,53 @@ export default function DashboardPage() {
       }
     };
 
+    // Refresh Pending On-Duty count for the active logged-in employee
+    const refreshOnDutyPending = async (targetEmpCode?: string, targetEmpId?: string) => {
+      try {
+        const reqs = await fetchOnDutyRequestsFromSupabase();
+        const sess = getCurrentUserSession();
+        const code = (targetEmpCode || sess?.employeeCode || user.employeeCode || '').trim().toLowerCase();
+        const uid = (targetEmpId || sess?.id || user.id || '').trim();
+
+        const pending = (reqs || []).filter((r) => {
+          const rCode = (r.employeeCode || '').trim().toLowerCase();
+          const rUid = (r.employeeId || '').trim();
+          const isMyReq =
+            (code && rCode === code) ||
+            (uid && rUid === uid) ||
+            (!code && !uid);
+          const st = (r.status || '').toUpperCase();
+          return isMyReq && st === 'PENDING';
+        }).length;
+
+        setOnDutyPendingCount(pending);
+      } catch {
+        setOnDutyPendingCount(0);
+      }
+    };
+
+    const handleOnDutyUpdate = () => {
+      refreshOnDutyPending();
+    };
+
+    const refreshOnLeaveData = async () => {
+      try {
+        const reqs = await fetchLeaveRequests();
+        const approved = (reqs || []).filter(
+          (r) => (r.status || '').toLowerCase() === 'approved'
+        );
+        setApprovedLeaves(approved);
+      } catch (err) {
+        console.warn('Error fetching approved leaves for dashboard:', err);
+      }
+    };
+
+    let handleLeaveUpdate = () => {
+      refreshOnLeaveData();
+    };
+
+    refreshOnLeaveData();
+
     window.addEventListener('jaago_user_updated', handleUserUpdated);
 
     try {
@@ -204,20 +255,22 @@ export default function DashboardPage() {
       // Fetch active employee from Supabase
       getActiveEmployeeProfile().then((emp) => {
         if (emp) {
-          setUser({
-            id: emp.id || '',
-            fullName: emp.name || '',
-            jobTitle: emp.designation || '',
-            department: emp.department || '',
-            project: (emp as any).project || (emp as any).projectName || '',
-            manager: emp.supervisor || '',
-            organization: emp.organization || 'JAAGO Foundation',
-            avatarUrl: emp.avatarUrl || '',
-            workingSchedule: emp.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
-            employeeCode: emp.code || '',
-          });
+          setUser((prev) => ({
+            ...prev,
+            id: emp.id || prev.id,
+            fullName: emp.name || prev.fullName,
+            jobTitle: emp.designation || prev.jobTitle,
+            department: emp.department || prev.department || "Founder's Office JFT",
+            project: (emp as any).project || (emp as any).projectName || prev.project,
+            manager: emp.supervisor || prev.manager,
+            organization: emp.organization || prev.organization || 'JAAGO Foundation Trust',
+            avatarUrl: emp.avatarUrl || prev.avatarUrl,
+            workingSchedule: emp.workingSchedule || prev.workingSchedule,
+            employeeCode: emp.code || prev.employeeCode,
+          }));
           refreshCanonicalAttendance(emp.id || emp.code);
           refreshLeaveBalance(emp.code);
+          refreshOnDutyPending(emp.code, emp.id);
         }
       });
 
@@ -291,19 +344,6 @@ export default function DashboardPage() {
         }
       };
 
-      // Refresh Pending On-Duty count
-      const refreshOnDutyPending = async () => {
-        try {
-          const reqs = await fetchOnDutyRequestsFromSupabase();
-          const sess = getCurrentUserSession();
-          const userCode = (sess?.employeeCode || user.employeeCode || '').trim().toLowerCase();
-          const pending = reqs.filter((r) => {
-            const isMyReq = userCode && r.employeeCode?.trim().toLowerCase() === userCode;
-            return (r.status === 'PENDING' || (r.status as string) === 'Pending') && (isMyReq || !userCode);
-          }).length;
-          setOnDutyPendingCount(pending > 0 ? pending : 4);
-        } catch {}
-      };
 
       // Refresh Live Approvals Count (Strictly excluding self-requests)
       const refreshPendingApprovals = async () => {
@@ -328,12 +368,19 @@ export default function DashboardPage() {
       refreshLeaveBalance();
       refreshOnDutyPending();
       refreshMonthlyMetrics();
+      refreshOnLeaveData();
 
-      window.addEventListener('jaago_leave_request_updated', refreshPendingApprovals);
-      window.addEventListener('jaago_leave_request_updated', () => refreshLeaveBalance());
+      handleLeaveUpdate = () => {
+        refreshPendingApprovals();
+        refreshLeaveBalance();
+        refreshOnLeaveData();
+      };
+
+      window.addEventListener('jaago_leave_request_updated', handleLeaveUpdate);
       window.addEventListener('jaago_leave_allocation_updated', () => refreshLeaveBalance());
       window.addEventListener('jaago_employees_updated', () => refreshLeaveBalance());
-      window.addEventListener('jaago_onduty_request_updated', refreshOnDutyPending);
+      window.addEventListener('jaago_onduty_request_updated', handleOnDutyUpdate);
+      window.addEventListener('jaago_onduty_updated', handleOnDutyUpdate);
       window.addEventListener('jaago_attendance_updated', refreshMonthlyMetrics);
       window.addEventListener('jaago_attendance_regularization_updated', refreshMonthlyMetrics);
 
@@ -492,6 +539,7 @@ export default function DashboardPage() {
             employeeCode: emp.code || '',
           });
           refreshCanonicalAttendance(emp.id || emp.code || '');
+          refreshOnDutyPending(emp.code, emp.id);
         }
       });
       refreshMonthlyMetrics();
@@ -512,8 +560,11 @@ export default function DashboardPage() {
       window.removeEventListener('jaago_view_mode_change', handleViewModeChange);
       window.removeEventListener('jaago_user_updated', handleUserUpdated);
       window.removeEventListener('jaago_public_holidays_updated', handleHolidaysUpdate);
+      window.removeEventListener('jaago_onduty_request_updated', handleOnDutyUpdate);
+      window.removeEventListener('jaago_onduty_updated', handleOnDutyUpdate);
       window.removeEventListener('jaago_attendance_updated', refreshMonthlyMetrics);
       window.removeEventListener('jaago_attendance_regularization_updated', refreshMonthlyMetrics);
+      window.removeEventListener('jaago_leave_request_updated', handleLeaveUpdate);
       window.removeEventListener('focus', handleStorageRefresh);
       window.removeEventListener('storage', handleStorageRefresh);
       clearInterval(autoPollInterval);
@@ -1317,6 +1368,27 @@ export default function DashboardPage() {
     }
   };
 
+  // Strictly Approved Leaves from People & Culture Time Off
+  const todayStrForLeave = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Dhaka',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+  const todayOnLeave = approvedLeaves.filter((r) => {
+    const from = r.fromDate || '';
+    const to = r.toDate || from;
+    return from <= todayStrForLeave && todayStrForLeave <= to;
+  });
+
+  const upcomingApprovedLeaves = approvedLeaves
+    .filter((r) => {
+      const to = r.toDate || r.fromDate || '';
+      return to >= todayStrForLeave;
+    })
+    .sort((a, b) => (a.fromDate || '').localeCompare(b.fromDate || ''));
+
   return (
     <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none relative">
       {/* ── FLOATING DASHBOARD TOAST NOTIFICATION ── */}
@@ -1348,37 +1420,40 @@ export default function DashboardPage() {
         } space-y-4 pt-1`}
       >
         {/* User Greeting Header */}
-        <div className="flex items-center space-x-4 px-1">
-          <div className="h-16 w-16 rounded-2xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-md flex-shrink-0 relative">
-            {mounted && user.avatarUrl && !imgError ? (
-              <img
-                src={user.avatarUrl}
-                alt={user.fullName}
-                onError={() => setImgError(true)}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="text-primary font-black text-lg">
-                {user.fullName
-                  ? user.fullName
-                      .split(' ')
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((n: string) => n[0])
-                      .join('')
-                      .toUpperCase()
-                  : ''}
-              </span>
-            )}
+        <div className="flex items-center space-x-3.5 px-1">
+          <div className="relative flex-shrink-0">
+            <div className="h-16 w-16 aspect-square rounded-[16px] border-2 border-amber-400/90 bg-card overflow-hidden flex items-center justify-center shadow-md relative p-0.5 group">
+              {mounted && user.avatarUrl && !imgError ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.fullName}
+                  onError={() => setImgError(true)}
+                  className="h-full w-full object-cover object-top rounded-[13px] transition-transform duration-300 group-hover:scale-105"
+                />
+              ) : (
+                <span className="text-amber-400 font-serif font-black text-xl">
+                  {user.fullName
+                    ? user.fullName
+                        .split(' ')
+                        .filter(Boolean)
+                        .slice(0, 2)
+                        .map((n: string) => n[0])
+                        .join('')
+                        .toUpperCase()
+                    : 'NK'}
+                </span>
+              )}
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-card shadow-sm animate-pulse" />
           </div>
           <div className="space-y-0.5 min-w-0">
             <h1 className="text-xl font-black tracking-tight text-foreground truncate min-h-[28px]">
               {firstName ? `Hi, ${firstName}!` : 'Hi!'}
             </h1>
             <p className="text-xs font-semibold text-muted-foreground truncate min-h-[16px]">
-              {user.jobTitle && user.organization
-                ? `${user.jobTitle} • ${user.organization}`
-                : user.jobTitle || user.organization || ''}
+              {user.jobTitle && (user.department || user.organization)
+                ? `${user.jobTitle} • ${user.department || user.organization}`
+                : user.jobTitle || user.department || user.organization || ''}
             </p>
           </div>
         </div>
@@ -1386,7 +1461,7 @@ export default function DashboardPage() {
         <div className="h-px bg-border/60 my-2" />
 
         {/* ── CARD 1: LIVE STATUS TIMER ── */}
-        <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md text-center space-y-2 relative overflow-hidden">
+        <div className="p-6 rounded-3xl bg-card border border-border/80 card-edge-amber shadow-md text-center space-y-2 relative overflow-hidden">
           {/* Header Lightning Bolt */}
           <div className="flex items-center justify-center space-x-1.5 text-xs font-black uppercase text-amber-500 tracking-wider">
             <Zap className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
@@ -1482,7 +1557,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── CARD 3: MONTHLY ATTENDANCE SUMMARY ── */}
-        <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-5">
+        <div className="p-6 rounded-3xl bg-card border border-border/80 card-edge-teal shadow-md space-y-5">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">
@@ -1710,6 +1785,121 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* ── CARD 5: ON LEAVE TODAY (MOBILE) ── */}
+        <div className="p-6 rounded-3xl bg-card border border-border/80 card-edge-indigo shadow-md space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-xs font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">
+              <UserCheck className="h-4 w-4" />
+              <span>ON LEAVE TODAY</span>
+            </div>
+            <span
+              className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                todayOnLeave.length > 0
+                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                  : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30'
+              }`}
+            >
+              {todayOnLeave.length > 0 ? `${todayOnLeave.length} Active` : '0 Today'}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {todayOnLeave.length > 0 ? (
+              todayOnLeave.map((item, idx) => (
+                <div
+                  key={`mob-onleave-${item.id || item.employeeCode}-${idx}`}
+                  className="p-3 rounded-2xl bg-surface/70 border border-border/70 flex items-center justify-between gap-2.5"
+                >
+                  <div className="flex items-center space-x-2.5 min-w-0">
+                    <div className="h-8 w-8 rounded-lg bg-card border border-border flex items-center justify-center flex-shrink-0 shadow-xs font-bold text-xs text-primary">
+                      {item.employeeName
+                        ? item.employeeName
+                            .split(' ')
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .map((n: string) => n[0])
+                            .join('')
+                            .toUpperCase()
+                        : 'OL'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-foreground truncate">{item.employeeName}</div>
+                      <div className="text-[10px] text-muted-foreground font-medium flex items-center space-x-1.5 truncate">
+                        <span className="text-amber-600 dark:text-amber-400 font-bold">{item.leaveType}</span>
+                        <span>&bull;</span>
+                        <span>{item.halfDayType && item.halfDayType !== 'Full Day' ? item.halfDayType : 'Full Day'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-1.5 flex-shrink-0">
+                    <span className="text-[9.5px] font-bold text-muted-foreground bg-card border border-border px-1.5 py-0.5 rounded-md">
+                      {item.totalDays}d
+                    </span>
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  </div>
+                </div>
+              ))
+            ) : upcomingApprovedLeaves.length > 0 ? (
+              <div className="space-y-2">
+                <div className="p-2.5 rounded-xl bg-surface/50 border border-border/50 text-center">
+                  <div className="text-xs font-bold text-foreground">Nobody on leave today</div>
+                  <div className="text-[10px] text-muted-foreground pt-0.5">All team members are active</div>
+                </div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-muted-foreground pt-0.5">
+                  Upcoming Approved
+                </div>
+                {upcomingApprovedLeaves.slice(0, 2).map((item, idx) => (
+                  <div
+                    key={`mob-up-onleave-${item.id || item.employeeCode}-${idx}`}
+                    className="p-3 rounded-2xl bg-surface/70 border border-border/70 flex items-center justify-between gap-2.5"
+                  >
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <div className="h-8 w-8 rounded-lg bg-card border border-border flex items-center justify-center flex-shrink-0 shadow-xs font-bold text-xs text-primary">
+                        {item.employeeName
+                          ? item.employeeName
+                              .split(' ')
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((n: string) => n[0])
+                              .join('')
+                              .toUpperCase()
+                          : 'OL'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-foreground truncate">{item.employeeName}</div>
+                        <div className="text-[10px] text-muted-foreground font-medium flex items-center space-x-1.5 truncate">
+                          <span className="text-amber-600 dark:text-amber-400 font-bold">{item.leaveType}</span>
+                          <span>&bull;</span>
+                          <span>{formatDisplayDate(item.fromDate)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1.5 flex-shrink-0">
+                      <span className="text-[9.5px] font-bold text-muted-foreground bg-card border border-border px-1.5 py-0.5 rounded-md">
+                        {item.totalDays}d
+                      </span>
+                      <span className="h-2 w-2 rounded-full bg-blue-500" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-xs text-muted-foreground">
+                No staff members currently on leave.
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 flex items-center justify-end border-t border-border/50 text-xs">
+            <Link
+              href="/organization/on-leave"
+              className="font-semibold text-muted-foreground hover:text-foreground"
+            >
+              Calendar &rarr;
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -1718,23 +1908,23 @@ export default function DashboardPage() {
       <div
         className={`${
           viewMode === 'desktop' ? 'block' : viewMode === 'mobile' ? 'hidden' : 'hidden md:block'
-        } space-y-5`}
+        } space-y-4`}
       >
-        {/* ── 1. USER PROFILE HERO CARD ── */}
-        <div className="p-6 sm:p-7 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 relative">
-          <div className="flex items-center space-x-6">
-            {/* Avatar inside Yellow Border Card with Green Online Dot (ENLARGED) */}
+        {/* ── 1. USER PROFILE HERO CARD (Dark Blue Banner - iOS 3D View Compact Card) ── */}
+        <div className="ios-3d-card dashboard-hero-card p-3 px-4 sm:p-3.5 sm:px-5 rounded-[18px] sm:rounded-[20px] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 relative overflow-hidden">
+          <div className="flex items-center space-x-3.5 sm:space-x-4 min-w-0">
+            {/* Avatar inside Yellow Border Card with Green Online Dot (Auto-adjusting whole-block system) */}
             <div className="relative flex-shrink-0">
-              <div className="h-28 w-28 sm:h-32 sm:w-32 rounded-3xl border-2 border-primary bg-primary/10 overflow-hidden flex items-center justify-center shadow-lg relative p-0.5">
+              <div className="h-16 w-16 sm:h-18 sm:w-18 md:h-20 md:w-20 aspect-square rounded-[16px] sm:rounded-[18px] border-2 border-amber-400/90 bg-card overflow-hidden flex items-center justify-center shadow-md relative p-0.5 group">
                 {mounted && user.avatarUrl && !imgError ? (
                   <img
                     src={user.avatarUrl}
                     alt={user.fullName}
                     onError={() => setImgError(true)}
-                    className="h-full w-full object-cover rounded-[22px]"
+                    className="h-full w-full object-cover object-top rounded-[13px] sm:rounded-[15px] transition-transform duration-300 group-hover:scale-105 select-none"
                   />
                 ) : (
-                  <div className="h-full w-full bg-gradient-to-br from-amber-400/20 via-primary/30 to-amber-600/30 rounded-[22px] flex items-center justify-center text-primary font-black text-3xl sm:text-4xl">
+                  <div className="h-full w-full rounded-[13px] sm:rounded-[15px] bg-gradient-to-br from-amber-400/20 via-amber-400/30 to-amber-600/20 flex items-center justify-center text-amber-400 font-serif font-black text-xl sm:text-2xl select-none">
                     {user.fullName
                       ? user.fullName
                           .split(' ')
@@ -1743,92 +1933,95 @@ export default function DashboardPage() {
                           .map((n: string) => n[0])
                           .join('')
                           .toUpperCase()
-                      : ''}
+                      : 'NK'}
                   </div>
                 )}
               </div>
               {/* Online Green Indicator Dot */}
-              <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 border-2 border-card shadow-md animate-pulse" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-full bg-emerald-500 border-2 border-card shadow-sm ring-2 ring-emerald-500/20 animate-pulse" />
             </div>
 
             {/* User Credentials & Metadata */}
-            <div className="space-y-1 min-w-[240px]">
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground min-h-[36px]">
+            <div className="space-y-0.5 min-w-0">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-black font-serif tracking-tight text-white leading-tight">
                 {user.fullName || ''}
               </h1>
-              <div className="text-sm font-semibold text-muted-foreground min-h-[20px]">
+              <div className="text-xs sm:text-[13px] font-medium text-slate-300 leading-snug">
                 {user.jobTitle || ''}
               </div>
               {user.organization ? (
-                <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-500 pt-0.5">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-400 pt-0.5">
                   <Building2 className="h-3.5 w-3.5" />
-                  <span>{user.organization}</span>
+                  <span className="truncate">{user.organization}</span>
                 </div>
               ) : null}
-              <div className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground pt-0.5 min-h-[20px]">
-                {user.department ? (
-                  <div className="flex items-center space-x-1">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground/80" />
-                    <span>{user.department}</span>
-                  </div>
-                ) : null}
+              <div className="flex items-center space-x-2 text-[11px] text-slate-400 pt-0.5">
+                <span className="flex items-center space-x-1">
+                  <MapPin className="h-3 w-3 text-slate-500" />
+                  <span>{user.department || "Founder's Office JFT"}</span>
+                </span>
                 {user.manager ? (
-                  <div className="flex items-center space-x-1">
-                    <Briefcase className="h-3.5 w-3.5 text-muted-foreground/80" />
-                    <span>Manager: {user.manager}</span>
-                  </div>
+                  <>
+                    <span>&bull;</span>
+                    <span className="flex items-center space-x-1">
+                      <Briefcase className="h-3 w-3 text-slate-500" />
+                      <span>Supervisor: {user.manager}</span>
+                    </span>
+                  </>
                 ) : null}
               </div>
             </div>
           </div>
 
-          {/* Right-Side Attendance Radar & Check-In / Check-Out Capsule Boxes */}
-          <div className="flex flex-col items-end space-y-1.5 w-full xl:w-auto">
-            <div className="flex items-center space-x-3.5 w-full xl:w-auto justify-end">
-              {/* Radar Pulse Capsule */}
-              <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-500 shadow-sm flex-shrink-0">
-                <Radio className={`h-5 w-5 ${isPunching ? 'animate-spin text-amber-500' : 'animate-pulse'}`} />
-              </div>
+          {/* Right Section: Attendance Action & GPS Live Badge */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 w-full md:w-auto justify-end">
+            {/* Live GPS Active Beacon */}
+            <div
+              title="GPS Live: In Geofence"
+              className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-xs flex-shrink-0"
+            >
+              <Radio className="h-4 w-4 animate-pulse text-emerald-400" />
+            </div>
 
-              {/* Check In Box - Read-only when actively checked in, active/clickable when not checked in or checked out */}
+            {/* Attendance Check In / Out Buttons Container */}
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              {/* Check In Box */}
               <button
                 onClick={isCheckedIn ? undefined : handleCheckInAction}
                 disabled={isPunching || isCheckedIn}
                 aria-disabled={isPunching || isCheckedIn}
                 title={isCheckedIn ? `Checked in at ${checkInTime}. Working hours are running.` : hasCheckedInToday ? `First Check-in recorded at ${checkInTime}. Click to re-check in.` : 'Click to check in'}
-                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
+                className={`hero-checkin-btn px-3.5 py-2 rounded-xl border transition-all duration-200 text-left flex items-center space-x-2 shadow-xs ${
                   isCheckedIn
-                    ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-800/80 dark:text-emerald-300/80 cursor-default opacity-65 backdrop-blur-[2px] saturate-[0.85] select-none shadow-none'
-                    : 'bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/35 border-emerald-600/30 dark:border-emerald-500/30 text-emerald-950 dark:text-emerald-100 hover:border-emerald-600/60 dark:hover:border-emerald-400/60 cursor-pointer shadow-sm active:scale-[0.98]'
+                    ? 'hero-checkin-recorded bg-amber-400/15 border-amber-400/25 text-amber-300 cursor-default opacity-85 backdrop-blur-[2px] select-none shadow-none'
+                    : 'bg-[#DAF6EA] hover:bg-[#C8F1E1] border-emerald-400/50 text-emerald-950 dark:bg-[#103828] dark:hover:bg-[#144833] dark:border-emerald-500/35 dark:text-emerald-300 cursor-pointer shadow-sm active:scale-[0.98]'
                 }`}
               >
-                <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  isCheckedIn
-                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-emerald-500/20 dark:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                <div className={`hero-btn-icon-box h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  isCheckedIn ? 'bg-amber-400/20 text-amber-300' : 'bg-emerald-600/15 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-400'
                 }`}>
                   {hasCheckedInToday ? (
-                    <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                    <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />
                   ) : (
-                    <Clock className="h-4 w-4 stroke-[2.2]" />
+                    <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
                   )}
                 </div>
                 <div>
-                  <div className={`text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1 ${
-                    isCheckedIn ? 'text-emerald-700 dark:text-emerald-400' : 'text-emerald-700/90 dark:text-emerald-300/90'
+                  <div className={`hero-btn-title text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 ${
+                    isCheckedIn ? 'text-amber-300' : 'text-emerald-800 dark:text-emerald-400'
                   }`}>
                     <span>CHECK IN</span>
-                    {hasCheckedInToday && <span className="text-[8px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold">&bull; RECORDED</span>}
+                    {hasCheckedInToday && <span className="text-[7.5px] px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 font-bold">&bull; RECORDED</span>}
                   </div>
-                  <div className={`text-xs font-black font-mono ${
-                    isCheckedIn ? 'text-emerald-900 dark:text-emerald-200' : 'text-emerald-950 dark:text-emerald-100'
+                  <div className={`hero-btn-time text-xs font-black font-mono leading-none pt-0.5 ${
+                    isCheckedIn ? 'text-amber-200' : 'text-emerald-950 dark:text-emerald-300'
                   }`}>
-                    {checkInTime || '--:--'}
+                    {checkInTime || '-- : -- : --'}
                   </div>
                 </div>
               </button>
 
-              {/* Check Out Box - Active when actively checked in, Read-only when already checked out, Disabled when day not started */}
+              {/* Check Out Box */}
               <button
                 onClick={isCheckedIn ? handleCheckOutAction : undefined}
                 disabled={isPunching || !isCheckedIn}
@@ -1840,46 +2033,28 @@ export default function DashboardPage() {
                     ? `Checked out at ${checkOutTime}`
                     : 'Cannot check out before checking in'
                 }
-                className={`px-4 py-2.5 rounded-2xl border transition-all duration-200 text-left flex items-center space-x-3 shadow-xs ${
+                className={`px-3.5 py-2 rounded-xl border transition-all duration-200 text-left flex items-center space-x-2 shadow-xs ${
                   !hasCheckedInToday
-                    ? 'opacity-35 grayscale cursor-not-allowed bg-surface/50 border-border text-muted-foreground'
+                    ? 'hero-checkout-waiting'
                     : !isCheckedIn && hasCheckedOutToday
-                    ? 'bg-rose-500/10 border-rose-500/25 text-rose-800/80 dark:text-rose-300/80 cursor-default opacity-65 backdrop-blur-[2px] saturate-[0.85] select-none shadow-none'
-                    : 'bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/35 border-rose-600/30 dark:border-rose-500/30 text-rose-950 dark:text-rose-100 hover:border-rose-600/60 dark:hover:border-rose-400/60 cursor-pointer shadow-sm active:scale-[0.98]'
+                    ? 'hero-checkout-recorded'
+                    : 'hero-checkout-active active:scale-[0.98]'
                 }`}
               >
-                <div className={`h-8 w-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  !hasCheckedInToday
-                    ? 'bg-muted text-muted-foreground'
-                    : !isCheckedIn && hasCheckedOutToday
-                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
-                    : 'bg-rose-500/20 dark:bg-rose-500/25 text-rose-700 dark:text-rose-300'
-                }`}>
+                <div className="hero-btn-icon-box h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0">
                   {hasCheckedOutToday ? (
-                    <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                    <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />
                   ) : (
-                    <Flag className="h-4 w-4 stroke-[2.2]" />
+                    <Flag className="h-3.5 w-3.5 stroke-[2.2]" />
                   )}
                 </div>
                 <div>
-                  <div className={`text-[10px] font-extrabold uppercase tracking-wider flex items-center space-x-1 ${
-                    !hasCheckedInToday
-                      ? 'text-muted-foreground'
-                      : !isCheckedIn && hasCheckedOutToday
-                      ? 'text-rose-700 dark:text-rose-400'
-                      : 'text-rose-700/90 dark:text-rose-300/90'
-                  }`}>
+                  <div className="hero-btn-title text-[9px] font-black uppercase tracking-wider flex items-center space-x-1">
                     <span>CHECK OUT</span>
-                    {hasCheckedOutToday && <span className="text-[8px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-700 dark:text-rose-300 font-bold">&bull; RECORDED</span>}
+                    {hasCheckedOutToday && <span className="text-[7.5px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-200 font-bold">&bull; RECORDED</span>}
                   </div>
-                  <div className={`text-xs font-black font-mono ${
-                    !hasCheckedInToday
-                      ? 'text-muted-foreground'
-                      : !isCheckedIn && hasCheckedOutToday
-                      ? 'text-rose-900 dark:text-rose-200'
-                      : 'text-rose-950 dark:text-rose-100'
-                  }`}>
-                    {hasCheckedInToday && hasCheckedOutToday ? (checkOutTime || '--:--') : '--:--'}
+                  <div className="hero-btn-time text-xs font-black font-mono leading-none pt-0.5">
+                    {hasCheckedInToday && hasCheckedOutToday ? (checkOutTime || '-- : -- : --') : '-- : -- : --'}
                   </div>
                 </div>
               </button>
@@ -1929,78 +2104,92 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── 2. ROW OF 4 METRIC KPI CARDS ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-          {/* Card 1: Working Hours Today */}
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between">
+        {/* ── 2. ROW OF 4 METRIC KPI CARDS (iOS 3D View Compact Cards with Distinct Left-Edge Colors) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5 sm:gap-4">
+          {/* Card 1: Working Hours Today (Amber Edge) */}
+          <div className="ios-3d-card card-edge-amber p-4 sm:p-4.5 rounded-[20px] space-y-2 flex flex-col justify-between">
             <div className="flex items-center justify-between">
-              <Clock className="h-5 w-5 text-amber-500" />
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground">
+              <div className="h-9 w-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/25 flex-shrink-0">
+                <Clock className="h-4 w-4 stroke-[2.5]" />
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 shadow-xs">
                 Target: 8.0h
               </span>
             </div>
             <div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground">
-                  Working Hours Today
+                <span className="text-[11px] sm:text-xs font-semibold text-muted-foreground">
+                  Working hours today
                 </span>
                 {isCheckedIn && (
-                  <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  <span className="inline-flex items-center space-x-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
                     <span>Live</span>
                   </span>
                 )}
               </div>
               <div
-                className="text-3xl sm:text-4xl lg:text-[38px] font-black font-mono tracking-tight text-foreground pt-1.5"
+                className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-foreground pt-1"
                 aria-live="polite"
               >
                 {formatTime(displaySeconds)}
               </div>
             </div>
-            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50">
-              Schedule: {user.workingSchedule}
+            <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-2 border-t border-dashed border-border/70">
+              Schedule — {user.workingSchedule}
             </div>
           </div>
 
-          {/* Card 2: On Duty Status */}
+          {/* Card 2: On Duty Status (Emerald Edge) */}
           <Link
             href="/on-duty"
-            className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between hover:border-amber-500/50 transition cursor-pointer group"
+            className="ios-3d-card ios-3d-card-interactive card-edge-emerald p-4 sm:p-4.5 rounded-[20px] space-y-2 flex flex-col justify-between hover:border-emerald-500/50 group"
           >
             <div className="flex items-center justify-between">
-              <Timer className="h-5 w-5 text-amber-500 group-hover:scale-110 transition" />
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground group-hover:border-amber-500/30">
-                Recent Request
+              <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/25 group-hover:scale-105 transition flex-shrink-0">
+                <Timer className="h-4 w-4 stroke-[2.5]" />
+              </div>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition shadow-xs ${
+                  onDutyPendingCount > 0
+                    ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                    : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
+                {onDutyPendingCount > 0 ? 'Pending Review' : 'Up to date'}
               </span>
             </div>
             <div>
-              <div className="text-xs font-semibold text-muted-foreground group-hover:text-foreground transition">
-                On Duty Status
+              <div className="text-[11px] sm:text-xs font-semibold text-muted-foreground group-hover:text-foreground transition">
+                On-duty status
               </div>
-              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1">
-                {onDutyPendingCount} Pending
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-foreground pt-1 font-mono">
+                {onDutyPendingCount} <span className="text-base font-bold text-muted-foreground font-sans">Pending</span>
               </div>
             </div>
-            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 flex items-center justify-between">
-              <span>Awaiting supervisor verification</span>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:translate-x-1 transition flex-shrink-0 ml-1" />
+            <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-2 border-t border-dashed border-border/70 flex items-center justify-between">
+              <span className="truncate">
+                {onDutyPendingCount > 0
+                  ? 'Awaiting supervisor verification'
+                  : 'No requests awaiting verification'}
+              </span>
+              <ChevronRight className="h-3 w-3 text-muted-foreground group-hover:translate-x-1 transition flex-shrink-0 ml-1" />
             </div>
           </Link>
 
-          {/* Card 3: Available Time Off */}
+          {/* Card 3: Available Time Off (Blue Edge) */}
           <Link
             href="/leaves"
-            className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between hover:border-blue-500/50 transition cursor-pointer group"
+            className="ios-3d-card ios-3d-card-interactive card-edge-blue p-4 sm:p-4.5 rounded-[20px] space-y-2 flex flex-col justify-between hover:border-blue-500/50 group"
           >
             <div className="flex items-center justify-between">
-              <div className="h-8 w-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-500 group-hover:scale-110 transition">
-                <Calendar className="h-4 w-4" />
+              <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-md shadow-blue-600/25 group-hover:scale-105 transition flex-shrink-0">
+                <Calendar className="h-4 w-4 stroke-[2.5]" />
               </div>
               <span
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition ${
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition shadow-xs ${
                   leaveBalance.totalAvailable > 0
-                    ? 'bg-blue-500/10 border-blue-500/20 text-blue-500 group-hover:bg-blue-500/20'
+                    ? 'bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400'
                     : 'bg-destructive/10 border-destructive/20 text-destructive'
                 }`}
               >
@@ -2008,115 +2197,105 @@ export default function DashboardPage() {
               </span>
             </div>
             <div>
-              <div className="text-xs font-semibold text-muted-foreground group-hover:text-foreground transition">
+              <div className="text-[11px] sm:text-xs font-semibold text-muted-foreground group-hover:text-foreground transition">
                 Available Time Off
               </div>
-              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1 flex items-baseline space-x-1.5">
-                <span>{leaveBalance.totalAvailable}</span>
-                <span className="text-lg font-bold text-muted-foreground">Days</span>
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-foreground pt-1 flex items-baseline space-x-1">
+                <span className="font-mono">{leaveBalance.totalAvailable}</span>
+                <span className="text-sm font-bold text-muted-foreground font-sans">Days</span>
               </div>
             </div>
-            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 flex items-center justify-between">
-              <span className="truncate">Annual &bull; Casual &bull; Sick Leave Pool</span>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:translate-x-1 transition flex-shrink-0 ml-1" />
+            <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-2 border-t border-dashed border-border/70 flex items-center justify-between">
+              <span className="truncate">Your Leave Balance</span>
+              <ChevronRight className="h-3 w-3 text-muted-foreground group-hover:translate-x-1 transition flex-shrink-0 ml-1" />
             </div>
           </Link>
 
-          {/* Card 4: Active Approvals */}
+          {/* Card 4: Active Approvals (Rose Edge) */}
           <Link
             href="/workflows"
-            className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-3 flex flex-col justify-between hover:border-emerald-500/50 transition cursor-pointer group"
+            className="ios-3d-card ios-3d-card-interactive card-edge-rose p-4 sm:p-4.5 rounded-[20px] space-y-2 flex flex-col justify-between hover:border-rose-500/50 group"
           >
             <div className="flex items-center justify-between">
-              <div className="h-8 w-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 group-hover:scale-110 transition">
-                <CheckCircle2 className="h-4 w-4" />
+              <div className="h-9 w-9 rounded-xl bg-rose-500 text-white flex items-center justify-center shadow-md shadow-rose-500/25 group-hover:scale-105 transition flex-shrink-0">
+                <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
               </div>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-surface border border-border text-muted-foreground group-hover:border-emerald-500/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 shadow-xs">
                 Action required
               </span>
             </div>
             <div>
-              <div className="text-xs font-semibold text-muted-foreground">
+              <div className="text-[11px] sm:text-xs font-semibold text-muted-foreground">
                 Active Approvals
               </div>
-              <div className="text-3xl sm:text-4xl font-extrabold tracking-tight text-foreground pt-1 font-mono text-emerald-500">
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-rose-500 dark:text-rose-400 pt-1 font-mono">
                 {pendingApprovalsCount}
               </div>
             </div>
-            <div className="text-[11px] text-muted-foreground pt-1 border-t border-border/50 flex items-center justify-between">
+            <div className="text-[10px] sm:text-[11px] text-muted-foreground pt-2 border-t border-dashed border-border/70 flex items-center justify-between">
               <span>Leave &amp; Workflow Requests</span>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground group-hover:translate-x-1 transition" />
+              <ChevronRight className="h-3 w-3 text-muted-foreground group-hover:translate-x-1 transition" />
             </div>
           </Link>
         </div>
 
-        {/* ── 3. LOWER 3-COLUMN SECTION (Strictly from Image) ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-stretch">
-          {/* ── COLUMN 1: MONTHLY ATTENDANCE SUMMARY ── */}
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md space-y-5 flex flex-col justify-between">
+        {/* ── 3. LOWER 4-COLUMN SECTION (iOS 3D View Compact Cards) ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-3.5 items-stretch">
+          {/* ── COLUMN 1: ATTENDANCE SUMMARY (Teal Edge) ── */}
+          <div className="ios-3d-card card-edge-teal p-3 sm:p-3.5 rounded-[18px] space-y-2 flex flex-col justify-between">
             {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2.5 text-foreground">
-                <div className="h-5 w-5 rounded-full border border-emerald-500/40 text-emerald-500 flex items-center justify-center flex-shrink-0">
-                  <Clock className="h-3 w-3" />
+            <div className="flex items-center justify-between gap-1.5 min-w-0">
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <div className="h-6 w-6 rounded-lg bg-teal-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs shadow-teal-500/25">
+                  <BarChart2 className="h-3 w-3 stroke-[2.5]" />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-base font-bold text-foreground leading-tight">Monthly Attendance</span>
-                  <span className="text-base font-bold text-foreground leading-tight">Summary</span>
-                </div>
+                <span className="text-xs font-bold text-foreground whitespace-nowrap">
+                  Attendance Summary
+                </span>
               </div>
               {monthlyMetrics.onTimePerformancePct >= 90 && monthlyMetrics.lateDays === 0 ? (
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase text-emerald-500 bg-emerald-500/10 border border-emerald-500/30">
+                <span className="px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 shadow-xs flex-shrink-0">
                   EXCELLENT
                 </span>
               ) : monthlyMetrics.onTimePerformancePct >= 75 ? (
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase text-emerald-500 bg-emerald-500/10 border border-emerald-500/30">
-                  GOOD STANDING
+                <span className="px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 shadow-xs flex-shrink-0">
+                  GOOD
                 </span>
               ) : (
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase text-rose-500 bg-rose-500/10 border border-rose-400/30">
-                  NEEDS IMPROVEMENT
+                <span className="px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase text-rose-500 bg-rose-500/10 border border-rose-400/30 shadow-xs flex-shrink-0">
+                  REVIEW
                 </span>
               )}
             </div>
 
             {/* 3-Column Top Stats */}
-            <div className="grid grid-cols-3 gap-2 text-left">
+            <div className="grid grid-cols-3 gap-1.5 text-left py-0.5">
               <div>
-                <div className="text-[11px] font-semibold text-muted-foreground">Working Days</div>
-                <div className="text-lg font-extrabold text-foreground pt-1">
+                <div className="text-[10px] font-semibold text-muted-foreground truncate">Working Days</div>
+                <div className="text-sm sm:text-base font-black text-foreground leading-tight">
                   {monthlyMetrics.presentDays} / {monthlyMetrics.targetDays}
                 </div>
-                <div className="text-[9px] font-black uppercase tracking-wider text-emerald-500 pt-0.5">
-                  PRESENT / TARGET
-                </div>
               </div>
               <div>
-                <div className="text-[11px] font-semibold text-muted-foreground">Late Days</div>
-                <div className="text-lg font-extrabold text-rose-500 pt-1">{monthlyMetrics.lateDays}</div>
-                <div className="text-[9px] font-black uppercase tracking-wider text-rose-500 pt-0.5">
-                  LATE ENTRIES
-                </div>
+                <div className="text-[10px] font-semibold text-muted-foreground truncate">Late Days</div>
+                <div className="text-sm sm:text-base font-black text-rose-500 leading-tight">{monthlyMetrics.lateDays}</div>
               </div>
               <div>
-                <div className="text-[11px] font-semibold text-muted-foreground">Auto Check</div>
-                <div className="text-lg font-extrabold text-amber-500 pt-1">{monthlyMetrics.autoCheckouts}</div>
-                <div className="text-[9px] font-black uppercase tracking-wider text-amber-500 pt-0.5">
-                  AUTO CHECKOUTS
-                </div>
+                <div className="text-[10px] font-semibold text-muted-foreground truncate">Auto Check</div>
+                <div className="text-sm sm:text-base font-black text-amber-500 leading-tight">{monthlyMetrics.autoCheckouts}</div>
               </div>
             </div>
 
-            <div className="h-px bg-border/60" />
+            <div className="h-px bg-border/40" />
 
             {/* Horizontal Progress Bars */}
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-foreground">On-Time Performance</span>
+            <div className="space-y-1.5">
+              <div className="space-y-0.5">
+                <div className="flex items-center justify-between text-[10px] font-bold">
+                  <span className="text-foreground">On-Time</span>
                   <span className="text-emerald-500 font-black">{monthlyMetrics.onTimePerformancePct}%</span>
                 </div>
-                <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
+                <div className="h-1 w-full bg-surface rounded-full overflow-hidden border border-border/40">
                   <div
                     className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                     style={{ width: `${Math.min(100, Math.max(0, monthlyMetrics.onTimePerformancePct))}%` }}
@@ -2124,12 +2303,12 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-bold">
+              <div className="space-y-0.5">
+                <div className="flex items-center justify-between text-[10px] font-bold">
                   <span className="text-foreground">Late Penalty</span>
                   <span className="text-rose-500 font-black">{monthlyMetrics.latePenaltyPct}%</span>
                 </div>
-                <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
+                <div className="h-1 w-full bg-surface rounded-full overflow-hidden border border-border/40">
                   <div
                     className="h-full bg-rose-500 rounded-full transition-all duration-500"
                     style={{ width: `${Math.min(100, Math.max(0, monthlyMetrics.latePenaltyPct))}%` }}
@@ -2137,12 +2316,12 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-foreground">Auto Check–out Rate</span>
+              <div className="space-y-0.5">
+                <div className="flex items-center justify-between text-[10px] font-bold">
+                  <span className="text-foreground">Auto Check–out</span>
                   <span className="text-amber-500 font-black">{monthlyMetrics.autoCheckoutRatePct}%</span>
                 </div>
-                <div className="h-2 w-full bg-surface rounded-full overflow-hidden border border-border/40">
+                <div className="h-1 w-full bg-surface rounded-full overflow-hidden border border-border/40">
                   <div
                     className="h-full bg-amber-500 rounded-full transition-all duration-500"
                     style={{ width: `${Math.min(100, Math.max(0, monthlyMetrics.autoCheckoutRatePct))}%` }}
@@ -2151,17 +2330,17 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Smooth Daily Trend Line Chart (Desktop) */}
-            <div className="pt-2">
+            {/* Smooth Daily Trend Line Sparkline */}
+            <div>
               {(() => {
                 const trend = monthlyMetrics.dailyTrend || [];
-                const width = 400;
-                const height = 80;
-                const padX = 25;
+                const width = 360;
+                const height = 38;
+                const padX = 16;
                 const availW = width - 2 * padX;
                 const maxHours = Math.max(8, ...trend.map((t) => t.workedHours || 8));
-                const minY = 18;
-                const maxY = height - 20;
+                const minY = 6;
+                const maxY = height - 8;
 
                 const pts = trend.length > 0
                   ? trend.map((d, i) => {
@@ -2188,39 +2367,33 @@ export default function DashboardPage() {
                 const areaPath = `${linePath} L ${pts[pts.length - 1]!.x} ${height} L ${pts[0]!.x} ${height} Z`;
 
                 return (
-                  <div className="space-y-1.5">
-                    <div className="h-28 w-full relative">
+                  <div className="space-y-0.5">
+                    <div className="h-9 w-full relative">
                       <svg className="w-full h-full overflow-visible" viewBox={`0 0 ${width} ${height}`}>
                         <defs>
-                          <linearGradient id="desktopTrendGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#10B981" stopOpacity="0.30" />
+                          <linearGradient id="desktopTrendGradCompact" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#10B981" stopOpacity="0.25" />
                             <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
                           </linearGradient>
                         </defs>
-
-                        {/* Shaded Area Under Curve */}
-                        <path d={areaPath} fill="url(#desktopTrendGrad)" />
-
-                        {/* Curved Smooth Spline */}
-                        <path d={linePath} fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" />
-
-                        {/* Points on Curve */}
+                        <path d={areaPath} fill="url(#desktopTrendGradCompact)" />
+                        <path d={linePath} fill="none" stroke="#10B981" strokeWidth="2" strokeLinecap="round" />
                         {pts.map((p, idx) => (
                           <circle
                             key={`desk-trend-pt-${p.date || 'd'}-${idx}`}
                             cx={p.x}
                             cy={p.y}
-                            r="3.5"
+                            r="2.5"
                             fill={p.isLate ? '#EF4444' : '#10B981'}
                             stroke="var(--card)"
-                            strokeWidth="1.5"
+                            strokeWidth="1.2"
                           />
                         ))}
                       </svg>
                     </div>
 
                     {/* X-Axis Dates */}
-                    <div className="flex items-center justify-between text-[10px] font-semibold text-muted-foreground pt-1 px-1">
+                    <div className="flex items-center justify-between text-[8px] font-semibold text-muted-foreground px-0.5">
                       {pts.map((p, idx) => (
                         <span key={`desk-trend-lbl-${p.date || 'd'}-${idx}`}>{p.label}</span>
                       ))}
@@ -2230,20 +2403,20 @@ export default function DashboardPage() {
               })()}
             </div>
 
-            <div className="h-px bg-border/60" />
+            <div className="h-px bg-border/40" />
 
             {/* Bottom Row Summary */}
-            <div className="flex items-center justify-between text-xs font-bold">
+            <div className="flex items-center justify-between text-[10.5px] font-bold">
               <div className="text-foreground">
-                Avg Hours: <span className="text-blue-500 font-mono font-black">{monthlyMetrics.avgHoursPerDay}h</span>
+                Avg: <span className="text-blue-500 font-mono font-black">{monthlyMetrics.avgHoursPerDay}h</span>
               </div>
               <div className="text-foreground">
-                Total Worked: <span className="text-amber-500 font-mono font-black">{monthlyMetrics.totalWorkedHours}h</span>
+                Total: <span className="text-amber-500 font-mono font-black">{monthlyMetrics.totalWorkedHours}h</span>
               </div>
             </div>
           </div>
 
-          {/* ── COLUMN 2: UPCOMING HOLIDAYS ── */}
+          {/* ── COLUMN 2: UPCOMING HOLIDAYS (Sky Edge) ── */}
           {(() => {
             const todayStr = new Date().toISOString().split('T')[0]!;
             const now = new Date(todayStr).getTime();
@@ -2265,30 +2438,30 @@ export default function DashboardPage() {
             const upcomingList = applicableHolidays
               .filter((h) => (h.endDate || h.date) >= todayStr || h.date >= todayStr)
               .sort((a, b) => a.date.localeCompare(b.date))
-              .slice(0, 4);
+              .slice(0, 3);
 
             return (
-              <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col justify-between space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-xs font-black uppercase text-foreground tracking-wider">
-                    <Calendar className="h-4 w-4 text-blue-500" />
-                    <span>Upcoming Holidays</span>
-                  </div>
-                  {user.department && (
-                    <span className="text-[10px] font-bold text-muted-foreground truncate max-w-[140px]">
-                      {user.department}
+              <div className="ios-3d-card card-edge-sky p-3 sm:p-3.5 rounded-[18px] flex flex-col justify-between space-y-2">
+                {/* Header */}
+                <div className="flex items-center justify-between gap-1.5 min-w-0">
+                  <div className="flex items-center space-x-1.5 min-w-0">
+                    <div className="h-6 w-6 rounded-lg bg-sky-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs shadow-sky-500/25">
+                      <Calendar className="h-3 w-3 stroke-[2.5]" />
+                    </div>
+                    <span className="text-xs font-bold text-foreground whitespace-nowrap">
+                      Upcoming Holidays
                     </span>
-                  )}
+                  </div>
                 </div>
 
                 {/* Holiday Items */}
-                <div className="flex-1 space-y-2.5 overflow-y-auto max-h-[220px] no-scrollbar">
+                <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[145px] no-scrollbar">
                   {upcomingList.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center text-center py-10 space-y-2">
-                      <div className="h-10 w-10 rounded-2xl bg-surface border border-border flex items-center justify-center text-muted-foreground">
-                        <Calendar className="h-5 w-5" />
+                    <div className="flex flex-col items-center justify-center text-center py-4 space-y-1.5">
+                      <div className="h-7 w-7 rounded-lg bg-surface border border-border flex items-center justify-center text-muted-foreground shadow-xs">
+                        <Calendar className="h-3.5 w-3.5" />
                       </div>
-                      <p className="text-xs font-semibold text-muted-foreground">
+                      <p className="text-[11px] font-semibold text-muted-foreground">
                         No upcoming holidays found
                       </p>
                     </div>
@@ -2312,22 +2485,22 @@ export default function DashboardPage() {
                       return (
                         <div
                           key={`holiday-${h.id || h.date}-${idx}`}
-                          className="p-2.5 px-3 rounded-2xl bg-surface/60 border border-border/80 hover:border-border transition flex items-center justify-between gap-3 group shadow-sm"
+                          className="p-1.5 px-2 rounded-lg bg-surface/70 border border-border/70 hover:border-border transition flex items-center justify-between gap-2 group shadow-xs"
                         >
-                          <div className="flex items-center space-x-3 min-w-0">
-                            <div className="h-10 w-10 rounded-xl bg-card border border-border flex flex-col items-center justify-center flex-shrink-0 shadow-sm">
-                              <span className="text-[8px] font-black text-amber-500 uppercase tracking-tighter leading-none">
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <div className="h-7 w-7 rounded-md bg-card border border-border flex flex-col items-center justify-center flex-shrink-0 shadow-xs">
+                              <span className="text-[7px] font-black text-amber-500 uppercase tracking-tighter leading-none">
                                 {monthName}
                               </span>
-                              <span className="text-xs font-black text-foreground leading-tight mt-0.5">
+                              <span className="text-[11px] font-black text-foreground leading-tight">
                                 {dayNum}
                               </span>
                             </div>
                             <div className="min-w-0">
-                              <div className="text-xs font-extrabold text-foreground truncate group-hover:text-amber-500 transition">
+                              <div className="text-[11px] font-bold text-foreground truncate group-hover:text-amber-500 transition">
                                 {h.title}
                               </div>
-                              <div className="text-[10px] text-muted-foreground font-medium flex items-center space-x-1.5 truncate">
+                              <div className="text-[9px] text-muted-foreground font-medium flex items-center space-x-1 truncate">
                                 <span>{h.type}</span>
                                 {h.department && (
                                   <>
@@ -2335,21 +2508,15 @@ export default function DashboardPage() {
                                     <span className="text-amber-500 font-bold">{h.department}</span>
                                   </>
                                 )}
-                                {h.project && (
-                                  <>
-                                    <span>&bull;</span>
-                                    <span className="text-blue-400 font-bold">{h.project}</span>
-                                  </>
-                                )}
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center space-x-2 flex-shrink-0">
-                            <span className="text-[10px] font-bold text-muted-foreground bg-card border border-border px-2 py-0.5 rounded-lg">
+                          <div className="flex items-center space-x-1.5 flex-shrink-0">
+                            <span className="text-[9px] font-bold text-muted-foreground bg-card border border-border px-1 py-0.5 rounded">
                               {h.totalDays}d
                             </span>
-                            <span className={`h-2.5 w-2.5 rounded-full ${dotColor}`} />
+                            <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
                           </div>
                         </div>
                       );
@@ -2358,17 +2525,17 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Bottom Legend */}
-                <div className="flex items-center justify-start space-x-4 text-xs font-semibold text-muted-foreground pt-2 border-t border-border/60">
-                  <div className="flex items-center space-x-1.5">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <div className="flex items-center justify-start space-x-3 text-[9px] font-semibold text-muted-foreground pt-1 border-t border-border/40">
+                  <div className="flex items-center space-x-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     <span>This Week</span>
                   </div>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  <div className="flex items-center space-x-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                     <span>This Month</span>
                   </div>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="h-2 w-2 rounded-full bg-blue-500" />
+                  <div className="flex items-center space-x-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                     <span>Later</span>
                   </div>
                 </div>
@@ -2376,42 +2543,166 @@ export default function DashboardPage() {
             );
           })()}
 
-          {/* ── COLUMN 3: HR ANNOUNCEMENT BOARD ── */}
-          <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-md flex flex-col justify-between space-y-6">
+          {/* ── COLUMN 3: ON LEAVE TODAY (Indigo Edge) ── */}
+          <div className="ios-3d-card card-edge-indigo p-3 sm:p-3.5 rounded-[18px] flex flex-col justify-between space-y-2">
             {/* Header */}
-            <div className="flex items-center space-x-2.5">
-              <div className="h-8 w-8 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                <Zap className="h-4 w-4 fill-purple-400" />
+            <div className="flex items-center justify-between gap-1.5 min-w-0">
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <div className="h-6 w-6 rounded-lg bg-indigo-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs shadow-indigo-500/25">
+                  <UserCheck className="h-3 w-3 stroke-[2.5]" />
+                </div>
+                <span className="text-xs sm:text-sm font-bold text-foreground truncate whitespace-nowrap">
+                  On Leave
+                </span>
               </div>
-              <h3 className="text-xs font-black uppercase tracking-wider text-foreground">
-                HR Announcement Board
-              </h3>
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[8.5px] font-bold uppercase flex-shrink-0 ${
+                  todayOnLeave.length > 0
+                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                    : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30'
+                }`}
+              >
+                {todayOnLeave.length > 0 ? `${todayOnLeave.length} Today` : '0 Today'}
+              </span>
+            </div>
+
+            {/* List / Content */}
+            <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[145px] no-scrollbar">
+              {todayOnLeave.length > 0 ? (
+                todayOnLeave.map((item, idx) => (
+                  <div
+                    key={`today-onleave-${item.id || item.employeeCode}-${idx}`}
+                    className="p-1.5 px-2 rounded-lg bg-surface/70 border border-border/70 hover:border-border transition flex items-center justify-between gap-2 group shadow-xs"
+                  >
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <div className="h-7 w-7 rounded-md bg-card border border-border flex items-center justify-center flex-shrink-0 shadow-xs font-bold text-[10px] text-primary">
+                        {item.employeeName
+                          ? item.employeeName
+                              .split(' ')
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((n: string) => n[0])
+                              .join('')
+                              .toUpperCase()
+                          : 'OL'}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-bold text-foreground truncate group-hover:text-amber-500 transition">
+                          {item.employeeName}
+                        </div>
+                        <div className="text-[9px] text-muted-foreground font-medium flex items-center space-x-1 truncate">
+                          <span className="text-amber-600 dark:text-amber-400 font-bold">{item.leaveType}</span>
+                          <span>&bull;</span>
+                          <span>{item.halfDayType && item.halfDayType !== 'Full Day' ? item.halfDayType : 'Full Day'}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1 flex-shrink-0">
+                      <span className="text-[9px] font-bold text-muted-foreground bg-card border border-border px-1 py-0.5 rounded">
+                        {item.totalDays}d
+                      </span>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    </div>
+                  </div>
+                ))
+              ) : upcomingApprovedLeaves.length > 0 ? (
+                <div className="space-y-1.5">
+                  <div className="p-2 rounded-lg bg-surface/60 border border-border/60 text-center">
+                    <div className="text-[11px] font-bold text-foreground">Nobody on leave today</div>
+                    <div className="text-[9px] text-muted-foreground">All team members are active today</div>
+                  </div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground px-0.5">
+                    Upcoming Approved
+                  </div>
+                  {upcomingApprovedLeaves.slice(0, 2).map((item, idx) => (
+                    <div
+                      key={`upcoming-onleave-${item.id || item.employeeCode}-${idx}`}
+                      className="p-1.5 px-2 rounded-lg bg-surface/70 border border-border/70 hover:border-border transition flex items-center justify-between gap-2 group shadow-xs"
+                    >
+                      <div className="flex items-center space-x-2 min-w-0">
+                        <div className="h-7 w-7 rounded-md bg-card border border-border flex items-center justify-center flex-shrink-0 shadow-xs font-bold text-[10px] text-primary">
+                          {item.employeeName
+                            ? item.employeeName
+                                .split(' ')
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .map((n: string) => n[0])
+                                .join('')
+                                .toUpperCase()
+                            : 'OL'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-bold text-foreground truncate group-hover:text-amber-500 transition">
+                            {item.employeeName}
+                          </div>
+                          <div className="text-[9px] text-muted-foreground font-medium flex items-center space-x-1 truncate">
+                            <span className="text-amber-600 dark:text-amber-400 font-bold">{item.leaveType}</span>
+                            <span>&bull;</span>
+                            <span>{formatDisplayDate(item.fromDate)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-1 flex-shrink-0">
+                        <span className="text-[9px] font-bold text-muted-foreground bg-card border border-border px-1 py-0.5 rounded">
+                          {item.totalDays}d
+                        </span>
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center py-4 space-y-1.5">
+                  <div className="h-7 w-7 rounded-lg bg-surface border border-border flex items-center justify-center text-muted-foreground shadow-xs">
+                    <UserCheck className="h-3.5 w-3.5" />
+                  </div>
+                  <p className="text-[11px] font-semibold text-muted-foreground">
+                    No staff members on leave
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Links */}
+            <div className="pt-1 flex items-center justify-end border-t border-border/40 text-[10px]">
+              <Link
+                href="/organization/on-leave"
+                className="font-semibold text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                Calendar &rarr;
+              </Link>
+            </div>
+          </div>
+
+          {/* ── COLUMN 4: HR ANNOUNCEMENTS (Purple Edge) ── */}
+          <div className="ios-3d-card card-edge-purple p-3 sm:p-3.5 rounded-[18px] flex flex-col justify-between space-y-2">
+            {/* Header */}
+            <div className="flex items-center space-x-1.5 min-w-0">
+              <div className="h-6 w-6 rounded-lg bg-purple-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs shadow-purple-500/25">
+                <Zap className="h-3 w-3 fill-white stroke-none" />
+              </div>
+              <span className="text-xs sm:text-sm font-bold text-foreground truncate whitespace-nowrap">
+                HR Announcements
+              </span>
             </div>
 
             {/* Empty State / All Caught Up */}
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-12 space-y-3">
-              <div className="h-14 w-14 rounded-2xl bg-surface border border-border flex items-center justify-center text-muted-foreground">
-                <Inbox className="h-7 w-7 stroke-[1.5]" />
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-4 sm:py-5 space-y-1.5">
+              <div className="h-8 w-8 rounded-lg bg-surface border border-border flex items-center justify-center text-muted-foreground shadow-xs">
+                <Inbox className="h-4 w-4 stroke-[1.5]" />
               </div>
               <div>
-                <div className="text-sm font-bold text-foreground">All Caught Up!</div>
-                <div className="text-xs text-muted-foreground pt-0.5">
+                <div className="text-xs font-bold text-foreground">All Caught Up!</div>
+                <div className="text-[10px] text-muted-foreground pt-0.5">
                   No active announcements for your department.
                 </div>
               </div>
-            </div>
-
-            {/* Bottom Link */}
-            <div className="pt-3 text-center border-t border-border/60">
-              <button className="text-xs font-black uppercase tracking-wider text-purple-500 hover:text-purple-400 hover:underline transition">
-                EXPLORE ALL ARCHIVES
-              </button>
             </div>
           </div>
         </div>
 
         {/* ── 4. DEDICATED PERSONAL ATTENDANCE & ACTIVITY LOG SECTION (Active My Attendance View) ── */}
-        <div className="p-6 sm:p-7 rounded-3xl bg-card border border-border/80 shadow-md space-y-6">
+        <div className="ios-3d-card p-4 sm:p-5 rounded-[22px] space-y-4">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/60">
             <div className="flex items-center space-x-3">
@@ -2429,24 +2720,6 @@ export default function DashboardPage() {
                   Real-time check-in / check-out records, calculated working hours, and shift compliance for {user.fullName}
                 </p>
               </div>
-            </div>
-
-            {/* Direct Quick-links */}
-            <div className="flex items-center space-x-2">
-              <Link
-                href="/pnc/attendance/report"
-                className="px-3.5 py-2 rounded-xl bg-surface hover:bg-surface/80 border border-border text-xs font-bold text-foreground transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              >
-                <span>Attendance Report</span>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-              </Link>
-              <Link
-                href="/pnc/attendance/logs"
-                className="px-3.5 py-2 rounded-xl bg-primary/15 hover:bg-primary/25 border border-primary/30 text-xs font-bold text-primary transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
-              >
-                <span>Organization Logs</span>
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
             </div>
           </div>
 

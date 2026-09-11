@@ -26,7 +26,7 @@ async function testInvitePassword() {
     designation: 'Assistant Manager',
     department: 'Program Implementation',
     workEmail: 'nayeem.hossain@jaago.com.bd',
-    tempPassword: 'Jaago@2026!7X9K',
+    tempPassword: 'MockTempPass#2026!',
     loginUrl: 'https://hub.jaago.com.bd/login?email=nayeem.hossain%40jaago.com.bd',
   };
 
@@ -37,8 +37,8 @@ async function testInvitePassword() {
   console.log(`\nRendered Subject: ${subjectRendered}`);
 
   // Verify that tempPassword is in HTML and text
-  const passInHtml = bodyHtmlRendered.includes('Jaago@2026!7X9K');
-  const passInText = bodyTextRendered.includes('Jaago@2026!7X9K');
+  const passInHtml = bodyHtmlRendered.includes('MockTempPass#2026!');
+  const passInText = bodyTextRendered.includes('MockTempPass#2026!');
   const emailInHtml = bodyHtmlRendered.includes('nayeem.hossain@jaago.com.bd');
   const invitationInHtml = bodyHtmlRendered.includes('Account Invitation');
 

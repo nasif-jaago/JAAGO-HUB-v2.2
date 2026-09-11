@@ -316,191 +316,7 @@ export function computeOnDutyDurationPreview(
 // 3. INITIAL SEED DATA (Matching Screenshot & Test Cases)
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const INITIAL_ON_DUTY_REQUESTS: OnDutyRequestItem[] = [
-  {
-    id: 'od-101',
-    tenantId: 'jaago-main',
-    employeeId: 'emp-nasif',
-    employeeCode: 'FO032507061190',
-    employeeName: 'Nasif Kamal',
-    department: "Founder's Office / FC",
-    designation: 'Lead Architect & Systems Engineer',
-    supervisorId: 'emp-korvi',
-    supervisorName: 'Korvi Rakshand',
-    supervisorEmail: 'korvi@jaago.com.bd',
-    startAt: '2026-08-27T10:37:00+06:00',
-    endAt: '2026-08-27T18:37:00+06:00',
-    startDate: '2026-08-27',
-    endDate: '2026-08-27',
-    startTime: '10:37 AM',
-    endTime: '06:37 PM',
-    reason: 'test field inspection',
-    status: 'PENDING',
-    totalHours: 8.0,
-    creditedDays: 1.0,
-    submittedAt: '2026-08-27T10:35:00+06:00',
-    createdAt: '2026-08-27T10:35:00+06:00',
-    updatedAt: '2026-08-27T10:35:00+06:00',
-  },
-  {
-    id: 'od-102',
-    tenantId: 'jaago-main',
-    employeeId: 'emp-nasif',
-    employeeCode: 'FO032507061190',
-    employeeName: 'Nasif Kamal',
-    department: "Founder's Office / FC",
-    designation: 'Lead Architect & Systems Engineer',
-    supervisorId: 'emp-korvi',
-    supervisorName: 'Korvi Rakshand',
-    supervisorEmail: 'korvi@jaago.com.bd',
-    startAt: '2026-08-29T10:00:00+06:00',
-    endAt: '2026-08-29T18:00:00+06:00',
-    startDate: '2026-08-29',
-    endDate: '2026-08-29',
-    startTime: '10:00 AM',
-    endTime: '06:00 PM',
-    reason: 'test 0101 project visit',
-    status: 'PENDING',
-    totalHours: 8.0,
-    creditedDays: 1.0,
-    submittedAt: '2026-08-29T09:45:00+06:00',
-    createdAt: '2026-08-29T09:45:00+06:00',
-    updatedAt: '2026-08-29T09:45:00+06:00',
-  },
-  {
-    id: 'od-103',
-    tenantId: 'jaago-main',
-    employeeId: 'emp-nasif',
-    employeeCode: 'FO032507061190',
-    employeeName: 'Nasif Kamal',
-    department: "Founder's Office / FC",
-    designation: 'Lead Architect & Systems Engineer',
-    supervisorId: 'emp-korvi',
-    supervisorName: 'Korvi Rakshand',
-    supervisorEmail: 'korvi@jaago.com.bd',
-    startAt: '2026-08-30T10:00:00+06:00',
-    endAt: '2026-08-30T18:00:00+06:00',
-    startDate: '2026-08-30',
-    endDate: '2026-08-30',
-    startTime: '10:00 AM',
-    endTime: '06:00 PM',
-    reason: 'EMK Center youth seminar technical setup',
-    status: 'PENDING',
-    totalHours: 8.0,
-    creditedDays: 1.0,
-    submittedAt: '2026-08-30T09:30:00+06:00',
-    createdAt: '2026-08-30T09:30:00+06:00',
-    updatedAt: '2026-08-30T09:30:00+06:00',
-  },
-  {
-    id: 'od-104',
-    tenantId: 'jaago-main',
-    employeeId: 'emp-nasif',
-    employeeCode: 'FO032507061190',
-    employeeName: 'Nasif Kamal',
-    department: "Founder's Office / FC",
-    designation: 'Lead Architect & Systems Engineer',
-    supervisorId: 'emp-korvi',
-    supervisorName: 'Korvi Rakshand',
-    supervisorEmail: 'korvi@jaago.com.bd',
-    startAt: '2026-08-31T10:00:00+06:00',
-    endAt: '2026-08-31T18:00:00+06:00',
-    startDate: '2026-08-31',
-    endDate: '2026-08-31',
-    startTime: '10:00 AM',
-    endTime: '06:00 PM',
-    reason: 'Donor briefing and technical demonstration at Banani extension',
-    status: 'PENDING',
-    totalHours: 8.0,
-    creditedDays: 1.0,
-    submittedAt: '2026-08-30T11:00:00+06:00',
-    createdAt: '2026-08-30T11:00:00+06:00',
-    updatedAt: '2026-08-30T11:00:00+06:00',
-  },
-  {
-    id: 'od-105',
-    tenantId: 'jaago-main',
-    employeeId: 'emp-nasif',
-    employeeCode: 'FO032507061190',
-    employeeName: 'Nasif Kamal',
-    department: "Founder's Office / FC",
-    designation: 'Lead Architect & Systems Engineer',
-    supervisorId: 'emp-korvi',
-    supervisorName: 'Korvi Rakshand',
-    supervisorEmail: 'korvi@jaago.com.bd',
-    startAt: '2026-07-19T10:00:00+06:00',
-    endAt: '2026-07-19T18:00:00+06:00',
-    startDate: '2026-07-19',
-    endDate: '2026-07-19',
-    startTime: '10:00 AM',
-    endTime: '06:00 PM',
-    reason: 'test remote work session',
-    status: 'REFUSED',
-    refusalNote: 'Staff already scheduled for HQ sync meeting on this date.',
-    totalHours: 8.0,
-    creditedDays: 1.0,
-    decidedBy: 'emp-korvi',
-    decidedAt: '2026-07-19T11:00:00+06:00',
-    submittedAt: '2026-07-18T16:00:00+06:00',
-    createdAt: '2026-07-18T16:00:00+06:00',
-    updatedAt: '2026-07-19T11:00:00+06:00',
-  },
-  {
-    id: 'od-106',
-    tenantId: 'jaago-main',
-    employeeId: 'emp-nasif',
-    employeeCode: 'FO032507061190',
-    employeeName: 'Nasif Kamal',
-    department: "Founder's Office / FC",
-    designation: 'Lead Architect & Systems Engineer',
-    supervisorId: 'emp-korvi',
-    supervisorName: 'Korvi Rakshand',
-    supervisorEmail: 'korvi@jaago.com.bd',
-    startAt: '2026-08-08T09:00:00+06:00',
-    endAt: '2026-08-08T17:00:00+06:00',
-    startDate: '2026-08-08',
-    endDate: '2026-08-08',
-    startTime: '09:00 AM',
-    endTime: '05:00 PM',
-    reason: 'test weekend branch coordination',
-    status: 'REFUSED',
-    refusalNote: 'Branch activities postponed by regional coordinator.',
-    totalHours: 8.0,
-    creditedDays: 1.0,
-    decidedBy: 'emp-korvi',
-    decidedAt: '2026-08-08T10:00:00+06:00',
-    submittedAt: '2026-08-07T14:00:00+06:00',
-    createdAt: '2026-08-07T14:00:00+06:00',
-    updatedAt: '2026-08-08T10:00:00+06:00',
-  },
-  {
-    id: 'od-107',
-    tenantId: 'jaago-main',
-    employeeId: 'emp-nasif',
-    employeeCode: 'FO032507061190',
-    employeeName: 'Nasif Kamal',
-    department: "Founder's Office / FC",
-    designation: 'Lead Architect & Systems Engineer',
-    supervisorId: 'emp-korvi',
-    supervisorName: 'Korvi Rakshand',
-    supervisorEmail: 'korvi@jaago.com.bd',
-    startAt: '2026-07-30T10:00:00+06:00',
-    endAt: '2026-08-01T18:00:00+06:00',
-    startDate: '2026-07-30',
-    endDate: '2026-08-01',
-    startTime: '10:00 AM',
-    endTime: '06:00 PM',
-    reason: 'test 3 days field school tech deployment in Bandarban',
-    status: 'APPROVED',
-    totalHours: 24.0,
-    creditedDays: 3.0,
-    decidedBy: 'emp-korvi',
-    decidedAt: '2026-07-29T17:00:00+06:00',
-    submittedAt: '2026-07-29T12:00:00+06:00',
-    createdAt: '2026-07-29T12:00:00+06:00',
-    updatedAt: '2026-07-29T17:00:00+06:00',
-  },
-];
+export const INITIAL_ON_DUTY_REQUESTS: OnDutyRequestItem[] = [];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 4. STORAGE & SUPABASE PERSISTENCE ENGINE
@@ -509,17 +325,14 @@ export const INITIAL_ON_DUTY_REQUESTS: OnDutyRequestItem[] = [
 const STORAGE_KEY_ONDUTY_V2 = 'jaago_pnc_onduty_requests_v2';
 
 export function getLocalOnDutyRequests(): OnDutyRequestItem[] {
-  if (typeof window === 'undefined') return INITIAL_ON_DUTY_REQUESTS;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_ONDUTY_V2);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY_ONDUTY_V2, JSON.stringify(INITIAL_ON_DUTY_REQUESTS));
-      return INITIAL_ON_DUTY_REQUESTS;
-    }
-    const parsed: OnDutyRequestItem[] = JSON.parse(raw);
-    return parsed.length > 0 ? parsed : INITIAL_ON_DUTY_REQUESTS;
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return INITIAL_ON_DUTY_REQUESTS;
+    return [];
   }
 }
 
@@ -590,14 +403,18 @@ export async function fetchOnDutyRequestsFromSupabase(filters?: {
     }
 
     const { data, error } = await query;
-    if (error || !data || data.length === 0) {
+    if (error) {
+      console.warn('Error fetching on-duty requests from Supabase:', error);
       return localList;
     }
 
-    const mapped = data.map(mapRowToOnDutyRequest);
-    saveLocalOnDutyRequests(mapped);
+    const mapped = (data || []).map(mapRowToOnDutyRequest);
+    if (!filters || Object.keys(filters).length === 0) {
+      saveLocalOnDutyRequests(mapped);
+    }
     return mapped;
-  } catch {
+  } catch (err) {
+    console.warn('Exception in fetchOnDutyRequestsFromSupabase:', err);
     return localList;
   }
 }
