@@ -139,7 +139,7 @@ export function hasAllPermissions(permKeys: string[], user?: RBACUserContext | n
  * Checks if the user is allowed to access a specific module
  */
 export function hasModuleAccess(
-  moduleKey: 'pnc' | 'admin' | 'org' | 'attendance' | 'time_off' | 'payroll' | 'appraisals' | 'requests' | 'reports',
+  moduleKey: 'pnc' | 'admin' | 'org' | 'attendance' | 'time_off' | 'payroll' | 'appraisals' | 'requests' | 'reports' | 'admin_procurement' | 'procurement',
   user?: RBACUserContext | null
 ): boolean {
   const active = user || getActiveUser();
@@ -236,6 +236,23 @@ export function hasModuleAccess(
     case 'reports':
       return hasAnyPermission(['reports.headcount.view', 'reports.attendance.view', 'reports.leave.view', 'reports.finance.view', 'reports.turnover.view'], user);
 
+    case 'admin_procurement':
+    case 'procurement':
+      return hasAnyPermission(
+        [
+          'procurement.view',
+          'procurement.requests.create',
+          'procurement.requests.approve',
+          'procurement.orders.manage',
+          'procurement.vendors.manage',
+          'procurement.inventory.manage',
+          'procurement.settings.manage',
+          'dept.admin_procurement.view',
+          'dept.admin_procurement.*',
+        ],
+        user
+      );
+
     default:
       return false;
   }
@@ -263,6 +280,15 @@ export function hasDepartmentAccess(
   // Check specific department permission
   const cleanSlug = deptSlug.toLowerCase().replace(/[^\w]/g, '_');
   const permKey = `dept.${cleanSlug}.view`;
+  if (cleanSlug === 'admin_procurement' || cleanSlug === 'procurement') {
+    return (
+      hasPermission(permKey, user) ||
+      hasPermission(`dept.${cleanSlug}.*`, user) ||
+      hasPermission('procurement.view', user) ||
+      hasPermission('org.view', user) ||
+      hasPermission('*', user)
+    );
+  }
   return hasPermission(permKey, user) || hasPermission(`dept.${cleanSlug}.*`, user) || hasPermission('*', user);
 }
 

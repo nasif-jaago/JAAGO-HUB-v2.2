@@ -97,6 +97,21 @@ export default function DashboardPage() {
     setMounted(true);
     if (typeof window === 'undefined') return;
 
+    // Handle legacy view forwarders
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const view = params.get('view');
+        if (view === 'approvals') {
+          window.location.href = '/requests/purchase';
+          return;
+        } else if (view === 'general-requisition') {
+          window.location.href = '/requests/general';
+          return;
+        }
+      } catch {}
+    }
+
     // Safely hydrate session from localStorage after client mount
     try {
       const sess = getCurrentUserSession();

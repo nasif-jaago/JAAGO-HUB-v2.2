@@ -174,6 +174,12 @@ export function DashboardSidebar({
     };
   }, []);
 
+  React.useEffect(() => {
+    if (pathname?.startsWith('/requests')) {
+      setOpenSections((prev) => ({ ...prev, requests: true }));
+    }
+  }, [pathname]);
+
   const toggleSection = (key: string) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -326,8 +332,8 @@ export function DashboardSidebar({
                         <span>All Requests</span>
                       </Link>
                       {[
-                        { label: 'General Requisition...', icon: Briefcase, href: '/workflows' },
-                        { label: 'Purchase Requisition...', icon: ShoppingCart, href: '/workflows' },
+                        { label: 'General Requisition...', icon: Briefcase, href: '/requests/general' },
+                        { label: 'Purchase Requisition...', icon: ShoppingCart, href: '/requests/purchase' },
                         { label: 'Expenses', icon: DollarSign, href: '/workflows' },
                         { label: 'Recruitment Requisition...', icon: UserPlus, href: '/workflows' },
                         { label: 'Sign Request', icon: PenTool, href: '/workflows' },
@@ -335,16 +341,29 @@ export function DashboardSidebar({
                         { label: 'Payment Voucher...', icon: Receipt, href: '/workflows' },
                         { label: 'Meeting Rooms', icon: Calendar, href: '/meeting-rooms' },
                         { label: 'Volunteering Program...', icon: Award, href: '/workflows' },
-                      ].map((item, idx) => (
-                        <Link
-                          key={idx}
-                          href={item.href}
-                          className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
-                        >
-                          <item.icon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">{item.label}</span>
-                        </Link>
-                      ))}
+                      ].map((item, idx) => {
+                        const isActive =
+                          pathname === item.href ||
+                          (item.href !== '/workflows' && pathname?.startsWith(item.href));
+                        return (
+                          <Link
+                            key={idx}
+                            href={item.href}
+                            className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                              isActive
+                                ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                                : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
+                            }`}
+                          >
+                            <item.icon
+                              className={`h-3.5 w-3.5 flex-shrink-0 ${
+                                isActive ? 'text-primary' : 'text-muted-foreground'
+                              }`}
+                            />
+                            <span className="truncate">{item.label}</span>
+                          </Link>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

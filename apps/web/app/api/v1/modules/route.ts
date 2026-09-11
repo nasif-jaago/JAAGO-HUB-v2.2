@@ -2,6 +2,7 @@ import { createApiHandler } from '@jaago/authz';
 import { globalModuleRegistry } from '@jaago/module-system';
 import { directoryModule } from '@jaago/mod-directory';
 import { announcementsModule } from '@jaago/mod-announcements';
+import { adminProcurementModule } from '@jaago/mod-admin-procurement';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 // Register core platform demo modules into the runtime registry
 globalModuleRegistry.register(directoryModule);
 globalModuleRegistry.register(announcementsModule);
+globalModuleRegistry.register(adminProcurementModule);
 
 export const GET = createApiHandler({
   requireAuth: true,

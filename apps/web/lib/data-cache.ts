@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Universal In-Memory & LocalStorage SWR Caching & Deduplication Layer
  * Ensures 0ms instantaneous page loads and prevents redundant parallel HTTP requests.
