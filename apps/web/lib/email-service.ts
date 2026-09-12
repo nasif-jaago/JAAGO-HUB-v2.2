@@ -266,7 +266,7 @@ Support: pnc@jaago.com.bd | IT Helpdesk: it-support@jaago.com.bd
     templateKey: 'approvals.pending_request',
     name: 'Approval Request Pending',
     module: 'approvals',
-    subject: 'Action Required: Pending Approval Request for {{requestTitle}}',
+    subject: 'Pending Approval Request for {{requestTitle}}',
     bodyHtml: `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Pending Approval</title></head>
@@ -279,7 +279,7 @@ Support: pnc@jaago.com.bd | IT Helpdesk: it-support@jaago.com.bd
       <p>Hello <strong>{{approverName}}</strong>,</p>
       <p>A new request requires your formal review and decision:</p>
       <div style="background:#f8fafc;border-left:4px solid #f59e0b;padding:12px 16px;margin:16px 0;">
-        <strong>{{requestTitle}}</strong><br>
+        <strong>{{requestDetails}}</strong><br>
         <span style="font-size:12px;color:#64748b;">Submitted by: {{requesterName}} &bull; Department: {{department}}</span>
       </div>
       <div style="text-align:center;margin:24px 0;">
@@ -289,18 +289,71 @@ Support: pnc@jaago.com.bd | IT Helpdesk: it-support@jaago.com.bd
   </div>
 </body>
 </html>`,
-    bodyText: `Action Required: Pending Approval for {{requestTitle}}
+    bodyText: `Pending Approval Request for {{requestTitle}}
+Details: {{requestDetails}}
 Submitted by: {{requesterName}} ({{department}})
 Review URL: {{actionUrl}}`,
     variablesSchema: [
       { key: 'approverName', name: 'Approver Name', description: 'Name of the reviewer', required: true, sample: 'S M Nayeem Rahman' },
-      { key: 'requestTitle', name: 'Request Title', description: 'Summary of the request', required: true, sample: 'On-Duty Travel Approval (Khulna Branch)' },
-      { key: 'requesterName', name: 'Requester Name', description: 'Staff member submitting', required: true, sample: 'Kazi Farhan' },
-      { key: 'department', name: 'Department', description: 'Originating department', required: true, sample: 'Programmes' },
-      { key: 'actionUrl', name: 'Action URL', description: 'Direct approval workflow link', required: true, sample: 'https://hub.jaago.com.bd/workflows' },
+      { key: 'requestTitle', name: 'Request Title', description: 'Short summary for email subject', required: true, sample: 'General Requisition JFT/GR/26/09/755685' },
+      { key: 'requestDetails', name: 'Request Details', description: 'Detailed step summary', required: false, sample: 'General Requisition JFT/GR/26/09/755685 - Step 1: Office Supplies (Est. ৳ 60,000)' },
+      { key: 'requesterName', name: 'Requester Name', description: 'Staff member submitting', required: true, sample: 'Nasif Kamal' },
+      { key: 'department', name: 'Department', description: 'Originating department', required: true, sample: 'Founder\'s Office JFT' },
+      { key: 'actionUrl', name: 'Action URL', description: 'Direct approval workflow link', required: true, sample: 'https://hub.jaago.com.bd/requests/general' },
     ],
     isActive: true,
-    version: 3,
+    version: 4,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'a0000000-0000-0000-0000-000000000010',
+    templateKey: 'approvals.request_refused',
+    name: 'Approval Request Refused',
+    module: 'approvals',
+    subject: 'Requisition Refused: {{requestTitle}}',
+    bodyHtml: `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Requisition Refused</title></head>
+<body style="margin:0;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background-color:#f8fafc;color:#1e293b;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);border:1px solid #e2e8f0;">
+    <div style="background:#0f172a;padding:24px 28px;border-bottom:4px solid #ef4444;">
+      <h2 style="color:#ffffff;font-size:18px;margin:0;">Requisition Refusal Notification</h2>
+    </div>
+    <div style="padding:24px;font-size:14px;color:#334155;">
+      <p>Hello <strong>{{requesterName}}</strong>,</p>
+      <p>Your requisition has been reviewed and <strong style="color:#ef4444;">refused</strong> at <strong>Step {{stepNumber}} ({{stepName}})</strong> by <strong>{{approverName}}</strong>.</p>
+      <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0;">
+        <strong>{{requestTitle}}</strong><br>
+        <span style="font-size:12px;color:#991b1b;display:block;margin-top:4px;">
+          Refusal Reason: {{refusalReason}}
+        </span>
+      </div>
+      <p style="font-size:13px;color:#475569;">
+        As the request owner, you are now permitted to <strong>re-edit and adjust</strong> your requisition details, line items, or attachments in JAAGO HUB. Once updated, you can resubmit it to restart the approval chain.
+      </p>
+      <div style="text-align:center;margin:24px 0;">
+        <a href="{{actionUrl}}" style="background:#ef4444;color:#ffffff;text-decoration:none;font-weight:700;font-size:13px;padding:12px 28px;border-radius:8px;display:inline-block;">Review &amp; Re-Edit Requisition in JAAGO HUB &rarr;</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`,
+    bodyText: `Requisition Refused: {{requestTitle}}
+Refused at Step {{stepNumber}} ({{stepName}}) by {{approverName}}.
+Reason: {{refusalReason}}
+Re-edit URL: {{actionUrl}}`,
+    variablesSchema: [
+      { key: 'requesterName', name: 'Requester Name', description: 'Staff member who submitted', required: true, sample: 'Nasif Kamal' },
+      { key: 'requestTitle', name: 'Request Title', description: 'Requisition reference and title', required: true, sample: 'General Requisition JFT/GR/26/09/755685' },
+      { key: 'stepNumber', name: 'Step Number', description: 'Step where refusal occurred', required: true, sample: '1' },
+      { key: 'stepName', name: 'Step Name', description: 'Role or name of the step', required: true, sample: 'Supervisor' },
+      { key: 'approverName', name: 'Approver Name', description: 'Approver who refused', required: true, sample: 'S M Nayeem Rahman' },
+      { key: 'refusalReason', name: 'Refusal Reason', description: 'Reason for refusal', required: false, sample: 'Budget allocation exceeded.' },
+      { key: 'actionUrl', name: 'Action URL', description: 'Direct link to re-edit requisition', required: true, sample: 'https://hub.jaago.com.bd/requests/general' },
+    ],
+    isActive: true,
+    version: 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },

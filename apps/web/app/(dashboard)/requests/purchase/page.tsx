@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   FileText,
   Plus,
@@ -20,8 +20,15 @@ import {
 } from '@/lib/supabase-procurement';
 import { RequisitionFormWindow } from '@/components/requisition-form-window';
 
-export default function PurchaseRequisitionLogPage() {
+function PurchaseRequisitionContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const targetId = searchParams.get('id');
+  const targetPr = searchParams.get('pr');
+  const queryStep = searchParams.get('step');
+  const approverContext = searchParams.get('approver') || undefined;
+  const stepNumberContext = queryStep ? parseInt(queryStep, 10) : undefined;
+
   const [requests, setRequests] = useState<ProcurementRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,7 +42,21 @@ export default function PurchaseRequisitionLogPage() {
     try {
       setLoading(true);
       const all = await getProcurementRequests();
-      setRequests(all.filter((r) => r.requisitionType === 'Purchase'));
+      const filtered = all.filter((r) => r.requisitionType === 'Purchase');
+      setRequests(filtered);
+
+      // Auto-open target requisition if redirected from approval notification email
+      if (targetId || targetPr) {
+        const directMatch = all.find(
+          (r) =>
+            (targetId && String(r.id) === String(targetId)) ||
+            (targetPr && r.prNumber.toLowerCase() === targetPr.toLowerCase())
+        );
+        if (directMatch) {
+          setSelectedRequest(directMatch);
+          setIsWindowOpen(true);
+        }
+      }
     } catch (err) {
       console.warn('Failed to load purchase requisitions:', err);
     } finally {
@@ -104,10 +125,11 @@ export default function PurchaseRequisitionLogPage() {
             {status}
           </span>
         );
+      case 'Refused':
       case 'Rejected':
         return (
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-destructive/10 text-destructive border border-destructive/20">
-            Rejected
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+            {status}
           </span>
         );
       case 'Draft':
@@ -188,7 +210,7 @@ export default function PurchaseRequisitionLogPage() {
           </div>
 
           <div className="flex items-center space-x-1 bg-card border border-border p-1 rounded-xl text-xs">
-            {['ALL', 'SUBMITTED', 'APPROVED', 'DRAFT'].map((st) => (
+            {['ALL', 'SUBMITTED', 'APPROVED', 'REFUSED', 'DRAFT'].map((st) => (
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
@@ -380,7 +402,24 @@ export default function PurchaseRequisitionLogPage() {
         onSaved={() => {
           loadRequests();
         }}
+        initialOpenApprovalModal={false}
+        approverContext={approverContext}
+        stepNumberContext={stepNumberContext}
       />
     </div>
+  );
+}
+
+export default function PurchaseRequisitionLogPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-12 text-center text-xs text-muted-foreground">
+          Loading Purchase Requisitions...
+        </div>
+      }
+    >
+      <PurchaseRequisitionContent />
+    </Suspense>
   );
 }

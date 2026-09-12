@@ -1989,133 +1989,122 @@ export default function DashboardPage() {
           </div>
 
           {/* Right Section: Attendance Action & GPS Live Badge */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 w-full md:w-auto justify-end">
+          <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto justify-end">
             {/* Live GPS Active Beacon */}
             <div
-              title="GPS Live: In Geofence"
-              className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-xs flex-shrink-0"
+              title={
+                gpsTracker.status === 'outside'
+                  ? `Outside Geofence: ${gpsTracker.distanceMeters ?? 0}m from ${gpsTracker.locationName || 'Office'}`
+                  : gpsTracker.status === 'error'
+                  ? `GPS: ${gpsTracker.errorMsg || 'Location error'}`
+                  : 'GPS Live: In Geofence'
+              }
+              className={`h-9 w-9 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center shadow-xs flex-shrink-0 ${
+                gpsTracker.status === 'outside' || gpsTracker.status === 'error'
+                  ? 'bg-rose-500/10 border border-rose-500/25 text-rose-400'
+                  : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+              }`}
             >
-              <Radio className="h-4 w-4 animate-pulse text-emerald-400" />
+              <Radio className={`h-4 w-4 animate-pulse ${
+                gpsTracker.status === 'outside' || gpsTracker.status === 'error' ? 'text-rose-400' : 'text-emerald-400'
+              }`} />
             </div>
 
-            {/* Attendance Check In / Out Buttons Container */}
-            <div className="flex items-center space-x-2 w-full sm:w-auto">
-              {/* Check In Box */}
-              <button
-                onClick={isCheckedIn ? undefined : handleCheckInAction}
-                disabled={isPunching || isCheckedIn}
-                aria-disabled={isPunching || isCheckedIn}
-                title={isCheckedIn ? `Checked in at ${checkInTime}. Working hours are running.` : hasCheckedInToday ? `First Check-in recorded at ${checkInTime}. Click to re-check in.` : 'Click to check in'}
-                className={`hero-checkin-btn px-3.5 py-2 rounded-xl border transition-all duration-200 text-left flex items-center space-x-2 shadow-xs ${
-                  isCheckedIn
-                    ? 'hero-checkin-recorded bg-amber-400/15 border-amber-400/25 text-amber-300 cursor-default opacity-85 backdrop-blur-[2px] select-none shadow-none'
-                    : 'bg-[#DAF6EA] hover:bg-[#C8F1E1] border-emerald-400/50 text-emerald-950 dark:bg-[#103828] dark:hover:bg-[#144833] dark:border-emerald-500/35 dark:text-emerald-300 cursor-pointer shadow-sm active:scale-[0.98]'
-                }`}
-              >
-                <div className={`hero-btn-icon-box h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  isCheckedIn ? 'bg-amber-400/20 text-amber-300' : 'bg-emerald-600/15 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-400'
-                }`}>
-                  {hasCheckedInToday ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />
-                  ) : (
-                    <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
-                  )}
-                </div>
-                <div>
-                  <div className={`hero-btn-title text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 ${
-                    isCheckedIn ? 'text-amber-300' : 'text-emerald-800 dark:text-emerald-400'
+            {/* Attendance Buttons & Under-Button Geofence Status Container */}
+            <div className="flex flex-col gap-1.5 w-full sm:w-auto">
+              {/* Attendance Check In / Out Buttons Container */}
+              <div className="flex items-center space-x-2 w-full sm:w-auto">
+                {/* Check In Box */}
+                <button
+                  onClick={isCheckedIn ? undefined : handleCheckInAction}
+                  disabled={isPunching || isCheckedIn}
+                  aria-disabled={isPunching || isCheckedIn}
+                  title={isCheckedIn ? `Checked in at ${checkInTime}. Working hours are running.` : hasCheckedInToday ? `First Check-in recorded at ${checkInTime}. Click to re-check in.` : 'Click to check in'}
+                  className={`hero-checkin-btn px-3.5 py-2 rounded-xl border transition-all duration-200 text-left flex items-center space-x-2 shadow-xs ${
+                    isCheckedIn
+                      ? 'hero-checkin-recorded bg-amber-400/15 border-amber-400/25 text-amber-300 cursor-default opacity-85 backdrop-blur-[2px] select-none shadow-none'
+                      : 'bg-[#DAF6EA] hover:bg-[#C8F1E1] border-emerald-400/50 text-emerald-950 dark:bg-[#103828] dark:hover:bg-[#144833] dark:border-emerald-500/35 dark:text-emerald-300 cursor-pointer shadow-sm active:scale-[0.98]'
+                  }`}
+                >
+                  <div className={`hero-btn-icon-box h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    isCheckedIn ? 'bg-amber-400/20 text-amber-300' : 'bg-emerald-600/15 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-400'
                   }`}>
-                    <span>CHECK IN</span>
-                    {hasCheckedInToday && <span className="text-[7.5px] px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 font-bold">&bull; RECORDED</span>}
+                    {hasCheckedInToday ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />
+                    ) : (
+                      <Clock className="h-3.5 w-3.5 stroke-[2.5]" />
+                    )}
                   </div>
-                  <div className={`hero-btn-time text-xs font-black font-mono leading-none pt-0.5 ${
-                    isCheckedIn ? 'text-amber-200' : 'text-emerald-950 dark:text-emerald-300'
-                  }`}>
-                    {checkInTime || '-- : -- : --'}
+                  <div>
+                    <div className={`hero-btn-title text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 ${
+                      isCheckedIn ? 'text-amber-300' : 'text-emerald-800 dark:text-emerald-400'
+                    }`}>
+                      <span>CHECK IN</span>
+                      {hasCheckedInToday && <span className="text-[7.5px] px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 font-bold">&bull; RECORDED</span>}
+                    </div>
+                    <div className={`hero-btn-time text-xs font-black font-mono leading-none pt-0.5 ${
+                      isCheckedIn ? 'text-amber-200' : 'text-emerald-950 dark:text-emerald-300'
+                    }`}>
+                      {checkInTime || '-- : -- : --'}
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
 
-              {/* Check Out Box */}
-              <button
-                onClick={isCheckedIn ? handleCheckOutAction : undefined}
-                disabled={isPunching || !isCheckedIn}
-                aria-disabled={isPunching || !isCheckedIn}
-                title={
-                  isCheckedIn
-                    ? 'Click to check out'
-                    : hasCheckedOutToday
-                    ? `Checked out at ${checkOutTime}`
-                    : 'Cannot check out before checking in'
-                }
-                className={`px-3.5 py-2 rounded-xl border transition-all duration-200 text-left flex items-center space-x-2 shadow-xs ${
-                  !hasCheckedInToday
-                    ? 'hero-checkout-waiting'
-                    : !isCheckedIn && hasCheckedOutToday
-                    ? 'hero-checkout-recorded'
-                    : 'hero-checkout-active active:scale-[0.98]'
-                }`}
-              >
-                <div className="hero-btn-icon-box h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0">
-                  {hasCheckedOutToday ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />
-                  ) : (
-                    <Flag className="h-3.5 w-3.5 stroke-[2.2]" />
-                  )}
-                </div>
-                <div>
-                  <div className="hero-btn-title text-[9px] font-black uppercase tracking-wider flex items-center space-x-1">
-                    <span>CHECK OUT</span>
-                    {hasCheckedOutToday && <span className="text-[7.5px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-200 font-bold">&bull; RECORDED</span>}
+                {/* Check Out Box */}
+                <button
+                  onClick={isCheckedIn ? handleCheckOutAction : undefined}
+                  disabled={isPunching || !isCheckedIn}
+                  aria-disabled={isPunching || !isCheckedIn}
+                  title={
+                    isCheckedIn
+                      ? 'Click to check out'
+                      : hasCheckedOutToday
+                      ? `Checked out at ${checkOutTime}`
+                      : 'Cannot check out before checking in'
+                  }
+                  className={`px-3.5 py-2 rounded-xl border transition-all duration-200 text-left flex items-center space-x-2 shadow-xs ${
+                    !hasCheckedInToday
+                      ? 'hero-checkout-waiting'
+                      : !isCheckedIn && hasCheckedOutToday
+                      ? 'hero-checkout-recorded'
+                      : 'hero-checkout-active active:scale-[0.98]'
+                  }`}
+                >
+                  <div className="hero-btn-icon-box h-6 w-6 rounded-lg flex items-center justify-center flex-shrink-0">
+                    {hasCheckedOutToday ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5]" />
+                    ) : (
+                      <Flag className="h-3.5 w-3.5 stroke-[2.2]" />
+                    )}
                   </div>
-                  <div className="hero-btn-time text-xs font-black font-mono leading-none pt-0.5">
-                    {hasCheckedInToday && hasCheckedOutToday ? (checkOutTime || '-- : -- : --') : '-- : -- : --'}
+                  <div>
+                    <div className="hero-btn-title text-[9px] font-black uppercase tracking-wider flex items-center space-x-1">
+                      <span>CHECK OUT</span>
+                      {hasCheckedOutToday && <span className="text-[7.5px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-200 font-bold">&bull; RECORDED</span>}
+                    </div>
+                    <div className="hero-btn-time text-xs font-black font-mono leading-none pt-0.5">
+                      {hasCheckedInToday && hasCheckedOutToday ? (checkOutTime || '-- : -- : --') : '-- : -- : --'}
+                    </div>
                   </div>
-                </div>
-              </button>
-            </div>
-
-            {/* Live GPS Tracker Status Line (Only shown when outside geofence or error occurs) */}
-            {gpsTracker.status === 'outside' || gpsTracker.status === 'error' ? (
-              <div className="flex flex-col items-end space-y-1 pt-0.5">
-                {gpsTracker.status === 'outside' ? (
-                  <div className="flex items-center space-x-2 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 px-3 py-1 rounded-xl text-xs font-bold shadow-xs">
-                    <span className="h-2 w-2 rounded-full bg-rose-500" />
-                    <span>
-                      🚫 Outside Geofence &bull; {gpsTracker.distanceMeters ?? 0}m from {gpsTracker.locationName || 'Office'}
-                    </span>
-                    <span className="text-[10px] uppercase px-1.5 py-0.5 bg-rose-500/20 text-rose-600 dark:text-rose-300 font-extrabold rounded-md">
-                      Blocked (Max {gpsTracker.allowedRadiusMeters}m)
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center space-x-2 bg-rose-500/10 border border-rose-500/20 text-rose-500 px-3 py-1 rounded-xl text-xs font-semibold">
-                    <span>⚠️ {gpsTracker.errorMsg}</span>
-                    <button
-                      onClick={checkLiveGeofence}
-                      className="underline hover:text-rose-600 font-bold ml-1 cursor-pointer"
-                    >
-                      Retry GPS
-                    </button>
-                  </div>
-                )}
-
-                {gpsTracker.latitude && (
-                  <div className="text-[10px] font-mono text-muted-foreground/70 flex items-center space-x-2">
-                    <span>
-                      Lat: {gpsTracker.latitude.toFixed(5)}, Lng: {gpsTracker.longitude?.toFixed(5)} (±{gpsTracker.accuracy}m)
-                    </span>
-                    <button
-                      onClick={checkLiveGeofence}
-                      className="hover:text-primary underline cursor-pointer font-bold"
-                      title="Refresh GPS Coordinates"
-                    >
-                      Refresh
-                    </button>
-                  </div>
-                )}
+                </button>
               </div>
-            ) : null}
+
+              {/* Live GPS Tracker Status Line (Only shown when outside geofence or error occurs) */}
+              {(gpsTracker.status === 'outside' || gpsTracker.status === 'error') && (
+                <div
+                  onClick={checkLiveGeofence}
+                  title={
+                    gpsTracker.status === 'outside'
+                      ? `Outside Geofence • ${gpsTracker.distanceMeters ?? 0}m from ${gpsTracker.locationName || 'Office'} (Max ${gpsTracker.allowedRadiusMeters}m). Click to refresh.`
+                      : `${gpsTracker.errorMsg || 'GPS location acquisition failed'}. Click to retry.`
+                  }
+                  className="w-full flex items-center justify-center space-x-1.5 py-1 px-2.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold tracking-tight shadow-xs cursor-pointer hover:bg-rose-500/25 transition-all select-none"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse flex-shrink-0" />
+                  <span>{gpsTracker.status === 'outside' ? 'Outside' : 'GPS Error'}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

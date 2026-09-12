@@ -76,8 +76,11 @@ export interface RequisitionApprovalStep {
   stepNumber: number;
   stepName: string;
   approver: string;
+  approverEmail?: string | undefined;
+  approverId?: string | undefined;
   status: 'PENDING' | 'SIGNED' | 'REJECTED' | 'SENT';
   signedAt?: string | undefined;
+  sentAt?: string | undefined;
   method?: string | undefined;
 }
 
@@ -98,7 +101,7 @@ export interface ProcurementRequest {
   requestOwnerCode?: string | undefined;
   estAmount: number;
   currency: string;
-  status: 'Draft' | 'Submitted' | 'Under Review' | 'Approved' | 'Rejected' | 'Fulfilled';
+  status: 'Draft' | 'Submitted' | 'Under Review' | 'Approved' | 'Rejected' | 'Refused' | 'Fulfilled';
   justification?: string | undefined;
   priority: 'Low' | 'Normal' | 'High' | 'Urgent';
   requiredDate?: string | undefined;
