@@ -39,3 +39,20 @@
 ## 4. Multi-Process Architecture & Background Queue
 * **Cross-Process Awareness:** In production, do not assume Next.js API routes share memory with standalone worker processes. Cross-process jobs must be brokered via Redis (`REDIS_URL` or `UPSTASH_REDIS_REST_URL`).
 * **Strict Type Safety:** All module changes must pass `npm run typecheck` across all 26 monorepo workspaces with 0 errors before release.
+
+---
+
+## 5. Mandatory Null & Undefined Prevention & Root-Cause Resolution
+* **Fix Root Causes, Never Hide Errors:** Masking bugs with empty fallbacks without addressing the corrupted state, broken schema, or bad API contract is strictly prohibited. Always trace and resolve why data was missing or invalid.
+* **Defensive Boundary Access:**
+  * PostgREST queries, API endpoints, URL params, and state caches are inherently asynchronous and nullable.
+  * Always define explicit fallback models or defaults at the ingestion boundary before downstream rendering.
+* **String and Array Operation Safety:**
+  * Never invoke methods such as `.split()`, `.replace()`, `.trim()`, or `.toUpperCase()` on unguarded strings.
+  * Never index into array items (e.g. `arr[0]`) or access properties of first elements without verifying the array is defined and non-empty.
+  * Always use standardized safe helper utilities (e.g. `getInitials(name, fallback)`).
+* **Numeric, Currency and Date Operations:**
+  * Never invoke `.toFixed()`, `.toLocaleString()`, or mathematical operations on nullable values. Coerce safely with `Number(val) || 0` or guard with `val != null`.
+  * Always validate date instances before invoking `.getTime()`, `.toISOString()`, or `.toLocaleDateString()` (e.g. `!isNaN(new Date(val).getTime())`).
+* **Resilient Client Error Boundaries:**
+  * Ensure `app/error.tsx` and `app/global-error.tsx` are in place to intercept transient deployment chunk mismatches (`ChunkLoadError`) and trigger automated, graceful recoveries rather than exposing raw client-side exception screens.
