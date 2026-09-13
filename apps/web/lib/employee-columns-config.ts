@@ -113,6 +113,7 @@ export const ALL_EMPLOYEE_COLUMNS: EmployeeColumnConfig[] = [
   { key: 'weekendDays', label: 'Weekend Days', category: 'Leave & Attendance', defaultVisible: false, minWidth: '140px' },
   { key: 'overtimeEligible', label: 'Overtime Eligible', category: 'Leave & Attendance', defaultVisible: false, minWidth: '120px' },
   { key: 'attendanceGracePeriodMin', label: 'Grace Period (Min)', category: 'Leave & Attendance', defaultVisible: false, minWidth: '130px', type: 'number' },
+  { key: 'allowRegularization', label: 'Allow Regularization', category: 'Leave & Attendance', defaultVisible: false, minWidth: '150px', type: 'boolean' },
 
   // ── Status & System ──
   { key: 'status', label: 'Status', category: 'Status & System', defaultVisible: true, minWidth: '110px', align: 'center', type: 'badge' },

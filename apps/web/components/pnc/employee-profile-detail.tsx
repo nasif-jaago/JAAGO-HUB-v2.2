@@ -38,6 +38,7 @@ import {
   FileText,
   Printer,
   Edit3,
+  XCircle,
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
@@ -52,12 +53,19 @@ import {
 } from '@/lib/contracts-engine';
 import { formatDisplayDate } from '@/lib/date-format';
 import {
+  AttendanceLogItem,
   getEmployeeAttendanceLogs,
   fetchAttendanceLogsFromSupabase,
   calculateWorkingHoursString,
   getLocalShifts,
   ShiftItem,
 } from '@/lib/supabase-attendance';
+import {
+  AttendanceRegularizationItem,
+  getLocalRegularizations,
+  submitAttendanceRegularization,
+  calculateShiftStandardTimes,
+} from '@/lib/supabase-regularization';
 import {
   fetchOrganizationsFromSupabase,
   fetchBranchesFromSupabase,
@@ -87,6 +95,8 @@ import {
   type BereavementRelationship,
   QUICK_LEAVE_POLICIES,
 } from '@/lib/supabase-time-off';
+import { saveEmployeeToSupabase } from '@/lib/supabase-employees';
+import { invalidateCache } from '@/lib/data-cache';
 
 export type EmployeeStatus = 'Active' | 'Terminated' | 'Resigned' | 'Incomplete' | 'Archived';
 
@@ -213,6 +223,7 @@ export interface FullEmployeeProfile {
   weekendDays?: string | undefined;
   overtimeEligible?: string | undefined;
   attendanceGracePeriodMin?: number | undefined;
+  allowRegularization?: boolean | undefined;
 
   // ── Tab 7: Log History ──
   logHistory: LogHistoryEntry[];
@@ -353,6 +364,7 @@ export function EmployeeProfileDetail({
         child3HealthInsuranceId: initialData.child3HealthInsuranceId || '',
         child3Name: initialData.child3Name || '',
         logHistory: initialData.logHistory || [],
+        allowRegularization: initialData.allowRegularization !== false,
       };
     }
 
@@ -463,6 +475,7 @@ export function EmployeeProfileDetail({
         },
       ],
       isUser: false,
+      allowRegularization: true,
     };
   });
 
@@ -854,6 +867,223 @@ export function EmployeeProfileDetail({
   const [profileLeaveError, setProfileLeaveError] = useState<string | null>(null);
   const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
 
+  // Attendance Regularization live connection
+  const [regularizations, setRegularizations] = useState<AttendanceRegularizationItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      return getLocalRegularizations();
+    }
+    return [];
+  });
+  const [profileRegModal, setProfileRegModal] = useState<{
+    isOpen: boolean;
+    log: AttendanceLogItem | null;
+    adjustedCheckIn: string;
+    adjustedCheckOut: string;
+    reason: string;
+    notes: string;
+    isSubmitting: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleRegUpdate = () => {
+      setRegularizations(getLocalRegularizations());
+    };
+    window.addEventListener('jaago_attendance_regularization_updated', handleRegUpdate);
+    window.addEventListener('storage', handleRegUpdate);
+    return () => {
+      window.removeEventListener('jaago_attendance_regularization_updated', handleRegUpdate);
+      window.removeEventListener('storage', handleRegUpdate);
+    };
+  }, []);
+
+  const handleToggleRegularization = (enabled: boolean) => {
+    setFormData((prev) => ({ ...prev, allowRegularization: enabled }));
+    try {
+      // 1. Update jaago_pnc_employees_v2 (canonical employee list)
+      const rawEmps = localStorage.getItem('jaago_pnc_employees_v2');
+      if (rawEmps) {
+        const list = JSON.parse(rawEmps);
+        const idx = list.findIndex(
+          (e: any) => (formData.id && e.id === formData.id) || (formData.code && e.code === formData.code)
+        );
+        if (idx >= 0) {
+          list[idx] = { ...list[idx], allowRegularization: enabled };
+          localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(list));
+        }
+      }
+      // Also update legacy jaago_employees_cache if present
+      const rawOldEmps = localStorage.getItem('jaago_employees_cache');
+      if (rawOldEmps) {
+        const list = JSON.parse(rawOldEmps);
+        const idx = list.findIndex(
+          (e: any) => (formData.id && e.id === formData.id) || (formData.code && e.code === formData.code)
+        );
+        if (idx >= 0) {
+          list[idx] = { ...list[idx], allowRegularization: enabled };
+          localStorage.setItem('jaago_employees_cache', JSON.stringify(list));
+        }
+      }
+
+      // 2. Invalidate SWR data cache so components immediately refetch fresh data
+      invalidateCache('pnc_employees_list');
+
+      // 3. Update jaago_user if it matches current user
+      const rawUser = localStorage.getItem('jaago_user');
+      let updatedUserObj: any = null;
+      if (rawUser) {
+        const u = JSON.parse(rawUser);
+        if (
+          (formData.code && u.employeeCode === formData.code) ||
+          (formData.id && u.id === formData.id) ||
+          (formData.name && u.fullName?.toLowerCase().trim() === formData.name.toLowerCase().trim())
+        ) {
+          u.allowRegularization = enabled;
+          localStorage.setItem('jaago_user', JSON.stringify(u));
+          document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(u))}; path=/; max-age=604800; SameSite=Lax`;
+          updatedUserObj = u;
+        }
+      }
+
+      // 4. Save to Supabase in background
+      const updatedProfile = { ...formData, allowRegularization: enabled };
+      saveEmployeeToSupabase(updatedProfile).catch((err) => {
+        console.warn('Could not persist regularization toggle:', err);
+      });
+
+      // 5. Broadcast real-time events across application
+      window.dispatchEvent(new CustomEvent('jaago_employees_updated'));
+      window.dispatchEvent(new CustomEvent('jaago_pnc_employees_changed'));
+      window.dispatchEvent(
+        new CustomEvent('jaago_user_updated', {
+          detail: {
+            user: updatedUserObj,
+            allowRegularization: enabled,
+            employee: updatedProfile,
+          },
+        })
+      );
+    } catch (err) {
+      console.error('Error syncing regularization toggle:', err);
+    }
+  };
+
+  const getExistingRegularization = (log: AttendanceLogItem): AttendanceRegularizationItem | undefined => {
+    if (!log) return undefined;
+    const logId = (log.id || '').trim();
+    const logDate = (log.date || '').trim();
+    const empCode = (formData.code || log.employeeCode || '').toLowerCase().trim();
+    return regularizations.find(
+      (r) =>
+        (logId && r.attendanceLogId === logId) ||
+        (logDate && r.date === logDate && (r.employeeCode || '').toLowerCase().trim() === empCode)
+    );
+  };
+
+  const isLogEligibleForReg = (log: AttendanceLogItem): boolean => {
+    if (!log) return false;
+    const existing = getExistingRegularization(log);
+    if (existing?.status === 'Approved') return false;
+
+    const statusLower = (log.status || '').toLowerCase().trim();
+    const notesLower = (log.notes || '').toLowerCase().trim();
+
+    if (
+      statusLower === 'leave' ||
+      statusLower === 'on leave' ||
+      statusLower === 'holiday' ||
+      statusLower === 'weekend' ||
+      notesLower.includes('approved leave') ||
+      notesLower.includes('on leave')
+    ) {
+      return false;
+    }
+
+    if (log.status === 'Late' || log.status === 'Absent' || log.status === 'Auto Check Out') return true;
+    if (log.isAutoCheckout) return true;
+    if (log.lateByMin !== undefined && log.lateByMin > 0) return true;
+    if (log.status !== 'Present' && (!log.checkOutTime || log.checkOutTime === '--:--' || log.checkOutTime === 'N/A')) {
+      return true;
+    }
+    return false;
+  };
+
+  const handleOpenProfileRegModal = (log: AttendanceLogItem) => {
+    if (formData.allowRegularization === false) {
+      setSaveToast({
+        message: 'Attendance regularization requests are disabled for this employee.',
+        type: 'error',
+      });
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
+    const standard = calculateShiftStandardTimes(formData.workingSchedule);
+    setProfileRegModal({
+      isOpen: true,
+      log,
+      adjustedCheckIn: standard.checkIn,
+      adjustedCheckOut: standard.checkOut,
+      reason: 'Late Entry Due to Official Field Work / Traffic',
+      notes: '',
+      isSubmitting: false,
+    });
+  };
+
+  const handleSubmitProfileRegularization = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profileRegModal || !profileRegModal.log) return;
+    if (formData.allowRegularization === false) {
+      setSaveToast({
+        message: 'Attendance regularization requests are disabled for this employee.',
+        type: 'error',
+      });
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
+
+    setProfileRegModal((prev) => (prev ? { ...prev, isSubmitting: true } : null));
+    try {
+      const log = profileRegModal.log;
+      const targetSup = formData.supervisor || 'S M Nayeem Rahman';
+      await submitAttendanceRegularization({
+        attendanceLogId: log.id,
+        employeeId: formData.id,
+        employeeCode: formData.code,
+        employeeName: formData.name,
+        department: formData.department,
+        designation: formData.designation,
+        date: log.date,
+        originalCheckIn: log.checkInTime || '--:--',
+        originalCheckOut: log.checkOutTime || '--:--',
+        originalStatus: log.status || 'Present',
+        originalLateByMin: log.lateByMin,
+        adjustedCheckIn: profileRegModal.adjustedCheckIn,
+        adjustedCheckOut: profileRegModal.adjustedCheckOut,
+        workingSchedule: formData.workingSchedule,
+        calculatedHours: '8h 00m',
+        reason: profileRegModal.reason,
+        notes: profileRegModal.notes,
+        supervisorName: targetSup,
+        supervisorEmail: 'nayeem.rahman@jaago.com.bd',
+      });
+
+      setProfileRegModal(null);
+      setRegularizations(getLocalRegularizations());
+      setSaveToast({
+        message: `Regularization requested for ${formatDisplayDate(log.date)}! Submitted for supervisor approval.`,
+        type: 'success',
+      });
+      setTimeout(() => setSaveToast(null), 3500);
+    } catch (err: any) {
+      console.error('Error submitting regularization request:', err);
+      setProfileRegModal((prev) => (prev ? { ...prev, isSubmitting: false } : null));
+      setSaveToast({
+        message: 'Failed to submit regularization request. Please try again.',
+        type: 'error',
+      });
+      setTimeout(() => setSaveToast(null), 3500);
+    }
+  };
+
   useEffect(() => {
     async function loadEmpLeaveData() {
       if (formData.code) {
@@ -1052,6 +1282,7 @@ export function EmployeeProfileDetail({
       { key: 'rfid', label: 'RFID' },
       { key: 'leaveGroup', label: 'Leave Group' },
       { key: 'employeeType', label: 'Employee Type' },
+      { key: 'allowRegularization', label: 'Allow Regularization' },
     ];
 
     trackableFields.forEach(({ key, label }) => {
@@ -3210,7 +3441,43 @@ export function EmployeeProfileDetail({
                 </div>
                 <span>Leave Entitlements &amp; Attendance Tracking Configuration</span>
               </h3>
-              <div className="flex items-center space-x-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Regularization Quick Toggle Button */}
+                <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-surface/80 border border-border/80 shadow-2xs">
+                  <Clock className="h-3.5 w-3.5 text-amber-500" />
+                  <span className="text-[11px] font-bold text-foreground">Regularization:</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formData.allowRegularization !== false}
+                    onClick={() => handleToggleRegularization(!(formData.allowRegularization !== false))}
+                    className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      formData.allowRegularization !== false ? 'bg-amber-500' : 'bg-muted-foreground/30'
+                    }`}
+                    title={
+                      formData.allowRegularization !== false
+                        ? 'Regularization requests are allowed. Click to turn OFF.'
+                        : 'Regularization requests are disabled. Click to turn ON.'
+                    }
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        formData.allowRegularization !== false ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                  <span
+                    className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                      formData.allowRegularization !== false
+                        ? 'bg-emerald-500/15 text-emerald-500'
+                        : 'bg-rose-500/15 text-rose-500'
+                    }`}
+                  >
+                    {formData.allowRegularization !== false ? 'ON' : 'OFF'}
+                  </span>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -3801,6 +4068,55 @@ export function EmployeeProfileDetail({
                   className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
                 />
               </div>
+
+              {/* Attendance Regularization Permission Toggle Card */}
+              <div className="p-3.5 rounded-xl bg-surface/50 border border-border flex items-center justify-between shadow-xs sm:col-span-2 lg:col-span-1">
+                <div className="space-y-0.5 pr-2">
+                  <div className="flex items-center space-x-1.5">
+                    <Clock className="h-3.5 w-3.5 text-amber-500" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+                      Regularization Allowed
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {formData.allowRegularization !== false
+                      ? 'Employee is allowed to request regularizations'
+                      : 'Regularization requests disabled for this employee'}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2 flex-shrink-0">
+                  <span
+                    className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                      formData.allowRegularization !== false
+                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                        : 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                    }`}
+                  >
+                    {formData.allowRegularization !== false ? 'Enabled' : 'Disabled'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formData.allowRegularization !== false}
+                    onClick={() => handleToggleRegularization(!(formData.allowRegularization !== false))}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                      formData.allowRegularization !== false ? 'bg-amber-500' : 'bg-muted-foreground/30'
+                    }`}
+                    title={
+                      formData.allowRegularization !== false
+                        ? 'Click to disable regularization requests'
+                        : 'Click to allow regularization requests'
+                    }
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        formData.allowRegularization !== false ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* ── 3. RECENT ATTENDANCE ACTIVITY LOG TABLE ── */}
@@ -3825,6 +4141,9 @@ export function EmployeeProfileDetail({
                       <th className="py-3 px-3">Working Hours</th>
                       <th className="py-3 px-3">Device / Method</th>
                       <th className="py-3 px-4 text-center">Status</th>
+                      {formData.allowRegularization !== false && (
+                        <th className="py-3 px-3 text-center">Regularization</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/40 font-medium">
@@ -3833,7 +4152,10 @@ export function EmployeeProfileDetail({
                       if (empLogs.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={6} className="py-6 text-center text-muted-foreground text-xs font-semibold">
+                            <td
+                              colSpan={formData.allowRegularization !== false ? 7 : 6}
+                              className="py-6 text-center text-muted-foreground text-xs font-semibold"
+                            >
                               No attendance logs recorded for this employee yet.
                             </td>
                           </tr>
@@ -3944,6 +4266,65 @@ export function EmployeeProfileDetail({
                                 </span>
                               )}
                             </td>
+                            {/* Regularization Column */}
+                            {formData.allowRegularization !== false && (
+                              <td className="py-3 px-3 text-center whitespace-nowrap">
+                                {(() => {
+                                  const existing = getExistingRegularization(log);
+                                  if (existing?.status === 'Approved') {
+                                    return (
+                                      <span
+                                        className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black tracking-wide shadow-2xs"
+                                        title={`Regularized (Approved by ${existing.approvedBy || 'Supervisor'}): ${existing.reason}`}
+                                      >
+                                        <CheckCircle2 className="h-3 w-3 mr-0.5 text-emerald-500" />
+                                        <span>R.Approved</span>
+                                      </span>
+                                    );
+                                  }
+                                  if (existing?.status === 'Pending') {
+                                    return (
+                                      <span
+                                        className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-2xs"
+                                        title="Regularization request pending review"
+                                      >
+                                        <Clock className="h-3 w-3 mr-0.5 animate-spin text-amber-500" />
+                                        <span>Pending</span>
+                                      </span>
+                                    );
+                                  }
+                                  if (existing?.status === 'Refused' || existing?.status === 'Rejected') {
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenProfileRegModal(log)}
+                                        className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md text-[9.5px] font-black transition shadow-2xs bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 cursor-pointer active:scale-95"
+                                        title={`Refused: ${existing.refusalNote || ''} - Click to re-apply`}
+                                      >
+                                        <XCircle className="h-3 w-3 mr-0.5" />
+                                        <span>R.Refused</span>
+                                      </button>
+                                    );
+                                  }
+
+                                  const eligible = isLogEligibleForReg(log);
+                                  if (!eligible) {
+                                    return <span className="text-muted-foreground/30 font-bold text-xs">--</span>;
+                                  }
+
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenProfileRegModal(log)}
+                                      className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[10.5px] font-black tracking-wide shadow-2xs transition duration-150 cursor-pointer inline-flex items-center space-x-1 active:scale-95"
+                                      title="Click to request attendance regularization"
+                                    >
+                                      <span>Regularize</span>
+                                    </button>
+                                  );
+                                })()}
+                              </td>
+                            )}
                           </tr>
                         );
                       });
@@ -4415,6 +4796,183 @@ export function EmployeeProfileDetail({
                   className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider transition shadow-md cursor-pointer"
                 >
                   SUBMIT LEAVE
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── ATTENDANCE REGULARIZATION MODAL ── */}
+      {profileRegModal && profileRegModal.isOpen && profileRegModal.log && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-card border border-amber-500/30 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 space-y-4 p-5 sm:p-6">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-border/70">
+              <div className="flex items-center space-x-2.5">
+                <div className="h-9 w-9 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center shadow-xs">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-foreground">Attendance Regularization</h3>
+                  <p className="text-[11px] text-muted-foreground">Shift-based auto correction &amp; supervisor approval</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfileRegModal(null)}
+                className="p-1.5 rounded-xl hover:bg-surface text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Date & Shift Info Badge */}
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-surface/70 border border-border text-xs">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Date</span>
+                <span className="font-mono font-bold text-foreground">{formatDisplayDate(profileRegModal.log.date)}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Assigned Shift</span>
+                <span className="font-bold text-amber-500">{formData.workingSchedule}</span>
+              </div>
+            </div>
+
+            {/* 2-Column Comparison Table */}
+            <div className="rounded-2xl border border-border/80 overflow-hidden bg-card/60">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="bg-surface/80 border-b border-border text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <th className="py-2.5 px-3">Metric</th>
+                    <th className="py-2.5 px-3">Original Record</th>
+                    <th className="py-2.5 px-3 text-amber-500">Adjusted (Editable)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40 font-mono">
+                  {/* Row 1: Check In */}
+                  <tr>
+                    <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Check In</td>
+                    <td className="py-2.5 px-3 text-rose-500 font-bold">
+                      {profileRegModal.log.checkInTime || '--:--'}
+                      {profileRegModal.log.lateByMin ? ` (+${profileRegModal.log.lateByMin}m)` : ''}
+                    </td>
+                    <td className="py-2 px-3">
+                      <input
+                        type="text"
+                        value={profileRegModal.adjustedCheckIn}
+                        onChange={(e) =>
+                          setProfileRegModal((prev) => (prev ? { ...prev, adjustedCheckIn: e.target.value } : null))
+                        }
+                        className="w-28 px-2.5 py-1 rounded-lg bg-surface border border-amber-500/40 text-xs font-bold text-emerald-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="10:00 AM"
+                      />
+                    </td>
+                  </tr>
+
+                  {/* Row 2: Check Out */}
+                  <tr>
+                    <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Check Out</td>
+                    <td className="py-2.5 px-3 text-muted-foreground">
+                      {profileRegModal.log.checkOutTime || (profileRegModal.log.status === 'Auto Check Out' ? 'Auto 11:30 PM' : '--:--')}
+                    </td>
+                    <td className="py-2 px-3">
+                      <input
+                        type="text"
+                        value={profileRegModal.adjustedCheckOut}
+                        onChange={(e) =>
+                          setProfileRegModal((prev) => (prev ? { ...prev, adjustedCheckOut: e.target.value } : null))
+                        }
+                        className="w-28 px-2.5 py-1 rounded-lg bg-surface border border-amber-500/40 text-xs font-bold text-emerald-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        placeholder="06:00 PM"
+                      />
+                    </td>
+                  </tr>
+
+                  {/* Row 3: Status */}
+                  <tr>
+                    <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Status</td>
+                    <td className="py-2.5 px-3">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500">
+                        {profileRegModal.log.status || 'Late'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-sans font-bold text-emerald-500">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 text-emerald-500">
+                        Present (Target)
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <form onSubmit={handleSubmitProfileRegularization} className="space-y-3.5 pt-1">
+              {/* Reason Dropdown */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Primary Reason <span className="text-amber-500">*</span>
+                </label>
+                <select
+                  value={profileRegModal.reason}
+                  onChange={(e) =>
+                    setProfileRegModal((prev) => (prev ? { ...prev, reason: e.target.value } : null))
+                  }
+                  required
+                  className="w-full h-9 px-3 rounded-xl bg-surface border border-border text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                >
+                  <option value="Late Entry Due to Official Field Work / Traffic">Late Entry Due to Official Field Work / Traffic</option>
+                  <option value="Biometric Device Sync / Network Failure">Biometric Device Sync / Network Failure</option>
+                  <option value="Approved Outside Duty / Offsite Meeting">Approved Outside Duty / Offsite Meeting</option>
+                  <option value="Forgot to Punch Out Before Leaving">Forgot to Punch Out Before Leaving</option>
+                  <option value="System Glitch or RFID Reader Latency">System Glitch or RFID Reader Latency</option>
+                  <option value="Emergency Personal or Health Delay">Emergency Personal or Health Delay</option>
+                  <option value="Other Legitimate Reason">Other Legitimate Reason</option>
+                </select>
+              </div>
+
+              {/* Justification Notes */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                  Detailed Justification / Explanation (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={profileRegModal.notes}
+                  onChange={(e) =>
+                    setProfileRegModal((prev) => (prev ? { ...prev, notes: e.target.value } : null))
+                  }
+                  placeholder="Provide context for your supervisor..."
+                  className="w-full p-2.5 rounded-xl bg-surface border border-border text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+                />
+              </div>
+
+              {/* Dynamic Line Manager / Supervisor Notice */}
+              <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-foreground/80 space-y-1">
+                <div className="flex items-center justify-between font-semibold">
+                  <span className="text-blue-500">Approving Supervisor:</span>
+                  <span className="font-bold text-foreground">{formData.supervisor || 'S M Nayeem Rahman'}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Regularization request will be routed directly to your designated supervisor for authorization.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-border/70">
+                <button
+                  type="button"
+                  onClick={() => setProfileRegModal(null)}
+                  className="px-4 py-2 rounded-xl bg-surface hover:bg-surface/80 text-muted-foreground text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={profileRegModal.isSubmitting}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider transition shadow-sm cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1.5"
+                >
+                  <span>{profileRegModal.isSubmitting ? 'Submitting...' : 'Submit Request'}</span>
                 </button>
               </div>
             </form>

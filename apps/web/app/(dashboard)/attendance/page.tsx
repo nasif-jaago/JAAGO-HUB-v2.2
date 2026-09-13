@@ -60,6 +60,7 @@ export default function AttendancePage() {
     avatarUrl: '',
     workingSchedule: 'JAAGO HQ (10:00 AM - 06:00 PM)',
     employeeCode: '',
+    allowRegularization: true as boolean | undefined,
   });
 
   // Punch session state
@@ -260,6 +261,7 @@ export default function AttendancePage() {
           avatarUrl: u.avatarUrl || prev.avatarUrl,
           workingSchedule: u.workingSchedule || prev.workingSchedule,
           employeeCode: u.employeeCode || u.employeeId || prev.employeeCode,
+          allowRegularization: u.allowRegularization !== false,
         }));
       }
     } catch {}
@@ -280,6 +282,7 @@ export default function AttendancePage() {
           avatarUrl: emp.avatarUrl || prev.avatarUrl,
           workingSchedule: emp.workingSchedule || prev.workingSchedule,
           employeeCode: emp.code || prev.employeeCode,
+          allowRegularization: emp.allowRegularization !== false,
         }));
         evaluateSuperAdminRole();
         loadUserLogs(emp.code || emp.id);
@@ -358,9 +361,15 @@ export default function AttendancePage() {
           avatarUrl: u.avatarUrl || prev.avatarUrl,
           workingSchedule: u.workingSchedule || prev.workingSchedule,
           employeeCode: u.employeeCode || prev.employeeCode,
+          allowRegularization: u.allowRegularization !== false,
         }));
         loadUserLogs(u.employeeCode || u.id);
         refreshTodaySession(u.employeeCode || u.id);
+      } else if (e?.detail?.allowRegularization !== undefined) {
+        setUser((prev) => ({
+          ...prev,
+          allowRegularization: e.detail.allowRegularization !== false,
+        }));
       }
     };
 
@@ -373,14 +382,32 @@ export default function AttendancePage() {
       loadUserLogs();
     };
 
+    const handleEmpsUpdated = () => {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_employees_v2');
+        if (raw) {
+          const emps = JSON.parse(raw);
+          if (Array.isArray(emps) && emps.length > 0) {
+            setEmployees(emps);
+          }
+        }
+      } catch {}
+      fetchEmployeesFromSupabase().then((emps) => {
+        if (emps && emps.length > 0) setEmployees(emps);
+      });
+    };
+
     window.addEventListener('jaago_attendance_updated', handleAttUpdated);
     window.addEventListener('jaago_attendance_regularization_updated', handleRegUpdated);
     window.addEventListener('jaago_leave_request_updated', handleAttUpdated);
     window.addEventListener('jaago_leave_allocation_updated', handleAttUpdated);
     window.addEventListener('jaago_user_updated', handleUserUpdated);
+    window.addEventListener('jaago_employees_updated', handleEmpsUpdated);
+    window.addEventListener('jaago_pnc_employees_changed', handleEmpsUpdated);
     window.addEventListener('jaago_onduty_updated', handleODUpdated);
     window.addEventListener('storage', handleAttUpdated);
     window.addEventListener('storage', handleUserUpdated);
+    window.addEventListener('storage', handleEmpsUpdated);
 
     // Live background polling for regularizations every 8 seconds
     const regInterval = setInterval(syncLiveRegularizations, 8000);
@@ -401,9 +428,12 @@ export default function AttendancePage() {
       window.removeEventListener('jaago_leave_request_updated', handleAttUpdated);
       window.removeEventListener('jaago_leave_allocation_updated', handleAttUpdated);
       window.removeEventListener('jaago_user_updated', handleUserUpdated);
+      window.removeEventListener('jaago_employees_updated', handleEmpsUpdated);
+      window.removeEventListener('jaago_pnc_employees_changed', handleEmpsUpdated);
       window.removeEventListener('jaago_onduty_updated', handleODUpdated);
       window.removeEventListener('storage', handleAttUpdated);
       window.removeEventListener('storage', handleUserUpdated);
+      window.removeEventListener('storage', handleEmpsUpdated);
       clearInterval(regInterval);
       clearInterval(autoPollInterval);
     };
@@ -626,6 +656,30 @@ export default function AttendancePage() {
   // ── REGULARIZATION HELPERS ───────────────────────────────────────────────
   // ═════════════════════════════════════════════════════════════════════════
 
+  const isEmployeeRegularizationAllowed = (log?: AttendanceLogItem): boolean => {
+    const reqEmpCode = (log?.employeeCode || user.employeeCode || '').toLowerCase().trim();
+    const reqEmpId = (log?.employeeId || user.id || '').trim();
+    const reqEmpName = (log?.employeeName || user.fullName || '').toLowerCase().trim();
+
+    const matchedEmp = employees.find(
+      (e) =>
+        (reqEmpCode && e.code?.toLowerCase().trim() === reqEmpCode) ||
+        (reqEmpId && e.id === reqEmpId) ||
+        (reqEmpName && e.name?.toLowerCase().trim() === reqEmpName)
+    );
+    if (matchedEmp) {
+      return matchedEmp.allowRegularization !== false;
+    }
+    if (user.allowRegularization !== undefined) {
+      return user.allowRegularization !== false;
+    }
+    return true;
+  };
+
+  const showRegularizationColumn = useMemo(() => {
+    return isEmployeeRegularizationAllowed();
+  }, [user, employees]);
+
   const isRowEligibleForRegularization = (log: AttendanceLogItem): boolean => {
     if (!log) return false;
 
@@ -709,6 +763,10 @@ export default function AttendancePage() {
   };
 
   const handleOpenRegularizationModal = (log: AttendanceLogItem) => {
+    if (!isEmployeeRegularizationAllowed(log)) {
+      alert('Attendance regularization requests are disabled for this employee in profile settings.');
+      return;
+    }
     const standard = calculateShiftStandardTimes(user.workingSchedule);
     setRegModal({
       isOpen: true,
@@ -724,6 +782,10 @@ export default function AttendancePage() {
   const handleSubmitRegularization = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!regModal || !regModal.log) return;
+    if (!isEmployeeRegularizationAllowed(regModal.log)) {
+      alert('Attendance regularization requests are disabled for this employee in profile settings.');
+      return;
+    }
 
     setRegModal((prev) => (prev ? { ...prev, isSubmitting: true } : null));
     try {
@@ -1389,7 +1451,9 @@ export default function AttendancePage() {
                           <th className="py-2 px-2.5 w-[90px] whitespace-nowrap border-r border-border/50">Working Hours</th>
                           <th className="py-2 px-2.5 w-[95px] whitespace-nowrap border-r border-border/50">Status</th>
                           <th className="py-2 px-2.5 w-[150px] max-w-[160px] whitespace-nowrap border-r border-border/50">Notes / Verification</th>
-                          <th className="py-2 px-2.5 w-[110px] whitespace-nowrap text-center border-r border-border/50">Regularization</th>
+                          {showRegularizationColumn && (
+                            <th className="py-2 px-2.5 w-[110px] whitespace-nowrap text-center border-r border-border/50">Regularization</th>
+                          )}
                           <th className="py-2 px-2.5 w-[85px] whitespace-nowrap text-right">Actions</th>
                         </tr>
                       </thead>
@@ -1401,6 +1465,8 @@ export default function AttendancePage() {
                             isSuperAdmin={isSuperAdmin}
                             isOnDuty={isOnDutyRecord(log)}
                             isEligibleForReg={isRowEligibleForRegularization(log)}
+                            isRegAllowed={isEmployeeRegularizationAllowed(log)}
+                            showRegularizationColumn={showRegularizationColumn}
                             existingReg={getExistingRegularization(log)}
                             onRegularize={handleOpenRegularizationModal}
                             onEdit={handleOpenEditModal}
@@ -1450,7 +1516,9 @@ export default function AttendancePage() {
                   <th className="py-2 px-2.5 w-[90px] whitespace-nowrap border-r border-border/50">Working Hours</th>
                   <th className="py-2 px-2.5 w-[95px] whitespace-nowrap border-r border-border/50">Status</th>
                   <th className="py-2 px-2.5 w-[150px] max-w-[160px] whitespace-nowrap border-r border-border/50">Notes / Verification</th>
-                  <th className="py-2 px-2.5 w-[110px] whitespace-nowrap text-center border-r border-border/50">Regularization</th>
+                  {showRegularizationColumn && (
+                    <th className="py-2 px-2.5 w-[110px] whitespace-nowrap text-center border-r border-border/50">Regularization</th>
+                  )}
                   <th className="py-2 px-2.5 w-[85px] whitespace-nowrap text-right">Actions</th>
                 </tr>
               </thead>
@@ -1649,63 +1717,76 @@ export default function AttendancePage() {
                         </td>
 
                         {/* ── REGULARIZATION COLUMN ── */}
-                        <td className="py-1.5 px-2.5 text-center whitespace-nowrap border-r border-border/30">
-                          {(() => {
-                            if (existingReg?.status === 'Approved') {
-                              return (
-                                <span
-                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black tracking-wide shadow-2xs"
-                                  title={`Regularized (Approved by ${existingReg.approvedBy || 'Supervisor'}): ${existingReg.reason}`}
-                                >
-                                  <CheckCircle2 className="h-3 w-3 mr-0.5 text-emerald-500" />
-                                  <span>R.Approved</span>
-                                </span>
-                              );
-                            }
+                        {showRegularizationColumn && (
+                          <td className="py-1.5 px-2.5 text-center whitespace-nowrap border-r border-border/30">
+                            {(() => {
+                              if (existingReg?.status === 'Approved') {
+                                return (
+                                  <span
+                                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black tracking-wide shadow-2xs"
+                                    title={`Regularized (Approved by ${existingReg.approvedBy || 'Supervisor'}): ${existingReg.reason}`}
+                                  >
+                                    <CheckCircle2 className="h-3 w-3 mr-0.5 text-emerald-500" />
+                                    <span>R.Approved</span>
+                                  </span>
+                                );
+                              }
 
-                            if (existingReg?.status === 'Pending') {
-                              return (
-                                <span
-                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-2xs"
-                                  title="Regularization request submitted and pending supervisor review"
-                                >
-                                  <Clock className="h-3 w-3 mr-0.5 animate-spin text-amber-500" />
-                                  <span>Pending</span>
-                                </span>
-                              );
-                            }
+                              if (existingReg?.status === 'Pending') {
+                                return (
+                                  <span
+                                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-2xs"
+                                    title="Regularization request submitted and pending supervisor review"
+                                  >
+                                    <Clock className="h-3 w-3 mr-0.5 animate-spin text-amber-500" />
+                                    <span>Pending</span>
+                                  </span>
+                                );
+                              }
 
-                            if (existingReg?.status === 'Refused' || existingReg?.status === 'Rejected') {
+                              if (existingReg?.status === 'Refused' || existingReg?.status === 'Rejected') {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenRegularizationModal(log)}
+                                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[9.5px] font-black transition cursor-pointer active:scale-95 shadow-2xs"
+                                    title={`Refused by ${existingReg.approvedBy || 'Supervisor'}${existingReg.refusalNote ? `: "${existingReg.refusalNote}"` : ''} - Click to re-apply`}
+                                  >
+                                    <XCircle className="h-3 w-3 mr-0.5 text-rose-500 group-hover:text-white" />
+                                    <span>R.Refused</span>
+                                  </button>
+                                );
+                              }
+
+                              if (!eligibleForReg) {
+                                return <span className="text-muted-foreground/30 font-bold text-xs">--</span>;
+                              }
+
+                              if (!isEmployeeRegularizationAllowed(log)) {
+                                return (
+                                  <span
+                                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted/30 text-muted-foreground border border-border/40 text-[10px] font-bold tracking-wide cursor-not-allowed"
+                                    title="Regularization requests are disabled for this employee in profile"
+                                  >
+                                    Disabled
+                                  </span>
+                                );
+                              }
+
+                              // If eligible and not regularized yet: Show Regularize button
                               return (
                                 <button
                                   type="button"
                                   onClick={() => handleOpenRegularizationModal(log)}
-                                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[9.5px] font-black transition cursor-pointer active:scale-95 shadow-2xs"
-                                  title={`Refused by ${existingReg.approvedBy || 'Supervisor'}${existingReg.refusalNote ? `: "${existingReg.refusalNote}"` : ''} - Click to re-apply`}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[10.5px] font-black tracking-wide shadow-2xs transition duration-150 cursor-pointer inline-flex items-center space-x-1 active:scale-95"
+                                  title="Click to regularize check-in/out times based on shift"
                                 >
-                                  <XCircle className="h-3 w-3 mr-0.5 text-rose-500 group-hover:text-white" />
-                                  <span>R.Refused</span>
+                                  <span>Regularize</span>
                                 </button>
                               );
-                            }
-
-                            if (!eligibleForReg) {
-                              return <span className="text-muted-foreground/30 font-bold text-xs">--</span>;
-                            }
-
-                            // If eligible and not regularized yet: Show Regularize button
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenRegularizationModal(log)}
-                                className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[10.5px] font-black tracking-wide shadow-2xs transition duration-150 cursor-pointer inline-flex items-center space-x-1 active:scale-95"
-                                title="Click to regularize check-in/out times based on shift"
-                              >
-                                <span>Regularize</span>
-                              </button>
-                            );
-                          })()}
-                        </td>
+                            })()}
+                          </td>
+                        )}
 
                         {/* Actions Column */}
                         <td className="py-1.5 px-2.5 text-right whitespace-nowrap">
@@ -1758,7 +1839,7 @@ export default function AttendancePage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={isSuperAdmin ? 10 : 9} className="py-14 text-center text-muted-foreground">
+                    <td colSpan={isSuperAdmin ? (showRegularizationColumn ? 10 : 9) : (showRegularizationColumn ? 9 : 8)} className="py-14 text-center text-muted-foreground">
                       <Clock className="h-9 w-9 mx-auto mb-2 text-muted-foreground/40" />
                       <p className="font-bold text-sm">No attendance records found</p>
                       <p className="text-xs text-muted-foreground/70 mt-0.5">
@@ -2445,6 +2526,8 @@ function AttendanceLogRow({
   isSuperAdmin = false,
   isOnDuty = false,
   isEligibleForReg = false,
+  isRegAllowed = true,
+  showRegularizationColumn = true,
   existingReg,
   onRegularize,
   onEdit,
@@ -2456,6 +2539,8 @@ function AttendanceLogRow({
   isSuperAdmin?: boolean | undefined;
   isOnDuty?: boolean | undefined;
   isEligibleForReg?: boolean | undefined;
+  isRegAllowed?: boolean | undefined;
+  showRegularizationColumn?: boolean | undefined;
   existingReg?: AttendanceRegularizationItem | undefined;
   onRegularize: (log: AttendanceLogItem) => void;
   onEdit: (log: AttendanceLogItem) => void;
@@ -2591,62 +2676,75 @@ function AttendanceLogRow({
       </td>
 
       {/* Regularization Column */}
-      <td className="py-1.5 px-2.5 text-center whitespace-nowrap border-r border-border/30">
-        {(() => {
-          if (existingReg?.status === 'Approved') {
-            return (
-              <span
-                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black tracking-wide shadow-2xs"
-                title={`Regularized (Approved by ${existingReg.approvedBy || 'Supervisor'}): ${existingReg.reason}`}
-              >
-                <CheckCircle2 className="h-3 w-3 mr-0.5 text-emerald-500" />
-                <span>R.Approved</span>
-              </span>
-            );
-          }
+      {showRegularizationColumn && (
+        <td className="py-1.5 px-2.5 text-center whitespace-nowrap border-r border-border/30">
+          {(() => {
+            if (existingReg?.status === 'Approved') {
+              return (
+                <span
+                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-[10px] font-black tracking-wide shadow-2xs"
+                  title={`Regularized (Approved by ${existingReg.approvedBy || 'Supervisor'}): ${existingReg.reason}`}
+                >
+                  <CheckCircle2 className="h-3 w-3 mr-0.5 text-emerald-500" />
+                  <span>R.Approved</span>
+                </span>
+              );
+            }
 
-          if (existingReg?.status === 'Pending') {
-            return (
-              <span
-                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-2xs"
-                title="Regularization request submitted and pending supervisor review"
-              >
-                <Clock className="h-3 w-3 mr-0.5 animate-spin text-amber-500" />
-                <span>Pending</span>
-              </span>
-            );
-          }
+            if (existingReg?.status === 'Pending') {
+              return (
+                <span
+                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-500 border border-amber-500/30 text-[10px] font-black tracking-wide shadow-2xs"
+                  title="Regularization request submitted and pending supervisor review"
+                >
+                  <Clock className="h-3 w-3 mr-0.5 animate-spin text-amber-500" />
+                  <span>Pending</span>
+                </span>
+              );
+            }
 
-          if (existingReg?.status === 'Refused' || existingReg?.status === 'Rejected') {
+            if (existingReg?.status === 'Refused' || existingReg?.status === 'Rejected') {
+              return (
+                <button
+                  type="button"
+                  onClick={() => onRegularize(log)}
+                  className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[9.5px] font-black transition cursor-pointer active:scale-95 shadow-2xs"
+                  title={`Refused by ${existingReg.approvedBy || 'Supervisor'}${existingReg.refusalNote ? `: "${existingReg.refusalNote}"` : ''} - Click to re-apply`}
+                >
+                  <XCircle className="h-3 w-3 mr-0.5 text-rose-500 group-hover:text-white" />
+                  <span>R.Refused</span>
+                </button>
+              );
+            }
+
+            if (!isEligibleForReg) {
+              return <span className="text-muted-foreground/30 font-bold text-xs">--</span>;
+            }
+
+            if (!isRegAllowed) {
+              return (
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted/30 text-muted-foreground border border-border/40 text-[10px] font-bold tracking-wide cursor-not-allowed"
+                  title="Regularization requests are disabled for this employee in profile"
+                >
+                  Disabled
+                </span>
+              );
+            }
+
             return (
               <button
                 type="button"
                 onClick={() => onRegularize(log)}
-                className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-rose-500/15 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/30 text-[9.5px] font-black transition cursor-pointer active:scale-95 shadow-2xs"
-                title={`Refused by ${existingReg.approvedBy || 'Supervisor'}${existingReg.refusalNote ? `: "${existingReg.refusalNote}"` : ''} - Click to re-apply`}
+                className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[10.5px] font-black tracking-wide shadow-2xs transition duration-150 cursor-pointer inline-flex items-center space-x-1 active:scale-95"
+                title="Click to regularize check-in/out times based on shift"
               >
-                <XCircle className="h-3 w-3 mr-0.5 text-rose-500 group-hover:text-white" />
-                <span>R.Refused</span>
+                <span>Regularize</span>
               </button>
             );
-          }
-
-          if (!isEligibleForReg) {
-            return <span className="text-muted-foreground/30 font-bold text-xs">--</span>;
-          }
-
-          return (
-            <button
-              type="button"
-              onClick={() => onRegularize(log)}
-              className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500 text-amber-500 hover:text-slate-950 border border-amber-500/30 hover:border-amber-500 text-[10.5px] font-black tracking-wide shadow-2xs transition duration-150 cursor-pointer inline-flex items-center space-x-1 active:scale-95"
-              title="Click to regularize check-in/out times based on shift"
-            >
-              <span>Regularize</span>
-            </button>
-          );
-        })()}
-      </td>
+          })()}
+        </td>
+      )}
 
       {/* Actions */}
       <td className="py-1.5 px-2.5 text-right whitespace-nowrap">

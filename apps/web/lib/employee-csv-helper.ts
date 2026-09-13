@@ -107,6 +107,7 @@ export const EMPLOYEE_CSV_COLUMNS: CSVColumnDefinition[] = [
   { header: 'Weekend Days', key: 'weekendDays', aliases: ['weekend_days', 'weekend days', 'weekends'], defaultValue: 'Friday & Saturday' },
   { header: 'Overtime Eligible', key: 'overtimeEligible', aliases: ['overtime_eligible', 'overtime eligible', 'ot_eligible'], defaultValue: 'No' },
   { header: 'Attendance Grace Period (Min)', key: 'attendanceGracePeriodMin', aliases: ['attendance_grace_period_min', 'grace_period', 'grace_min'], type: 'number', defaultValue: 15 },
+  { header: 'Allow Regularization', key: 'allowRegularization', aliases: ['allow_regularization', 'regularization_allowed', 'regularization'], type: 'boolean', defaultValue: true },
 
   // ── Tab 7: User Provisioning ──
   { header: 'User Account Created', key: 'isUser', aliases: ['is_user', 'user_account_created', 'has_user_login'], type: 'boolean', defaultValue: false },
@@ -571,6 +572,7 @@ export function parseComprehensiveEmployeeCSV(csvText: string): {
       weekendDays: rowObj.weekendDays || 'Friday & Saturday',
       overtimeEligible: rowObj.overtimeEligible || 'No',
       attendanceGracePeriodMin: Number(rowObj.attendanceGracePeriodMin ?? 15),
+      allowRegularization: rowObj.allowRegularization !== undefined ? Boolean(rowObj.allowRegularization) : true,
 
       // Tab 7: Logs
       logHistory: [],

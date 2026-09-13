@@ -19,6 +19,7 @@ export interface UserSessionData {
   workingSchedule?: string | undefined;
   roles?: string[] | undefined;
   permissions?: string[] | undefined;
+  allowRegularization?: boolean | undefined;
 }
 
 /**
@@ -230,6 +231,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       workingSchedule: employee.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
       permissions: userPermissions || baseSession.permissions || (isNasif ? ['*'] : []),
       roles: isNasif ? ['super_admin', 'coordinator'] : baseSession.roles || ['user'],
+      allowRegularization: employee.allowRegularization !== false,
     };
 
     localStorage.setItem('jaago_user', JSON.stringify(updatedUser));

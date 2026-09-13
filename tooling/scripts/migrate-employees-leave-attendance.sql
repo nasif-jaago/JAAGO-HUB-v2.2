@@ -19,7 +19,9 @@ ALTER TABLE public.employees
     ADD COLUMN IF NOT EXISTS overtime_eligible VARCHAR(50) NOT NULL DEFAULT 'No',
     ADD COLUMN IF NOT EXISTS attendance_grace_period_min INTEGER NOT NULL DEFAULT 15,
     ADD COLUMN IF NOT EXISTS late_penalty_rule VARCHAR(100) NOT NULL DEFAULT '3_LATES_HALF_DAY',
-    ADD COLUMN IF NOT EXISTS attendance_verification_method VARCHAR(100) NOT NULL DEFAULT 'HYBRID';
+    ADD COLUMN IF NOT EXISTS attendance_verification_method VARCHAR(100) NOT NULL DEFAULT 'HYBRID',
+    ADD COLUMN IF NOT EXISTS allow_regularization BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN IF NOT EXISTS regularization_allowed BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- 2. CREATE INDEX FOR WORKING SCHEDULE (If not exists)
 CREATE INDEX IF NOT EXISTS idx_employees_working_schedule ON public.employees(working_schedule);
@@ -43,5 +45,7 @@ SET
     attendance_grace_period_min = 15,
     late_penalty_rule = '3_LATES_HALF_DAY',
     attendance_verification_method = 'HYBRID',
+    allow_regularization = TRUE,
+    regularization_allowed = TRUE,
     updated_at = NOW()
 WHERE code = 'FO032507061190' OR work_email = 'nasif.kamal@jaago.com.bd';

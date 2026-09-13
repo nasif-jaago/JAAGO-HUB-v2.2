@@ -111,6 +111,9 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     weekendDays: row.weekend_days || 'Friday & Saturday',
     overtimeEligible: row.overtime_eligible || 'No',
     attendanceGracePeriodMin: Number(row.attendance_grace_period_min ?? 15),
+    allowRegularization: row.allow_regularization !== undefined
+      ? Boolean(row.allow_regularization)
+      : (row.regularization_allowed !== undefined ? Boolean(row.regularization_allowed) : true),
 
     // Tab 7: Logs
     logHistory: [],
@@ -274,6 +277,8 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     weekend_days: profile.weekendDays || 'Friday & Saturday',
     overtime_eligible: profile.overtimeEligible || 'No',
     attendance_grace_period_min: sanitizeNumber(profile.attendanceGracePeriodMin, 15),
+    allow_regularization: profile.allowRegularization !== false,
+    regularization_allowed: profile.allowRegularization !== false,
 
     is_user: Boolean(profile.isUser),
     user_id: sanitizeUuid(profile.userId),
