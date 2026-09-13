@@ -691,8 +691,7 @@ export default function AttendancePage() {
           (e.name || '').toLowerCase().trim() === reqEmpName ||
           (e.name || '').toLowerCase().trim().includes(reqEmpName) ||
           reqEmpName.includes((e.name || '').toLowerCase().trim())
-        )) ||
-        (reqEmpName.includes('nasif') && (e.name || '').toLowerCase().includes('nasif'))
+        ))
     );
     if (matchedEmp) {
       if (matchedEmp.allowRegularization !== undefined) {

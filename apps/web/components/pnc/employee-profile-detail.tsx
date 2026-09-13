@@ -994,8 +994,7 @@ export function EmployeeProfileDetail({
           (fCode && uCode && (uCode === fCode || uCode.includes(fCode) || fCode.includes(uCode))) ||
           (fId && (u.id === fId || uCode === fId.toLowerCase())) ||
           (fEmail && uEmail && uEmail === fEmail) ||
-          (fName && uName && (uName === fName || uName.includes(fName) || fName.includes(uName))) ||
-          (fName.includes('nasif') && (uName.includes('nasif') || uEmail.includes('nasif')));
+          (fName && uName && (uName === fName || uName.includes(fName) || fName.includes(uName)));
 
         if (isMatch) {
           u.allowRegularization = enabled;
