@@ -39,6 +39,7 @@ import {
   Printer,
   Edit3,
   XCircle,
+  Paperclip,
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
@@ -94,6 +95,10 @@ import {
   BEREAVEMENT_RELATIONSHIPS,
   type BereavementRelationship,
   QUICK_LEAVE_POLICIES,
+  fetchPublicHolidays,
+  type PublicHolidayItem,
+  calculateCasualLeaveDuration,
+  validateCasualLeaveRules,
 } from '@/lib/supabase-time-off';
 import { saveEmployeeToSupabase } from '@/lib/supabase-employees';
 import { invalidateCache } from '@/lib/data-cache';
@@ -879,6 +884,8 @@ export function EmployeeProfileDetail({
     expectedDeliveryDate: string;
     intendedMaternityStartDate: string;
     bereavementRelationship: BereavementRelationship | '';
+    attachmentName?: string;
+    attachmentUrl?: string;
   }>({
     leaveType: 'Casual Leave',
     fromDate: new Date().toISOString().split('T')[0]!,
@@ -890,9 +897,23 @@ export function EmployeeProfileDetail({
     expectedDeliveryDate: '',
     intendedMaternityStartDate: '',
     bereavementRelationship: '',
+    attachmentName: '',
+    attachmentUrl: '',
   });
   const [profileLeaveError, setProfileLeaveError] = useState<string | null>(null);
   const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
+  const [holidays, setHolidays] = useState<PublicHolidayItem[]>([]);
+
+  // Real-time Casual Leave calculation breakdown (sandwiched holidays, boundary exclusion)
+  const profileCasualCalcInfo = useMemo(() => {
+    if (profileLeaveForm.leaveType !== 'Casual Leave') return null;
+    return calculateCasualLeaveDuration(
+      profileLeaveForm.fromDate,
+      profileLeaveForm.toDate,
+      profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF',
+      holidays
+    );
+  }, [profileLeaveForm.leaveType, profileLeaveForm.fromDate, profileLeaveForm.toDate, profileLeaveForm.halfDayType, holidays]);
 
   // Attendance Regularization live connection
   const [regularizations, setRegularizations] = useState<AttendanceRegularizationItem[]>(() => {
@@ -1148,14 +1169,16 @@ export function EmployeeProfileDetail({
     async function loadEmpLeaveData() {
       if (formData.code) {
         try {
-          const [allocs, reqs] = await Promise.all([
+          const [allocs, reqs, hols] = await Promise.all([
             fetchLeaveAllocations(),
             fetchLeaveRequests(),
+            fetchPublicHolidays(),
           ]);
           const found = allocs.find((a) => a.employeeCode === formData.code) || null;
           setEmpLeaveAllocation(found);
           const filtered = reqs.filter((r) => r.employeeCode === formData.code);
           setEmpLeaveRequests(filtered);
+          if (hols) setHolidays(hols);
         } catch {}
       }
     }
@@ -1166,9 +1189,11 @@ export function EmployeeProfileDetail({
     };
     window.addEventListener('jaago_leave_allocation_updated', handleAllocationUpdate);
     window.addEventListener('jaago_leave_request_updated', handleAllocationUpdate);
+    window.addEventListener('jaago_public_holidays_updated', handleAllocationUpdate);
     return () => {
       window.removeEventListener('jaago_leave_allocation_updated', handleAllocationUpdate);
       window.removeEventListener('jaago_leave_request_updated', handleAllocationUpdate);
+      window.removeEventListener('jaago_public_holidays_updated', handleAllocationUpdate);
     };
   }, [formData.code]);
 
@@ -4560,6 +4585,105 @@ export function EmployeeProfileDetail({
                   return;
                 }
 
+                // Check probation rules
+                const isEmpProbation = Boolean(
+                  (formData as any)?.probationaryStatus === 'On Probation' ||
+                  (formData as any)?.probationaryStatus === 'Probationary' ||
+                  (formData as any)?.probationaryStatus === 'Probation' ||
+                  (formData as any)?.leaveGroup === 'Probationary Staff'
+                );
+
+                if (profileLeaveForm.leaveType === 'Casual Leave') {
+                  const clValidation = validateCasualLeaveRules({
+                    startDate: profileLeaveForm.fromDate,
+                    endDate: profileLeaveForm.toDate,
+                    mode: profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF',
+                    totalCalculatedDays: profileLeaveForm.totalDays,
+                    holidays,
+                    existingRequests: empLeaveRequests,
+                    employeeCode: formData.code,
+                    isProbation: isEmpProbation,
+                    availableBalance: empLeaveAllocation ? Math.max(0, (empLeaveAllocation.casualAllocated ?? 0) - (empLeaveAllocation.casualUsed ?? 0)) : undefined,
+                  });
+
+                  if (!clValidation.valid) {
+                    setProfileLeaveError(clValidation.error || 'Casual Leave request violates policy rules.');
+                    return;
+                  }
+                }
+
+                if (profileLeaveForm.leaveType === 'Annual Leave' && isEmpProbation) {
+                  setProfileLeaveError('Policy Warning: Annual Leave is not available during probation period.');
+                  return;
+                }
+
+                if (profileLeaveForm.leaveType === 'Medical Leave' && isEmpProbation) {
+                  const medicalUsed = empLeaveAllocation?.medicalUsed || 0;
+                  const maxAllowed = Math.max(0, 3 - medicalUsed);
+                  if (profileLeaveForm.totalDays > maxAllowed) {
+                    setProfileLeaveError(
+                      `Probation Policy Limit: Employees on probation cannot avail more than 3 Medical Leave days in total (Remaining eligible: ${maxAllowed} day(s)).`
+                    );
+                    return;
+                  }
+                }
+
+                // Check available balance
+                if (empLeaveAllocation) {
+                  let availableQuota = 0;
+                  const effectiveMedical = isEmpProbation
+                    ? Math.min(3, empLeaveAllocation.medicalAllocated ?? 3)
+                    : (empLeaveAllocation.medicalAllocated ?? 10);
+
+                  switch (profileLeaveForm.leaveType) {
+                    case 'Casual Leave':
+                      availableQuota = Math.max(0, (empLeaveAllocation.casualAllocated ?? 0) - (empLeaveAllocation.casualUsed ?? 0));
+                      break;
+                    case 'Medical Leave':
+                      availableQuota = Math.max(0, effectiveMedical - (empLeaveAllocation.medicalUsed ?? 0));
+                      break;
+                    case 'Emergency Leave':
+                      availableQuota = Math.max(0, (empLeaveAllocation.emergencyAllocated ?? 0) - (empLeaveAllocation.emergencyUsed ?? 0));
+                      break;
+                    case 'Annual Leave':
+                      availableQuota = Math.max(0, (empLeaveAllocation.annualAllocated ?? 0) - (empLeaveAllocation.annualUsed ?? 0));
+                      break;
+                    case 'Maternity Leave':
+                      availableQuota = Math.max(0, (empLeaveAllocation.maternityAllocated ?? 0) - (empLeaveAllocation.maternityUsed ?? 0));
+                      break;
+                    case 'Paternity Leave':
+                      availableQuota = Math.max(0, (empLeaveAllocation.paternityAllocated ?? 0) - (empLeaveAllocation.paternityUsed ?? 0));
+                      break;
+                    case 'Compensatory Leave':
+                      availableQuota = Math.max(0, (empLeaveAllocation.compOffAllocated ?? 0) - (empLeaveAllocation.compOffUsed ?? 0));
+                      break;
+                    case 'Bereavement Leave':
+                      availableQuota = Math.max(0, 5 - (empLeaveAllocation.bereavementUsed ?? 0));
+                      break;
+                    default:
+                      availableQuota = 0;
+                  }
+
+                  if (profileLeaveForm.totalDays > availableQuota) {
+                    setProfileLeaveError(
+                      `Insufficient Balance: Requested ${profileLeaveForm.totalDays} day(s) exceeds available ${profileLeaveForm.leaveType} balance of ${availableQuota} day(s).`
+                    );
+                    return;
+                  }
+                }
+
+                // Mandatory document for Medical Leave > 3 consecutive days
+                if (profileLeaveForm.leaveType === 'Medical Leave' && profileLeaveForm.totalDays > 3) {
+                  if (!profileLeaveForm.attachmentName) {
+                    setProfileLeaveError(
+                      'Policy Requirement: Medical certificate or prescription document upload is mandatory for Medical Leave exceeding 3 consecutive days.'
+                    );
+                    return;
+                  }
+                }
+
+                const supervisorName = formData.supervisor || (formData as any)?.manager || "Nasif Kamal";
+
                 const newReq: LeaveRequestItem = {
                   id: `lv-${Date.now()}`,
                   employeeCode: formData.code,
@@ -4576,6 +4700,9 @@ export function EmployeeProfileDetail({
                   expectedDeliveryDate: profileLeaveForm.expectedDeliveryDate,
                   intendedMaternityStartDate: profileLeaveForm.intendedMaternityStartDate,
                   bereavementRelationship: profileLeaveForm.bereavementRelationship as BereavementRelationship,
+                  attachmentName: profileLeaveForm.attachmentName || '',
+                  attachmentUrl: profileLeaveForm.attachmentUrl || '',
+                  supervisorName: supervisorName,
                   status: 'Pending',
                   appliedAt: new Date().toISOString(),
                 };
@@ -4620,7 +4747,14 @@ export function EmployeeProfileDetail({
                         const d2 = new Date(profileLeaveForm.toDate);
                         let diffDays = 1;
                         if (newType === 'Maternity Leave') diffDays = 120;
-                        else if (profileLeaveForm.halfDayType !== 'Full Day' && newType === 'Casual Leave') diffDays = 0.5;
+                        else if (newType === 'Casual Leave') {
+                          diffDays = calculateCasualLeaveDuration(
+                            profileLeaveForm.fromDate,
+                            profileLeaveForm.toDate,
+                            profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF',
+                            holidays
+                          ).totalDays;
+                        } else if (profileLeaveForm.halfDayType !== 'Full Day') diffDays = 0.5;
                         else if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
                           diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
                         }
@@ -4662,10 +4796,26 @@ export function EmployeeProfileDetail({
                       value={profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF'}
                       onChange={(e) => {
                         const isHalf = e.target.value === 'HALF';
+                        const nextMode = isHalf ? 'First Half' : 'Full Day';
+                        let nextDays = isHalf ? 0.5 : 1;
+                        if (profileLeaveForm.leaveType === 'Casual Leave') {
+                          nextDays = calculateCasualLeaveDuration(
+                            profileLeaveForm.fromDate,
+                            profileLeaveForm.toDate,
+                            isHalf ? 'HALF' : 'FULL',
+                            holidays
+                          ).totalDays;
+                        } else if (!isHalf) {
+                          const d1 = new Date(profileLeaveForm.fromDate);
+                          const d2 = new Date(profileLeaveForm.toDate);
+                          if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+                            nextDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                          }
+                        }
                         setProfileLeaveForm({
                           ...profileLeaveForm,
-                          halfDayType: isHalf ? 'First Half' : 'Full Day',
-                          totalDays: isHalf ? 0.5 : 1,
+                          halfDayType: nextMode,
+                          totalDays: nextDays > 0 ? nextDays : 1,
                         });
                       }}
                       className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm"
@@ -4727,15 +4877,32 @@ export function EmployeeProfileDetail({
                     required
                     value={profileLeaveForm.fromDate}
                     onChange={(e) => {
-                      const d1 = new Date(e.target.value);
-                      const d2 = new Date(profileLeaveForm.toDate);
+                      const fromVal = e.target.value;
+                      let toVal = profileLeaveForm.toDate;
+                      if (profileLeaveForm.halfDayType !== 'Full Day' || fromVal > toVal) {
+                        toVal = fromVal;
+                      }
                       let diffDays = 1;
-                      if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
-                        diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                      if (profileLeaveForm.leaveType === 'Casual Leave') {
+                        diffDays = calculateCasualLeaveDuration(
+                          fromVal,
+                          toVal,
+                          profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF',
+                          holidays
+                        ).totalDays;
+                      } else if (profileLeaveForm.halfDayType !== 'Full Day') {
+                        diffDays = 0.5;
+                      } else {
+                        const d1 = new Date(fromVal);
+                        const d2 = new Date(toVal);
+                        if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+                          diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                        }
                       }
                       setProfileLeaveForm({
                         ...profileLeaveForm,
-                        fromDate: e.target.value,
+                        fromDate: fromVal,
+                        toDate: toVal,
                         totalDays: diffDays > 0 ? diffDays : 1,
                       });
                     }}
@@ -4756,15 +4923,27 @@ export function EmployeeProfileDetail({
                         : profileLeaveForm.toDate
                     }
                     onChange={(e) => {
-                      const d1 = new Date(profileLeaveForm.fromDate);
-                      const d2 = new Date(e.target.value);
+                      const toVal = e.target.value;
                       let diffDays = 1;
-                      if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
-                        diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                      if (profileLeaveForm.leaveType === 'Casual Leave') {
+                        diffDays = calculateCasualLeaveDuration(
+                          profileLeaveForm.fromDate,
+                          toVal,
+                          profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF',
+                          holidays
+                        ).totalDays;
+                      } else if (profileLeaveForm.halfDayType !== 'Full Day') {
+                        diffDays = 0.5;
+                      } else {
+                        const d1 = new Date(profileLeaveForm.fromDate);
+                        const d2 = new Date(toVal);
+                        if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
+                          diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
+                        }
                       }
                       setProfileLeaveForm({
                         ...profileLeaveForm,
-                        toDate: e.target.value,
+                        toDate: toVal,
                         totalDays: diffDays > 0 ? diffDays : 1,
                       });
                     }}
@@ -4772,6 +4951,22 @@ export function EmployeeProfileDetail({
                   />
                 </div>
               </div>
+
+              {/* Casual Leave Holiday Breakdown Details */}
+              {profileLeaveForm.leaveType === 'Casual Leave' && profileCasualCalcInfo && (
+                <div className="flex flex-wrap gap-2 text-[11px] pt-1">
+                  {profileCasualCalcInfo.sandwichedHolidaysCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-500 font-bold">
+                      Includes {profileCasualCalcInfo.sandwichedHolidaysCount} sandwiched public holiday ({profileCasualCalcInfo.sandwichedHolidayNames.join(', ')})
+                    </span>
+                  )}
+                  {profileCasualCalcInfo.boundaryHolidaysCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-xl bg-surface border border-border/70 text-muted-foreground">
+                      {profileCasualCalcInfo.boundaryHolidaysCount} boundary public holiday(s) excluded
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Bereavement Dropdown */}
               {profileLeaveForm.leaveType === 'Bereavement Leave' && (
@@ -4812,6 +5007,71 @@ export function EmployeeProfileDetail({
                   placeholder="Detail the purpose of leave and handover arrangements..."
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm resize-none"
                 />
+              </div>
+
+              {/* Supporting Document Upload */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Supporting Document{' '}
+                  {profileLeaveForm.leaveType === 'Medical Leave' && profileLeaveForm.totalDays > 3 ? (
+                    <span className="text-amber-500 font-bold">(Required *)</span>
+                  ) : profileLeaveForm.totalDays >= 3 ? (
+                    <span className="text-muted-foreground font-semibold">(Recommended)</span>
+                  ) : (
+                    <span className="text-muted-foreground/80 font-normal">(Optional)</span>
+                  )}
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="file"
+                    id="profile-leave-doc"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 10 * 1024 * 1024) {
+                          setProfileLeaveError('Document size exceeds 10 MB.');
+                          return;
+                        }
+                        setProfileLeaveError(null);
+                        let finalUrl = '';
+                        try {
+                          const formDataUpload = new FormData();
+                          formDataUpload.append('file', file);
+                          formDataUpload.append('employeeCode', formData.code || 'emp');
+                          formDataUpload.append('fileName', file.name);
+                          const res = await fetch('/api/v1/leaves/attachments', {
+                            method: 'POST',
+                            body: formDataUpload,
+                          });
+                          const data = await res.json();
+                          if (data.success && data.url) {
+                            finalUrl = data.url;
+                          }
+                        } catch {}
+                        setProfileLeaveForm((prev) => ({
+                          ...prev,
+                          attachmentName: file.name,
+                          attachmentUrl: finalUrl,
+                        }));
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('profile-leave-doc')?.click()}
+                    className="w-full h-10 px-3.5 rounded-xl bg-surface border border-border hover:border-amber-500 text-xs font-semibold text-foreground transition shadow-sm cursor-pointer flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-2 truncate">
+                      <Paperclip className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                      <span className="truncate text-muted-foreground">
+                        {profileLeaveForm.attachmentName || 'Attach medical certificate / prescription...'}
+                      </span>
+                    </div>
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  </button>
+                </div>
               </div>
 
               {/* ── QUICK LEAVE POLICY BANNER ── */}

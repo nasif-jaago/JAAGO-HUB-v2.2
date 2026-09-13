@@ -321,8 +321,19 @@ export default function LeaveAllocationsPage() {
       // Core Quotas dynamically resolved based on employee's Leave Policy Configuration
       const coreQuotas = getCoreLeaveQuotaFromPolicies(emp || existing || {}, policies);
 
+      const isEmpProbation = Boolean(
+        (emp as any)?.probationaryStatus === 'On Probation' ||
+        (emp as any)?.probationaryStatus === 'Probationary' ||
+        (emp as any)?.probationaryStatus === 'Probation' ||
+        (emp as any)?.leaveGroup === 'Probationary Staff'
+      );
+
       let casual = existing?.casualAllocated ?? coreQuotas.casual;
-      let medical = existing?.medicalAllocated ?? coreQuotas.medical;
+      let medical = isEmpProbation
+        ? 3
+        : (emp?.joiningDate || (emp as any)?.joining_date)
+          ? coreQuotas.medical
+          : (existing?.medicalAllocated ?? coreQuotas.medical);
       let emergency = existing?.emergencyAllocated ?? coreQuotas.emergency;
       let annual = existing?.annualAllocated ?? coreQuotas.annual;
 

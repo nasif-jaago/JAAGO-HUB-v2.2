@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
   Trash2,
@@ -31,6 +31,10 @@ import {
   fetchLeaveAllocations,
   LeaveAllocationItem,
   validateLeaveGenderEligibility,
+  PublicHolidayItem,
+  fetchPublicHolidays,
+  calculateCasualLeaveDuration,
+  validateCasualLeaveRules,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import {
@@ -97,6 +101,7 @@ export default function MyLeavePage() {
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [selectedEmpCode, setSelectedEmpCode] = useState<string>('');
+  const [holidays, setHolidays] = useState<PublicHolidayItem[]>([]);
   const [selectedTab, setSelectedTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -126,13 +131,15 @@ export default function MyLeavePage() {
   const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
 
   const loadData = async () => {
-    const [reqs, allocs, emps] = await Promise.all([
+    const [reqs, allocs, emps, hols] = await Promise.all([
       fetchLeaveRequests(),
       fetchLeaveAllocations(),
       fetchEmployeesFromSupabase(),
+      fetchPublicHolidays(),
     ]);
     if (reqs) setRequests(reqs);
     if (allocs) setAllocations(allocs);
+    if (hols) setHolidays(hols);
     if (emps && emps.length > 0) {
       setEmployees(emps);
       const currentSession = getCurrentUserSession();
@@ -182,12 +189,14 @@ export default function MyLeavePage() {
     window.addEventListener('jaago_leave_request_updated', handleReqUpdate);
     window.addEventListener('jaago_user_updated', handleUserUpdate);
     window.addEventListener('jaago_employees_updated', handleAllocUpdate);
+    window.addEventListener('jaago_public_holidays_updated', handleAllocUpdate);
 
     return () => {
       window.removeEventListener('jaago_leave_allocation_updated', handleAllocUpdate);
       window.removeEventListener('jaago_leave_request_updated', handleReqUpdate);
       window.removeEventListener('jaago_user_updated', handleUserUpdate);
       window.removeEventListener('jaago_employees_updated', handleAllocUpdate);
+      window.removeEventListener('jaago_public_holidays_updated', handleAllocUpdate);
     };
   }, []);
 
@@ -238,12 +247,16 @@ export default function MyLeavePage() {
     );
   };
 
-  // Calculate duration days
+  // Calculate duration days with government holiday rules
   const calculateTotalDays = (): number => {
     if (leaveCategory === 'Maternity Leave') return 120;
     if (leaveCategory === 'Paternity Leave') return 15;
     if (isHalfDayAllowed(leaveCategory) && leaveDurationMode === 'HALF') {
       return 0.5;
+    }
+    if (leaveCategory === 'Casual Leave') {
+      const res = calculateCasualLeaveDuration(startDate, endDate, leaveDurationMode, holidays);
+      return res.totalDays;
     }
     const d1 = new Date(startDate);
     const d2 = new Date(endDate);
@@ -255,6 +268,50 @@ export default function MyLeavePage() {
 
   const totalCalculatedDays = calculateTotalDays();
 
+  const casualCalcInfo = useMemo(() => {
+    if (leaveCategory !== 'Casual Leave') return null;
+    return calculateCasualLeaveDuration(startDate, endDate, leaveDurationMode, holidays);
+  }, [leaveCategory, startDate, endDate, leaveDurationMode, holidays]);
+
+  // Employee status & probation check
+  const isProbation = Boolean(
+    (currentEmp as any)?.probationaryStatus === 'On Probation' ||
+    (currentEmp as any)?.probationaryStatus === 'Probationary' ||
+    (currentEmp as any)?.probationaryStatus === 'Probation' ||
+    (currentEmp as any)?.leaveGroup === 'Probationary Staff'
+  );
+
+  // If employee is on probation, medical leave quota is strictly capped at 3 days
+  const effectiveMedicalAlloc = isProbation
+    ? Math.min(3, currentAlloc.medicalAllocated || 3)
+    : (currentAlloc.medicalAllocated ?? 10);
+
+  const getAvailableBalance = (type: LeaveType): number => {
+    switch (type) {
+      case 'Casual Leave':
+        return Math.max(0, currentAlloc.casualAllocated - currentAlloc.casualUsed);
+      case 'Medical Leave':
+        return Math.max(0, effectiveMedicalAlloc - currentAlloc.medicalUsed);
+      case 'Emergency Leave':
+        return Math.max(0, currentAlloc.emergencyAllocated - currentAlloc.emergencyUsed);
+      case 'Annual Leave':
+        return Math.max(0, currentAlloc.annualAllocated - currentAlloc.annualUsed);
+      case 'Maternity Leave':
+        return Math.max(0, currentAlloc.maternityAllocated - (currentAlloc.maternityUsed || 0));
+      case 'Paternity Leave':
+        return Math.max(0, currentAlloc.paternityAllocated - (currentAlloc.paternityUsed || 0));
+      case 'Compensatory Leave':
+        return Math.max(0, currentAlloc.compOffAllocated - (currentAlloc.compOffUsed || 0));
+      case 'Bereavement Leave':
+        return hasAllocation ? Math.max(0, 5 - (currentAlloc.bereavementUsed || 0)) : 0;
+      default:
+        return 0;
+    }
+  };
+
+  const availableBalance = getAvailableBalance(leaveCategory);
+  const remainingBalanceAfter = availableBalance - totalCalculatedDays;
+
   // Validate policy rules
   useEffect(() => {
     setValidationError(null);
@@ -263,22 +320,61 @@ export default function MyLeavePage() {
     const startObj = new Date(startDate);
     startObj.setHours(0, 0, 0, 0);
 
-    if (leaveCategory === 'Casual Leave') {
-      if (totalCalculatedDays > 3 && leaveDurationMode === 'FULL') {
+    // Rule: Leave application cannot exceed available quota
+    if (totalCalculatedDays > availableBalance) {
+      setValidationError(
+        `Insufficient Balance: Requested ${totalCalculatedDays} day(s) exceeds your available ${leaveCategory} balance of ${availableBalance} day(s).`
+      );
+      return;
+    }
+
+    // Rule: Employees on probation cannot avail more than 3 Medical Leave days in total
+    if (leaveCategory === 'Medical Leave' && isProbation) {
+      const remainingProbationML = Math.max(0, 3 - (currentAlloc.medicalUsed || 0));
+      if (totalCalculatedDays > remainingProbationML) {
         setValidationError(
-          'Policy Warning: Maximum 3 consecutive days can be applied for Casual Leave. For longer leaves, please apply for Annual Leave.'
-        );
-        return;
-      }
-      if (startObj <= today) {
-        setValidationError(
-          'Policy Requirement: Casual Leave application must be submitted at least 1 day before the leave start date.'
+          `Probation Policy Limit: Employees on probation are limited to a maximum of 3 Medical Leave days in total (Remaining eligible: ${remainingProbationML} day(s)).`
         );
         return;
       }
     }
 
+    // Rule: Medical Leave exceeding 3 consecutive days requires mandatory document upload
+    if (leaveCategory === 'Medical Leave' && totalCalculatedDays > 3) {
+      if (!attachedFileName && !selectedFile) {
+        setValidationError(
+          'Policy Requirement: Medical certificate or prescription document upload is mandatory for Medical Leave exceeding 3 consecutive days.'
+        );
+        return;
+      }
+    }
+
+    if (leaveCategory === 'Casual Leave') {
+      const clValidation = validateCasualLeaveRules({
+        startDate,
+        endDate,
+        mode: leaveDurationMode,
+        totalCalculatedDays,
+        holidays,
+        existingRequests: requests.filter((r) => r.employeeCode === currentEmp.code),
+        employeeCode: currentEmp.code,
+        isProbation,
+        availableBalance,
+      });
+
+      if (!clValidation.valid) {
+        setValidationError(clValidation.error || 'Casual leave request violates policy rules.');
+        return;
+      }
+    }
+
     if (leaveCategory === 'Annual Leave') {
+      if (isProbation) {
+        setValidationError(
+          'Policy Warning: Annual Leave is not available during the probationary period.'
+        );
+        return;
+      }
       if (totalCalculatedDays < 5) {
         setValidationError(
           'Policy Requirement: Annual Leave requires a minimum of 5 consecutive working days per application.'
@@ -303,33 +399,21 @@ export default function MyLeavePage() {
         return;
       }
     }
-  }, [leaveCategory, leaveDurationMode, startDate, endDate, totalCalculatedDays]);
-
-  const getAvailableBalance = (type: LeaveType): number => {
-    switch (type) {
-      case 'Casual Leave':
-        return currentAlloc.casualAllocated - currentAlloc.casualUsed;
-      case 'Medical Leave':
-        return currentAlloc.medicalAllocated - currentAlloc.medicalUsed;
-      case 'Emergency Leave':
-        return currentAlloc.emergencyAllocated - currentAlloc.emergencyUsed;
-      case 'Annual Leave':
-        return currentAlloc.annualAllocated - currentAlloc.annualUsed;
-      case 'Maternity Leave':
-        return currentAlloc.maternityAllocated - (currentAlloc.maternityUsed || 0);
-      case 'Paternity Leave':
-        return currentAlloc.paternityAllocated - (currentAlloc.paternityUsed || 0);
-      case 'Compensatory Leave':
-        return currentAlloc.compOffAllocated - (currentAlloc.compOffUsed || 0);
-      case 'Bereavement Leave':
-        return hasAllocation ? Math.max(0, 5 - (currentAlloc.bereavementUsed || 0)) : 0;
-      default:
-        return 0;
-    }
-  };
-
-  const availableBalance = getAvailableBalance(leaveCategory);
-  const remainingBalanceAfter = availableBalance - totalCalculatedDays;
+  }, [
+    leaveCategory,
+    leaveDurationMode,
+    startDate,
+    endDate,
+    totalCalculatedDays,
+    availableBalance,
+    isProbation,
+    currentAlloc.medicalUsed,
+    attachedFileName,
+    selectedFile,
+    holidays,
+    requests,
+    currentEmp.code,
+  ]);
 
   const empGender = (currentEmp?.gender || (currentAlloc as any)?.gender || '').toUpperCase().trim();
   const isMale = empGender === 'MALE' || empGender === 'M';
@@ -407,6 +491,44 @@ export default function MyLeavePage() {
       return;
     }
 
+    // Final submit guards
+    if (leaveCategory === 'Casual Leave') {
+      const clValidation = validateCasualLeaveRules({
+        startDate,
+        endDate,
+        mode: leaveDurationMode,
+        totalCalculatedDays,
+        holidays,
+        existingRequests: requests.filter((r) => r.employeeCode === currentEmp.code),
+        employeeCode: currentEmp.code,
+        isProbation,
+        availableBalance,
+      });
+
+      if (!clValidation.valid) {
+        showToastMsg(clValidation.error || 'Casual leave request violates policy rules.', 'error');
+        return;
+      }
+    }
+
+    if (totalCalculatedDays > availableBalance) {
+      showToastMsg(`Insufficient Balance: Requested ${totalCalculatedDays} day(s) exceeds your available ${leaveCategory} balance of ${availableBalance} day(s).`, 'error');
+      return;
+    }
+
+    if (leaveCategory === 'Medical Leave' && isProbation) {
+      const remainingProbationML = Math.max(0, 3 - (currentAlloc.medicalUsed || 0));
+      if (totalCalculatedDays > remainingProbationML) {
+        showToastMsg(`Probation Policy Limit: Employees on probation cannot avail more than 3 Medical Leave days in total.`, 'error');
+        return;
+      }
+    }
+
+    if (leaveCategory === 'Medical Leave' && totalCalculatedDays > 3 && !attachedFileName && !selectedFile) {
+      showToastMsg('Policy Requirement: Medical certificate or prescription document upload is mandatory for Medical Leave exceeding 3 consecutive days.', 'error');
+      return;
+    }
+
     const halfType: HalfDayType =
       leaveDurationMode === 'HALF'
         ? halfPeriod === 'First Half'
@@ -440,6 +562,16 @@ export default function MyLeavePage() {
       : '';
     const persistedReason = `${baseReason || 'General leave application'}${attachTag}`.trim();
 
+    // Resolve supervisor information
+    const supervisorName = currentEmp.supervisor || currentEmp.manager || "Nasif Kamal";
+    const supervisorEmp = employees.find(
+      (e) =>
+        (e.name && e.name.toLowerCase().trim() === supervisorName.toLowerCase().trim()) ||
+        (e.code && e.code === currentEmp.supervisorCode)
+    );
+    const supervisorEmail = supervisorEmp?.workEmail || supervisorEmp?.personalEmail || 'nasif.kamal@jaago.com.bd';
+    const supervisorCode = supervisorEmp?.code || 'FO032507061190';
+
     const newReq: LeaveRequestItem = {
       id: `req-${Date.now()}`,
       employeeId: currentEmp.id || `emp-${currentEmp.code}`,
@@ -460,22 +592,15 @@ export default function MyLeavePage() {
       bereavementRelationship: bereavementRelation as BereavementRelationship,
       attachmentName: attachedFileName || '',
       attachmentUrl: finalAttachmentUrl || '',
+      supervisorName,
+      supervisorEmail,
+      supervisorCode,
       status: 'Pending',
       appliedAt: new Date().toISOString(),
     };
 
     setRequests([newReq, ...requests]);
     await saveLeaveRequest(newReq);
-
-    // Resolve supervisor information
-    const supervisorName = currentEmp.supervisor || currentEmp.manager || "Nasif Kamal";
-    const supervisorEmp = employees.find(
-      (e) =>
-        (e.name && e.name.toLowerCase().trim() === supervisorName.toLowerCase().trim()) ||
-        (e.code && e.code === currentEmp.supervisorCode)
-    );
-    const supervisorEmail = supervisorEmp?.workEmail || supervisorEmp?.personalEmail || 'nasif.kamal@jaago.com.bd';
-    const supervisorCode = supervisorEmp?.code || 'FO032507061190';
 
     // 1. Dispatch Email to Supervisor
     try {
@@ -546,7 +671,7 @@ export default function MyLeavePage() {
   const clRem = Math.max(0, clAlloc - clUsed);
   const clPct = clAlloc > 0 ? (clRem / clAlloc) * 100 : 0;
 
-  const mlAlloc = currentAlloc.medicalAllocated ?? 0;
+  const mlAlloc = effectiveMedicalAlloc;
   const mlUsed = currentAlloc.medicalUsed ?? 0;
   const mlRem = Math.max(0, mlAlloc - mlUsed);
   const mlPct = mlAlloc > 0 ? (mlRem / mlAlloc) * 100 : 0;
@@ -1023,7 +1148,14 @@ export default function MyLeavePage() {
             {isDocUploadRelevant && (
               <div className="lg:col-span-3 space-y-1.5 animate-in fade-in">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block truncate">
-                  Supporting Document {totalCalculatedDays >= 3 ? '(Required)' : '(Optional)'}
+                  Supporting Document{' '}
+                  {leaveCategory === 'Medical Leave' && totalCalculatedDays > 3 ? (
+                    <span className="text-amber-500 font-bold">(Required *)</span>
+                  ) : totalCalculatedDays >= 3 ? (
+                    <span className="text-muted-foreground font-semibold">(Recommended)</span>
+                  ) : (
+                    <span className="text-muted-foreground/80 font-normal">(Optional)</span>
+                  )}
                 </label>
                 <div className="flex items-center space-x-2">
                   <input
@@ -1083,6 +1215,22 @@ export default function MyLeavePage() {
                 {remainingBalanceAfter} Days
               </strong>
             </span>
+
+            {/* Casual Leave Holiday Breakdown Details */}
+            {leaveCategory === 'Casual Leave' && casualCalcInfo && (
+              <>
+                {casualCalcInfo.sandwichedHolidaysCount > 0 && (
+                  <span className="px-3 py-1 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-500 font-bold">
+                    Includes {casualCalcInfo.sandwichedHolidaysCount} sandwiched public holiday ({casualCalcInfo.sandwichedHolidayNames.join(', ')})
+                  </span>
+                )}
+                {casualCalcInfo.boundaryHolidaysCount > 0 && (
+                  <span className="px-3 py-1 rounded-xl bg-surface border border-border/70 text-muted-foreground">
+                    {casualCalcInfo.boundaryHolidaysCount} boundary public holiday(s) excluded
+                  </span>
+                )}
+              </>
+            )}
           </div>
 
           {/* Validation Warning Alert */}

@@ -55,6 +55,9 @@ export interface LeaveRequestItem {
   approvedBy?: string;
   approvedAt?: string;
   rejectionReason?: string;
+  supervisorName?: string;
+  supervisorEmail?: string;
+  supervisorCode?: string;
   
   // Specific Leave Type Fields
   attachmentUrl?: string;
@@ -172,9 +175,13 @@ export const QUICK_LEAVE_POLICIES: Record<LeaveType, QuickPolicyItem> = {
     title: 'CASUAL LEAVE – QUICK POLICY',
     points: [
       'Total 10 days per year.',
-      'Apply at least 1 day before.',
+      'Apply at least 1 day before the leave date.',
       'Maximum 3 consecutive days at a time.',
       'Not allowed during probation period.',
+      'Cannot be combined or sandwiched with Annual Leave.',
+      'No other leave except Medical and Emergency Leave can be prefixed or suffixed.',
+      'Sandwiched government holidays count as Casual Leave.',
+      'Government holidays on outer boundaries are not counted as leave.',
       'Supervisor approval mandatory.',
     ],
     allowHalfDay: true,
@@ -302,6 +309,343 @@ export function validateLeaveGenderEligibility(
       reason:
         'Under JAAGO Foundation HR Policy (Clause 4.3), Paternity Leave is exclusively available for Male employees. Female employees are not eligible for Paternity Leave allocations or requests. Please select Maternity Leave (120 Days) instead.',
     };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Checks if a given date string (YYYY-MM-DD) is an active official public / government holiday.
+ */
+export function isDateGovernmentHoliday(dateStr: string, holidays: PublicHolidayItem[]): boolean {
+  if (!dateStr || !holidays || holidays.length === 0) return false;
+  return holidays.some((h) => {
+    if (h.isArchived) return false;
+    const start = h.date;
+    const end = h.endDate || h.date;
+    return dateStr >= start && dateStr <= end;
+  });
+}
+
+/**
+ * Finds the specific public holiday covering a given date string.
+ */
+export function getGovernmentHolidayOnDate(dateStr: string, holidays: PublicHolidayItem[]): PublicHolidayItem | undefined {
+  if (!dateStr || !holidays || holidays.length === 0) return undefined;
+  return holidays.find((h) => {
+    if (h.isArchived) return false;
+    const start = h.date;
+    const end = h.endDate || h.date;
+    return dateStr >= start && dateStr <= end;
+  });
+}
+
+/**
+ * Checks if a given Date object falls on an official weekend in Bangladesh (Friday = 5, Saturday = 6).
+ */
+export function isWeekendDay(date: Date): boolean {
+  const day = date.getDay();
+  return day === 5 || day === 6;
+}
+
+/**
+ * Determines whether two leave dates are consecutive/adjacent over non-working days (weekends or public holidays).
+ * Returns isAdjacent = true if there are NO working days between date1 and date2.
+ */
+export function areDatesAdjacentOverNonWorkingDays(
+  date1Str: string,
+  date2Str: string,
+  holidays: PublicHolidayItem[]
+): { isAdjacent: boolean; holidayDaysCount: number; interveningHolidays: PublicHolidayItem[] } {
+  const d1 = new Date(date1Str);
+  const d2 = new Date(date2Str);
+  if (isNaN(d1.getTime()) || isNaN(d2.getTime()) || d2 <= d1) {
+    return { isAdjacent: false, holidayDaysCount: 0, interveningHolidays: [] };
+  }
+
+  const interveningHolidays: PublicHolidayItem[] = [];
+  let holidayDaysCount = 0;
+  const curr = new Date(d1);
+  curr.setDate(curr.getDate() + 1);
+
+  while (curr < d2) {
+    const curStr = curr.toISOString().split('T')[0]!;
+    const hol = getGovernmentHolidayOnDate(curStr, holidays);
+    const isWk = isWeekendDay(curr);
+
+    if (!hol && !isWk) {
+      // Found an intervening normal working day, so the leaves are not adjacent
+      return { isAdjacent: false, holidayDaysCount: 0, interveningHolidays: [] };
+    }
+
+    if (hol) {
+      holidayDaysCount++;
+      if (!interveningHolidays.some((h) => h.id === hol.id)) {
+        interveningHolidays.push(hol);
+      }
+    }
+
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  return { isAdjacent: true, holidayDaysCount, interveningHolidays };
+}
+
+/**
+ * Calculates Casual Leave duration according to JAAGO Foundation HR policy:
+ * 1. "Government holidays on both sides of a leave period should not be counted as leave."
+ *    (Outer leading and trailing government holidays are excluded from leave count).
+ * 2. "If Casual Leave is taken on both sides of a government holiday, the holiday should also be counted as Casual Leave as per policy."
+ *    (Intervening government holidays between Casual Leave days are counted as Casual Leave).
+ * 3. Half-day options (0.5 day) supported.
+ */
+export function calculateCasualLeaveDuration(
+  startDate: string,
+  endDate: string,
+  mode: 'FULL' | 'HALF',
+  holidays: PublicHolidayItem[]
+): {
+  totalDays: number;
+  sandwichedHolidaysCount: number;
+  boundaryHolidaysCount: number;
+  validWorkingDays: number;
+  allDaysAreHolidays: boolean;
+  sandwichedHolidayNames: string[];
+} {
+  if (mode === 'HALF') {
+    return {
+      totalDays: 0.5,
+      sandwichedHolidaysCount: 0,
+      boundaryHolidaysCount: 0,
+      validWorkingDays: 1,
+      allDaysAreHolidays: false,
+      sandwichedHolidayNames: [],
+    };
+  }
+
+  const d1 = new Date(startDate);
+  const d2 = new Date(endDate);
+  if (isNaN(d1.getTime()) || isNaN(d2.getTime()) || d2 < d1) {
+    return {
+      totalDays: 1,
+      sandwichedHolidaysCount: 0,
+      boundaryHolidaysCount: 0,
+      validWorkingDays: 1,
+      allDaysAreHolidays: false,
+      sandwichedHolidayNames: [],
+    };
+  }
+
+  // Generate all date strings in the requested range
+  const datesInRange: string[] = [];
+  const curr = new Date(d1);
+  while (curr <= d2) {
+    datesInRange.push(curr.toISOString().split('T')[0]!);
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  // Find first non-holiday date index
+  let firstNonHolidayIdx = -1;
+  for (let i = 0; i < datesInRange.length; i++) {
+    if (!isDateGovernmentHoliday(datesInRange[i]!, holidays)) {
+      firstNonHolidayIdx = i;
+      break;
+    }
+  }
+
+  // Find last non-holiday date index
+  let lastNonHolidayIdx = -1;
+  for (let i = datesInRange.length - 1; i >= 0; i--) {
+    if (!isDateGovernmentHoliday(datesInRange[i]!, holidays)) {
+      lastNonHolidayIdx = i;
+      break;
+    }
+  }
+
+  // If entire range is government holidays:
+  if (firstNonHolidayIdx === -1 || lastNonHolidayIdx === -1) {
+    return {
+      totalDays: 0,
+      sandwichedHolidaysCount: 0,
+      boundaryHolidaysCount: datesInRange.length,
+      validWorkingDays: 0,
+      allDaysAreHolidays: true,
+      sandwichedHolidayNames: [],
+    };
+  }
+
+  const leadingBoundaryHolidays = firstNonHolidayIdx;
+  const trailingBoundaryHolidays = datesInRange.length - 1 - lastNonHolidayIdx;
+  const boundaryHolidaysCount = leadingBoundaryHolidays + trailingBoundaryHolidays;
+
+  let validWorkingDays = 0;
+  let sandwichedHolidaysCount = 0;
+  const sandwichedHolidayNames: string[] = [];
+
+  for (let i = firstNonHolidayIdx; i <= lastNonHolidayIdx; i++) {
+    const dStr = datesInRange[i]!;
+    const hol = getGovernmentHolidayOnDate(dStr, holidays);
+    if (hol) {
+      sandwichedHolidaysCount++;
+      if (!sandwichedHolidayNames.includes(hol.title)) {
+        sandwichedHolidayNames.push(hol.title);
+      }
+    } else {
+      validWorkingDays++;
+    }
+  }
+
+  const totalDays = validWorkingDays + sandwichedHolidaysCount;
+
+  return {
+    totalDays,
+    sandwichedHolidaysCount,
+    boundaryHolidaysCount,
+    validWorkingDays,
+    allDaysAreHolidays: false,
+    sandwichedHolidayNames,
+  };
+}
+
+/**
+ * Validates all Casual Leave rules against JAAGO Foundation HR policy:
+ * - Minimum 1 day advance submission (startDate > today).
+ * - Maximum 3 consecutive days at a time (exceeding restricts request & advises applying for Annual Leave).
+ * - Cannot be sandwiched, combined, prefixed, or suffixed with Annual Leave.
+ * - No other leave except Medical Leave and Emergency Leave can be prefixed or suffixed with Casual Leave.
+ * - Government holidays on both sides of a leave period are not counted as leave.
+ * - Sandwiched government holidays count as Casual Leave.
+ * - Prohibited during probation.
+ */
+export function validateCasualLeaveRules(params: {
+  startDate: string;
+  endDate: string;
+  mode: 'FULL' | 'HALF';
+  totalCalculatedDays: number;
+  holidays: PublicHolidayItem[];
+  existingRequests: LeaveRequestItem[];
+  employeeCode: string;
+  isProbation: boolean;
+  availableBalance?: number | undefined;
+  currentRequestId?: string | undefined;
+}): { valid: boolean; error?: string } {
+  // 1. Probation Rule
+  if (params.isProbation) {
+    return {
+      valid: false,
+      error: 'Policy Warning: Casual Leave is not available during probation period. Staff on probation are not eligible for Casual Leave under JAAGO HR Policy.',
+    };
+  }
+
+  // 2. Advance Notice Rule (at least 1 day in advance)
+  const todayStr = new Date().toISOString().split('T')[0]!;
+  if (params.startDate <= todayStr) {
+    return {
+      valid: false,
+      error: 'Advance Notice Required: Casual Leave application must be submitted at least 1 day before the leave start date.',
+    };
+  }
+
+  // 3. Check if all days applied are holidays
+  if (params.totalCalculatedDays <= 0) {
+    return {
+      valid: false,
+      error: 'The selected date period falls entirely on public holiday(s) or weekend(s). No leave deduction is required.',
+    };
+  }
+
+  // 4. Maximum 3 Consecutive Days Rule
+  if (params.totalCalculatedDays > 3) {
+    return {
+      valid: false,
+      error: 'Casual Leave Limit Exceeded: Maximum 3 consecutive days can be applied at a time. Please apply for Annual Leave or split your leave request as per policy.',
+    };
+  }
+
+  // 5. Available Quota Balance Rule
+  if (params.availableBalance !== undefined && params.totalCalculatedDays > params.availableBalance) {
+    return {
+      valid: false,
+      error: `Insufficient Balance: Requested ${params.totalCalculatedDays} day(s) exceeds your available Casual Leave balance of ${params.availableBalance} day(s).`,
+    };
+  }
+
+  // 6. Inspect adjacent leave requests for sandwiching and prefix/suffix policy compliance
+  const relevantRequests = (params.existingRequests || []).filter(
+    (r) =>
+      r.employeeCode === params.employeeCode &&
+      r.status !== 'Rejected' &&
+      r.id !== params.currentRequestId
+  );
+
+  for (const existing of relevantRequests) {
+    // Check if existing request is immediately preceding this application
+    const prevAdj = areDatesAdjacentOverNonWorkingDays(existing.toDate, params.startDate, params.holidays);
+    if (prevAdj.isAdjacent) {
+      // Rule: Casual Leave cannot be sandwiched with Annual Leave
+      if (existing.leaveType === 'Annual Leave') {
+        return {
+          valid: false,
+          error: `Policy Violation: Casual Leave cannot be combined, prefixed, or sandwiched with Annual Leave (${existing.fromDate} to ${existing.toDate}). Under JAAGO HR Policy, Casual Leave and Annual Leave cannot be taken consecutively.`,
+        };
+      }
+
+      // Rule: No other leave except Medical Leave and Emergency Leave can be prefixed or suffixed
+      if (existing.leaveType !== 'Medical Leave' && existing.leaveType !== 'Emergency Leave' && existing.leaveType !== 'Casual Leave') {
+        return {
+          valid: false,
+          error: `Policy Restriction: Casual Leave cannot be prefixed with ${existing.leaveType} (${existing.fromDate} to ${existing.toDate}). Under JAAGO HR Policy, no other leave except Medical Leave and Emergency Leave can be prefixed or suffixed with Casual Leave.`,
+        };
+      }
+
+      // Rule: Adjacent Casual Leave consecutive days limit (including any sandwiched holiday)
+      if (existing.leaveType === 'Casual Leave') {
+        const combined = existing.totalDays + prevAdj.holidayDaysCount + params.totalCalculatedDays;
+        if (combined > 3) {
+          const holNotice = prevAdj.holidayDaysCount > 0
+            ? ` (including ${prevAdj.holidayDaysCount} sandwiched public holiday day(s))`
+            : '';
+          return {
+            valid: false,
+            error: `Policy Warning: Combining this application (${params.totalCalculatedDays}d) with your adjacent Casual Leave (${existing.totalDays}d from ${existing.fromDate} to ${existing.toDate})${holNotice} totals ${combined} consecutive days, exceeding the 3-day maximum limit. For longer leaves, please apply for Annual Leave.`,
+          };
+        }
+      }
+    }
+
+    // Check if existing request is immediately succeeding this application
+    const nextAdj = areDatesAdjacentOverNonWorkingDays(params.endDate, existing.fromDate, params.holidays);
+    if (nextAdj.isAdjacent) {
+      // Rule: Casual Leave cannot be sandwiched with Annual Leave
+      if (existing.leaveType === 'Annual Leave') {
+        return {
+          valid: false,
+          error: `Policy Violation: Casual Leave cannot be combined, suffixed, or sandwiched with Annual Leave (${existing.fromDate} to ${existing.toDate}). Under JAAGO HR Policy, Casual Leave and Annual Leave cannot be taken consecutively.`,
+        };
+      }
+
+      // Rule: No other leave except Medical Leave and Emergency Leave can be prefixed or suffixed
+      if (existing.leaveType !== 'Medical Leave' && existing.leaveType !== 'Emergency Leave' && existing.leaveType !== 'Casual Leave') {
+        return {
+          valid: false,
+          error: `Policy Restriction: Casual Leave cannot be suffixed with ${existing.leaveType} (${existing.fromDate} to ${existing.toDate}). Under JAAGO HR Policy, no other leave except Medical Leave and Emergency Leave can be prefixed or suffixed with Casual Leave.`,
+        };
+      }
+
+      // Rule: Adjacent Casual Leave consecutive days limit (including any sandwiched holiday)
+      if (existing.leaveType === 'Casual Leave') {
+        const combined = existing.totalDays + nextAdj.holidayDaysCount + params.totalCalculatedDays;
+        if (combined > 3) {
+          const holNotice = nextAdj.holidayDaysCount > 0
+            ? ` (including ${nextAdj.holidayDaysCount} sandwiched public holiday day(s))`
+            : '';
+          return {
+            valid: false,
+            error: `Policy Warning: Combining this application (${params.totalCalculatedDays}d) with your adjacent Casual Leave (${existing.totalDays}d from ${existing.fromDate} to ${existing.toDate})${holNotice} totals ${combined} consecutive days, exceeding the 3-day maximum limit. For longer leaves, please apply for Annual Leave.`,
+          };
+        }
+      }
+    }
   }
 
   return { valid: true };
@@ -725,10 +1069,24 @@ export async function fetchLeaveRequests(forceRefresh: boolean = false): Promise
                 halfDayType = 'First Half';
               }
 
+              let supervisorName = row.supervisor_name || '';
+              let supervisorEmail = row.supervisor_email || '';
+              let supervisorCode = row.supervisor_code || '';
+              if (!supervisorName && /\[Supervisor:\s*([\s\S]*?)\]/i.test(rawReason)) {
+                const match = rawReason.match(/\[Supervisor:\s*([\s\S]*?)\]/i);
+                if (match && match[1]) {
+                  const parts = match[1].trim().split('|');
+                  supervisorName = parts[0]?.trim() || '';
+                  if (parts[1]) supervisorEmail = parts[1].trim();
+                  if (parts[2]) supervisorCode = parts[2].trim();
+                }
+              }
+
               const cleanReason = rawReason
                 .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
                 .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
                 .replace(/\[Half Day:\s*[\s\S]*?\]/gi, '')
+                .replace(/\[Supervisor:\s*[\s\S]*?\]/gi, '')
                 .trim();
 
               return {
@@ -747,6 +1105,9 @@ export async function fetchLeaveRequests(forceRefresh: boolean = false): Promise
                 rejectionReason: rejectionReason || undefined,
                 attachmentName: attachmentName || undefined,
                 attachmentUrl: attachmentUrl || undefined,
+                supervisorName: supervisorName || undefined,
+                supervisorEmail: supervisorEmail || undefined,
+                supervisorCode: supervisorCode || undefined,
                 status: (row.status as LeaveStatus) || 'Pending',
                 appliedAt: row.applied_at || row.created_at,
                 approvedBy: row.approved_by,
@@ -881,6 +1242,40 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
     }
   }
 
+  // Validate Casual Leave Rules
+  if (request.leaveType === 'Casual Leave') {
+    try {
+      const holidays = await fetchPublicHolidays();
+      const allRequests = await fetchLeaveRequests();
+      const allocations = await fetchLeaveAllocations();
+      const empAlloc = allocations.find((a) => a.employeeCode === request.employeeCode);
+      const available = (empAlloc?.casualAllocated ?? 10) - (empAlloc?.casualUsed ?? 0);
+      const isProbation = empAlloc?.leaveGroup === 'Probationary Staff';
+
+      const clValidation = validateCasualLeaveRules({
+        startDate: request.fromDate,
+        endDate: request.toDate,
+        mode: request.halfDayType && request.halfDayType !== 'Full Day' ? 'HALF' : 'FULL',
+        totalCalculatedDays: request.totalDays,
+        holidays,
+        existingRequests: allRequests,
+        employeeCode: request.employeeCode,
+        isProbation,
+        availableBalance: available,
+        currentRequestId: request.id,
+      });
+
+      if (!clValidation.valid) {
+        console.warn(`[Casual Leave Policy Ineligibility]: ${clValidation.error}`);
+        throw new Error(clValidation.error || 'Casual leave request violates policy rules.');
+      }
+    } catch (err: any) {
+      if (err.message && err.message.startsWith('Policy')) {
+        throw err;
+      }
+    }
+  }
+
   invalidateCache('pnc_leave_requests_list');
   invalidateCache('pnc_attendance_logs_list');
   if (typeof window !== 'undefined') {
@@ -916,6 +1311,10 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
           ? `${request.attachmentName}|${request.attachmentUrl}`
           : request.attachmentName;
         finalReason = `[Attachment: ${attachStr}] ${finalReason}`.trim();
+      }
+      if (request.supervisorName && !finalReason.includes('[Supervisor:')) {
+        const supStr = `${request.supervisorName}${request.supervisorEmail ? `|${request.supervisorEmail}` : ''}${request.supervisorCode ? `|${request.supervisorCode}` : ''}`;
+        finalReason = `[Supervisor: ${supStr}] ${finalReason}`.trim();
       }
       if (request.rejectionReason && !finalReason.includes('[Refusal Note:')) {
         finalReason = `${finalReason} [Refusal Note: ${request.rejectionReason}]`.trim();
@@ -998,11 +1397,16 @@ export function saveDeletedAllocationKeys(keys: string[]): void {
  * as they must be allocated manually per individual employee.
  */
 export function getCoreLeaveQuotaFromPolicies(
-  emp: { department?: string; leaveGroup?: string; probationaryStatus?: string; [key: string]: any },
+  emp: { department?: string; leaveGroup?: string; probationaryStatus?: string; joiningDate?: string; [key: string]: any },
   policies: LeavePolicyConfig[]
 ): { casual: number; medical: number; emergency: number; annual: number; totalDays: number; policyName: string } {
   const isDsp = emp?.department === 'Digital School Program' || emp?.leaveGroup === 'DSP Faculty Group';
-  const isProbation = emp?.probationaryStatus === 'Probationary' || emp?.leaveGroup === 'Probationary Staff';
+  const isProbation = Boolean(
+    emp?.probationaryStatus === 'On Probation' ||
+    emp?.probationaryStatus === 'Probationary' ||
+    emp?.probationaryStatus === 'Probation' ||
+    emp?.leaveGroup === 'Probationary Staff'
+  );
 
   const matchedPolicy = policies?.find((p) => {
     if (!p.isActive) return false;
@@ -1019,9 +1423,44 @@ export function getCoreLeaveQuotaFromPolicies(
   }) || policies?.find((p) => p.applicableGroup === 'Standard Full-time') || (policies && policies[0]);
 
   const cl = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Casual Leave')?.entitlementDays ?? (isProbation ? 0 : isDsp ? 12 : 10);
-  const ml = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Medical Leave')?.entitlementDays ?? (isProbation ? 3 : 10);
   const el = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Emergency Leave')?.entitlementDays ?? (isProbation ? 3 : 4);
   const al = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Annual Leave')?.entitlementDays ?? (isProbation ? 0 : isDsp ? 10 : 15);
+
+  // ── MEDICAL LEAVE RULES ──
+  // Rule 1: Employees in probation can avail max 3 days in total
+  // Rule 2: Allocation is based on joining date (pro-rated if joining in current year)
+  let ml = 10;
+  if (isProbation) {
+    ml = 3;
+  } else {
+    const rawPolicyMl = matchedPolicy?.leaveTypes?.find((t) => t.key === 'Medical Leave')?.entitlementDays ?? 10;
+    const joiningDateStr = emp?.joiningDate || emp?.joining_date;
+    if (joiningDateStr) {
+      try {
+        const joinDate = new Date(joiningDateStr);
+        if (!isNaN(joinDate.getTime())) {
+          const currentYear = new Date().getFullYear();
+          const joinYear = joinDate.getFullYear();
+          if (joinYear === currentYear) {
+            const joinMonth = joinDate.getMonth() + 1; // 1 to 12
+            const remainingMonths = Math.max(1, 12 - joinMonth + 1);
+            const proRated = Math.round((remainingMonths / 12) * rawPolicyMl);
+            ml = Math.max(1, Math.min(rawPolicyMl, proRated));
+          } else if (joinYear > currentYear) {
+            ml = 1;
+          } else {
+            ml = rawPolicyMl;
+          }
+        } else {
+          ml = rawPolicyMl;
+        }
+      } catch {
+        ml = rawPolicyMl;
+      }
+    } else {
+      ml = rawPolicyMl;
+    }
+  }
 
   return {
     casual: cl,
@@ -1118,17 +1557,26 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
     });
 
     const isDsp = emp.department === 'Digital School Program' || emp.leaveGroup === 'DSP Faculty Group';
-    const isProbation = emp.probationaryStatus === 'Probationary' || emp.leaveGroup === 'Probationary Staff';
+    const isProbation = Boolean(
+      emp.probationaryStatus === 'On Probation' ||
+      emp.probationaryStatus === 'Probationary' ||
+      emp.probationaryStatus === 'Probation' ||
+      emp.leaveGroup === 'Probationary Staff'
+    );
 
     const g = (emp.gender || existing?.gender || '').toUpperCase().trim();
     const isMale = g === 'MALE' || g === 'M';
     const isFemale = g === 'FEMALE' || g === 'F';
 
-    // Base allocations: core leaves (CL, ML, EL, AL) dynamically determined from Leave Policy Configuration
+    // Base allocations: core leaves (CL, ML, EL, AL) dynamically determined from Leave Policy Configuration & Joining Date
     const coreQuotas = getCoreLeaveQuotaFromPolicies(emp, policies);
 
     const casualAlloc = existing?.casualAllocated ?? (emp.casualLeaveAllocated ? Number(emp.casualLeaveAllocated) : coreQuotas.casual);
-    const medicalAlloc = existing?.medicalAllocated ?? (emp.sickLeaveAllocated ? Number(emp.sickLeaveAllocated) : coreQuotas.medical);
+    const medicalAlloc = isProbation
+      ? 3
+      : (emp.joiningDate || emp.joining_date)
+        ? coreQuotas.medical
+        : (existing?.medicalAllocated !== undefined ? existing.medicalAllocated : coreQuotas.medical);
     const emergencyAlloc = existing?.emergencyAllocated ?? (emp.specialLeaveAllocated ? Number(emp.specialLeaveAllocated) : coreQuotas.emergency);
     const annualAlloc = existing?.annualAllocated ?? (emp.earnedLeaveAllocated ? Number(emp.earnedLeaveAllocated) : coreQuotas.annual);
 

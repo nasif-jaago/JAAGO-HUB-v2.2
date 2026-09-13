@@ -14,6 +14,7 @@ import {
   MessageSquareQuote,
   Paperclip,
   Download,
+  Upload,
 } from 'lucide-react';
 import { downloadAttachment } from '@/lib/attachment-helper';
 import {
@@ -26,6 +27,10 @@ import {
   fetchLeaveAllocations,
   LeaveAllocationItem,
   validateLeaveGenderEligibility,
+  fetchPublicHolidays,
+  type PublicHolidayItem,
+  calculateCasualLeaveDuration,
+  validateCasualLeaveRules,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import {
@@ -54,6 +59,7 @@ export default function LeaveRequestsPage() {
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [allocations, setAllocations] = useState<LeaveAllocationItem[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
+  const [holidays, setHolidays] = useState<PublicHolidayItem[]>([]);
   const [selectedTab, setSelectedTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -81,17 +87,21 @@ export default function LeaveRequestsPage() {
   const [createReason, setCreateReason] = useState<string>(
     'Admin Approved Leave / Attendance Adjustment'
   );
+  const [createAttachmentName, setCreateAttachmentName] = useState<string>('');
+  const [createAttachmentUrl, setCreateAttachmentUrl] = useState<string>('');
 
   const loadData = async () => {
     try {
-      const [reqs, allocs, emps] = await Promise.all([
+      const [reqs, allocs, emps, hols] = await Promise.all([
         fetchLeaveRequests(),
         fetchLeaveAllocations(),
         fetchEmployeesFromSupabase(),
+        fetchPublicHolidays(),
       ]);
       if (reqs) setRequests(reqs);
       if (allocs) setAllocations(allocs);
       if (emps) setEmployees(emps);
+      if (hols) setHolidays(hols);
     } catch {}
   };
 
@@ -121,10 +131,12 @@ export default function LeaveRequestsPage() {
     };
     window.addEventListener('jaago_leave_request_updated', handleReqUpdate);
     window.addEventListener('jaago_leave_allocation_updated', handleReqUpdate);
+    window.addEventListener('jaago_public_holidays_updated', handleReqUpdate);
 
     return () => {
       window.removeEventListener('jaago_leave_request_updated', handleReqUpdate);
       window.removeEventListener('jaago_leave_allocation_updated', handleReqUpdate);
+      window.removeEventListener('jaago_public_holidays_updated', handleReqUpdate);
     };
   }, []);
 
@@ -168,8 +180,17 @@ export default function LeaveRequestsPage() {
     }
   };
 
+  // Casual Leave holiday breakdown info
+  const casualCalcInfo = useMemo(() => {
+    if (createLeaveType !== 'Casual Leave') return null;
+    return calculateCasualLeaveDuration(createStartDate, createEndDate, createMode, holidays);
+  }, [createStartDate, createEndDate, createMode, createLeaveType, holidays]);
+
   // Calculate duration in Create Modal
   const calculatedDays = useMemo(() => {
+    if (createLeaveType === 'Casual Leave') {
+      return casualCalcInfo?.totalDays ?? 1;
+    }
     if (createMode === 'HALF') return 0.5;
     if (createLeaveType === 'Maternity Leave') return 120;
     if (createLeaveType === 'Paternity Leave') return 15;
@@ -180,7 +201,7 @@ export default function LeaveRequestsPage() {
       return Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
     }
     return 1;
-  }, [createStartDate, createEndDate, createMode, createLeaveType]);
+  }, [createStartDate, createEndDate, createMode, createLeaveType, casualCalcInfo]);
 
   // Handle Approve / Re-Approve
   const handleApprove = async (req: LeaveRequestItem) => {
@@ -362,8 +383,108 @@ export default function LeaveRequestsPage() {
       return;
     }
 
+    // Check probation rules
+    const isEmpProbation = Boolean(
+      (selectedEmp as any)?.probationaryStatus === 'On Probation' ||
+      (selectedEmp as any)?.probationaryStatus === 'Probationary' ||
+      (selectedEmp as any)?.probationaryStatus === 'Probation' ||
+      (selectedEmp as any)?.leaveGroup === 'Probationary Staff'
+    );
+
+    if (createLeaveType === 'Casual Leave') {
+      const clValidation = validateCasualLeaveRules({
+        startDate: createStartDate,
+        endDate: createEndDate,
+        mode: createMode,
+        totalCalculatedDays: calculatedDays,
+        holidays,
+        existingRequests: requests.filter((r) => r.employeeCode === selectedEmp.code),
+        employeeCode: selectedEmp.code,
+        isProbation: isEmpProbation,
+        availableBalance: selectedEmpAllocation ? Math.max(0, (selectedEmpAllocation.casualAllocated ?? 0) - (selectedEmpAllocation.casualUsed ?? 0)) : undefined,
+      });
+
+      if (!clValidation.valid) {
+        showToastMsg(clValidation.error || 'Casual leave request violates policy rules.', 'error');
+        return;
+      }
+    }
+
+    if (createLeaveType === 'Annual Leave' && isEmpProbation) {
+      showToastMsg('Policy Warning: Annual Leave is not available during probation period', 'error');
+      return;
+    }
+
+    if (createLeaveType === 'Medical Leave' && isEmpProbation) {
+      const medicalUsed = selectedEmpAllocation?.medicalUsed || 0;
+      const maxAllowed = Math.max(0, 3 - medicalUsed);
+      if (calculatedDays > maxAllowed) {
+        showToastMsg(
+          `Probation Policy Limit: Employees on probation cannot avail more than 3 Medical Leave days in total (Remaining eligible: ${maxAllowed} days)`,
+          'error'
+        );
+        return;
+      }
+    }
+
+    // Check available balance
+    if (selectedEmpAllocation) {
+      let availableQuota = 0;
+      const effectiveMedical = isEmpProbation
+        ? Math.min(3, selectedEmpAllocation.medicalAllocated ?? 3)
+        : (selectedEmpAllocation.medicalAllocated ?? 10);
+
+      switch (createLeaveType) {
+        case 'Casual Leave':
+          availableQuota = Math.max(0, (selectedEmpAllocation.casualAllocated ?? 0) - (selectedEmpAllocation.casualUsed ?? 0));
+          break;
+        case 'Medical Leave':
+          availableQuota = Math.max(0, effectiveMedical - (selectedEmpAllocation.medicalUsed ?? 0));
+          break;
+        case 'Emergency Leave':
+          availableQuota = Math.max(0, (selectedEmpAllocation.emergencyAllocated ?? 0) - (selectedEmpAllocation.emergencyUsed ?? 0));
+          break;
+        case 'Annual Leave':
+          availableQuota = Math.max(0, (selectedEmpAllocation.annualAllocated ?? 0) - (selectedEmpAllocation.annualUsed ?? 0));
+          break;
+        case 'Maternity Leave':
+          availableQuota = Math.max(0, (selectedEmpAllocation.maternityAllocated ?? 0) - (selectedEmpAllocation.maternityUsed ?? 0));
+          break;
+        case 'Paternity Leave':
+          availableQuota = Math.max(0, (selectedEmpAllocation.paternityAllocated ?? 0) - (selectedEmpAllocation.paternityUsed ?? 0));
+          break;
+        case 'Compensatory Leave':
+          availableQuota = Math.max(0, (selectedEmpAllocation.compOffAllocated ?? 0) - (selectedEmpAllocation.compOffUsed ?? 0));
+          break;
+        case 'Bereavement Leave':
+          availableQuota = Math.max(0, 5 - (selectedEmpAllocation.bereavementUsed ?? 0));
+          break;
+        default:
+          availableQuota = 0;
+      }
+
+      if (calculatedDays > availableQuota) {
+        showToastMsg(
+          `Insufficient Balance: Requested ${calculatedDays} day(s) exceeds available ${createLeaveType} balance of ${availableQuota} day(s)`,
+          'error'
+        );
+        return;
+      }
+    }
+
+    // Mandatory document upload for Medical Leave > 3 consecutive days
+    if (createLeaveType === 'Medical Leave' && calculatedDays > 3 && !createAttachmentName) {
+      showToastMsg(
+        'Policy Requirement: Medical certificate or prescription document upload is mandatory for Medical Leave exceeding 3 consecutive days.',
+        'error'
+      );
+      return;
+    }
+
     const halfType: HalfDayType =
       createMode === 'HALF' ? (createHalfPeriod === 'First Half' ? 'First Half' : 'Second Half') : 'Full Day';
+
+    const supervisorName = selectedEmp.supervisor || selectedEmp.manager || 'Nasif Kamal';
 
     const newReq: LeaveRequestItem = {
       id: `req-${Date.now()}`,
@@ -378,6 +499,9 @@ export default function LeaveRequestsPage() {
       totalDays: calculatedDays,
       halfDayType: halfType,
       reason: createReason.trim(),
+      attachmentName: createAttachmentName || '',
+      attachmentUrl: createAttachmentUrl || '',
+      supervisorName: supervisorName,
       status: directApprove ? 'Approved' : 'Pending',
       appliedAt: new Date().toISOString(),
       ...(directApprove
@@ -402,6 +526,8 @@ export default function LeaveRequestsPage() {
     setSelectedEmpCode('');
     setEmpSearchInput('');
     setCreateReason('Admin Approved Leave / Attendance Adjustment');
+    setCreateAttachmentName('');
+    setCreateAttachmentUrl('');
   };
 
   // Filtered Employee List for Search in Modal
@@ -1129,6 +1255,22 @@ export default function LeaveRequestsPage() {
                     />
                   </div>
                 </div>
+
+                {/* Casual Leave Holiday Breakdown Details */}
+                {createLeaveType === 'Casual Leave' && casualCalcInfo && (
+                  <div className="flex flex-wrap gap-2 text-[11px] pt-1">
+                    {casualCalcInfo.sandwichedHolidaysCount > 0 && (
+                      <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-500 font-bold">
+                        Includes {casualCalcInfo.sandwichedHolidaysCount} sandwiched public holiday ({casualCalcInfo.sandwichedHolidayNames.join(', ')})
+                      </span>
+                    )}
+                    {casualCalcInfo.boundaryHolidaysCount > 0 && (
+                      <span className="px-2.5 py-1 rounded-xl bg-surface border border-border/70 text-muted-foreground">
+                        {casualCalcInfo.boundaryHolidaysCount} boundary public holiday(s) excluded
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* 5. REASON / REMARKS */}
@@ -1143,6 +1285,68 @@ export default function LeaveRequestsPage() {
                   placeholder="Admin Approved Leave / Attendance Adjustment"
                   className="w-full h-11 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
                 />
+              </div>
+
+              {/* 5.1 SUPPORTING DOCUMENT */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  SUPPORTING DOCUMENT{' '}
+                  {createLeaveType === 'Medical Leave' && calculatedDays > 3 ? (
+                    <span className="text-amber-500 font-bold">(Required *)</span>
+                  ) : calculatedDays >= 3 ? (
+                    <span className="text-muted-foreground font-semibold">(Recommended)</span>
+                  ) : (
+                    <span className="text-muted-foreground/80 font-normal">(Optional)</span>
+                  )}
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="file"
+                    id="admin-create-leave-doc"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 10 * 1024 * 1024) {
+                          showToastMsg('Document size exceeds 10 MB.', 'error');
+                          return;
+                        }
+                        let finalUrl = '';
+                        try {
+                          const formDataUpload = new FormData();
+                          formDataUpload.append('file', file);
+                          formDataUpload.append('employeeCode', selectedEmp?.code || 'emp');
+                          formDataUpload.append('fileName', file.name);
+                          const res = await fetch('/api/v1/leaves/attachments', {
+                            method: 'POST',
+                            body: formDataUpload,
+                          });
+                          const data = await res.json();
+                          if (data.success && data.url) {
+                            finalUrl = data.url;
+                          }
+                        } catch {}
+                        setCreateAttachmentName(file.name);
+                        setCreateAttachmentUrl(finalUrl);
+                        showToastMsg(`Document attached: ${file.name}`);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('admin-create-leave-doc')?.click()}
+                    className="w-full h-11 px-3.5 rounded-xl bg-surface border border-border hover:border-amber-500 text-xs font-semibold text-foreground transition shadow-sm cursor-pointer flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-2 truncate">
+                      <Paperclip className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                      <span className="truncate text-muted-foreground">
+                        {createAttachmentName || 'Attach medical certificate / prescription...'}
+                      </span>
+                    </div>
+                    <Upload className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  </button>
+                </div>
               </div>
 
               {/* 6. MODAL ACTIONS (CANCEL + APPROVE & SAVE LEAVE) */}
