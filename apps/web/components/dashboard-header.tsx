@@ -472,7 +472,7 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
                               notif.category === 'approvals' ? 'text-amber-400' : 'text-primary'
                             }`}
                           >
-                            {notif.category.replace(/_/g, ' ')}
+                            {(notif?.category || 'system').replace(/_/g, ' ')}
                           </span>
                           {notif.category === 'approvals' && (
                             <span className="text-[8px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300">
@@ -482,10 +482,12 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
                         </div>
                         <div className="flex items-center space-x-1">
                           <span className="text-[9px] font-mono text-muted-foreground">
-                            {new Date(notif.createdAt).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
+                            {notif.createdAt && !isNaN(new Date(notif.createdAt).getTime())
+                              ? new Date(notif.createdAt).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : ''}
                           </span>
                           <button
                             onClick={(e) => {
@@ -530,22 +532,22 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
             className="flex items-center space-x-2 p-0.5 rounded-full hover:ring-2 hover:ring-primary/50 transition cursor-pointer"
           >
             <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-black flex items-center justify-center text-xs shadow-md overflow-hidden border border-primary/40">
-              {mounted && user.avatarUrl ? (
+              {mounted && user?.avatarUrl ? (
                 <img
                   src={user.avatarUrl}
-                  alt={user.fullName}
+                  alt={user?.fullName || 'User'}
                   className="h-full w-full object-cover"
                 />
               ) : (
                 <span suppressHydrationWarning>
-                  {user.fullName
+                  {user?.fullName
                     ? user.fullName
-                        .split(' ')
+                        .trim()
+                        .split(/\s+/)
                         .filter(Boolean)
                         .slice(0, 2)
-                        .map((n) => n[0])
+                        .map((n) => n[0]?.toUpperCase() || '')
                         .join('')
-                        .toUpperCase()
                     : ''}
                 </span>
               )}
@@ -556,8 +558,8 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-card border border-border shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95">
               <div className="p-3 border-b border-border">
-                <div suppressHydrationWarning className="text-xs font-bold text-foreground truncate">{user.fullName}</div>
-                <div suppressHydrationWarning className="text-[11px] text-muted-foreground truncate">{user.jobTitle}</div>
+                <div suppressHydrationWarning className="text-xs font-bold text-foreground truncate">{user?.fullName || 'User'}</div>
+                <div suppressHydrationWarning className="text-[11px] text-muted-foreground truncate">{user?.jobTitle || ''}</div>
               </div>
               <div className="pt-2 space-y-1">
                 <button

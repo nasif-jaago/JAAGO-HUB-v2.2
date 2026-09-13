@@ -112,15 +112,15 @@ export type CompensatoryDutyType = 'WEEKEND' | 'PUBLIC_HOLIDAY' | 'BOTH';
 
 export interface CompensatoryLedgerEntry {
   id: string;
-  tenantId?: string;
-  employeeId?: string;
+  tenantId?: string | undefined;
+  employeeId?: string | undefined;
   employeeCode: string;
-  employeeName?: string;
-  onDutyRequestId?: string;
+  employeeName?: string | undefined;
+  onDutyRequestId?: string | undefined;
   dutyDate: string; // YYYY-MM-DD
-  dutyReason?: string;
+  dutyReason?: string | undefined;
   dutyType: CompensatoryDutyType;
-  holidayName?: string;
+  holidayName?: string | undefined;
   hoursEarned: number;
   hoursUtilized: number;
   remainingBalance: number;

@@ -125,11 +125,12 @@ export function middleware(request: NextRequest) {
   // Content Security Policy (CSP)
   const cspHeader = `
     default-src 'self';
-    script-src 'self' 'unsafe-eval' 'unsafe-inline';
+    script-src 'self' 'unsafe-eval' 'unsafe-inline' https://static.cloudflareinsights.com;
+    script-src-elem 'self' 'unsafe-inline' https://static.cloudflareinsights.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob: https://storage.jaago.com.bd https://*.supabase.co https://*.googleusercontent.com;
-    connect-src 'self' https://storage.jaago.com.bd https://*.supabase.co https://*.googleapis.com;
+    connect-src 'self' https://storage.jaago.com.bd https://*.supabase.co https://*.googleapis.com https://cloudflareinsights.com;
     frame-ancestors 'none';
     form-action 'self' https://*.supabase.co https://accounts.google.com;
   `.replace(/\s{2,}/g, ' ').trim();

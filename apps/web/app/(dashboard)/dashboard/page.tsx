@@ -47,6 +47,13 @@ import { fetchOnDutyRequestsFromSupabase } from '@/lib/supabase-onduty';
 import { formatDisplayDate } from '@/lib/date-format';
 import Link from 'next/link';
 
+const getInitials = (name?: string | null, fallback = 'JA'): string => {
+  if (!name || typeof name !== 'string') return fallback;
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return fallback;
+  return parts.slice(0, 2).map((n) => n[0]?.toUpperCase() || '').join('') || fallback;
+};
+
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
   const [viewMode, setViewMode] = useState<'auto' | 'desktop' | 'mobile'>('auto');
@@ -1391,18 +1398,20 @@ export default function DashboardPage() {
     day: '2-digit',
   }).format(new Date());
 
-  const todayOnLeave = approvedLeaves.filter((r) => {
+  const todayOnLeave = (approvedLeaves || []).filter((r) => {
+    if (!r) return false;
     const from = r.fromDate || '';
     const to = r.toDate || from;
-    return from <= todayStrForLeave && todayStrForLeave <= to;
+    return Boolean(from && from <= todayStrForLeave && todayStrForLeave <= to);
   });
 
-  const upcomingApprovedLeaves = approvedLeaves
+  const upcomingApprovedLeaves = (approvedLeaves || [])
     .filter((r) => {
+      if (!r) return false;
       const to = r.toDate || r.fromDate || '';
-      return to >= todayStrForLeave;
+      return Boolean(to && to >= todayStrForLeave);
     })
-    .sort((a, b) => (a.fromDate || '').localeCompare(b.fromDate || ''));
+    .sort((a, b) => (a?.fromDate || '').localeCompare(b?.fromDate || ''));
 
   return (
     <div className="max-w-[1700px] mx-auto text-foreground pb-24 md:pb-28 select-none relative">
@@ -1447,15 +1456,7 @@ export default function DashboardPage() {
                 />
               ) : (
                 <span className="text-amber-400 font-serif font-black text-xl">
-                  {user.fullName
-                    ? user.fullName
-                        .split(' ')
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((n: string) => n[0])
-                        .join('')
-                        .toUpperCase()
-                    : 'NK'}
+                  {getInitials(user?.fullName, 'NK')}
                 </span>
               )}
             </div>
@@ -1520,9 +1521,9 @@ export default function DashboardPage() {
                 ? `${gpsTracker.distanceMeters}m away (Max allowed: ${gpsTracker.allowedRadiusMeters}m)`
                 : gpsTracker.errorMsg || 'Calculating distance to office...'}
             </div>
-            {gpsTracker.latitude && (
+            {gpsTracker.latitude != null && (
               <div className="text-[10px] font-mono text-muted-foreground/70 pt-0.5">
-                Lat: {gpsTracker.latitude.toFixed(5)} &bull; Lng: {gpsTracker.longitude?.toFixed(5)} (±{gpsTracker.accuracy}m)
+                Lat: {Number(gpsTracker.latitude).toFixed(5)} &bull; Lng: {gpsTracker.longitude != null ? Number(gpsTracker.longitude).toFixed(5) : '0.00000'} (±{gpsTracker.accuracy ?? 0}m)
               </div>
             )}
           </div>
@@ -1828,15 +1829,7 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center space-x-2.5 min-w-0">
                     <div className="h-8 w-8 rounded-lg bg-card border border-border flex items-center justify-center flex-shrink-0 shadow-xs font-bold text-xs text-primary">
-                      {item.employeeName
-                        ? item.employeeName
-                            .split(' ')
-                            .filter(Boolean)
-                            .slice(0, 2)
-                            .map((n: string) => n[0])
-                            .join('')
-                            .toUpperCase()
-                        : 'OL'}
+                      {getInitials(item.employeeName, 'OL')}
                     </div>
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-foreground truncate">{item.employeeName}</div>
@@ -1871,15 +1864,7 @@ export default function DashboardPage() {
                   >
                     <div className="flex items-center space-x-2.5 min-w-0">
                       <div className="h-8 w-8 rounded-lg bg-card border border-border flex items-center justify-center flex-shrink-0 shadow-xs font-bold text-xs text-primary">
-                        {item.employeeName
-                          ? item.employeeName
-                              .split(' ')
-                              .filter(Boolean)
-                              .slice(0, 2)
-                              .map((n: string) => n[0])
-                              .join('')
-                              .toUpperCase()
-                          : 'OL'}
+                        {getInitials(item.employeeName, 'OL')}
                       </div>
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-foreground truncate">{item.employeeName}</div>
@@ -1940,15 +1925,7 @@ export default function DashboardPage() {
                   />
                 ) : (
                   <div className="h-full w-full rounded-[13px] sm:rounded-[15px] bg-gradient-to-br from-amber-400/20 via-amber-400/30 to-amber-600/20 flex items-center justify-center text-amber-400 font-serif font-black text-xl sm:text-2xl select-none">
-                    {user.fullName
-                      ? user.fullName
-                          .split(' ')
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map((n: string) => n[0])
-                          .join('')
-                          .toUpperCase()
-                      : 'NK'}
+                    {getInitials(user?.fullName, 'NK')}
                   </div>
                 )}
               </div>
@@ -2426,22 +2403,23 @@ export default function DashboardPage() {
             const now = new Date(todayStr).getTime();
 
             // Filter for current user's department & project (or company-wide)
-            const applicableHolidays = publicHolidays.filter((h) => {
-              const deptMatch =
-                !h.department ||
-                h.department === 'All' ||
-                (user.department && h.department.toLowerCase().trim() === user.department.toLowerCase().trim());
-              const projMatch =
-                !h.project ||
-                h.project === 'All' ||
-                (user.project && h.project.toLowerCase().trim() === user.project.toLowerCase().trim());
+            const applicableHolidays = (publicHolidays || []).filter((h) => {
+              if (!h) return false;
+              const hDept = typeof h.department === 'string' ? h.department.trim().toLowerCase() : '';
+              const uDept = typeof user.department === 'string' ? user.department.trim().toLowerCase() : '';
+              const deptMatch = !h.department || h.department === 'All' || (uDept && hDept === uDept);
+
+              const hProj = typeof h.project === 'string' ? h.project.trim().toLowerCase() : '';
+              const uProj = typeof user.project === 'string' ? user.project.trim().toLowerCase() : '';
+              const projMatch = !h.project || h.project === 'All' || (uProj && hProj === uProj);
+
               return deptMatch && projMatch;
             });
 
             // Sort upcoming holidays
-            const upcomingList = applicableHolidays
-              .filter((h) => (h.endDate || h.date) >= todayStr || h.date >= todayStr)
-              .sort((a, b) => a.date.localeCompare(b.date))
+            const upcomingList = (applicableHolidays || [])
+              .filter((h) => h && (h.date || h.endDate) && ((h.endDate || h.date || '') >= todayStr || (h.date || '') >= todayStr))
+              .sort((a, b) => (a?.date || '').localeCompare(b?.date || ''))
               .slice(0, 3);
 
             return (
@@ -2471,13 +2449,13 @@ export default function DashboardPage() {
                     </div>
                   ) : (
                     upcomingList.map((h, idx) => {
-                      const dateObj = new Date(h.date);
+                      const dateObj = h?.date ? new Date(h.date) : new Date();
                       const monthName = isNaN(dateObj.getTime())
                         ? 'HOL'
                         : dateObj.toLocaleString('en-US', { month: 'short' }).toUpperCase();
                       const dayNum = isNaN(dateObj.getTime()) ? '1' : dateObj.getDate();
-                      const hTime = new Date(h.date).getTime();
-                      const daysDiff = Math.ceil((hTime - now) / (1000 * 3600 * 24));
+                      const hTime = dateObj.getTime();
+                      const daysDiff = isNaN(hTime) ? 30 : Math.ceil((hTime - now) / (1000 * 3600 * 24));
                       const isThisWeek = daysDiff >= 0 && daysDiff <= 7;
                       const isThisMonth = daysDiff > 7 && daysDiff <= 30;
                       const dotColor = isThisWeek
@@ -2488,7 +2466,7 @@ export default function DashboardPage() {
 
                       return (
                         <div
-                          key={`holiday-${h.id || h.date}-${idx}`}
+                          key={`holiday-${h.id || h.date || idx}-${idx}`}
                           className="p-1.5 px-2 rounded-lg bg-surface/70 border border-border/70 hover:border-border transition flex items-center justify-between gap-2 group shadow-xs"
                         >
                           <div className="flex items-center space-x-2 min-w-0">
@@ -2502,10 +2480,10 @@ export default function DashboardPage() {
                             </div>
                             <div className="min-w-0">
                               <div className="text-[11px] font-bold text-foreground truncate group-hover:text-amber-500 transition">
-                                {h.title}
+                                {h.title || 'Public Holiday'}
                               </div>
                               <div className="text-[9px] text-muted-foreground font-medium flex items-center space-x-1 truncate">
-                                <span>{h.type}</span>
+                                <span>{h.type || 'Holiday'}</span>
                                 {h.department && (
                                   <>
                                     <span>&bull;</span>
@@ -2518,7 +2496,7 @@ export default function DashboardPage() {
 
                           <div className="flex items-center space-x-1.5 flex-shrink-0">
                             <span className="text-[9px] font-bold text-muted-foreground bg-card border border-border px-1 py-0.5 rounded">
-                              {h.totalDays}d
+                              {h.totalDays ?? 1}d
                             </span>
                             <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
                           </div>
@@ -2580,15 +2558,7 @@ export default function DashboardPage() {
                   >
                     <div className="flex items-center space-x-2 min-w-0">
                       <div className="h-7 w-7 rounded-md bg-card border border-border flex items-center justify-center flex-shrink-0 shadow-xs font-bold text-[10px] text-primary">
-                        {item.employeeName
-                          ? item.employeeName
-                              .split(' ')
-                              .filter(Boolean)
-                              .slice(0, 2)
-                              .map((n: string) => n[0])
-                              .join('')
-                              .toUpperCase()
-                          : 'OL'}
+                        {getInitials(item.employeeName, 'OL')}
                       </div>
                       <div className="min-w-0">
                         <div className="text-[11px] font-bold text-foreground truncate group-hover:text-amber-500 transition">
@@ -2625,15 +2595,7 @@ export default function DashboardPage() {
                     >
                       <div className="flex items-center space-x-2 min-w-0">
                         <div className="h-7 w-7 rounded-md bg-card border border-border flex items-center justify-center flex-shrink-0 shadow-xs font-bold text-[10px] text-primary">
-                          {item.employeeName
-                            ? item.employeeName
-                                .split(' ')
-                                .filter(Boolean)
-                                .slice(0, 2)
-                                .map((n: string) => n[0])
-                                .join('')
-                                .toUpperCase()
-                            : 'OL'}
+                          {getInitials(item.employeeName, 'OL')}
                         </div>
                         <div className="min-w-0">
                           <div className="text-[11px] font-bold text-foreground truncate group-hover:text-amber-500 transition">
@@ -2896,22 +2858,22 @@ export default function DashboardPage() {
             <div className="p-4 rounded-2xl bg-surface border border-border/80 text-left space-y-2.5 text-xs">
               <div className="flex justify-between items-center pb-2 border-b border-border/60">
                 <span className="text-muted-foreground font-semibold">Nearest Designated Office:</span>
-                <span className="font-bold text-foreground text-right">{geofenceAlert.locationName}</span>
+                <span className="font-bold text-foreground text-right">{geofenceAlert.locationName || 'Authorized Office'}</span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-border/60">
                 <span className="text-muted-foreground font-semibold">Your Current Distance:</span>
                 <span className="font-extrabold text-rose-500 font-mono text-sm">
-                  {geofenceAlert.distanceMeters.toLocaleString()}m away
+                  {(Number(geofenceAlert.distanceMeters) || 0).toLocaleString()}m away
                 </span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b border-border/60">
                 <span className="text-muted-foreground font-semibold">Max Allowed Geofence:</span>
-                <span className="font-bold text-emerald-500">{geofenceAlert.allowedRadiusMeters}m radius</span>
+                <span className="font-bold text-emerald-500">{(Number(geofenceAlert.allowedRadiusMeters) || 100)}m radius</span>
               </div>
               <div className="flex justify-between items-center text-[10px] text-muted-foreground font-mono">
                 <span>GPS Coordinates:</span>
                 <span>
-                  {geofenceAlert.latitude.toFixed(5)}° N, {geofenceAlert.longitude.toFixed(5)}° E
+                  {(Number(geofenceAlert.latitude) || 0).toFixed(5)}° N, {(Number(geofenceAlert.longitude) || 0).toFixed(5)}° E
                 </span>
               </div>
             </div>
