@@ -31,6 +31,7 @@ import {
   Layers,
   Move,
   CalendarDays,
+  Calendar,
   ArrowUpRight,
   Plus,
   X,
@@ -58,8 +59,8 @@ import {
   getEmployeeAttendanceLogs,
   fetchAttendanceLogsFromSupabase,
   calculateWorkingHoursString,
-  getLocalShifts,
   ShiftItem,
+  getLocalShifts,
 } from '@/lib/supabase-attendance';
 import {
   AttendanceRegularizationItem,
@@ -101,6 +102,8 @@ import {
   validateCasualLeaveRules,
   calculateAnnualLeaveDuration,
   validateAnnualLeaveRules,
+  validateMaternityLeaveRules,
+  validatePaternityLeaveRules,
 } from '@/lib/supabase-time-off';
 import { saveEmployeeToSupabase } from '@/lib/supabase-employees';
 import { invalidateCache } from '@/lib/data-cache';
@@ -2424,8 +2427,8 @@ export function EmployeeProfileDetail({
                           setEmpLeaveAllocation({
                             ...empLeaveAllocation,
                             gender: newGender,
-                            paternityAllocated: isM ? (empLeaveAllocation.paternityAllocated || 0) : 0,
-                            maternityAllocated: isF ? (empLeaveAllocation.maternityAllocated || 0) : 0,
+                            paternityAllocated: isM ? (empLeaveAllocation.paternityAllocated && empLeaveAllocation.paternityAllocated > 0 ? empLeaveAllocation.paternityAllocated : 15) : 0,
+                            maternityAllocated: isF ? (empLeaveAllocation.maternityAllocated && empLeaveAllocation.maternityAllocated > 0 ? empLeaveAllocation.maternityAllocated : 120) : 0,
                           });
                         }
                       }}
@@ -3631,21 +3634,21 @@ export function EmployeeProfileDetail({
               const coUsed = empLeaveAllocation ? (empLeaveAllocation.compOffUsed ?? 0) : 0;
               const coRem = Math.max(0, coAlloc - coUsed);
 
-              const plAlloc = empLeaveAllocation ? (empLeaveAllocation.paternityAllocated ?? 0) : 0;
+              const empGender = (formData.gender || empLeaveAllocation?.gender || '').toUpperCase().trim();
+              const isMale = empGender === 'MALE' || empGender === 'M';
+              const isFemale = empGender === 'FEMALE' || empGender === 'F';
+
+              const plAlloc = isMale ? (empLeaveAllocation?.paternityAllocated && empLeaveAllocation.paternityAllocated > 0 ? empLeaveAllocation.paternityAllocated : 15) : 0;
               const plUsed = empLeaveAllocation ? (empLeaveAllocation.paternityUsed ?? 0) : 0;
               const plRem = Math.max(0, plAlloc - plUsed);
 
-              const matAlloc = empLeaveAllocation ? (empLeaveAllocation.maternityAllocated ?? 0) : 0;
+              const matAlloc = isFemale ? (empLeaveAllocation?.maternityAllocated && empLeaveAllocation.maternityAllocated > 0 ? empLeaveAllocation.maternityAllocated : 120) : 0;
               const matUsed = empLeaveAllocation ? (empLeaveAllocation.maternityUsed ?? 0) : 0;
               const matRem = Math.max(0, matAlloc - matUsed);
 
               const blAlloc = empLeaveAllocation ? 5 : 0;
               const blUsed = empLeaveAllocation ? (empLeaveAllocation.bereavementUsed ?? 0) : 0;
               const blRem = Math.max(0, blAlloc - blUsed);
-
-              const empGender = (formData.gender || empLeaveAllocation?.gender || '').toUpperCase().trim();
-              const isMale = empGender === 'MALE' || empGender === 'M';
-              const isFemale = empGender === 'FEMALE' || empGender === 'F';
 
               const clPct = clAlloc > 0 ? (clRem / clAlloc) * 100 : 0;
               const mlPct = mlAlloc > 0 ? (mlRem / mlAlloc) * 100 : 0;
@@ -3833,7 +3836,7 @@ export function EmployeeProfileDetail({
                   </div>
 
                   {/* 6. Paternity Leave Card (Only for Male Employees) */}
-                  {(!isFemale || (!isMale && !isFemale && plAlloc > 0)) && (
+                  {isMale && (
                     <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
                       <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-2xl" />
                       <div className="flex items-center justify-between pl-2">
@@ -3859,7 +3862,7 @@ export function EmployeeProfileDetail({
                   )}
 
                   {/* 7. Maternity Leave Card (Only for Female Employees) */}
-                  {(!isMale || (!isMale && !isFemale && matAlloc > 0)) && (
+                  {isFemale && (
                     <div className="rounded-2xl bg-card border border-border/80 p-4 shadow-sm relative overflow-hidden flex flex-col justify-between space-y-2">
                       <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 rounded-l-2xl" />
                       <div className="flex items-center justify-between pl-2">
@@ -4658,8 +4661,8 @@ export function EmployeeProfileDetail({
                 }
 
                 // Check available balance
+                let availableQuota = 0;
                 if (empLeaveAllocation) {
-                  let availableQuota = 0;
                   const effectiveMedical = isEmpProbation
                     ? Math.min(3, empLeaveAllocation.medicalAllocated ?? 3)
                     : (empLeaveAllocation.medicalAllocated ?? 10);
@@ -4677,9 +4680,12 @@ export function EmployeeProfileDetail({
                     case 'Annual Leave':
                       availableQuota = Math.max(0, (empLeaveAllocation.annualAllocated ?? 0) - (empLeaveAllocation.annualUsed ?? 0));
                       break;
-                    case 'Maternity Leave':
-                      availableQuota = Math.max(0, (empLeaveAllocation.maternityAllocated ?? 0) - (empLeaveAllocation.maternityUsed ?? 0));
+                    case 'Maternity Leave': {
+                      const isF = (formData.gender || empLeaveAllocation?.gender || '').toUpperCase().trim() === 'FEMALE';
+                      const matAlloc = isF ? (empLeaveAllocation.maternityAllocated && empLeaveAllocation.maternityAllocated > 0 ? empLeaveAllocation.maternityAllocated : 120) : 0;
+                      availableQuota = Math.max(0, matAlloc - (empLeaveAllocation.maternityUsed ?? 0));
                       break;
+                    }
                     case 'Paternity Leave':
                       availableQuota = Math.max(0, (empLeaveAllocation.paternityAllocated ?? 0) - (empLeaveAllocation.paternityUsed ?? 0));
                       break;
@@ -4711,6 +4717,45 @@ export function EmployeeProfileDetail({
                   }
                 }
 
+                if (profileLeaveForm.leaveType === 'Maternity Leave') {
+                  const matValidation = validateMaternityLeaveRules({
+                    startDate: profileLeaveForm.fromDate,
+                    endDate: profileLeaveForm.toDate,
+                    pregnancyConfirmationDate: profileLeaveForm.pregnancyConfirmationDate,
+                    expectedDeliveryDate: profileLeaveForm.expectedDeliveryDate,
+                    intendedMaternityStartDate: profileLeaveForm.intendedMaternityStartDate || profileLeaveForm.fromDate,
+                    employeeGender: formData.gender,
+                    existingRequests: empLeaveRequests,
+                    employeeCode: formData.code,
+                    hasAttachedDoc: Boolean(profileLeaveForm.attachmentName),
+                    availableBalance: availableQuota,
+                    totalCalculatedDays: profileLeaveForm.totalDays,
+                  });
+                  if (!matValidation.valid) {
+                    setProfileLeaveError(matValidation.error || 'Maternity Leave violates policy rules.');
+                    return;
+                  }
+                }
+
+                if (profileLeaveForm.leaveType === 'Paternity Leave') {
+                  const patValidation = validatePaternityLeaveRules({
+                    startDate: profileLeaveForm.fromDate,
+                    endDate: profileLeaveForm.toDate,
+                    employeeGender: formData.gender,
+                    existingRequests: empLeaveRequests,
+                    employeeCode: formData.code,
+                    joiningDate: formData.joiningDate,
+                    sixMonthsCompletionStatus: formData.sixMonthsCompletionStatus,
+                    availableBalance: availableQuota,
+                    totalCalculatedDays: profileLeaveForm.totalDays,
+                    holidays,
+                  });
+                  if (!patValidation.valid) {
+                    setProfileLeaveError(patValidation.error || 'Paternity Leave violates policy rules.');
+                    return;
+                  }
+                }
+
                 const supervisorName = formData.supervisor || (formData as any)?.manager || "Nasif Kamal";
 
                 const newReq: LeaveRequestItem = {
@@ -4727,7 +4772,7 @@ export function EmployeeProfileDetail({
                   reason: profileLeaveForm.reason,
                   pregnancyConfirmationDate: profileLeaveForm.pregnancyConfirmationDate,
                   expectedDeliveryDate: profileLeaveForm.expectedDeliveryDate,
-                  intendedMaternityStartDate: profileLeaveForm.intendedMaternityStartDate,
+                  intendedMaternityStartDate: profileLeaveForm.intendedMaternityStartDate || profileLeaveForm.fromDate,
                   bereavementRelationship: profileLeaveForm.bereavementRelationship as BereavementRelationship,
                   attachmentName: profileLeaveForm.attachmentName || '',
                   attachmentUrl: profileLeaveForm.attachmentUrl || '',
@@ -4750,8 +4795,6 @@ export function EmployeeProfileDetail({
                 const empGender = (formData.gender || empLeaveAllocation?.gender || '').toUpperCase().trim();
                 const isMale = empGender === 'MALE' || empGender === 'M';
                 const isFemale = empGender === 'FEMALE' || empGender === 'F';
-                const plAlloc = empLeaveAllocation ? (empLeaveAllocation.paternityAllocated ?? 0) : 0;
-                const matAlloc = empLeaveAllocation ? (empLeaveAllocation.maternityAllocated ?? 0) : 0;
 
                 return (
                   <div className="space-y-1">
@@ -4805,10 +4848,10 @@ export function EmployeeProfileDetail({
                       <option value="Medical Leave">Medical Leave (ML)</option>
                       <option value="Emergency Leave">Emergency Leave (EL)</option>
                       <option value="Annual Leave">Annual Leave (AL)</option>
-                      {(!isFemale || (!isMale && !isFemale && plAlloc > 0)) && (
+                      {isMale && (
                         <option value="Paternity Leave">Paternity Leave (15 Days)</option>
                       )}
-                      {(!isMale || (!isMale && !isFemale && matAlloc > 0)) && (
+                      {isFemale && (
                         <option value="Maternity Leave">Maternity Leave (120 Days)</option>
                       )}
                       <option value="Bereavement Leave">Bereavement Leave</option>
@@ -4924,7 +4967,21 @@ export function EmployeeProfileDetail({
                         toVal = fromVal;
                       }
                       let diffDays = 1;
-                      if (profileLeaveForm.leaveType === 'Casual Leave') {
+                      if (profileLeaveForm.leaveType === 'Maternity Leave') {
+                        diffDays = 120;
+                        const s = new Date(fromVal);
+                        if (!isNaN(s.getTime())) {
+                          s.setDate(s.getDate() + 119);
+                          toVal = s.toISOString().split('T')[0] || '';
+                        }
+                      } else if (profileLeaveForm.leaveType === 'Paternity Leave') {
+                        diffDays = 15;
+                        const s = new Date(fromVal);
+                        if (!isNaN(s.getTime())) {
+                          s.setDate(s.getDate() + 14);
+                          toVal = s.toISOString().split('T')[0] || '';
+                        }
+                      } else if (profileLeaveForm.leaveType === 'Casual Leave') {
                         diffDays = calculateCasualLeaveDuration(
                           fromVal,
                           toVal,
@@ -4950,6 +5007,7 @@ export function EmployeeProfileDetail({
                         ...profileLeaveForm,
                         fromDate: fromVal,
                         toDate: toVal,
+                        intendedMaternityStartDate: profileLeaveForm.leaveType === 'Maternity Leave' ? fromVal : profileLeaveForm.intendedMaternityStartDate,
                         totalDays: diffDays > 0 ? diffDays : 1,
                       });
                     }}
@@ -4958,12 +5016,22 @@ export function EmployeeProfileDetail({
                 </div>
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                    To Date
+                    To Date{' '}
+                    {profileLeaveForm.leaveType === 'Maternity Leave' && (
+                      <span className="text-rose-500 font-bold normal-case">(120 Days)</span>
+                    )}
+                    {profileLeaveForm.leaveType === 'Paternity Leave' && (
+                      <span className="text-indigo-500 font-bold normal-case">(15 Days)</span>
+                    )}
                   </label>
                   <input
                     type="date"
                     required
-                    disabled={profileLeaveForm.leaveType === 'Maternity Leave' || profileLeaveForm.halfDayType !== 'Full Day'}
+                    disabled={
+                      profileLeaveForm.leaveType === 'Maternity Leave' ||
+                      profileLeaveForm.leaveType === 'Paternity Leave' ||
+                      profileLeaveForm.halfDayType !== 'Full Day'
+                    }
                     value={
                       profileLeaveForm.halfDayType !== 'Full Day'
                         ? profileLeaveForm.fromDate
@@ -5004,6 +5072,127 @@ export function EmployeeProfileDetail({
                   />
                 </div>
               </div>
+
+              {/* Dedicated Maternity Leave Fields */}
+              {profileLeaveForm.leaveType === 'Maternity Leave' && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-2xl bg-surface/50 border border-border animate-in fade-in">
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground block font-bold uppercase">
+                      Pregnancy Confirmed Date <span className="text-amber-500">*</span>
+                    </span>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        required
+                        value={profileLeaveForm.pregnancyConfirmationDate}
+                        onChange={(e) =>
+                          setProfileLeaveForm({
+                            ...profileLeaveForm,
+                            pregnancyConfirmationDate: e.target.value,
+                          })
+                        }
+                        className="w-full h-10 pl-9 pr-2 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = e.currentTarget.parentElement?.querySelector('input');
+                          if (input && 'showPicker' in input) (input as any).showPicker();
+                        }}
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
+                        title="Select Date"
+                      >
+                        <Calendar className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground block font-bold uppercase">
+                      Expected Delivery Date (EDD) <span className="text-amber-500">*</span>
+                    </span>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        required
+                        value={profileLeaveForm.expectedDeliveryDate}
+                        onChange={(e) =>
+                          setProfileLeaveForm({
+                            ...profileLeaveForm,
+                            expectedDeliveryDate: e.target.value,
+                          })
+                        }
+                        className="w-full h-10 pl-9 pr-2 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = e.currentTarget.parentElement?.querySelector('input');
+                          if (input && 'showPicker' in input) (input as any).showPicker();
+                        }}
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
+                        title="Select Date"
+                      >
+                        <Calendar className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-muted-foreground block font-bold uppercase">
+                      Intended Leave Start <span className="text-amber-500">*</span>
+                    </span>
+                    <div className="relative">
+                      <input
+                        type="date"
+                        required
+                        value={profileLeaveForm.intendedMaternityStartDate || profileLeaveForm.fromDate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const s = new Date(val);
+                          let endVal = profileLeaveForm.toDate;
+                          if (!isNaN(s.getTime())) {
+                            s.setDate(s.getDate() + 119);
+                            endVal = s.toISOString().split('T')[0] || '';
+                          }
+                          setProfileLeaveForm({
+                            ...profileLeaveForm,
+                            intendedMaternityStartDate: val,
+                            fromDate: val,
+                            toDate: endVal,
+                            totalDays: 120,
+                          });
+                        }}
+                        className="w-full h-10 pl-9 pr-2 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          const input = e.currentTarget.parentElement?.querySelector('input');
+                          if (input && 'showPicker' in input) (input as any).showPicker();
+                        }}
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
+                        title="Select Date"
+                      >
+                        <Calendar className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Paternity Leave Information Details */}
+              {profileLeaveForm.leaveType === 'Paternity Leave' && (
+                <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 space-y-1 animate-in fade-in">
+                  <div className="flex items-center space-x-2">
+                    <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      Paternity Leave Policy (15 Calendar Days Full Pay)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed pl-4">
+                    Weekends and government public holidays are counted within the 15-day period. Maximum 15 days entitlement with full pay. Applicable after 1 year of continuous service for up to two children. Application must be submitted at least 7 days before start date.
+                  </p>
+                </div>
+              )}
 
               {/* Casual Leave Holiday Breakdown Details */}
               {profileLeaveForm.leaveType === 'Casual Leave' && profileCasualCalcInfo && (
@@ -5096,7 +5285,7 @@ export function EmployeeProfileDetail({
               <div className="space-y-1">
                 <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                   Supporting Document{' '}
-                  {profileLeaveForm.leaveType === 'Medical Leave' && profileLeaveForm.totalDays > 3 ? (
+                  {(profileLeaveForm.leaveType === 'Medical Leave' && profileLeaveForm.totalDays > 3) || profileLeaveForm.leaveType === 'Maternity Leave' ? (
                     <span className="text-amber-500 font-bold">(Required *)</span>
                   ) : profileLeaveForm.totalDays >= 3 ? (
                     <span className="text-muted-foreground font-semibold">(Recommended)</span>

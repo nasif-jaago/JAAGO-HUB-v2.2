@@ -970,6 +970,244 @@ export function validateAnnualLeaveRules(params: {
   return { valid: true };
 }
 
+export function cleanApplicantReason(reason?: string | null): string {
+  if (!reason) return '';
+  return reason
+    .replace(/\[Supervisor:\s*[\s\S]*?\]/gi, '')
+    .replace(/\{"?Supervisor:\s*[\s\S]*?\}?/gi, '')
+    .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
+    .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
+    .replace(/\[Half Day:\s*[\s\S]*?\]/gi, '')
+    .trim();
+}
+
+export function validateMaternityLeaveRules(params: {
+  startDate: string;
+  endDate: string;
+  pregnancyConfirmationDate?: string | undefined;
+  expectedDeliveryDate?: string | undefined;
+  intendedMaternityStartDate?: string | undefined;
+  employeeGender?: string | undefined;
+  existingRequests?: LeaveRequestItem[] | undefined;
+  employeeCode: string;
+  hasAttachedDoc: boolean;
+  availableBalance?: number | undefined;
+  currentRequestId?: string | undefined;
+  totalCalculatedDays?: number | undefined;
+}): { valid: boolean; error?: string } {
+  // 1. Gender Rule: Exclusively for Female Employees
+  const g = (params.employeeGender || '').toUpperCase().trim();
+  const isFemale = g === 'FEMALE' || g === 'F';
+  if (!isFemale) {
+    return {
+      valid: false,
+      error: 'Policy Restriction: Maternity Leave is strictly reserved for female employees under JAAGO HR Policy.',
+    };
+  }
+
+  // 2. Mandatory Fields
+  if (!params.pregnancyConfirmationDate || !params.pregnancyConfirmationDate.trim()) {
+    return {
+      valid: false,
+      error: 'Mandatory Field Missing: Please provide the Pregnancy Confirmation Date.',
+    };
+  }
+  if (!params.expectedDeliveryDate || !params.expectedDeliveryDate.trim()) {
+    return {
+      valid: false,
+      error: 'Mandatory Field Missing: Please provide the Expected Delivery Date (EDD).',
+    };
+  }
+  if (!params.intendedMaternityStartDate || !params.intendedMaternityStartDate.trim()) {
+    return {
+      valid: false,
+      error: 'Mandatory Field Missing: Please provide the Intended Maternity Leave Start Date.',
+    };
+  }
+
+  // 3. Advance Notice: At least 12 weeks (84 days) before Expected Delivery Date
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const edd = new Date(params.expectedDeliveryDate);
+  edd.setHours(0, 0, 0, 0);
+
+  if (isNaN(edd.getTime())) {
+    return {
+      valid: false,
+      error: 'Invalid Date: The Expected Delivery Date provided is invalid.',
+    };
+  }
+
+  const diffEddDays = Math.round((edd.getTime() - today.getTime()) / (1000 * 3600 * 24));
+  if (diffEddDays < 84) {
+    return {
+      valid: false,
+      error: `Advance Notice Required: Maternity Leave application must be submitted at least 12 weeks (84 days / 3 months) before the Expected Delivery Date (EDD). Your Expected Delivery Date is ${
+        diffEddDays < 0 ? 'in the past' : `only ${diffEddDays} day(s) from today`
+      }.`,
+    };
+  }
+
+  // 4. Mandatory Document Upload
+  if (!params.hasAttachedDoc) {
+    return {
+      valid: false,
+      error: 'Document Required: Supporting medical documentation / pregnancy confirmation certificate must be uploaded before submitting a Maternity Leave application.',
+    };
+  }
+
+  // 5. Maximum 2 Children Restriction
+  const priorMaternityLeaves = (params.existingRequests || []).filter(
+    (r) =>
+      r.employeeCode === params.employeeCode &&
+      (r.leaveType === 'Maternity Leave' || (r as any).leave_type === 'Maternity Leave') &&
+      r.status !== 'Rejected' &&
+      r.status !== 'Cancelled' &&
+      (!params.currentRequestId || r.id !== params.currentRequestId)
+  );
+  if (priorMaternityLeaves.length >= 2) {
+    return {
+      valid: false,
+      error: 'Policy Restriction: Maternity Leave entitlement is restricted to a maximum of two (2) children under JAAGO HR Policy. Our records indicate you have already availed Maternity Leave for two children.',
+    };
+  }
+
+  // 6. Available Quota Balance
+  if (params.availableBalance !== undefined && params.availableBalance < 120) {
+    return {
+      valid: false,
+      error: `Insufficient Balance: Maternity Leave entitlement is 120 calendar days, but your available balance is ${params.availableBalance} day(s).`,
+    };
+  }
+
+  // 7. Single Continuous Period of 120 Calendar Days (Weekends & Government Holidays Included)
+  const startObj = new Date(params.startDate);
+  startObj.setHours(0, 0, 0, 0);
+  const endObj = new Date(params.endDate);
+  endObj.setHours(0, 0, 0, 0);
+  const calendarDays = Math.round((endObj.getTime() - startObj.getTime()) / (1000 * 3600 * 24)) + 1;
+
+  if (calendarDays !== 120 && (params.totalCalculatedDays !== undefined && params.totalCalculatedDays !== 120)) {
+    return {
+      valid: false,
+      error: `Policy Requirement: Maternity Leave must be availed in a single continuous period of exactly 120 calendar days (including weekends and government holidays). It cannot be split, reused, or carried forward. Current selection is ${calendarDays} day(s).`,
+    };
+  }
+
+  return { valid: true };
+}
+
+export function validatePaternityLeaveRules(params: {
+  startDate: string;
+  endDate: string;
+  employeeGender?: string | undefined;
+  existingRequests?: LeaveRequestItem[] | undefined;
+  employeeCode: string;
+  joiningDate?: string | undefined;
+  sixMonthsCompletionStatus?: string | undefined;
+  availableBalance?: number | undefined;
+  currentRequestId?: string | undefined;
+  totalCalculatedDays?: number | undefined;
+  holidays?: PublicHolidayItem[] | undefined;
+}): { valid: boolean; error?: string } {
+  // 1. Gender Rule: Exclusively for Male Employees
+  const g = (params.employeeGender || '').toUpperCase().trim();
+  const isMale = g === 'MALE' || g === 'M';
+  if (!isMale) {
+    return {
+      valid: false,
+      error: 'Policy Restriction: Paternity Leave is strictly reserved for male employees under JAAGO HR Policy.',
+    };
+  }
+
+  // 2. Service Eligibility: Applicable after completion of 1 year of continuous service
+  // Data pull from People and Culture employee profile 6-month confirmation status and joining date
+  const sixMonths = (params.sixMonthsCompletionStatus || '').trim().toLowerCase();
+  if (sixMonths === 'no') {
+    return {
+      valid: false,
+      error: "Policy Ineligibility: Employee must complete at least 1 year of continuous service before becoming eligible for Paternity Leave (People & Culture Profile: 6 Months Completion Status is 'No').",
+    };
+  }
+
+  if (params.joiningDate) {
+    const jDate = new Date(params.joiningDate);
+    const startObj = new Date(params.startDate);
+    if (!isNaN(jDate.getTime()) && !isNaN(startObj.getTime())) {
+      const serviceDiffDays = Math.round((startObj.getTime() - jDate.getTime()) / (1000 * 3600 * 24));
+      if (serviceDiffDays < 365) {
+        const completedMonths = Math.floor(serviceDiffDays / 30.4375);
+        return {
+          valid: false,
+          error: `Policy Ineligibility: Paternity Leave is applicable only after completion of 1 year (365 days) of continuous service. Current service length is approximately ${completedMonths} month(s) (${serviceDiffDays} days).`,
+        };
+      }
+    }
+  }
+
+  // 3. Advance Notice: Application must be submitted at least 7 days before the leave start date
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startObj = new Date(params.startDate);
+  startObj.setHours(0, 0, 0, 0);
+
+  if (isNaN(startObj.getTime())) {
+    return {
+      valid: false,
+      error: 'Invalid Date: The leave start date provided is invalid.',
+    };
+  }
+
+  const daysUntilLeave = Math.round((startObj.getTime() - today.getTime()) / (1000 * 3600 * 24));
+  if (daysUntilLeave < 7) {
+    return {
+      valid: false,
+      error: `Advance Notice Required: Paternity Leave application must be submitted at least 7 days before the leave start date (Current notice: ${
+        daysUntilLeave < 0 ? 'date in past' : `${daysUntilLeave} day(s)`
+      }).`,
+    };
+  }
+
+  // 4. Maximum 2 Children Restriction: Applicable for up to two (2) children only
+  const priorPaternityLeaves = (params.existingRequests || []).filter(
+    (r) =>
+      r.employeeCode === params.employeeCode &&
+      (r.leaveType === 'Paternity Leave' || (r as any).leave_type === 'Paternity Leave') &&
+      r.status !== 'Rejected' &&
+      r.status !== 'Cancelled' &&
+      (!params.currentRequestId || r.id !== params.currentRequestId)
+  );
+  if (priorPaternityLeaves.length >= 2) {
+    return {
+      valid: false,
+      error: 'Policy Restriction: Paternity Leave entitlement is restricted to a maximum of two (2) children under JAAGO HR Policy. Our records indicate you have already availed Paternity Leave for two children.',
+    };
+  }
+
+  // 5. Maximum Entitlement: 15 days (Weekends and government holidays counted within the period)
+  const endObj = new Date(params.endDate);
+  endObj.setHours(0, 0, 0, 0);
+  const calendarDays = Math.round((endObj.getTime() - startObj.getTime()) / (1000 * 3600 * 24)) + 1;
+  const effectiveDays = params.totalCalculatedDays !== undefined ? params.totalCalculatedDays : calendarDays;
+
+  if (effectiveDays > 15 || calendarDays > 15) {
+    return {
+      valid: false,
+      error: `Policy Limit Exceeded: Maximum entitlement for Paternity Leave is 15 calendar days (including weekends and government holidays). Current requested duration is ${effectiveDays} day(s).`,
+    };
+  }
+
+  // 6. Available Quota Balance
+  if (params.availableBalance !== undefined && effectiveDays > params.availableBalance) {
+    return {
+      valid: false,
+      error: `Insufficient Balance: Requested ${effectiveDays} day(s) exceeds your available Paternity Leave balance of ${params.availableBalance} day(s).`,
+    };
+  }
+
+  return { valid: true };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. PRODUCTION SEED DATA WITH FULL RULES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1448,9 +1686,12 @@ export async function fetchLeaveRequests(forceRefresh: boolean = false): Promise
           const cached = localStorage.getItem('jaago_pnc_leave_requests_v3');
           if (cached) {
             const parsed: LeaveRequestItem[] = JSON.parse(cached);
-            const clean = parsed.filter(
-              (r) => !['lv-101', 'lv-102', 'lv-103', 'lv-104'].includes(r.id)
-            );
+            const clean = parsed
+              .filter((r) => !['lv-101', 'lv-102', 'lv-103', 'lv-104'].includes(r.id))
+              .map((r) => ({
+                ...r,
+                reason: cleanApplicantReason(r.reason),
+              }));
             return clean;
           }
         } catch {}
@@ -1645,6 +1886,124 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
       }
     } catch (err: any) {
       if (err.message && (err.message.startsWith('Policy') || err.message.startsWith('Advance') || err.message.startsWith('Insufficient'))) {
+        throw err;
+      }
+    }
+  }
+
+  // Rule Validation for Maternity Leave Requests
+  if (request.leaveType === 'Maternity Leave') {
+    try {
+      const [allRequests, allAllocations] = await Promise.all([
+        fetchLeaveRequests(),
+        fetchLeaveAllocations(),
+      ]);
+
+      const empAlloc = allAllocations.find((a) => a.employeeCode === request.employeeCode);
+      const available = empAlloc ? Math.max(0, (empAlloc.maternityAllocated || 120) - (empAlloc.maternityUsed || 0)) : 120;
+
+      let empGender = empAlloc?.gender || '';
+      try {
+        if (typeof window !== 'undefined') {
+          const emps = await fetchEmployeesFromSupabase();
+          if (emps && Array.isArray(emps)) {
+            const foundEmp = emps.find((e: any) => e.code === request.employeeCode);
+            if (foundEmp && foundEmp.gender) {
+              empGender = foundEmp.gender;
+            }
+          }
+        }
+      } catch {}
+
+      const matValidation = validateMaternityLeaveRules({
+        startDate: request.fromDate,
+        endDate: request.toDate,
+        pregnancyConfirmationDate: request.pregnancyConfirmationDate,
+        expectedDeliveryDate: request.expectedDeliveryDate,
+        intendedMaternityStartDate: request.intendedMaternityStartDate || request.fromDate,
+        employeeGender: empGender,
+        existingRequests: allRequests,
+        employeeCode: request.employeeCode,
+        hasAttachedDoc: Boolean(request.attachmentUrl || request.attachmentName),
+        availableBalance: available,
+        currentRequestId: request.id,
+        totalCalculatedDays: request.totalDays || 120,
+      });
+
+      if (!matValidation.valid) {
+        console.warn(`[Maternity Leave Policy Ineligibility]: ${matValidation.error}`);
+        throw new Error(matValidation.error || 'Maternity leave request violates policy rules.');
+      }
+    } catch (err: any) {
+      if (
+        err.message &&
+        (err.message.startsWith('Policy') ||
+          err.message.startsWith('Advance') ||
+          err.message.startsWith('Mandatory') ||
+          err.message.startsWith('Document') ||
+          err.message.startsWith('Insufficient') ||
+          err.message.startsWith('Invalid'))
+      ) {
+        throw err;
+      }
+    }
+  }
+
+  // Rule Validation for Paternity Leave Requests
+  if (request.leaveType === 'Paternity Leave') {
+    try {
+      const [allRequests, allAllocations] = await Promise.all([
+        fetchLeaveRequests(),
+        fetchLeaveAllocations(),
+      ]);
+
+      const empAlloc = allAllocations.find((a) => a.employeeCode === request.employeeCode);
+      const available = empAlloc ? Math.max(0, (empAlloc.paternityAllocated || 15) - (empAlloc.paternityUsed || 0)) : 15;
+
+      let empGender = empAlloc?.gender || '';
+      let joiningDate: string | undefined = undefined;
+      let sixMonthsStatus: string | undefined = undefined;
+
+      try {
+        if (typeof window !== 'undefined') {
+          const emps = await fetchEmployeesFromSupabase();
+          if (emps && Array.isArray(emps)) {
+            const foundEmp = emps.find((e: any) => e.code === request.employeeCode);
+            if (foundEmp) {
+              if (foundEmp.gender) empGender = foundEmp.gender;
+              joiningDate = foundEmp.joiningDate || (foundEmp as any).joining_date;
+              sixMonthsStatus = (foundEmp as any).sixMonthsCompletionStatus;
+            }
+          }
+        }
+      } catch {}
+
+      const patValidation = validatePaternityLeaveRules({
+        startDate: request.fromDate,
+        endDate: request.toDate,
+        employeeGender: empGender,
+        existingRequests: allRequests,
+        employeeCode: request.employeeCode,
+        joiningDate,
+        sixMonthsCompletionStatus: sixMonthsStatus,
+        availableBalance: available,
+        currentRequestId: request.id,
+        totalCalculatedDays: request.totalDays || 15,
+      });
+
+      if (!patValidation.valid) {
+        console.warn(`[Paternity Leave Policy Ineligibility]: ${patValidation.error}`);
+        throw new Error(patValidation.error || 'Paternity leave request violates policy rules.');
+      }
+    } catch (err: any) {
+      if (
+        err.message &&
+        (err.message.startsWith('Policy') ||
+          err.message.startsWith('Advance') ||
+          err.message.startsWith('Mandatory') ||
+          err.message.startsWith('Insufficient') ||
+          err.message.startsWith('Invalid'))
+      ) {
         throw err;
       }
     }
@@ -1961,20 +2320,18 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
     let compOffAlloc = 0;
     let bereavementAlloc = 0;
 
-    if (existing) {
-      if (isMale) {
-        paternityAlloc = existing.paternityAllocated || 0;
-        maternityAlloc = 0; // Strictly prohibited for Male
-      } else if (isFemale) {
-        maternityAlloc = existing.maternityAllocated || 0;
-        paternityAlloc = 0; // Strictly prohibited for Female
-      } else {
-        maternityAlloc = existing.maternityAllocated || 0;
-        paternityAlloc = existing.paternityAllocated || 0;
-      }
-      compOffAlloc = existing.compOffAllocated || 0;
-      bereavementAlloc = existing.bereavementAllocated || 0;
+    if (isMale) {
+      paternityAlloc = existing?.paternityAllocated && existing.paternityAllocated > 0 ? existing.paternityAllocated : 15;
+      maternityAlloc = 0; // Strictly prohibited for Male
+    } else if (isFemale) {
+      maternityAlloc = existing?.maternityAllocated && existing.maternityAllocated > 0 ? existing.maternityAllocated : 120;
+      paternityAlloc = 0; // Strictly prohibited for Female
+    } else {
+      maternityAlloc = existing?.maternityAllocated || 0;
+      paternityAlloc = existing?.paternityAllocated || 0;
     }
+    compOffAlloc = existing?.compOffAllocated || 0;
+    bereavementAlloc = existing?.bereavementAllocated || 0;
 
     const allocationItem: LeaveAllocationItem = {
       id: existing?.id || `alloc-${emp.code}`,
@@ -2017,8 +2374,8 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
       const isFemale = g === 'FEMALE' || g === 'F';
       resultMap.set(code, {
         ...item,
-        maternityAllocated: isMale ? 0 : (item.maternityAllocated || 0),
-        paternityAllocated: isFemale ? 0 : (item.paternityAllocated || 0),
+        maternityAllocated: isFemale ? (item.maternityAllocated && item.maternityAllocated > 0 ? item.maternityAllocated : 120) : 0,
+        paternityAllocated: isMale ? (item.paternityAllocated && item.paternityAllocated > 0 ? item.paternityAllocated : 15) : 0,
         compOffAllocated: item.compOffAllocated || 0,
         bereavementAllocated: item.bereavementAllocated || 0,
       });
@@ -2047,8 +2404,8 @@ export async function saveBulkLeaveAllocations(items: LeaveAllocationItem[]): Pr
     const isFemale = g === 'FEMALE' || g === 'F';
     return {
       ...item,
-      maternityAllocated: isMale ? 0 : item.maternityAllocated,
-      paternityAllocated: isFemale ? 0 : item.paternityAllocated,
+      maternityAllocated: isFemale ? (item.maternityAllocated && item.maternityAllocated > 0 ? item.maternityAllocated : 120) : 0,
+      paternityAllocated: isMale ? (item.paternityAllocated && item.paternityAllocated > 0 ? item.paternityAllocated : 15) : 0,
     };
   });
 

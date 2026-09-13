@@ -11,6 +11,7 @@ import {
   AlertCircle,
   History,
   CalendarDays,
+  Calendar,
   MessageSquareQuote,
   Paperclip,
   Download,
@@ -33,6 +34,9 @@ import {
   validateCasualLeaveRules,
   calculateAnnualLeaveDuration,
   validateAnnualLeaveRules,
+  validateMaternityLeaveRules,
+  validatePaternityLeaveRules,
+  cleanApplicantReason,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import {
@@ -91,6 +95,9 @@ export default function LeaveRequestsPage() {
   );
   const [createAttachmentName, setCreateAttachmentName] = useState<string>('');
   const [createAttachmentUrl, setCreateAttachmentUrl] = useState<string>('');
+  const [createPregnancyDate, setCreatePregnancyDate] = useState<string>('');
+  const [createEddDate, setCreateEddDate] = useState<string>('');
+  const [createIntendedStartDate, setCreateIntendedStartDate] = useState<string>('');
 
   const loadData = async () => {
     try {
@@ -157,24 +164,40 @@ export default function LeaveRequestsPage() {
     return allocations.find((a) => a.employeeCode === selectedEmpCode) || null;
   }, [allocations, selectedEmpCode]);
 
-  // Helper for available balance in modal
+  // Helper to get available balance for the selected employee in the creation modal
   const getEmpAvailableBalance = (type: LeaveType): number => {
     if (!selectedEmpAllocation) return 0;
+    const isProbation = Boolean(
+      (selectedEmp as any)?.probationaryStatus === 'On Probation' ||
+      (selectedEmp as any)?.probationaryStatus === 'Probationary' ||
+      (selectedEmp as any)?.probationaryStatus === 'Probation' ||
+      (selectedEmp as any)?.leaveGroup === 'Probationary Staff'
+    );
+    const effectiveMedical = isProbation
+      ? Math.min(3, selectedEmpAllocation.medicalAllocated || 3)
+      : (selectedEmpAllocation.medicalAllocated ?? 10);
+
     switch (type) {
       case 'Casual Leave':
         return Math.max(0, (selectedEmpAllocation.casualAllocated || 0) - (selectedEmpAllocation.casualUsed || 0));
       case 'Medical Leave':
-        return Math.max(0, (selectedEmpAllocation.medicalAllocated || 0) - (selectedEmpAllocation.medicalUsed || 0));
+        return Math.max(0, effectiveMedical - (selectedEmpAllocation.medicalUsed || 0));
       case 'Emergency Leave':
         return Math.max(0, (selectedEmpAllocation.emergencyAllocated || 0) - (selectedEmpAllocation.emergencyUsed || 0));
       case 'Annual Leave':
         return Math.max(0, (selectedEmpAllocation.annualAllocated || 0) - (selectedEmpAllocation.annualUsed || 0));
       case 'Compensatory Leave':
         return Math.max(0, Math.floor(((selectedEmpAllocation.compOffAllocated || 0) - (selectedEmpAllocation.compOffUsed || 0)) / 8));
-      case 'Paternity Leave':
-        return Math.max(0, (selectedEmpAllocation.paternityAllocated || 0) - (selectedEmpAllocation.paternityUsed || 0));
-      case 'Maternity Leave':
-        return Math.max(0, (selectedEmpAllocation.maternityAllocated || 0) - (selectedEmpAllocation.maternityUsed || 0));
+      case 'Paternity Leave': {
+        const isM = (selectedEmp?.gender || selectedEmpAllocation.gender || '').toUpperCase().trim() === 'MALE';
+        const patAlloc = isM ? (selectedEmpAllocation.paternityAllocated && selectedEmpAllocation.paternityAllocated > 0 ? selectedEmpAllocation.paternityAllocated : 15) : 0;
+        return Math.max(0, patAlloc - (selectedEmpAllocation.paternityUsed || 0));
+      }
+      case 'Maternity Leave': {
+        const isF = (selectedEmp?.gender || selectedEmpAllocation.gender || '').toUpperCase().trim() === 'FEMALE';
+        const matAlloc = isF ? (selectedEmpAllocation.maternityAllocated && selectedEmpAllocation.maternityAllocated > 0 ? selectedEmpAllocation.maternityAllocated : 120) : 0;
+        return Math.max(0, matAlloc - (selectedEmpAllocation.maternityUsed || 0));
+      }
       case 'Bereavement Leave':
         return Math.max(0, 5 - (selectedEmpAllocation.bereavementUsed || 0));
       default:
@@ -456,8 +479,8 @@ export default function LeaveRequestsPage() {
     }
 
     // Check available balance
+    let availableQuota = 0;
     if (selectedEmpAllocation) {
-      let availableQuota = 0;
       const effectiveMedical = isEmpProbation
         ? Math.min(3, selectedEmpAllocation.medicalAllocated ?? 3)
         : (selectedEmpAllocation.medicalAllocated ?? 10);
@@ -475,12 +498,18 @@ export default function LeaveRequestsPage() {
         case 'Annual Leave':
           availableQuota = Math.max(0, (selectedEmpAllocation.annualAllocated ?? 0) - (selectedEmpAllocation.annualUsed ?? 0));
           break;
-        case 'Maternity Leave':
-          availableQuota = Math.max(0, (selectedEmpAllocation.maternityAllocated ?? 0) - (selectedEmpAllocation.maternityUsed ?? 0));
+        case 'Maternity Leave': {
+          const isF = (selectedEmp?.gender || selectedEmpAllocation?.gender || '').toUpperCase().trim() === 'FEMALE';
+          const matAlloc = isF ? (selectedEmpAllocation.maternityAllocated && selectedEmpAllocation.maternityAllocated > 0 ? selectedEmpAllocation.maternityAllocated : 120) : 0;
+          availableQuota = Math.max(0, matAlloc - (selectedEmpAllocation.maternityUsed ?? 0));
           break;
-        case 'Paternity Leave':
-          availableQuota = Math.max(0, (selectedEmpAllocation.paternityAllocated ?? 0) - (selectedEmpAllocation.paternityUsed ?? 0));
+        }
+        case 'Paternity Leave': {
+          const isM = (selectedEmp?.gender || selectedEmpAllocation?.gender || '').toUpperCase().trim() === 'MALE';
+          const patAlloc = isM ? (selectedEmpAllocation.paternityAllocated && selectedEmpAllocation.paternityAllocated > 0 ? selectedEmpAllocation.paternityAllocated : 15) : 0;
+          availableQuota = Math.max(0, patAlloc - (selectedEmpAllocation.paternityUsed ?? 0));
           break;
+        }
         case 'Compensatory Leave':
           availableQuota = Math.max(0, (selectedEmpAllocation.compOffAllocated ?? 0) - (selectedEmpAllocation.compOffUsed ?? 0));
           break;
@@ -509,6 +538,47 @@ export default function LeaveRequestsPage() {
       return;
     }
 
+    if (createLeaveType === 'Maternity Leave') {
+      const matValidation = validateMaternityLeaveRules({
+        startDate: createStartDate,
+        endDate: createEndDate,
+        pregnancyConfirmationDate: createPregnancyDate,
+        expectedDeliveryDate: createEddDate,
+        intendedMaternityStartDate: createIntendedStartDate || createStartDate,
+        employeeGender: selectedEmp.gender,
+        existingRequests: requests.filter((r) => r.employeeCode === selectedEmp.code),
+        employeeCode: selectedEmp.code,
+        hasAttachedDoc: Boolean(createAttachmentName),
+        availableBalance: availableQuota,
+        totalCalculatedDays: calculatedDays,
+      });
+
+      if (!matValidation.valid) {
+        showToastMsg(matValidation.error || 'Maternity Leave request violates policy rules.', 'error');
+        return;
+      }
+    }
+
+    if (createLeaveType === 'Paternity Leave') {
+      const patValidation = validatePaternityLeaveRules({
+        startDate: createStartDate,
+        endDate: createEndDate,
+        employeeGender: selectedEmp.gender,
+        existingRequests: requests.filter((r) => r.employeeCode === selectedEmp.code),
+        employeeCode: selectedEmp.code,
+        joiningDate: selectedEmp.joiningDate || (selectedEmp as any).joining_date,
+        sixMonthsCompletionStatus: (selectedEmp as any)?.sixMonthsCompletionStatus,
+        availableBalance: availableQuota,
+        totalCalculatedDays: calculatedDays,
+        holidays,
+      });
+
+      if (!patValidation.valid) {
+        showToastMsg(patValidation.error || 'Paternity Leave request violates policy rules.', 'error');
+        return;
+      }
+    }
+
     const halfType: HalfDayType =
       createMode === 'HALF' ? (createHalfPeriod === 'First Half' ? 'First Half' : 'Second Half') : 'Full Day';
 
@@ -527,6 +597,9 @@ export default function LeaveRequestsPage() {
       totalDays: calculatedDays,
       halfDayType: halfType,
       reason: createReason.trim(),
+      pregnancyConfirmationDate: createPregnancyDate,
+      expectedDeliveryDate: createEddDate,
+      intendedMaternityStartDate: createIntendedStartDate || createStartDate,
       attachmentName: createAttachmentName || '',
       attachmentUrl: createAttachmentUrl || '',
       supervisorName: supervisorName,
@@ -908,7 +981,7 @@ export default function LeaveRequestsPage() {
 
                   <div className="text-xs text-foreground/80 font-medium flex items-center space-x-1.5 italic bg-surface/50 p-1.5 px-2.5 rounded-xl max-w-xl">
                     <MessageSquareQuote className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate">&ldquo;{req.reason}&rdquo;</span>
+                    <span className="truncate">&ldquo;{cleanApplicantReason(req.reason) || 'General leave application'}&rdquo;</span>
                     {req.attachmentName && (
                       <button
                         type="button"
@@ -1159,6 +1232,19 @@ export default function LeaveRequestsPage() {
                       }
                     }
                     setCreateLeaveType(chosenType);
+                    if (chosenType === 'Maternity Leave') {
+                      const s = new Date(createStartDate);
+                      if (!isNaN(s.getTime())) {
+                        s.setDate(s.getDate() + 119);
+                        setCreateEndDate(s.toISOString().split('T')[0] || '');
+                      }
+                    } else if (chosenType === 'Paternity Leave') {
+                      const s = new Date(createStartDate);
+                      if (!isNaN(s.getTime())) {
+                        s.setDate(s.getDate() + 14);
+                        setCreateEndDate(s.toISOString().split('T')[0] || '');
+                      }
+                    }
                   }}
                   disabled={!selectedEmpCode}
                   className="w-full h-11 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-sm disabled:opacity-50"
@@ -1170,8 +1256,8 @@ export default function LeaveRequestsPage() {
                       const g = (selectedEmp?.gender || selectedEmpAllocation?.gender || '').toUpperCase().trim();
                       const isMale = g === 'MALE' || g === 'M';
                       const isFemale = g === 'FEMALE' || g === 'F';
-                      if (type === 'Maternity Leave' && isMale) return false;
-                      if (type === 'Paternity Leave' && isFemale) return false;
+                      if (type === 'Maternity Leave' && !isFemale) return false;
+                      if (type === 'Paternity Leave' && !isMale) return false;
                       return true;
                     }).map((type) => {
                       const bal = getEmpAvailableBalance(type);
@@ -1263,9 +1349,23 @@ export default function LeaveRequestsPage() {
                       type="date"
                       value={createStartDate}
                       onChange={(e) => {
-                        setCreateStartDate(e.target.value);
-                        if (createMode === 'HALF' || e.target.value > createEndDate) {
-                          setCreateEndDate(e.target.value);
+                        const val = e.target.value;
+                        setCreateStartDate(val);
+                        if (createLeaveType === 'Maternity Leave') {
+                          setCreateIntendedStartDate(val);
+                          const s = new Date(val);
+                          if (!isNaN(s.getTime())) {
+                            s.setDate(s.getDate() + 119);
+                            setCreateEndDate(s.toISOString().split('T')[0] || '');
+                          }
+                        } else if (createLeaveType === 'Paternity Leave') {
+                          const s = new Date(val);
+                          if (!isNaN(s.getTime())) {
+                            s.setDate(s.getDate() + 14);
+                            setCreateEndDate(s.toISOString().split('T')[0] || '');
+                          }
+                        } else if (createMode === 'HALF' || val > createEndDate) {
+                          setCreateEndDate(val);
                         }
                       }}
                       className="w-full h-11 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -1273,16 +1373,126 @@ export default function LeaveRequestsPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-[10px] text-muted-foreground block">End Date</span>
+                    <span className="text-[10px] text-muted-foreground block">
+                      End Date{' '}
+                      {createLeaveType === 'Maternity Leave' && (
+                        <span className="text-rose-500 font-bold">(120 Days Auto-Calculated)</span>
+                      )}
+                      {createLeaveType === 'Paternity Leave' && (
+                        <span className="text-indigo-500 font-bold">(15 Days Auto-Calculated)</span>
+                      )}
+                    </span>
                     <input
                       type="date"
                       value={createMode === 'HALF' ? createStartDate : createEndDate}
-                      disabled={createMode === 'HALF'}
+                      disabled={createMode === 'HALF' || createLeaveType === 'Maternity Leave' || createLeaveType === 'Paternity Leave'}
                       onChange={(e) => setCreateEndDate(e.target.value)}
                       className="w-full h-11 px-3 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 disabled:opacity-50"
                     />
                   </div>
                 </div>
+
+                {/* Dedicated Paternity Leave Banner */}
+                {createLeaveType === 'Paternity Leave' && (
+                  <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 space-y-1 animate-in fade-in">
+                    <div className="flex items-center space-x-2">
+                      <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                        Paternity Leave Policy (15 Calendar Days Full Pay)
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed pl-4">
+                      Weekends and government public holidays are counted within the 15-day period. Maximum 15 days entitlement with full pay. Applicable after 1 year of continuous service for up to two children. Application must be submitted at least 7 days before start date.
+                    </p>
+                  </div>
+                )}
+
+                {/* Dedicated Maternity Leave Fields */}
+                {createLeaveType === 'Maternity Leave' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-2xl bg-surface/50 border border-border">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">
+                        Pregnancy Confirmed Date <span className="text-amber-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          required
+                          value={createPregnancyDate}
+                          onChange={(e) => setCreatePregnancyDate(e.target.value)}
+                          className="w-full h-10 pl-9 pr-2 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement?.querySelector('input');
+                            if (input && 'showPicker' in input) (input as any).showPicker();
+                          }}
+                          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
+                        >
+                          <Calendar className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">
+                        Expected Delivery Date (EDD) <span className="text-amber-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          required
+                          value={createEddDate}
+                          onChange={(e) => setCreateEddDate(e.target.value)}
+                          className="w-full h-10 pl-9 pr-2 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement?.querySelector('input');
+                            if (input && 'showPicker' in input) (input as any).showPicker();
+                          }}
+                          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
+                        >
+                          <Calendar className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-muted-foreground block font-bold uppercase">
+                        Intended Leave Start <span className="text-amber-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          required
+                          value={createIntendedStartDate || createStartDate}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCreateIntendedStartDate(val);
+                            setCreateStartDate(val);
+                            const s = new Date(val);
+                            if (!isNaN(s.getTime())) {
+                              s.setDate(s.getDate() + 119);
+                              setCreateEndDate(s.toISOString().split('T')[0] || '');
+                            }
+                          }}
+                          className="w-full h-10 pl-9 pr-2 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement?.querySelector('input');
+                            if (input && 'showPicker' in input) (input as any).showPicker();
+                          }}
+                          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
+                        >
+                          <Calendar className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Casual Leave Holiday Breakdown Details */}
                 {createLeaveType === 'Casual Leave' && casualCalcInfo && (
@@ -1563,8 +1773,8 @@ export default function LeaveRequestsPage() {
                 </span>{' '}
                 ({formatDisplayDate(refusalModalReq.fromDate)} to {formatDisplayDate(refusalModalReq.toDate)})
               </div>
-              <div className="text-muted-foreground italic">
-                Reason: &ldquo;{refusalModalReq.reason}&rdquo;
+              <div className="text-muted-foreground italic break-words">
+                Reason: &ldquo;{cleanApplicantReason(refusalModalReq.reason) || 'General leave application'}&rdquo;
               </div>
             </div>
 

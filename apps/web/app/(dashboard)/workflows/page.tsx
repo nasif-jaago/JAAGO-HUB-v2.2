@@ -29,6 +29,7 @@ import {
 } from '@/lib/supabase-regularization';
 import { dismissNotificationForEntity } from '@/lib/notifications';
 import { formatDisplayDate, formatDisplayDateTime } from '@/lib/date-format';
+import { cleanApplicantReason } from '@/lib/supabase-time-off';
 
 interface WorkflowInstance {
   id: string;
@@ -917,9 +918,9 @@ function WorkflowsContent() {
                           </span>
                         )}
                       </div>
-                      {item.metadata.reason && (
-                        <div className="text-muted-foreground italic text-[11px]">
-                          Reason: &ldquo;{item.metadata.reason}&rdquo;
+                      {item.metadata.reason && cleanApplicantReason(item.metadata.reason) && (
+                        <div className="text-muted-foreground italic text-[11px] break-words line-clamp-2">
+                          Reason: &ldquo;{cleanApplicantReason(item.metadata.reason)}&rdquo;
                         </div>
                       )}
                       {item.metadata.rejectionReason && (
@@ -1082,9 +1083,9 @@ function WorkflowsContent() {
                     </div>
 
                     <div className="col-span-2">
-                      <span className="text-muted-foreground">Regularization Reason &amp; Remarks:</span>
-                      <div className="text-foreground mt-1 bg-card/70 p-2.5 rounded-xl border border-border italic text-[11px]">
-                        &ldquo;{selectedInstance.metadata.reason}&rdquo;
+                      <span className="text-muted-foreground text-xs font-semibold">Regularization Reason &amp; Remarks:</span>
+                      <div className="text-foreground mt-1.5 bg-card/70 p-3 rounded-xl border border-border text-xs leading-relaxed break-words whitespace-pre-wrap min-h-[44px] h-auto overflow-hidden">
+                        &ldquo;{cleanApplicantReason(selectedInstance.metadata.reason) || 'No remarks provided'}&rdquo;
                       </div>
                     </div>
                   </>
@@ -1104,9 +1105,9 @@ function WorkflowsContent() {
                       </div>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Applicant Reason:</span>
-                      <div className="text-foreground mt-1 bg-card/70 p-2.5 rounded-xl border border-border italic text-[11px] min-h-[42px] flex items-center">
-                        &ldquo;{selectedInstance.metadata.reason || 'General leave application'}&rdquo;
+                      <span className="text-muted-foreground text-xs font-semibold">Applicant Reason:</span>
+                      <div className="text-foreground mt-1.5 bg-card/70 p-3 rounded-xl border border-border text-xs leading-relaxed break-words whitespace-pre-wrap min-h-[44px] h-auto overflow-hidden">
+                        &ldquo;{cleanApplicantReason(selectedInstance.metadata.reason) || 'General leave application'}&rdquo;
                       </div>
                     </div>
                     <div>

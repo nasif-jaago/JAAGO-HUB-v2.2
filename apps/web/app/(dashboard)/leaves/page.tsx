@@ -16,6 +16,7 @@ import {
   Sparkles,
   Paperclip,
   Download,
+  Calendar,
 } from 'lucide-react';
 import { downloadAttachment } from '@/lib/attachment-helper';
 import {
@@ -37,6 +38,9 @@ import {
   validateCasualLeaveRules,
   calculateAnnualLeaveDuration,
   validateAnnualLeaveRules,
+  validateMaternityLeaveRules,
+  validatePaternityLeaveRules,
+  cleanApplicantReason,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import {
@@ -117,6 +121,7 @@ export default function MyLeavePage() {
   const [bereavementRelation, setBereavementRelation] = useState<BereavementRelationship | ''>('');
   const [pregnancyDate, setPregnancyDate] = useState<string>('');
   const [eddDate, setEddDate] = useState<string>('');
+  const [intendedMaternityStartDate, setIntendedMaternityStartDate] = useState<string>('');
   const [attachedFileName, setAttachedFileName] = useState<string>('');
   const [attachedFileUrl, setAttachedFileUrl] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -221,24 +226,39 @@ export default function MyLeavePage() {
     };
 
   // Current Employee Allocation
-  const hasAllocation = Boolean(allocations.find((a) => a.employeeCode === currentEmp.code));
-  const currentAlloc = allocations.find((a) => a.employeeCode === currentEmp.code) || {
-    casualAllocated: 0,
-    casualUsed: 0,
-    medicalAllocated: 0,
-    medicalUsed: 0,
-    emergencyAllocated: 0,
-    emergencyUsed: 0,
-    annualAllocated: 0,
-    annualUsed: 0,
-    maternityAllocated: 0,
-    maternityUsed: 0,
-    paternityAllocated: 0,
-    paternityUsed: 0,
-    compOffAllocated: 0,
-    compOffUsed: 0,
-    bereavementUsed: 0,
-  };
+  const rawAlloc = allocations.find((a) => a.employeeCode === currentEmp.code);
+  const hasAllocation = Boolean(rawAlloc);
+  const empGender = (currentEmp?.gender || (rawAlloc as any)?.gender || '').toUpperCase().trim();
+  const isMale = empGender === 'MALE' || empGender === 'M';
+  const isFemale = empGender === 'FEMALE' || empGender === 'F';
+
+  const currentAlloc = rawAlloc
+    ? {
+        ...rawAlloc,
+        maternityAllocated: isFemale
+          ? (rawAlloc.maternityAllocated && rawAlloc.maternityAllocated > 0 ? rawAlloc.maternityAllocated : 120)
+          : 0,
+        paternityAllocated: isMale
+          ? (rawAlloc.paternityAllocated && rawAlloc.paternityAllocated > 0 ? rawAlloc.paternityAllocated : 15)
+          : 0,
+      }
+    : {
+        casualAllocated: 0,
+        casualUsed: 0,
+        medicalAllocated: 0,
+        medicalUsed: 0,
+        emergencyAllocated: 0,
+        emergencyUsed: 0,
+        annualAllocated: 0,
+        annualUsed: 0,
+        maternityAllocated: isFemale ? 120 : 0,
+        maternityUsed: 0,
+        paternityAllocated: isMale ? 15 : 0,
+        paternityUsed: 0,
+        compOffAllocated: 0,
+        compOffUsed: 0,
+        bereavementUsed: 0,
+      };
 
   const isHalfDayAllowed = (type: LeaveType): boolean => {
     return (
@@ -401,12 +421,43 @@ export default function MyLeavePage() {
       }
     }
 
+    if (leaveCategory === 'Maternity Leave') {
+      const matValidation = validateMaternityLeaveRules({
+        startDate,
+        endDate,
+        pregnancyConfirmationDate: pregnancyDate,
+        expectedDeliveryDate: eddDate,
+        intendedMaternityStartDate: intendedMaternityStartDate || startDate,
+        employeeGender: empGender,
+        existingRequests: requests.filter((r) => r.employeeCode === currentEmp.code),
+        employeeCode: currentEmp.code,
+        hasAttachedDoc: Boolean(attachedFileName || selectedFile),
+        availableBalance,
+        totalCalculatedDays,
+      });
+
+      if (!matValidation.valid) {
+        setValidationError(matValidation.error || 'Maternity Leave request violates policy rules.');
+        return;
+      }
+    }
+
     if (leaveCategory === 'Paternity Leave') {
-      const daysUntilLeave = Math.round((startObj.getTime() - today.getTime()) / (1000 * 3600 * 24));
-      if (daysUntilLeave < 7) {
-        setValidationError(
-          'Policy Requirement: Paternity Leave application must be submitted at least 7 days before start date.'
-        );
+      const patValidation = validatePaternityLeaveRules({
+        startDate,
+        endDate,
+        employeeGender: empGender,
+        existingRequests: requests,
+        employeeCode: currentEmp.code,
+        joiningDate: currentEmp.joiningDate || (currentEmp as any).joining_date,
+        sixMonthsCompletionStatus: (currentEmp as any)?.sixMonthsCompletionStatus,
+        availableBalance,
+        totalCalculatedDays,
+        holidays,
+      });
+
+      if (!patValidation.valid) {
+        setValidationError(patValidation.error || 'Paternity Leave violates policy rules.');
         return;
       }
     }
@@ -424,25 +475,74 @@ export default function MyLeavePage() {
     holidays,
     requests,
     currentEmp.code,
+    currentEmp.joiningDate,
+    pregnancyDate,
+    eddDate,
+    intendedMaternityStartDate,
+    empGender,
   ]);
 
-  const empGender = (currentEmp?.gender || (currentAlloc as any)?.gender || '').toUpperCase().trim();
-  const isMale = empGender === 'MALE' || empGender === 'M';
-  const isFemale = empGender === 'FEMALE' || empGender === 'F';
+  const availedMaternityCount = useMemo(() => {
+    return requests.filter(
+      (r) =>
+        r.employeeCode === currentEmp.code &&
+        (r.leaveType === 'Maternity Leave' || (r as any).leave_type === 'Maternity Leave') &&
+        r.status !== 'Rejected' &&
+        r.status !== 'Cancelled'
+    ).length;
+  }, [requests, currentEmp.code]);
+
+  const availedPaternityCount = useMemo(() => {
+    return requests.filter(
+      (r) =>
+        r.employeeCode === currentEmp.code &&
+        (r.leaveType === 'Paternity Leave' || (r as any).leave_type === 'Paternity Leave') &&
+        r.status !== 'Rejected' &&
+        r.status !== 'Cancelled'
+    ).length;
+  }, [requests, currentEmp.code]);
+
+  const isPaternityEligible = useMemo(() => {
+    if (!isMale) return false;
+    const sixMonths = ((currentEmp as any)?.sixMonthsCompletionStatus || '').trim().toLowerCase();
+    if (sixMonths === 'no') return false;
+    const jDateStr = currentEmp.joiningDate || (currentEmp as any).joining_date;
+    if (jDateStr) {
+      const jDate = new Date(jDateStr);
+      const today = new Date();
+      if (!isNaN(jDate.getTime())) {
+        const diffDays = Math.round((today.getTime() - jDate.getTime()) / (1000 * 3600 * 24));
+        if (diffDays < 365) return false;
+      }
+    }
+    return true;
+  }, [isMale, currentEmp]);
 
   const handleCategoryChange = (newCat: LeaveType) => {
     const eligibility = validateLeaveGenderEligibility(empGender, newCat);
     if (!eligibility.valid) {
-      setPolicyErrorModal({
-        isOpen: true,
-        title: eligibility.title || 'Leave Policy Ineligibility',
-        reason: eligibility.reason || 'This leave type is not allowed for your gender profile.',
-      });
+      showToastMsg(eligibility.reason || 'Leave type not permitted for your profile.', 'error');
       return;
     }
     setLeaveCategory(newCat);
-    if (!isHalfDayAllowed(newCat)) {
-      setLeaveDurationMode('FULL');
+    if (newCat === 'Maternity Leave') {
+      const initStart = startDate || new Date().toISOString().split('T')[0]!;
+      if (!intendedMaternityStartDate) {
+        setIntendedMaternityStartDate(initStart);
+      }
+      const s = new Date(intendedMaternityStartDate || initStart);
+      if (!isNaN(s.getTime())) {
+        s.setDate(s.getDate() + 119);
+        setEndDate(s.toISOString().split('T')[0] || '');
+      }
+    }
+    if (newCat === 'Paternity Leave') {
+      const initStart = startDate || new Date().toISOString().split('T')[0]!;
+      const s = new Date(initStart);
+      if (!isNaN(s.getTime())) {
+        s.setDate(s.getDate() + 14);
+        setEndDate(s.toISOString().split('T')[0] || '');
+      }
     }
   };
 
@@ -544,6 +644,47 @@ export default function MyLeavePage() {
       }
     }
 
+    if (leaveCategory === 'Maternity Leave') {
+      const matValidation = validateMaternityLeaveRules({
+        startDate,
+        endDate,
+        pregnancyConfirmationDate: pregnancyDate,
+        expectedDeliveryDate: eddDate,
+        intendedMaternityStartDate: intendedMaternityStartDate || startDate,
+        employeeGender: empGender,
+        existingRequests: requests.filter((r) => r.employeeCode === currentEmp.code),
+        employeeCode: currentEmp.code,
+        hasAttachedDoc: Boolean(attachedFileName || selectedFile),
+        availableBalance,
+        totalCalculatedDays,
+      });
+
+      if (!matValidation.valid) {
+        showToastMsg(matValidation.error || 'Maternity Leave request violates policy rules.', 'error');
+        return;
+      }
+    }
+
+    if (leaveCategory === 'Paternity Leave') {
+      const patValidation = validatePaternityLeaveRules({
+        startDate,
+        endDate,
+        employeeGender: empGender,
+        existingRequests: requests.filter((r) => r.employeeCode === currentEmp.code),
+        employeeCode: currentEmp.code,
+        joiningDate: currentEmp.joiningDate || (currentEmp as any).joining_date,
+        sixMonthsCompletionStatus: (currentEmp as any)?.sixMonthsCompletionStatus,
+        availableBalance,
+        totalCalculatedDays,
+        holidays,
+      });
+
+      if (!patValidation.valid) {
+        showToastMsg(patValidation.error || 'Paternity Leave request violates policy rules.', 'error');
+        return;
+      }
+    }
+
     if (totalCalculatedDays > availableBalance) {
       showToastMsg(`Insufficient Balance: Requested ${totalCalculatedDays} day(s) exceeds your available ${leaveCategory} balance of ${availableBalance} day(s).`, 'error');
       return;
@@ -621,7 +762,7 @@ export default function MyLeavePage() {
       reason: persistedReason,
       pregnancyConfirmationDate: pregnancyDate,
       expectedDeliveryDate: eddDate,
-      intendedMaternityStartDate: startDate,
+      intendedMaternityStartDate: intendedMaternityStartDate || startDate,
       bereavementRelationship: bereavementRelation as BereavementRelationship,
       attachmentName: attachedFileName || '',
       attachmentUrl: finalAttachmentUrl || '',
@@ -724,12 +865,12 @@ export default function MyLeavePage() {
   const coRem = Math.max(0, coAlloc - coUsed);
   const coPct = coAlloc > 0 ? (coRem / coAlloc) * 100 : 0;
 
-  const plAlloc = currentAlloc.paternityAllocated ?? 0;
+  const plAlloc = isMale ? (currentAlloc.paternityAllocated && currentAlloc.paternityAllocated > 0 ? currentAlloc.paternityAllocated : 15) : 0;
   const plUsed = currentAlloc.paternityUsed ?? 0;
   const plRem = Math.max(0, plAlloc - plUsed);
   const plPct = plAlloc > 0 ? (plRem / plAlloc) * 100 : 0;
 
-  const matAlloc = currentAlloc.maternityAllocated ?? 0;
+  const matAlloc = isFemale ? (currentAlloc.maternityAllocated && currentAlloc.maternityAllocated > 0 ? currentAlloc.maternityAllocated : 120) : 0;
   const matUsed = currentAlloc.maternityUsed ?? 0;
   const matRem = Math.max(0, matAlloc - matUsed);
   const matPct = matAlloc > 0 ? (matRem / matAlloc) * 100 : 0;
@@ -887,7 +1028,7 @@ export default function MyLeavePage() {
         </div>
 
         {/* 6. Paternity Leave (Exclusively for Male Employees) */}
-        {(!isFemale || (!isMale && !isFemale && plAlloc > 0)) && (
+        {isMale && (
           <div className="rounded-2xl bg-card border border-border/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden flex flex-col justify-between space-y-3">
             <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-indigo-500 rounded-l-2xl" />
             <div className="flex items-center justify-between pl-2">
@@ -913,7 +1054,7 @@ export default function MyLeavePage() {
         )}
 
         {/* 7. Maternity Leave (Exclusively for Female Employees) */}
-        {(!isMale || (!isMale && !isFemale && matAlloc > 0)) && (
+        {isFemale && (
           <div className="rounded-2xl bg-card border border-border/80 p-5 shadow-sm hover:shadow-md transition relative overflow-hidden flex flex-col justify-between space-y-3">
             <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-rose-500 rounded-l-2xl" />
             <div className="flex items-center justify-between pl-2">
@@ -1007,12 +1148,8 @@ export default function MyLeavePage() {
                 <option value="Emergency Leave">Emergency Leave (EL)</option>
                 <option value="Annual Leave">Annual Leave (AL)</option>
                 <option value="Compensatory Leave">Compensatory Leave</option>
-                {(!isFemale || (!isMale && !isFemale && plAlloc > 0)) && (
-                  <option value="Paternity Leave">Paternity Leave</option>
-                )}
-                {(!isMale || (!isMale && !isFemale && matAlloc > 0)) && (
-                  <option value="Maternity Leave">Maternity Leave</option>
-                )}
+                {isMale && <option value="Paternity Leave">Paternity Leave</option>}
+                {isFemale && <option value="Maternity Leave">Maternity Leave</option>}
                 <option value="Bereavement Leave">Bereavement Leave</option>
               </select>
             </div>
@@ -1077,18 +1214,45 @@ export default function MyLeavePage() {
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
                 {isHalfDayAllowed(leaveCategory) && leaveDurationMode === 'HALF' ? 'Leave Date' : 'Starting Date'}
               </label>
-              <input
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  if (isHalfDayAllowed(leaveCategory) && leaveDurationMode === 'HALF') {
-                    setEndDate(e.target.value);
-                  }
-                }}
-                className="w-full h-11 px-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
-              />
+              <div className="relative">
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setStartDate(val);
+                    if (leaveCategory === 'Maternity Leave') {
+                      setIntendedMaternityStartDate(val);
+                      const s = new Date(val);
+                      if (!isNaN(s.getTime())) {
+                        s.setDate(s.getDate() + 119);
+                        setEndDate(s.toISOString().split('T')[0] || '');
+                      }
+                    } else if (leaveCategory === 'Paternity Leave') {
+                      const s = new Date(val);
+                      if (!isNaN(s.getTime())) {
+                        s.setDate(s.getDate() + 14);
+                        setEndDate(s.toISOString().split('T')[0] || '');
+                      }
+                    } else if (isHalfDayAllowed(leaveCategory) && leaveDurationMode === 'HALF') {
+                      setEndDate(val);
+                    }
+                  }}
+                  className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    const input = e.currentTarget.parentElement?.querySelector('input');
+                    if (input && 'showPicker' in input) (input as any).showPicker();
+                  }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition p-0.5 cursor-pointer"
+                  title="Select Date"
+                >
+                  <Calendar className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             {/* Ending Date: ONLY SHOWN FOR MULTI-DAY / FULL-DAY REQUESTS */}
@@ -1098,17 +1262,43 @@ export default function MyLeavePage() {
                   isHalfDayAllowed(leaveCategory) ? 'lg:col-span-3' : 'lg:col-span-4'
                 } space-y-1.5 animate-in fade-in duration-150`}
               >
-                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Ending Date
-                </label>
-                <input
-                  type="date"
-                  required
-                  disabled={leaveCategory === 'Maternity Leave'}
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm disabled:opacity-60"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Ending Date
+                  </label>
+                  {leaveCategory === 'Maternity Leave' && (
+                    <span className="text-[9px] font-bold text-rose-500 tracking-tight">
+                      (120 Days Auto-Calculated)
+                    </span>
+                  )}
+                  {leaveCategory === 'Paternity Leave' && (
+                    <span className="text-[9px] font-bold text-indigo-500 tracking-tight">
+                      (15 Days Auto-Calculated)
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="date"
+                    required
+                    disabled={leaveCategory === 'Maternity Leave' || leaveCategory === 'Paternity Leave'}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm disabled:opacity-75 disabled:cursor-not-allowed"
+                  />
+                  <button
+                    type="button"
+                    disabled={leaveCategory === 'Maternity Leave' || leaveCategory === 'Paternity Leave'}
+                    onClick={(e) => {
+                      const input = e.currentTarget.parentElement?.querySelector('input');
+                      if (input && 'showPicker' in input) (input as any).showPicker();
+                    }}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition p-0.5 cursor-pointer disabled:opacity-50"
+                    title="Select Date"
+                  >
+                    <Calendar className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1135,29 +1325,154 @@ export default function MyLeavePage() {
             </div>
           )}
 
+          {/* Maternity Leave Dedicated Fields (Exclusively For Maternity Leave) */}
           {leaveCategory === 'Maternity Leave' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 max-w-2xl animate-in fade-in">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Pregnancy Confirmation Date
-                </label>
-                <input
-                  type="date"
-                  value={pregnancyDate}
-                  onChange={(e) => setPregnancyDate(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
-                />
+            <div className="space-y-3 pt-1 animate-in fade-in">
+              {availedMaternityCount >= 2 && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-500 text-xs font-semibold flex items-start space-x-2.5">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block text-[11px] uppercase tracking-wide">
+                      Policy Restriction: Maximum 2 Children Entitlement Availed
+                    </strong>
+                    Under JAAGO HR Policy, Maternity Leave is restricted to a maximum of two (2) children.
+                    Our records indicate you have already availed Maternity Leave for two children. Further
+                    applications are strictly restricted.
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                {/* 1. Pregnancy Confirmation Date */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Pregnancy Confirmation Date <span className="text-amber-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      required
+                      value={pregnancyDate}
+                      onChange={(e) => setPregnancyDate(e.target.value)}
+                      className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const input = e.currentTarget.parentElement?.querySelector('input');
+                        if (input && 'showPicker' in input) (input as any).showPicker();
+                      }}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition p-0.5 cursor-pointer"
+                      title="Select Pregnancy Confirmation Date"
+                    >
+                      <Calendar className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Expected Delivery Date (EDD) */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Expected Delivery Date (EDD) <span className="text-amber-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      required
+                      value={eddDate}
+                      onChange={(e) => setEddDate(e.target.value)}
+                      className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const input = e.currentTarget.parentElement?.querySelector('input');
+                        if (input && 'showPicker' in input) (input as any).showPicker();
+                      }}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition p-0.5 cursor-pointer"
+                      title="Select Expected Delivery Date"
+                    >
+                      <Calendar className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Intended Maternity Leave Start Date */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Intended Leave Start Date <span className="text-amber-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="date"
+                      required
+                      value={intendedMaternityStartDate || startDate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setIntendedMaternityStartDate(val);
+                        setStartDate(val);
+                        const s = new Date(val);
+                        if (!isNaN(s.getTime())) {
+                          s.setDate(s.getDate() + 119);
+                          setEndDate(s.toISOString().split('T')[0] || '');
+                        }
+                      }}
+                      className="w-full h-11 pl-10 pr-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const input = e.currentTarget.parentElement?.querySelector('input');
+                        if (input && 'showPicker' in input) (input as any).showPicker();
+                      }}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-amber-500 transition p-0.5 cursor-pointer"
+                      title="Select Intended Start Date"
+                    >
+                      <Calendar className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Expected Delivery Date (EDD) <span className="text-amber-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={eddDate}
-                  onChange={(e) => setEddDate(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-2xl bg-surface/70 border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm"
-                />
+            </div>
+          )}
+
+          {/* Paternity Leave Information & Restriction Banners */}
+          {leaveCategory === 'Paternity Leave' && (
+            <div className="space-y-3 pt-1 animate-in fade-in">
+              {availedPaternityCount >= 2 && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-500 text-xs font-semibold flex items-start space-x-2.5">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block text-[11px] uppercase tracking-wide">
+                      Policy Restriction: Maximum 2 Children Entitlement Availed
+                    </strong>
+                    Under JAAGO HR Policy, Paternity Leave is restricted to a maximum of two (2) children.
+                    Our records indicate you have already availed Paternity Leave for two children. Further
+                    applications are strictly restricted.
+                  </div>
+                </div>
+              )}
+              {!isPaternityEligible && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-500 text-xs font-semibold flex items-start space-x-2.5">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="block text-[11px] uppercase tracking-wide">
+                      Policy Ineligibility: 1 Year of Continuous Service Required
+                    </strong>
+                    Paternity Leave is applicable only after completion of 1 year (365 continuous days) of service under JAAGO HR Policy.
+                  </div>
+                </div>
+              )}
+              <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 space-y-1">
+                <div className="flex items-center space-x-2">
+                  <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                    Paternity Leave Policy (15 Calendar Days Full Pay)
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed pl-4">
+                  Weekends and government holidays (from People & Culture public holidays) are counted within the 15-day period. Maximum 15 days entitlement with full pay. Cannot be accumulated or carried forward. Application must be submitted at least 7 days before start date.
+                </p>
               </div>
             </div>
           )}
@@ -1182,7 +1497,7 @@ export default function MyLeavePage() {
               <div className="lg:col-span-3 space-y-1.5 animate-in fade-in">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block truncate">
                   Supporting Document{' '}
-                  {leaveCategory === 'Medical Leave' && totalCalculatedDays > 3 ? (
+                  {(leaveCategory === 'Medical Leave' && totalCalculatedDays > 3) || leaveCategory === 'Maternity Leave' ? (
                     <span className="text-amber-500 font-bold">(Required *)</span>
                   ) : totalCalculatedDays >= 3 ? (
                     <span className="text-muted-foreground font-semibold">(Recommended)</span>
@@ -1218,7 +1533,11 @@ export default function MyLeavePage() {
             <div className={isDocUploadRelevant ? 'lg:col-span-3' : 'lg:col-span-3'}>
               <button
                 type="submit"
-                disabled={Boolean(validationError)}
+                disabled={
+                  Boolean(validationError) ||
+                  (leaveCategory === 'Maternity Leave' && availedMaternityCount >= 2) ||
+                  (leaveCategory === 'Paternity Leave' && (availedPaternityCount >= 2 || !isPaternityEligible))
+                }
                 className="w-full h-11 px-6 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider transition flex items-center justify-center space-x-2 shadow-lg shadow-amber-500/25 cursor-pointer active:scale-95"
               >
                 <Send className="h-4 w-4" />
@@ -1248,6 +1567,13 @@ export default function MyLeavePage() {
                 {remainingBalanceAfter} Days
               </strong>
             </span>
+
+            {/* Maternity Leave Policy Notice Pill */}
+            {leaveCategory === 'Maternity Leave' && (
+              <span className="px-3 py-1 rounded-xl bg-rose-500/15 border border-rose-500/35 text-rose-500 font-bold">
+                120 Consecutive Calendar Days (Includes Weekends & Public Holidays) &bull; Single Continuous Period
+              </span>
+            )}
 
             {/* Casual Leave Holiday Breakdown Details */}
             {leaveCategory === 'Casual Leave' && casualCalcInfo && (
@@ -1476,7 +1802,7 @@ export default function MyLeavePage() {
                       </td>
                       <td className="py-3.5 px-4 text-muted-foreground max-w-xs truncate">
                         {req.bereavementRelationship ? `[${req.bereavementRelationship}] ` : ''}
-                        {req.reason}
+                        {cleanApplicantReason(req.reason) || 'General leave application'}
                       </td>
                       <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
                         {req.attachmentName ? (
@@ -1591,7 +1917,9 @@ export default function MyLeavePage() {
 
               <div className="p-3 rounded-xl bg-surface/50 border border-border space-y-1">
                 <div className="text-[10px] uppercase font-bold text-muted-foreground">Reason</div>
-                <p className="text-foreground font-medium leading-relaxed">{selectedRequest.reason}</p>
+                <p className="text-foreground font-medium leading-relaxed break-words whitespace-pre-wrap">
+                  {cleanApplicantReason(selectedRequest.reason) || 'General leave application'}
+                </p>
               </div>
 
               {selectedRequest.attachmentName && (

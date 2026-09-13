@@ -146,6 +146,9 @@ export async function GET(request: NextRequest) {
       const cleanReason = rawReason
         .replace(/\[Attachment:\s*[\s\S]*?\]/gi, '')
         .replace(/\[Refusal Note:\s*[\s\S]*?\]/gi, '')
+        .replace(/\[Half Day:\s*[\s\S]*?\]/gi, '')
+        .replace(/\[Supervisor:\s*[\s\S]*?\]/gi, '')
+        .replace(/\{"?Supervisor:\s*[\s\S]*?\}?/gi, '')
         .trim();
 
       const history: WorkflowHistoryItem[] = [
