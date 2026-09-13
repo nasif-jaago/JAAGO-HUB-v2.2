@@ -2390,6 +2390,12 @@ export default function PnCDashboardPage() {
               allEmployees={employees}
               currentUser={{ fullName: 'HR Executive', jobTitle: 'People & Culture Lead' }}
               onBack={() => setSelectedProfile(null)}
+              onProfileChange={(updated) => {
+                setSelectedProfile(updated);
+                setEmployees((prev) =>
+                  prev.map((e) => (e.id === updated.id || e.code === updated.code ? updated : e))
+                );
+              }}
               onSave={async (updated) => {
                 await saveEmployeeToSupabase(updated);
                 setSelectedProfile(null);

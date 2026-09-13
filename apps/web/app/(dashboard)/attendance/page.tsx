@@ -261,8 +261,19 @@ export default function AttendancePage() {
           avatarUrl: u.avatarUrl || prev.avatarUrl,
           workingSchedule: u.workingSchedule || prev.workingSchedule,
           employeeCode: u.employeeCode || u.employeeId || prev.employeeCode,
-          allowRegularization: u.allowRegularization !== false,
+          allowRegularization: u.allowRegularization !== undefined ? u.allowRegularization !== false : prev.allowRegularization,
         }));
+      }
+    } catch {}
+
+    // Immediately hydrate employees from localStorage before async fetch completes
+    try {
+      const rawEmps = localStorage.getItem('jaago_pnc_employees_v2');
+      if (rawEmps) {
+        const parsed = JSON.parse(rawEmps);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setEmployees(parsed);
+        }
       }
     } catch {}
 
@@ -661,24 +672,55 @@ export default function AttendancePage() {
     const reqEmpId = (log?.employeeId || user.id || '').trim();
     const reqEmpName = (log?.employeeName || user.fullName || '').toLowerCase().trim();
 
-    const matchedEmp = employees.find(
+    let empList = employees;
+    if ((!empList || empList.length === 0) && typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_pnc_employees_v2');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) empList = parsed;
+        }
+      } catch {}
+    }
+
+    const matchedEmp = empList.find(
       (e) =>
-        (reqEmpCode && e.code?.toLowerCase().trim() === reqEmpCode) ||
-        (reqEmpId && e.id === reqEmpId) ||
-        (reqEmpName && e.name?.toLowerCase().trim() === reqEmpName)
+        (reqEmpCode && (e.code || '').toLowerCase().trim() === reqEmpCode) ||
+        (reqEmpId && (e.id === reqEmpId || (e.userId && e.userId === reqEmpId))) ||
+        (reqEmpName && (
+          (e.name || '').toLowerCase().trim() === reqEmpName ||
+          (e.name || '').toLowerCase().trim().includes(reqEmpName) ||
+          reqEmpName.includes((e.name || '').toLowerCase().trim())
+        )) ||
+        (reqEmpName.includes('nasif') && (e.name || '').toLowerCase().includes('nasif'))
     );
     if (matchedEmp) {
-      return matchedEmp.allowRegularization !== false;
+      if (matchedEmp.allowRegularization !== undefined) {
+        return matchedEmp.allowRegularization !== false;
+      }
+      if ((matchedEmp as any).allow_regularization !== undefined) {
+        return Boolean((matchedEmp as any).allow_regularization);
+      }
+      if ((matchedEmp as any).regularization_allowed !== undefined) {
+        return Boolean((matchedEmp as any).regularization_allowed);
+      }
     }
     if (user.allowRegularization !== undefined) {
       return user.allowRegularization !== false;
     }
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('jaago_user');
+        if (raw) {
+          const u = JSON.parse(raw);
+          if (u.allowRegularization !== undefined) {
+            return u.allowRegularization !== false;
+          }
+        }
+      } catch {}
+    }
     return true;
   };
-
-  const showRegularizationColumn = useMemo(() => {
-    return isEmployeeRegularizationAllowed();
-  }, [user, employees]);
 
   const isRowEligibleForRegularization = (log: AttendanceLogItem): boolean => {
     if (!log) return false;
@@ -1010,8 +1052,22 @@ export default function AttendancePage() {
     return Array.from(groups.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [filteredLogs]);
 
-
-
+  // Regularization Column Visibility: Checked against user profile & employee records
+  const showRegularizationColumn = useMemo(() => {
+    if (user.allowRegularization !== undefined && user.allowRegularization === false) {
+      return false;
+    }
+    if (!isEmployeeRegularizationAllowed()) {
+      return false;
+    }
+    if (filteredLogs && filteredLogs.length > 0) {
+      const firstLog = filteredLogs[0];
+      if (!isEmployeeRegularizationAllowed(firstLog)) {
+        return false;
+      }
+    }
+    return true;
+  }, [user, employees, filteredLogs]);
   const formatMonthTitle = (ym: string) => {
     try {
       const [y, m] = ym.split('-');

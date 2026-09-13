@@ -1682,6 +1682,12 @@ function toCanonicalOrgName(raw: string): string {
           currentUser={currentUser}
           readOnly={!canEditEmployee}
           onSave={handleSaveProfile}
+          onProfileChange={(updated) => {
+            setSelectedProfile(updated);
+            setEmployees((prev) =>
+              prev.map((e) => (e.id === updated.id || e.code === updated.code ? updated : e))
+            );
+          }}
           onBack={() => setSelectedProfile(null)}
           onDelete={canDeleteEmployee ? handleDeleteEmployee : undefined}
           onCreateUser={canCreateEmployee ? handleCreateUserForEmployee : undefined}

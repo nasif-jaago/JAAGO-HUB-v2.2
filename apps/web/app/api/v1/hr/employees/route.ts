@@ -183,11 +183,48 @@ export async function POST(request: Request) {
     if ('custom_office_days_to' in employeePayload) employeePayload.custom_office_days_to = sanitizeDate(employeePayload.custom_office_days_to);
     if ('user_id' in employeePayload) employeePayload.user_id = sanitizeUuid(employeePayload.user_id);
 
-    let { data, error } = await supabaseAdmin
-      .from('employees')
-      .upsert(employeePayload, { onConflict: 'code' })
-      .select()
-      .single();
+    let data: any = null;
+    let error: any = null;
+
+    // 1. Try to update existing record by ID if valid UUID
+    if (body.id && !body.id.startsWith('emp-')) {
+      const updateById = await supabaseAdmin
+        .from('employees')
+        .update(employeePayload)
+        .eq('id', body.id)
+        .select()
+        .maybeSingle();
+      if (!updateById.error && updateById.data) {
+        data = updateById.data;
+      } else if (updateById.error) {
+        error = updateById.error;
+      }
+    }
+
+    // 2. Try to update existing record by unique Employee Code
+    if (!data && employeePayload.code) {
+      const updateByCode = await supabaseAdmin
+        .from('employees')
+        .update(employeePayload)
+        .eq('code', employeePayload.code)
+        .select()
+        .maybeSingle();
+      if (!updateByCode.error && updateByCode.data) {
+        data = updateByCode.data;
+        error = null;
+      }
+    }
+
+    // 3. If record doesn't exist yet, insert / upsert with code conflict target
+    if (!data) {
+      const upsertRes = await supabaseAdmin
+        .from('employees')
+        .upsert(employeePayload, { onConflict: 'code' })
+        .select()
+        .single();
+      data = upsertRes.data;
+      error = upsertRes.error;
+    }
 
     if (error && error.message?.includes('is_archived')) {
       const { is_archived, ...fallbackPayload } = employeePayload;

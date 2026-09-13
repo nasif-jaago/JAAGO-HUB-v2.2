@@ -111,9 +111,12 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     weekendDays: row.weekend_days || 'Friday & Saturday',
     overtimeEligible: row.overtime_eligible || 'No',
     attendanceGracePeriodMin: Number(row.attendance_grace_period_min ?? 15),
-    allowRegularization: row.allow_regularization !== undefined
-      ? Boolean(row.allow_regularization)
-      : (row.regularization_allowed !== undefined ? Boolean(row.regularization_allowed) : true),
+    allowRegularization:
+      row.allow_regularization !== undefined && row.allow_regularization !== null
+        ? Boolean(row.allow_regularization)
+        : row.regularization_allowed !== undefined && row.regularization_allowed !== null
+        ? Boolean(row.regularization_allowed)
+        : true,
 
     // Tab 7: Logs
     logHistory: [],

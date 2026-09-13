@@ -254,6 +254,7 @@ interface EmployeeProfileDetailProps {
   onBack: () => void;
   onDelete?: ((code: string) => void) | undefined;
   onCreateUser?: ((employee: FullEmployeeProfile) => void) | undefined;
+  onProfileChange?: ((updatedProfile: FullEmployeeProfile) => void) | undefined;
 }
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'] as const;
@@ -274,6 +275,7 @@ export function EmployeeProfileDetail({
   onBack,
   onDelete,
   onCreateUser,
+  onProfileChange,
 }: EmployeeProfileDetailProps) {
   const isNew = !initialData?.id;
 
@@ -364,7 +366,14 @@ export function EmployeeProfileDetail({
         child3HealthInsuranceId: initialData.child3HealthInsuranceId || '',
         child3Name: initialData.child3Name || '',
         logHistory: initialData.logHistory || [],
-        allowRegularization: initialData.allowRegularization !== false,
+        allowRegularization:
+          (initialData as any).allowRegularization !== undefined
+            ? (initialData as any).allowRegularization !== false
+            : (initialData as any).allow_regularization !== undefined
+            ? Boolean((initialData as any).allow_regularization)
+            : (initialData as any).regularization_allowed !== undefined
+            ? Boolean((initialData as any).regularization_allowed)
+            : true,
       };
     }
 
@@ -478,6 +487,24 @@ export function EmployeeProfileDetail({
       allowRegularization: true,
     };
   });
+
+  // Keep formData synchronized when initialData updates
+  useEffect(() => {
+    if (initialData) {
+      setFormData((prev) => ({
+        ...prev,
+        ...initialData,
+        allowRegularization:
+          (initialData as any).allowRegularization !== undefined
+            ? (initialData as any).allowRegularization !== false
+            : (initialData as any).allow_regularization !== undefined
+            ? Boolean((initialData as any).allow_regularization)
+            : (initialData as any).regularization_allowed !== undefined
+            ? Boolean((initialData as any).regularization_allowed)
+            : true,
+      }));
+    }
+  }, [initialData]);
 
   // Track original for diff logging
   const originalStateRef = useRef<FullEmployeeProfile>(formData);
@@ -897,29 +924,57 @@ export function EmployeeProfileDetail({
   }, []);
 
   const handleToggleRegularization = (enabled: boolean) => {
-    setFormData((prev) => ({ ...prev, allowRegularization: enabled }));
+    const updatedProfile = { ...formData, allowRegularization: enabled };
+    setFormData(updatedProfile);
+    if (onProfileChange) {
+      onProfileChange(updatedProfile);
+    }
     try {
+      const fId = (formData.id || '').trim();
+      const fCode = (formData.code || '').toLowerCase().trim();
+      const fName = (formData.name || '').toLowerCase().trim();
+      const fEmail = (formData.workEmail || '').toLowerCase().trim();
+
       // 1. Update jaago_pnc_employees_v2 (canonical employee list)
       const rawEmps = localStorage.getItem('jaago_pnc_employees_v2');
       if (rawEmps) {
         const list = JSON.parse(rawEmps);
         const idx = list.findIndex(
-          (e: any) => (formData.id && e.id === formData.id) || (formData.code && e.code === formData.code)
+          (e: any) =>
+            (fId && e.id === fId) ||
+            (fCode && (e.code || '').toLowerCase().trim() === fCode) ||
+            (fEmail && (e.workEmail || '').toLowerCase().trim() === fEmail) ||
+            (fName && (e.name || '').toLowerCase().trim() === fName)
         );
         if (idx >= 0) {
-          list[idx] = { ...list[idx], allowRegularization: enabled };
+          list[idx] = {
+            ...list[idx],
+            allowRegularization: enabled,
+            allow_regularization: enabled,
+            regularization_allowed: enabled,
+          };
           localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(list));
         }
       }
+
       // Also update legacy jaago_employees_cache if present
       const rawOldEmps = localStorage.getItem('jaago_employees_cache');
       if (rawOldEmps) {
         const list = JSON.parse(rawOldEmps);
         const idx = list.findIndex(
-          (e: any) => (formData.id && e.id === formData.id) || (formData.code && e.code === formData.code)
+          (e: any) =>
+            (fId && e.id === fId) ||
+            (fCode && (e.code || '').toLowerCase().trim() === fCode) ||
+            (fEmail && (e.workEmail || '').toLowerCase().trim() === fEmail) ||
+            (fName && (e.name || '').toLowerCase().trim() === fName)
         );
         if (idx >= 0) {
-          list[idx] = { ...list[idx], allowRegularization: enabled };
+          list[idx] = {
+            ...list[idx],
+            allowRegularization: enabled,
+            allow_regularization: enabled,
+            regularization_allowed: enabled,
+          };
           localStorage.setItem('jaago_employees_cache', JSON.stringify(list));
         }
       }
@@ -932,11 +987,17 @@ export function EmployeeProfileDetail({
       let updatedUserObj: any = null;
       if (rawUser) {
         const u = JSON.parse(rawUser);
-        if (
-          (formData.code && u.employeeCode === formData.code) ||
-          (formData.id && u.id === formData.id) ||
-          (formData.name && u.fullName?.toLowerCase().trim() === formData.name.toLowerCase().trim())
-        ) {
+        const uCode = (u.employeeCode || u.employeeId || '').toLowerCase().trim();
+        const uEmail = (u.email || '').toLowerCase().trim();
+        const uName = (u.fullName || u.name || '').toLowerCase().trim();
+        const isMatch =
+          (fCode && uCode && (uCode === fCode || uCode.includes(fCode) || fCode.includes(uCode))) ||
+          (fId && (u.id === fId || uCode === fId.toLowerCase())) ||
+          (fEmail && uEmail && uEmail === fEmail) ||
+          (fName && uName && (uName === fName || uName.includes(fName) || fName.includes(uName))) ||
+          (fName.includes('nasif') && (uName.includes('nasif') || uEmail.includes('nasif')));
+
+        if (isMatch) {
           u.allowRegularization = enabled;
           localStorage.setItem('jaago_user', JSON.stringify(u));
           document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(u))}; path=/; max-age=604800; SameSite=Lax`;
