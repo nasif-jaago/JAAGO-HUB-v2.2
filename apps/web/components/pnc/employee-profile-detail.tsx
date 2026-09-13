@@ -99,6 +99,8 @@ import {
   type PublicHolidayItem,
   calculateCasualLeaveDuration,
   validateCasualLeaveRules,
+  calculateAnnualLeaveDuration,
+  validateAnnualLeaveRules,
 } from '@/lib/supabase-time-off';
 import { saveEmployeeToSupabase } from '@/lib/supabase-employees';
 import { invalidateCache } from '@/lib/data-cache';
@@ -914,6 +916,16 @@ export function EmployeeProfileDetail({
       holidays
     );
   }, [profileLeaveForm.leaveType, profileLeaveForm.fromDate, profileLeaveForm.toDate, profileLeaveForm.halfDayType, holidays]);
+
+  // Real-time Annual Leave calculation breakdown (working days, internal weekends/holidays, boundary exclusion)
+  const profileAnnualCalcInfo = useMemo(() => {
+    if (profileLeaveForm.leaveType !== 'Annual Leave') return null;
+    return calculateAnnualLeaveDuration(
+      profileLeaveForm.fromDate,
+      profileLeaveForm.toDate,
+      holidays
+    );
+  }, [profileLeaveForm.leaveType, profileLeaveForm.fromDate, profileLeaveForm.toDate, holidays]);
 
   // Attendance Regularization live connection
   const [regularizations, setRegularizations] = useState<AttendanceRegularizationItem[]>(() => {
@@ -4612,9 +4624,26 @@ export function EmployeeProfileDetail({
                   }
                 }
 
-                if (profileLeaveForm.leaveType === 'Annual Leave' && isEmpProbation) {
-                  setProfileLeaveError('Policy Warning: Annual Leave is not available during probation period.');
-                  return;
+                if (profileLeaveForm.leaveType === 'Annual Leave') {
+                  const alValidation = validateAnnualLeaveRules({
+                    startDate: profileLeaveForm.fromDate,
+                    endDate: profileLeaveForm.toDate,
+                    totalCalculatedDays: profileLeaveForm.totalDays,
+                    workingDaysCount: profileAnnualCalcInfo?.workingDaysCount ?? 0,
+                    holidays,
+                    existingRequests: empLeaveRequests,
+                    employeeCode: formData.code,
+                    isProbation: isEmpProbation,
+                    sixMonthsCompletionStatus: formData.sixMonthsCompletionStatus,
+                    joiningDate: formData.joiningDate,
+                    employeeStatus: formData.status,
+                    availableBalance: empLeaveAllocation ? Math.max(0, (empLeaveAllocation.annualAllocated ?? 0) - (empLeaveAllocation.annualUsed ?? 0)) : undefined,
+                  });
+
+                  if (!alValidation.valid) {
+                    setProfileLeaveError(alValidation.error || 'Annual Leave request violates policy rules.');
+                    return;
+                  }
                 }
 
                 if (profileLeaveForm.leaveType === 'Medical Leave' && isEmpProbation) {
@@ -4754,6 +4783,12 @@ export function EmployeeProfileDetail({
                             profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF',
                             holidays
                           ).totalDays;
+                        } else if (newType === 'Annual Leave') {
+                          diffDays = calculateAnnualLeaveDuration(
+                            profileLeaveForm.fromDate,
+                            profileLeaveForm.toDate,
+                            holidays
+                          ).totalDays;
                         } else if (profileLeaveForm.halfDayType !== 'Full Day') diffDays = 0.5;
                         else if (!isNaN(d1.getTime()) && !isNaN(d2.getTime()) && d2 >= d1) {
                           diffDays = Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
@@ -4803,6 +4838,12 @@ export function EmployeeProfileDetail({
                             profileLeaveForm.fromDate,
                             profileLeaveForm.toDate,
                             isHalf ? 'HALF' : 'FULL',
+                            holidays
+                          ).totalDays;
+                        } else if (profileLeaveForm.leaveType === 'Annual Leave') {
+                          nextDays = calculateAnnualLeaveDuration(
+                            profileLeaveForm.fromDate,
+                            profileLeaveForm.toDate,
                             holidays
                           ).totalDays;
                         } else if (!isHalf) {
@@ -4890,6 +4931,12 @@ export function EmployeeProfileDetail({
                           profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF',
                           holidays
                         ).totalDays;
+                      } else if (profileLeaveForm.leaveType === 'Annual Leave') {
+                        diffDays = calculateAnnualLeaveDuration(
+                          fromVal,
+                          toVal,
+                          holidays
+                        ).totalDays;
                       } else if (profileLeaveForm.halfDayType !== 'Full Day') {
                         diffDays = 0.5;
                       } else {
@@ -4932,6 +4979,12 @@ export function EmployeeProfileDetail({
                           profileLeaveForm.halfDayType === 'Full Day' ? 'FULL' : 'HALF',
                           holidays
                         ).totalDays;
+                      } else if (profileLeaveForm.leaveType === 'Annual Leave') {
+                        diffDays = calculateAnnualLeaveDuration(
+                          profileLeaveForm.fromDate,
+                          toVal,
+                          holidays
+                        ).totalDays;
                       } else if (profileLeaveForm.halfDayType !== 'Full Day') {
                         diffDays = 0.5;
                       } else {
@@ -4963,6 +5016,36 @@ export function EmployeeProfileDetail({
                   {profileCasualCalcInfo.boundaryHolidaysCount > 0 && (
                     <span className="px-2.5 py-1 rounded-xl bg-surface border border-border/70 text-muted-foreground">
                       {profileCasualCalcInfo.boundaryHolidaysCount} boundary public holiday(s) excluded
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Annual Leave Calculation Breakdown Details */}
+              {profileLeaveForm.leaveType === 'Annual Leave' && profileAnnualCalcInfo && (
+                <div className="flex flex-wrap gap-2 text-[11px] pt-1">
+                  <span
+                    className={`px-2.5 py-1 rounded-xl border font-bold ${
+                      profileAnnualCalcInfo.workingDaysCount >= 5
+                        ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-500'
+                        : 'bg-amber-500/15 border-amber-500/35 text-amber-500'
+                    }`}
+                  >
+                    {profileAnnualCalcInfo.workingDaysCount} working day{profileAnnualCalcInfo.workingDaysCount === 1 ? '' : 's'} applied (Min. 5 required)
+                  </span>
+                  {profileAnnualCalcInfo.internalWeekendDaysCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-500 font-bold">
+                      Includes {profileAnnualCalcInfo.internalWeekendDaysCount} internal weekend day(s)
+                    </span>
+                  )}
+                  {profileAnnualCalcInfo.internalHolidaysCount > 0 && (
+                    <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-500 font-bold">
+                      Includes {profileAnnualCalcInfo.internalHolidaysCount} internal public holiday ({profileAnnualCalcInfo.internalHolidayNames.join(', ')})
+                    </span>
+                  )}
+                  {(profileAnnualCalcInfo.leadingBoundaryDaysExcluded > 0 || profileAnnualCalcInfo.trailingBoundaryDaysExcluded > 0) && (
+                    <span className="px-2.5 py-1 rounded-xl bg-surface border border-border/70 text-muted-foreground">
+                      {profileAnnualCalcInfo.leadingBoundaryDaysExcluded + profileAnnualCalcInfo.trailingBoundaryDaysExcluded} boundary weekend/holiday day(s) excluded
                     </span>
                   )}
                 </div>

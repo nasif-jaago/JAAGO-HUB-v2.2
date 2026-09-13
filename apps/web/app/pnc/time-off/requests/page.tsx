@@ -31,6 +31,8 @@ import {
   type PublicHolidayItem,
   calculateCasualLeaveDuration,
   validateCasualLeaveRules,
+  calculateAnnualLeaveDuration,
+  validateAnnualLeaveRules,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import {
@@ -186,10 +188,19 @@ export default function LeaveRequestsPage() {
     return calculateCasualLeaveDuration(createStartDate, createEndDate, createMode, holidays);
   }, [createStartDate, createEndDate, createMode, createLeaveType, holidays]);
 
+  // Annual Leave calculation breakdown info
+  const annualCalcInfo = useMemo(() => {
+    if (createLeaveType !== 'Annual Leave') return null;
+    return calculateAnnualLeaveDuration(createStartDate, createEndDate, holidays);
+  }, [createStartDate, createEndDate, createLeaveType, holidays]);
+
   // Calculate duration in Create Modal
   const calculatedDays = useMemo(() => {
     if (createLeaveType === 'Casual Leave') {
       return casualCalcInfo?.totalDays ?? 1;
+    }
+    if (createLeaveType === 'Annual Leave') {
+      return annualCalcInfo?.totalDays ?? 1;
     }
     if (createMode === 'HALF') return 0.5;
     if (createLeaveType === 'Maternity Leave') return 120;
@@ -201,7 +212,7 @@ export default function LeaveRequestsPage() {
       return Math.round((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24)) + 1;
     }
     return 1;
-  }, [createStartDate, createEndDate, createMode, createLeaveType, casualCalcInfo]);
+  }, [createStartDate, createEndDate, createMode, createLeaveType, casualCalcInfo, annualCalcInfo]);
 
   // Handle Approve / Re-Approve
   const handleApprove = async (req: LeaveRequestItem) => {
@@ -410,9 +421,26 @@ export default function LeaveRequestsPage() {
       }
     }
 
-    if (createLeaveType === 'Annual Leave' && isEmpProbation) {
-      showToastMsg('Policy Warning: Annual Leave is not available during probation period', 'error');
-      return;
+    if (createLeaveType === 'Annual Leave') {
+      const alValidation = validateAnnualLeaveRules({
+        startDate: createStartDate,
+        endDate: createEndDate,
+        totalCalculatedDays: calculatedDays,
+        workingDaysCount: annualCalcInfo?.workingDaysCount ?? 0,
+        holidays,
+        existingRequests: requests.filter((r) => r.employeeCode === selectedEmp.code),
+        employeeCode: selectedEmp.code,
+        isProbation: isEmpProbation,
+        sixMonthsCompletionStatus: (selectedEmp as any)?.sixMonthsCompletionStatus,
+        joiningDate: (selectedEmp as any)?.joiningDate || (selectedEmp as any)?.joining_date,
+        employeeStatus: (selectedEmp as any)?.status,
+        availableBalance: selectedEmpAllocation ? Math.max(0, (selectedEmpAllocation.annualAllocated ?? 0) - (selectedEmpAllocation.annualUsed ?? 0)) : undefined,
+      });
+
+      if (!alValidation.valid) {
+        showToastMsg(alValidation.error || 'Annual leave request violates policy rules.', 'error');
+        return;
+      }
     }
 
     if (createLeaveType === 'Medical Leave' && isEmpProbation) {
@@ -1267,6 +1295,36 @@ export default function LeaveRequestsPage() {
                     {casualCalcInfo.boundaryHolidaysCount > 0 && (
                       <span className="px-2.5 py-1 rounded-xl bg-surface border border-border/70 text-muted-foreground">
                         {casualCalcInfo.boundaryHolidaysCount} boundary public holiday(s) excluded
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Annual Leave Calculation Breakdown Details */}
+                {createLeaveType === 'Annual Leave' && annualCalcInfo && (
+                  <div className="flex flex-wrap gap-2 text-[11px] pt-1">
+                    <span
+                      className={`px-2.5 py-1 rounded-xl border font-bold ${
+                        annualCalcInfo.workingDaysCount >= 5
+                          ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-500'
+                          : 'bg-amber-500/15 border-amber-500/35 text-amber-500'
+                      }`}
+                    >
+                      {annualCalcInfo.workingDaysCount} working day{annualCalcInfo.workingDaysCount === 1 ? '' : 's'} applied (Min. 5 required)
+                    </span>
+                    {annualCalcInfo.internalWeekendDaysCount > 0 && (
+                      <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-500 font-bold">
+                        Includes {annualCalcInfo.internalWeekendDaysCount} internal weekend day(s)
+                      </span>
+                    )}
+                    {annualCalcInfo.internalHolidaysCount > 0 && (
+                      <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-500 font-bold">
+                        Includes {annualCalcInfo.internalHolidaysCount} internal public holiday ({annualCalcInfo.internalHolidayNames.join(', ')})
+                      </span>
+                    )}
+                    {(annualCalcInfo.leadingBoundaryDaysExcluded > 0 || annualCalcInfo.trailingBoundaryDaysExcluded > 0) && (
+                      <span className="px-2.5 py-1 rounded-xl bg-surface border border-border/70 text-muted-foreground">
+                        {annualCalcInfo.leadingBoundaryDaysExcluded + annualCalcInfo.trailingBoundaryDaysExcluded} boundary weekend/holiday day(s) excluded
                       </span>
                     )}
                   </div>

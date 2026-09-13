@@ -651,6 +651,325 @@ export function validateCasualLeaveRules(params: {
   return { valid: true };
 }
 
+export interface AnnualLeaveDurationResult {
+  totalDays: number;
+  workingDaysCount: number;
+  trimmedStartDate: string;
+  trimmedEndDate: string;
+  leadingBoundaryDaysExcluded: number;
+  trailingBoundaryDaysExcluded: number;
+  internalWeekendDaysCount: number;
+  internalHolidaysCount: number;
+  internalHolidayNames: string[];
+}
+
+/**
+ * Calculates Annual Leave duration according to JAAGO Foundation HR policy:
+ * 1. "Weekends immediately before or after the leave period should not count as Annual Leave."
+ *    (Outer leading/trailing weekends and government holidays are trimmed from the deduction).
+ * 2. "Weekends and government holidays falling within the leave period should count as Annual Leave."
+ *    (All calendar days between the first working day and last working day count towards Annual Leave).
+ * 3. Returns workingDaysCount to strictly enforce "at least 5 consecutive working days".
+ */
+export function calculateAnnualLeaveDuration(
+  startDate: string,
+  endDate: string,
+  holidays: PublicHolidayItem[]
+): AnnualLeaveDurationResult {
+  const d1 = new Date(startDate);
+  const d2 = new Date(endDate);
+
+  if (isNaN(d1.getTime()) || isNaN(d2.getTime()) || d2 < d1) {
+    return {
+      totalDays: 0,
+      workingDaysCount: 0,
+      trimmedStartDate: startDate,
+      trimmedEndDate: endDate,
+      leadingBoundaryDaysExcluded: 0,
+      trailingBoundaryDaysExcluded: 0,
+      internalWeekendDaysCount: 0,
+      internalHolidaysCount: 0,
+      internalHolidayNames: [],
+    };
+  }
+
+  // Generate all date strings in the requested range
+  const datesInRange: string[] = [];
+  const curr = new Date(d1);
+  while (curr <= d2) {
+    datesInRange.push(curr.toISOString().split('T')[0]!);
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  const isWorkingDay = (dateStr: string) => {
+    const dt = new Date(dateStr);
+    return !isWeekendDay(dt) && !isDateGovernmentHoliday(dateStr, holidays);
+  };
+
+  // Find first working day (trim outer leading non-working days)
+  let firstWorkingIdx = -1;
+  for (let i = 0; i < datesInRange.length; i++) {
+    if (isWorkingDay(datesInRange[i]!)) {
+      firstWorkingIdx = i;
+      break;
+    }
+  }
+
+  // Find last working day (trim outer trailing non-working days)
+  let lastWorkingIdx = -1;
+  for (let i = datesInRange.length - 1; i >= 0; i--) {
+    if (isWorkingDay(datesInRange[i]!)) {
+      lastWorkingIdx = i;
+      break;
+    }
+  }
+
+  // If no working days in the range (e.g. only Fri-Sat or only holidays)
+  if (firstWorkingIdx === -1 || lastWorkingIdx === -1) {
+    return {
+      totalDays: 0,
+      workingDaysCount: 0,
+      trimmedStartDate: startDate,
+      trimmedEndDate: endDate,
+      leadingBoundaryDaysExcluded: datesInRange.length,
+      trailingBoundaryDaysExcluded: 0,
+      internalWeekendDaysCount: 0,
+      internalHolidaysCount: 0,
+      internalHolidayNames: [],
+    };
+  }
+
+  const leadingBoundaryDaysExcluded = firstWorkingIdx;
+  const trailingBoundaryDaysExcluded = datesInRange.length - 1 - lastWorkingIdx;
+  const trimmedStartDate = datesInRange[firstWorkingIdx]!;
+  const trimmedEndDate = datesInRange[lastWorkingIdx]!;
+
+  let workingDaysCount = 0;
+  let internalWeekendDaysCount = 0;
+  let internalHolidaysCount = 0;
+  const internalHolidayNames: string[] = [];
+
+  for (let i = firstWorkingIdx; i <= lastWorkingIdx; i++) {
+    const dStr = datesInRange[i]!;
+    const dt = new Date(dStr);
+    const hol = getGovernmentHolidayOnDate(dStr, holidays);
+    const isWk = isWeekendDay(dt);
+
+    if (hol) {
+      internalHolidaysCount++;
+      if (!internalHolidayNames.includes(hol.title)) {
+        internalHolidayNames.push(hol.title);
+      }
+    } else if (isWk) {
+      internalWeekendDaysCount++;
+    } else {
+      workingDaysCount++;
+    }
+  }
+
+  // All days from firstWorkingIdx to lastWorkingIdx count as Annual Leave!
+  const totalDays = lastWorkingIdx - firstWorkingIdx + 1;
+
+  return {
+    totalDays,
+    workingDaysCount,
+    trimmedStartDate,
+    trimmedEndDate,
+    leadingBoundaryDaysExcluded,
+    trailingBoundaryDaysExcluded,
+    internalWeekendDaysCount,
+    internalHolidaysCount,
+    internalHolidayNames,
+  };
+}
+
+/**
+ * Validates Annual Leave application against JAAGO Foundation HR policy:
+ * 1. Eligibility: Employee must complete 6 months of continuous service (P&C 6-month status field).
+ * 2. Restriction: Annual Leave cannot be availed during notice period or after resignation.
+ * 3. Advance Notice: Must be submitted at least 10 days before leave start date.
+ * 4. Working Days Requirement: Minimum 5 consecutive working days required.
+ * 5. Minimum Gap: Cannot be availed within 1 month (30 days) of a previously approved Annual Leave.
+ * 6. Prefix / Suffix Restriction: No other leave type except Medical Leave and Emergency Leave can be prefixed or suffixed.
+ * 7. Sandwiching: Strict prevention of sandwiching between Annual Leave and Casual Leave.
+ * 8. Quota: Cannot exceed available Annual Leave balance.
+ */
+export function validateAnnualLeaveRules(params: {
+  startDate: string;
+  endDate: string;
+  totalCalculatedDays: number;
+  workingDaysCount: number;
+  holidays: PublicHolidayItem[];
+  existingRequests: LeaveRequestItem[];
+  employeeCode: string;
+  isProbation: boolean;
+  sixMonthsCompletionStatus?: string | undefined;
+  joiningDate?: string | undefined;
+  employeeStatus?: string | undefined;
+  availableBalance?: number | undefined;
+  currentRequestId?: string | undefined;
+}): { valid: boolean; error?: string } {
+  // 1. Notice Period / Resignation Rule
+  const empStatus = (params.employeeStatus || '').trim().toLowerCase();
+  if (empStatus === 'resigned' || empStatus === 'terminated' || empStatus === 'notice period') {
+    return {
+      valid: false,
+      error: 'Policy Restriction: Annual Leave cannot be availed during notice period or after resignation as per JAAGO HR Policy.',
+    };
+  }
+
+  // 2. Probation Rule
+  if (params.isProbation) {
+    return {
+      valid: false,
+      error: 'Policy Warning: Annual Leave is not available during the probationary period. Staff must complete probation and 6 months of continuous service.',
+    };
+  }
+
+  // 3. 6 Months of Service Completion Rule
+  const sixMonths = (params.sixMonthsCompletionStatus || '').trim().toLowerCase();
+  let eligible6Months = true;
+  if (sixMonths === 'no') {
+    eligible6Months = false;
+  } else if (sixMonths !== 'yes' && params.joiningDate) {
+    const jDate = new Date(params.joiningDate);
+    if (!isNaN(jDate.getTime())) {
+      const now = new Date();
+      const diffMonths = (now.getFullYear() - jDate.getFullYear()) * 12 + (now.getMonth() - jDate.getMonth());
+      if (diffMonths < 6) eligible6Months = false;
+    }
+  }
+
+  if (!eligible6Months) {
+    return {
+      valid: false,
+      error: "Policy Ineligibility: Employee must complete at least 6 months of continuous service before becoming eligible for Annual Leave (People & Culture Profile: 6 Months Completion Status is 'No').",
+    };
+  }
+
+  // 4. Advance Notice Rule (at least 10 days before leave start date)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const startObj = new Date(params.startDate);
+  startObj.setHours(0, 0, 0, 0);
+  const diffNoticeDays = Math.round((startObj.getTime() - today.getTime()) / (1000 * 3600 * 24));
+  if (diffNoticeDays < 10) {
+    return {
+      valid: false,
+      error: `Advance Notice Required: Annual Leave application must be submitted at least 10 days before the leave start date (Current notice: ${diffNoticeDays < 0 ? 0 : diffNoticeDays} day(s)).`,
+    };
+  }
+
+  // 5. Check if all selected days are non-working days
+  if (params.totalCalculatedDays <= 0 || params.workingDaysCount <= 0) {
+    return {
+      valid: false,
+      error: 'The selected date range contains no active working days (weekends or public holidays only). No Annual Leave deduction is required.',
+    };
+  }
+
+  // 6. Minimum 5 Consecutive Working Days Rule
+  if (params.workingDaysCount < 5) {
+    return {
+      valid: false,
+      error: `Policy Requirement: Minimum 5 consecutive working days must be applied for Annual Leave. Your application contains only ${params.workingDaysCount} working day(s).`,
+    };
+  }
+
+  // 7. Available Quota Balance Rule
+  if (params.availableBalance !== undefined && params.totalCalculatedDays > params.availableBalance) {
+    return {
+      valid: false,
+      error: `Insufficient Balance: Requested ${params.totalCalculatedDays} day(s) exceeds your available Annual Leave balance of ${params.availableBalance} day(s).`,
+    };
+  }
+
+  // 8. 1-Month Gap from Previously Approved Annual Leave
+  const approvedAnnualLeaves = (params.existingRequests || []).filter(
+    (r) =>
+      r.employeeCode === params.employeeCode &&
+      r.leaveType === 'Annual Leave' &&
+      r.status === 'Approved' &&
+      r.id !== params.currentRequestId
+  );
+
+  for (const app of approvedAnnualLeaves) {
+    const appStart = new Date(app.fromDate);
+    const appEnd = new Date(app.toDate);
+    const newStart = new Date(params.startDate);
+    const newEnd = new Date(params.endDate);
+
+    if (newStart >= appEnd) {
+      const gapDays = Math.round((newStart.getTime() - appEnd.getTime()) / (1000 * 3600 * 24));
+      if (gapDays < 30) {
+        return {
+          valid: false,
+          error: `Policy Restriction: Annual Leave cannot be availed within 1 month (30 days) of a previously approved Annual Leave (Previous leave ended on ${app.toDate}, gap is ${gapDays} day(s)).`,
+        };
+      }
+    } else if (newEnd <= appStart) {
+      const gapDays = Math.round((appStart.getTime() - newEnd.getTime()) / (1000 * 3600 * 24));
+      if (gapDays < 30) {
+        return {
+          valid: false,
+          error: `Policy Restriction: Annual Leave cannot be availed within 1 month (30 days) of a previously approved Annual Leave (Upcoming approved leave starts on ${app.fromDate}, gap is ${gapDays} day(s)).`,
+        };
+      }
+    } else {
+      return {
+        valid: false,
+        error: `Policy Restriction: Annual Leave overlaps with a previously approved Annual Leave (${app.fromDate} to ${app.toDate}).`,
+      };
+    }
+  }
+
+  // 9. Inspect adjacent leave requests for sandwiching and prefix/suffix compliance
+  const relevantRequests = (params.existingRequests || []).filter(
+    (r) =>
+      r.employeeCode === params.employeeCode &&
+      r.status !== 'Rejected' &&
+      r.id !== params.currentRequestId
+  );
+
+  for (const existing of relevantRequests) {
+    // Preceding adjacency
+    const prevAdj = areDatesAdjacentOverNonWorkingDays(existing.toDate, params.startDate, params.holidays);
+    if (prevAdj.isAdjacent) {
+      if (existing.leaveType === 'Casual Leave') {
+        return {
+          valid: false,
+          error: `Policy Conflict: Annual Leave cannot be sandwiched, prefixed, or suffixed with Casual Leave (${existing.fromDate} to ${existing.toDate}). Under JAAGO HR Policy, Casual Leave and Annual Leave cannot be taken consecutively.`,
+        };
+      }
+      if (existing.leaveType !== 'Medical Leave' && existing.leaveType !== 'Emergency Leave') {
+        return {
+          valid: false,
+          error: `Policy Conflict: Annual Leave cannot be prefixed with ${existing.leaveType} (${existing.fromDate} to ${existing.toDate}). Only Medical Leave and Emergency Leave can be prefixed or suffixed with Annual Leave.`,
+        };
+      }
+    }
+
+    // Succeeding adjacency
+    const nextAdj = areDatesAdjacentOverNonWorkingDays(params.endDate, existing.fromDate, params.holidays);
+    if (nextAdj.isAdjacent) {
+      if (existing.leaveType === 'Casual Leave') {
+        return {
+          valid: false,
+          error: `Policy Conflict: Annual Leave cannot be sandwiched, prefixed, or suffixed with Casual Leave (${existing.fromDate} to ${existing.toDate}). Under JAAGO HR Policy, Casual Leave and Annual Leave cannot be taken consecutively.`,
+        };
+      }
+      if (existing.leaveType !== 'Medical Leave' && existing.leaveType !== 'Emergency Leave') {
+        return {
+          valid: false,
+          error: `Policy Conflict: Annual Leave cannot be suffixed with ${existing.leaveType} (${existing.fromDate} to ${existing.toDate}). Only Medical Leave and Emergency Leave can be prefixed or suffixed with Annual Leave.`,
+        };
+      }
+    }
+  }
+
+  return { valid: true };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. PRODUCTION SEED DATA WITH FULL RULES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1271,6 +1590,61 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
       }
     } catch (err: any) {
       if (err.message && err.message.startsWith('Policy')) {
+        throw err;
+      }
+    }
+  }
+
+  // Enforce Universal Annual Leave Policies in saveLeaveRequest
+  if (request.leaveType === 'Annual Leave') {
+    try {
+      const holidays = await fetchPublicHolidays();
+      const allRequests = await fetchLeaveRequests();
+      const allocations = await fetchLeaveAllocations();
+      const empAlloc = allocations.find((a) => a.employeeCode === request.employeeCode);
+      const available = (empAlloc?.annualAllocated ?? 15) - (empAlloc?.annualUsed ?? 0);
+      const isProbation = empAlloc?.leaveGroup === 'Probationary Staff';
+
+      let sixMonthsStatus: string | undefined = undefined;
+      let employeeStatus: string | undefined = undefined;
+      let joiningDate: string | undefined = undefined;
+
+      try {
+        const emps = await fetchEmployeesFromSupabase();
+        if (emps && Array.isArray(emps)) {
+          const foundEmp = emps.find((e: any) => e.code === request.employeeCode);
+          if (foundEmp) {
+            sixMonthsStatus = (foundEmp as any).sixMonthsCompletionStatus;
+            employeeStatus = (foundEmp as any).status;
+            joiningDate = (foundEmp as any).joiningDate || (foundEmp as any).joining_date;
+          }
+        }
+      } catch {}
+
+      const calcRes = calculateAnnualLeaveDuration(request.fromDate, request.toDate, holidays);
+
+      const alValidation = validateAnnualLeaveRules({
+        startDate: request.fromDate,
+        endDate: request.toDate,
+        totalCalculatedDays: calcRes.totalDays,
+        workingDaysCount: calcRes.workingDaysCount,
+        holidays,
+        existingRequests: allRequests,
+        employeeCode: request.employeeCode,
+        isProbation,
+        sixMonthsCompletionStatus: sixMonthsStatus,
+        joiningDate,
+        employeeStatus,
+        availableBalance: available,
+        currentRequestId: request.id,
+      });
+
+      if (!alValidation.valid) {
+        console.warn(`[Annual Leave Policy Ineligibility]: ${alValidation.error}`);
+        throw new Error(alValidation.error || 'Annual leave request violates policy rules.');
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.startsWith('Policy') || err.message.startsWith('Advance') || err.message.startsWith('Insufficient'))) {
         throw err;
       }
     }
