@@ -107,6 +107,39 @@ export interface LeaveAllocationItem {
   fiscalYear: string; // e.g. '2026-2027'
 }
 
+export type CompensatoryLedgerStatus = 'ACTIVE' | 'EXPIRED' | 'FULLY_UTILIZED';
+export type CompensatoryDutyType = 'WEEKEND' | 'PUBLIC_HOLIDAY' | 'BOTH';
+
+export interface CompensatoryLedgerEntry {
+  id: string;
+  tenantId?: string;
+  employeeId?: string;
+  employeeCode: string;
+  employeeName?: string;
+  onDutyRequestId?: string;
+  dutyDate: string; // YYYY-MM-DD
+  dutyReason?: string;
+  dutyType: CompensatoryDutyType;
+  holidayName?: string;
+  hoursEarned: number;
+  hoursUtilized: number;
+  remainingBalance: number;
+  expiryDate: string; // YYYY-MM-DD (2 months / 60 days after dutyDate)
+  status: CompensatoryLedgerStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompensatoryBalanceSummary {
+  totalHoursEarned: number;
+  totalHoursUtilized: number;
+  availableHours: number;
+  expiredHours: number;
+  accumulatedPendingHours: number; // < 4 hours balance that cannot be redeemed yet
+  usableHalfDays: number; // 4 hours = Half Day
+  usableFullDays: number; // 8 hours = Full Day
+}
+
 export interface PublicHolidayItem {
   id: string;
   title: string;
@@ -1208,6 +1241,67 @@ export function validatePaternityLeaveRules(params: {
   return { valid: true };
 }
 
+/**
+ * Validates Compensatory Leave (Comp Off) Application against JAAGO Policy:
+ * 1. Earned exclusively from approved On-Duty holiday/weekend work.
+ * 2. 4 hours = Half-Day Compensatory Leave.
+ * 3. 8 hours = Full-Day Compensatory Leave.
+ * 4. Less than 4 hours remains as accumulated balance and cannot be redeemed.
+ * 5. Must expire after 2 months (60 calendar days) from the duty earning date.
+ */
+export interface ValidateCompensatoryLeaveParams {
+  employeeCode: string;
+  durationMode: 'HALF' | 'FULL';
+  hoursRequested?: number;
+  availableBalanceHours: number; // Active, unexpired balance in hours
+  accumulatedTotalHours?: number; // Total accumulated hours
+}
+
+export function validateCompensatoryLeaveRules(params: ValidateCompensatoryLeaveParams): {
+  valid: boolean;
+  error?: string;
+  requiredHours: number;
+} {
+  const isHalf = params.durationMode === 'HALF';
+  const requiredHours = params.hoursRequested ?? (isHalf ? 4 : 8);
+
+  // 1. Check minimum threshold (at least 4 hours is required for any leave application)
+  if (params.availableBalanceHours < 4) {
+    if (params.availableBalanceHours > 0) {
+      return {
+        valid: false,
+        requiredHours,
+        error: `Insufficient Balance: You have ${params.availableBalanceHours} hour(s) accumulated. Minimum 4 hours is required for a Half-Day Compensatory Leave. (Balances under 4 hours remain safely stored as accumulated balance until reaching 4 hours).`,
+      };
+    }
+    return {
+      valid: false,
+      requiredHours,
+      error: `Insufficient Balance: You have 0 hours of available Compensatory Leave. Compensatory Leave is earned automatically from approved On-Duty work on weekends or public holidays and expires after 2 months.`,
+    };
+  }
+
+  // 2. Check full day requirement (8 hours)
+  if (!isHalf && params.availableBalanceHours < 8) {
+    return {
+      valid: false,
+      requiredHours,
+      error: `Insufficient Balance: Requested 8 hours (Full-Day) exceeds your available active Compensatory Leave balance of ${params.availableBalanceHours} hour(s). You can apply for a 4h Half-Day leave instead.`,
+    };
+  }
+
+  // 3. Exact quota check against requested hours
+  if (requiredHours > params.availableBalanceHours) {
+    return {
+      valid: false,
+      requiredHours,
+      error: `Insufficient Balance: Requested ${requiredHours} hours exceeds your available active Compensatory Leave balance of ${params.availableBalanceHours} hour(s).`,
+    };
+  }
+
+  return { valid: true, requiredHours };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 2. PRODUCTION SEED DATA WITH FULL RULES
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2009,6 +2103,43 @@ export async function saveLeaveRequest(request: LeaveRequestItem): Promise<boole
     }
   }
 
+  // Rule Validation & FIFO Deduction for Compensatory Leave Requests
+  if (request.leaveType === 'Compensatory Leave') {
+    try {
+      const compLedger = await fetchCompensatoryLedger(request.employeeCode);
+      const compSummary = calculateCompensatoryBalanceSummary(compLedger);
+      const isHalf = request.halfDayType && request.halfDayType !== 'Full Day';
+      const claimedHours = request.compOffHoursClaimed ?? (isHalf ? 4 : 8);
+
+      const compValidation = validateCompensatoryLeaveRules({
+        employeeCode: request.employeeCode,
+        durationMode: isHalf ? 'HALF' : 'FULL',
+        hoursRequested: claimedHours,
+        availableBalanceHours: compSummary.availableHours,
+        accumulatedTotalHours: compSummary.totalHoursEarned,
+      });
+
+      if (!compValidation.valid) {
+        console.warn(`[Compensatory Leave Policy Ineligibility]: ${compValidation.error}`);
+        throw new Error(compValidation.error || 'Compensatory leave request violates policy rules.');
+      }
+
+      // If request is approved, immediately deduct hours from the earliest-expiring active ledger entries (FIFO)
+      if (request.status === 'Approved') {
+        await redeemCompensatoryHours(request.employeeCode, claimedHours, request.id);
+      }
+    } catch (err: any) {
+      if (
+        err.message &&
+        (err.message.startsWith('Policy') ||
+          err.message.startsWith('Insufficient') ||
+          err.message.startsWith('Invalid'))
+      ) {
+        throw err;
+      }
+    }
+  }
+
   invalidateCache('pnc_leave_requests_list');
   invalidateCache('pnc_attendance_logs_list');
   if (typeof window !== 'undefined') {
@@ -2255,7 +2386,16 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
     }
   });
 
-  // 4. Construct comprehensive list of allocations for all active employees
+  // 4. Load Compensatory Leave Ledger to calculate dynamic earned and utilized hours
+  const allCompLedger = await fetchCompensatoryLedger();
+  const compLedgerMap = new Map<string, CompensatoryLedgerEntry[]>();
+  for (const entry of allCompLedger) {
+    const list = compLedgerMap.get(entry.employeeCode) || [];
+    list.push(entry);
+    compLedgerMap.set(entry.employeeCode, list);
+  }
+
+  // 5. Construct comprehensive list of allocations for all active employees
   const resultMap = new Map<string, LeaveAllocationItem>();
 
   for (const emp of employees) {
@@ -2313,8 +2453,7 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
     const emergencyAlloc = existing?.emergencyAllocated ?? (emp.specialLeaveAllocated ? Number(emp.specialLeaveAllocated) : coreQuotas.emergency);
     const annualAlloc = existing?.annualAllocated ?? (emp.earnedLeaveAllocated ? Number(emp.earnedLeaveAllocated) : coreQuotas.annual);
 
-    // Parental, Bereavement, Compensatory and Other leaves must ONLY be allocated manually.
-    // They are NEVER automatically allocated.
+    // Parental, Bereavement, Compensatory and Other leaves
     let maternityAlloc = 0;
     let paternityAlloc = 0;
     let compOffAlloc = 0;
@@ -2330,7 +2469,13 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
       maternityAlloc = existing?.maternityAllocated || 0;
       paternityAlloc = existing?.paternityAllocated || 0;
     }
-    compOffAlloc = existing?.compOffAllocated || 0;
+
+    // Dynamic Compensatory Leave hours from Supabase Ledger
+    const empCompEntries = compLedgerMap.get(emp.code) || [];
+    const compSummary = calculateCompensatoryBalanceSummary(empCompEntries);
+    compOffAlloc = compSummary.totalHoursEarned > 0 ? compSummary.totalHoursEarned : (existing?.compOffAllocated || 0);
+    const finalCoUsed = Math.max(coUsed, compSummary.totalHoursUtilized);
+
     bereavementAlloc = existing?.bereavementAllocated || 0;
 
     const allocationItem: LeaveAllocationItem = {
@@ -2356,7 +2501,7 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
       paternityAllocated: paternityAlloc,
       paternityUsed: plUsed,
       compOffAllocated: compOffAlloc,
-      compOffUsed: coUsed,
+      compOffUsed: finalCoUsed,
       bereavementAllocated: bereavementAlloc,
       bereavementUsed: blUsed,
       unpaidUsed: unpaidUsed,
@@ -2372,11 +2517,15 @@ export async function fetchLeaveAllocations(): Promise<LeaveAllocationItem[]> {
       const g = (item.gender || '').toUpperCase().trim();
       const isMale = g === 'MALE' || g === 'M';
       const isFemale = g === 'FEMALE' || g === 'F';
+      const itemCompEntries = compLedgerMap.get(code) || [];
+      const itemSummary = calculateCompensatoryBalanceSummary(itemCompEntries);
+
       resultMap.set(code, {
         ...item,
         maternityAllocated: isFemale ? (item.maternityAllocated && item.maternityAllocated > 0 ? item.maternityAllocated : 120) : 0,
         paternityAllocated: isMale ? (item.paternityAllocated && item.paternityAllocated > 0 ? item.paternityAllocated : 15) : 0,
-        compOffAllocated: item.compOffAllocated || 0,
+        compOffAllocated: itemSummary.totalHoursEarned > 0 ? itemSummary.totalHoursEarned : (item.compOffAllocated || 0),
+        compOffUsed: Math.max(item.compOffUsed || 0, itemSummary.totalHoursUtilized),
         bereavementAllocated: item.bereavementAllocated || 0,
       });
     }
@@ -2624,3 +2773,657 @@ export async function deleteLeavePolicy(id: string): Promise<boolean> {
   }
   return true;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. COMPENSATORY LEAVE (COMP OFF) ENGINE & SUPABASE LEDGER SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════
+
+export const STORAGE_KEY_COMP_LEDGER_V2 = 'jaago_pnc_compensatory_ledger_v2';
+
+/**
+ * Calculates official Compensatory Leave Expiry Date:
+ * Strictly 2 months (60 calendar days) from the duty date.
+ */
+export function calculateCompOffExpiryDate(dutyDateStr: string): string {
+  const dt = new Date(dutyDateStr);
+  if (isNaN(dt.getTime())) return '';
+  const expiry = new Date(dt);
+  expiry.setMonth(expiry.getMonth() + 2);
+  return expiry.toISOString().split('T')[0]!;
+}
+
+/**
+ * Checks if a given Compensatory Leave ledger entry is expired based on current local time.
+ */
+export function isCompOffEntryExpired(expiryDateStr: string): boolean {
+  if (!expiryDateStr) return false;
+  const todayStr = new Date().toISOString().split('T')[0]!;
+  return expiryDateStr < todayStr;
+}
+
+/**
+ * Validates whether a specific Date is a weekend for a given employee based on their
+ * workingSchedule or weekendDays config (defaulting to Friday & Saturday in Bangladesh).
+ */
+export function isDateEmployeeWeekend(
+  date: Date | string,
+  weekendDaysStr: string = 'Friday & Saturday',
+  workingScheduleStr?: string
+): boolean {
+  const dt = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(dt.getTime())) return false;
+
+  const dayIndex = dt.getDay(); // 0 = Sun, 1 = Mon, ..., 5 = Fri, 6 = Sat
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayName = dayNames[dayIndex]!;
+
+  if (workingScheduleStr) {
+    const wsLower = workingScheduleStr.toLowerCase();
+    if (wsLower.includes('sun-thu') || wsLower.includes('sunday to thursday')) {
+      return dayIndex === 5 || dayIndex === 6;
+    }
+  }
+
+  if (weekendDaysStr) {
+    const wkLower = weekendDaysStr.toLowerCase();
+    if (wkLower.includes(dayName.toLowerCase())) return true;
+    if (wkLower.includes('friday') && dayIndex === 5) return true;
+    if (wkLower.includes('saturday') && dayIndex === 6) return true;
+    if (wkLower.includes('sunday') && dayIndex === 0) return true;
+    if (wkLower.includes('thursday') && dayIndex === 4) return true;
+  }
+
+  // Bangladesh NGO / JAAGO standard weekend: Friday & Saturday
+  return dayIndex === 5 || dayIndex === 6;
+}
+
+/**
+ * Helper to parse time strings like '10:00 AM' or '18:00' to minutes from midnight.
+ */
+export function parseDutyTimeToMinutes(timeStr: string): number {
+  if (!timeStr) return 600; // 10:00 AM
+  const clean = timeStr.trim().toUpperCase();
+  let hours = 0;
+  let minutes = 0;
+
+  if (clean.includes('AM') || clean.includes('PM')) {
+    const isPM = clean.includes('PM');
+    const timePart = clean.replace('AM', '').replace('PM', '').trim();
+    const [hStr, mStr] = timePart.split(':');
+    let rawH = Number(hStr) || 0;
+    minutes = Number(mStr) || 0;
+    if (isPM && rawH < 12) rawH += 12;
+    if (!isPM && rawH === 12) rawH = 0;
+    hours = rawH;
+  } else {
+    const [hStr, mStr] = clean.split(':');
+    hours = Number(hStr) || 0;
+    minutes = Number(mStr) || 0;
+  }
+  return hours * 60 + minutes;
+}
+
+/**
+ * Calculates a comprehensive summary of Compensatory Leave balance from ledger entries:
+ * - totalHoursEarned: all earned hours
+ * - totalHoursUtilized: all redeemed hours
+ * - availableHours: non-expired active remaining balance
+ * - expiredHours: unutilized balance from expired entries
+ * - accumulatedPendingHours: balance under 4 hours (safely stored, but cannot be redeemed yet)
+ * - usableHalfDays: 4 hours = Half Day
+ * - usableFullDays: 8 hours = Full Day
+ */
+export function calculateCompensatoryBalanceSummary(entries: CompensatoryLedgerEntry[]): CompensatoryBalanceSummary {
+  const todayStr = new Date().toISOString().split('T')[0]!;
+  let totalHoursEarned = 0;
+  let totalHoursUtilized = 0;
+  let availableHours = 0;
+  let expiredHours = 0;
+
+  for (const entry of entries) {
+    const isExpired = entry.expiryDate < todayStr;
+    totalHoursEarned += Number(entry.hoursEarned) || 0;
+    totalHoursUtilized += Number(entry.hoursUtilized) || 0;
+
+    if (isExpired) {
+      if (entry.remainingBalance > 0) {
+        expiredHours += Number(entry.remainingBalance) || 0;
+      }
+    } else if (entry.status !== 'FULLY_UTILIZED') {
+      availableHours += Math.max(0, Number(entry.remainingBalance) || 0);
+    }
+  }
+
+  totalHoursEarned = Math.round(totalHoursEarned * 100) / 100;
+  totalHoursUtilized = Math.round(totalHoursUtilized * 100) / 100;
+  availableHours = Math.round(availableHours * 100) / 100;
+  expiredHours = Math.round(expiredHours * 100) / 100;
+
+  const usableFullDays = Math.floor(availableHours / 8);
+  const usableHalfDays = Math.floor(availableHours / 4);
+  const accumulatedPendingHours = availableHours < 4 ? availableHours : Math.round((availableHours % 4) * 100) / 100;
+
+  return {
+    totalHoursEarned,
+    totalHoursUtilized,
+    availableHours,
+    expiredHours,
+    accumulatedPendingHours,
+    usableHalfDays,
+    usableFullDays,
+  };
+}
+
+/**
+ * Canonical Initial Compensatory Leave Seed Data for Nasif Kamal (FO032507061190)
+ * Demonstrates:
+ * - 8h full day earned on weekend (active)
+ * - 4h half day earned on weekend (active)
+ * - 3h partial day (< 4h accumulated balance, stored in Supabase)
+ * - 8h expired duty (> 2 months ago, automatically expired)
+ */
+export const INITIAL_COMPENSATORY_LEDGER: CompensatoryLedgerEntry[] = [
+  {
+    id: 'cpl-seed-001',
+    tenantId: 'jaago-main',
+    employeeId: 'emp-FO032507061190',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    onDutyRequestId: 'od-seed-wknd1',
+    dutyDate: '2026-08-21',
+    dutyReason: 'Critical cloud infrastructure server migration over weekend',
+    dutyType: 'WEEKEND',
+    hoursEarned: 8.0,
+    hoursUtilized: 0.0,
+    remainingBalance: 8.0,
+    expiryDate: '2026-10-21',
+    status: 'ACTIVE',
+    createdAt: '2026-08-21T10:00:00Z',
+    updatedAt: '2026-08-21T10:00:00Z',
+  },
+  {
+    id: 'cpl-seed-002',
+    tenantId: 'jaago-main',
+    employeeId: 'emp-FO032507061190',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    onDutyRequestId: 'od-seed-wknd2',
+    dutyDate: '2026-08-28',
+    dutyReason: 'Emergency network failover drill on weekend',
+    dutyType: 'WEEKEND',
+    hoursEarned: 4.0,
+    hoursUtilized: 0.0,
+    remainingBalance: 4.0,
+    expiryDate: '2026-10-28',
+    status: 'ACTIVE',
+    createdAt: '2026-08-28T10:00:00Z',
+    updatedAt: '2026-08-28T10:00:00Z',
+  },
+  {
+    id: 'cpl-seed-003',
+    tenantId: 'jaago-main',
+    employeeId: 'emp-FO032507061190',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    onDutyRequestId: 'od-seed-wknd3',
+    dutyDate: '2026-09-04',
+    dutyReason: 'Field backup testing (3 hours partial weekend duty)',
+    dutyType: 'WEEKEND',
+    hoursEarned: 3.0,
+    hoursUtilized: 0.0,
+    remainingBalance: 3.0,
+    expiryDate: '2026-11-04',
+    status: 'ACTIVE',
+    createdAt: '2026-09-04T10:00:00Z',
+    updatedAt: '2026-09-04T10:00:00Z',
+  },
+  {
+    id: 'cpl-seed-004',
+    tenantId: 'jaago-main',
+    employeeId: 'emp-FO032507061190',
+    employeeCode: 'FO032507061190',
+    employeeName: 'Nasif Kamal',
+    onDutyRequestId: 'od-seed-exp1',
+    dutyDate: '2026-06-15',
+    dutyReason: 'Q2 Fiscal Close system deployment support',
+    dutyType: 'WEEKEND',
+    hoursEarned: 8.0,
+    hoursUtilized: 0.0,
+    remainingBalance: 8.0,
+    expiryDate: '2026-08-15',
+    status: 'EXPIRED',
+    createdAt: '2026-06-15T10:00:00Z',
+    updatedAt: '2026-08-15T10:00:00Z',
+  },
+];
+
+export function getLocalCompensatoryLedger(): CompensatoryLedgerEntry[] {
+  if (typeof window === 'undefined') return INITIAL_COMPENSATORY_LEDGER;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_COMP_LEDGER_V2);
+    if (!raw) {
+      localStorage.setItem(STORAGE_KEY_COMP_LEDGER_V2, JSON.stringify(INITIAL_COMPENSATORY_LEDGER));
+      return INITIAL_COMPENSATORY_LEDGER;
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : INITIAL_COMPENSATORY_LEDGER;
+  } catch {
+    return INITIAL_COMPENSATORY_LEDGER;
+  }
+}
+
+export function saveLocalCompensatoryLedger(entries: CompensatoryLedgerEntry[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_COMP_LEDGER_V2, JSON.stringify(entries));
+  } catch (err) {
+    console.error('Error saving compensatory leave ledger to localStorage:', err);
+  }
+}
+
+export function mapRowToCompensatoryLedger(row: any): CompensatoryLedgerEntry {
+  const hoursEarned = Number(row.hours_earned ?? 0);
+  const hoursUtilized = Number(row.hours_utilized ?? 0);
+  const remainingBalance = Number(row.remaining_balance ?? Math.max(0, hoursEarned - hoursUtilized));
+  const expiryDate = row.expiry_date || calculateCompOffExpiryDate(row.duty_date);
+  const isExpired = isCompOffEntryExpired(expiryDate);
+
+  let status: CompensatoryLedgerStatus = (row.status || 'ACTIVE') as CompensatoryLedgerStatus;
+  if (remainingBalance <= 0) {
+    status = 'FULLY_UTILIZED';
+  } else if (isExpired) {
+    status = 'EXPIRED';
+  }
+
+  return {
+    id: String(row.id || `cpl-${Date.now()}`),
+    tenantId: row.tenant_id || 'jaago-main',
+    employeeId: row.employee_id || '',
+    employeeCode: row.employee_code || '',
+    employeeName: row.employee_name || '',
+    onDutyRequestId: row.on_duty_request_id || undefined,
+    dutyDate: row.duty_date,
+    dutyReason: row.duty_reason || '',
+    dutyType: (row.duty_type || 'WEEKEND') as CompensatoryDutyType,
+    holidayName: row.holiday_name || undefined,
+    hoursEarned,
+    hoursUtilized,
+    remainingBalance,
+    expiryDate,
+    status,
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString(),
+  };
+}
+
+/**
+ * Fetches Compensatory Leave Ledger entries from Supabase (with fallback to local storage).
+ * Automatically evaluates 2-month expiry for every entry.
+ */
+export async function fetchCompensatoryLedger(employeeCode?: string): Promise<CompensatoryLedgerEntry[]> {
+  const localList = getLocalCompensatoryLedger();
+  const supabase = getSupabase();
+  const todayStr = new Date().toISOString().split('T')[0]!;
+
+  let entries = localList;
+
+  if (supabase) {
+    try {
+      let query = supabase
+        .from('compensatory_leave_ledger')
+        .select('*')
+        .order('duty_date', { ascending: false });
+
+      if (employeeCode) {
+        query = query.eq('employee_code', employeeCode);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        entries = data.map(mapRowToCompensatoryLedger);
+        if (!employeeCode) {
+          saveLocalCompensatoryLedger(entries);
+        }
+      }
+    } catch (err) {
+      console.warn('Exception querying compensatory_leave_ledger from Supabase:', err);
+    }
+  }
+
+  // Normalize and enforce 2-month expiry
+  const normalized = entries.map((entry) => {
+    const isExpired = entry.expiryDate < todayStr;
+    if (isExpired && entry.status === 'ACTIVE') {
+      return { ...entry, status: 'EXPIRED' as const };
+    }
+    return entry;
+  });
+
+  if (employeeCode) {
+    return normalized.filter((e) => e.employeeCode === employeeCode);
+  }
+
+  return normalized;
+}
+
+/**
+ * Persists a Compensatory Leave Ledger entry to Supabase & localStorage.
+ */
+export async function saveCompensatoryLedgerEntry(entry: CompensatoryLedgerEntry): Promise<boolean> {
+  const current = getLocalCompensatoryLedger();
+  const idx = current.findIndex((e) => e.id === entry.id);
+  const updated = idx >= 0 ? current.map((e) => (e.id === entry.id ? entry : e)) : [entry, ...current];
+  saveLocalCompensatoryLedger(updated);
+
+  const supabase = getSupabase();
+  if (supabase) {
+    (async () => {
+      try {
+        await supabase.from('compensatory_leave_ledger').upsert({
+          id: entry.id,
+          tenant_id: entry.tenantId || 'jaago-main',
+          employee_id: entry.employeeId || '',
+          employee_code: entry.employeeCode,
+          employee_name: entry.employeeName || '',
+          on_duty_request_id: entry.onDutyRequestId,
+          duty_date: entry.dutyDate,
+          duty_reason: entry.dutyReason,
+          duty_type: entry.dutyType,
+          holiday_name: entry.holidayName,
+          hours_earned: entry.hoursEarned,
+          hours_utilized: entry.hoursUtilized,
+          remaining_balance: entry.remainingBalance,
+          expiry_date: entry.expiryDate,
+          status: entry.status,
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.warn('Supabase compensatory_leave_ledger insert error:', err);
+      }
+    })();
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('jaago_compensatory_updated', { detail: { entry, all: updated } }));
+  }
+
+  return true;
+}
+
+/**
+ * Automatically synchronizes approved On-Duty work into the Compensatory Leave Ledger:
+ * 1. Scans approved On Duty requests.
+ * 2. Checks each duty day against official People & Culture Public Holidays and Employee Weekends.
+ * 3. Hours worked accumulate automatically.
+ * 4. Less than 4 hours remains as accumulated balance stored in Supabase.
+ * 5. Automatically assigns 2-month expiry date.
+ */
+export async function syncOnDutyToCompensatoryLedger(targetEmployeeCode?: string): Promise<{ syncedCount: number }> {
+  const holidays = await fetchPublicHolidays();
+
+  let emps: any[] = [];
+  try {
+    emps = (await fetchEmployeesFromSupabase()) || [];
+  } catch {}
+  if (!emps || emps.length === 0) {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('jaago_pnc_employees_v2');
+        if (cached) emps = JSON.parse(cached);
+      } catch {}
+    }
+  }
+  const empMap = new Map<string, any>();
+  for (const e of emps) {
+    if (e.code) empMap.set(e.code, e);
+    if (e.id) empMap.set(e.id, e);
+  }
+
+  let onDutyRequests: any[] = [];
+  const supabase = getSupabase();
+  if (supabase) {
+    try {
+      let q = supabase.from('on_duty_requests').select('*').eq('status', 'APPROVED');
+      if (targetEmployeeCode) {
+        q = q.eq('employee_code', targetEmployeeCode);
+      }
+      const { data } = await q;
+      if (data && Array.isArray(data)) onDutyRequests = data;
+    } catch {}
+  }
+  if (onDutyRequests.length === 0 && typeof window !== 'undefined') {
+    try {
+      const cached = localStorage.getItem('jaago_pnc_onduty_requests_v2');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) {
+          onDutyRequests = parsed.filter((r: any) => r.status === 'APPROVED');
+          if (targetEmployeeCode) {
+            onDutyRequests = onDutyRequests.filter(
+              (r: any) => r.employeeCode === targetEmployeeCode || r.employee_code === targetEmployeeCode
+            );
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const currentLedger = await fetchCompensatoryLedger();
+  const ledgerMap = new Map<string, CompensatoryLedgerEntry>();
+  for (const entry of currentLedger) {
+    ledgerMap.set(entry.id, entry);
+  }
+
+  let syncedCount = 0;
+  const todayStr = new Date().toISOString().split('T')[0]!;
+
+  for (const od of onDutyRequests) {
+    const empCode = od.employee_code || od.employeeCode;
+    const empName = od.employee_name || od.employeeName || 'Staff Member';
+    const empId = od.employee_id || od.employeeId;
+    const odId = od.id;
+    const reason = od.reason || 'Approved On Duty Field Work';
+    const startDateStr = od.start_date || (od.start_at ? od.start_at.slice(0, 10) : od.startDate);
+    const endDateStr = od.end_date || (od.end_at ? od.end_at.slice(0, 10) : od.endDate) || startDateStr;
+    const startTimeStr = od.start_time || od.startTime || '10:00 AM';
+    const endTimeStr = od.end_time || od.endTime || '06:00 PM';
+
+    if (!empCode || !startDateStr) continue;
+
+    const empInfo = empMap.get(empCode) || empMap.get(empId);
+    const weekendDaysStr = empInfo?.weekendDays || empInfo?.weekend_days || 'Friday & Saturday';
+    const workingScheduleStr = empInfo?.workingSchedule || empInfo?.working_schedule;
+
+    const sDate = new Date(startDateStr);
+    const eDate = new Date(endDateStr);
+    if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) continue;
+
+    const curr = new Date(sDate);
+    while (curr <= eDate) {
+      const dateIso = curr.toISOString().split('T')[0]!;
+      const isWeekend = isDateEmployeeWeekend(curr, weekendDaysStr, workingScheduleStr);
+      const holiday = getGovernmentHolidayOnDate(dateIso, holidays);
+      const isPublicHoliday = Boolean(holiday);
+
+      // Only count holiday (People & Culture public holiday) / weekend (employee working schedule)
+      if (isWeekend || isPublicHoliday) {
+        const entryId = `cpl-od-${odId}-${dateIso}`;
+        const existingEntry = ledgerMap.get(entryId);
+
+        let hoursWorked = 8.0;
+        if (startDateStr === endDateStr) {
+          const startMin = parseDutyTimeToMinutes(startTimeStr);
+          const endMin = parseDutyTimeToMinutes(endTimeStr);
+          const diffHours = Math.max(0, endMin - startMin) / 60;
+          hoursWorked = Math.min(8.0, Math.round(diffHours * 100) / 100);
+          if (hoursWorked <= 0) hoursWorked = Number(od.total_hours || od.totalHours || 8.0);
+        } else {
+          hoursWorked = 8.0;
+        }
+
+        const expiryDate = calculateCompOffExpiryDate(dateIso);
+        const isExpired = expiryDate < todayStr;
+        const utilized = existingEntry ? Number(existingEntry.hoursUtilized) || 0 : 0;
+        const remaining = Math.max(0, hoursWorked - utilized);
+
+        let status: CompensatoryLedgerStatus = 'ACTIVE';
+        if (remaining <= 0) {
+          status = 'FULLY_UTILIZED';
+        } else if (isExpired) {
+          status = 'EXPIRED';
+        }
+
+        let dutyType: CompensatoryDutyType = 'WEEKEND';
+        if (isWeekend && isPublicHoliday) dutyType = 'BOTH';
+        else if (isPublicHoliday) dutyType = 'PUBLIC_HOLIDAY';
+
+        const newOrUpdatedEntry: CompensatoryLedgerEntry = {
+          id: entryId,
+          tenantId: 'jaago-main',
+          employeeId: empId,
+          employeeCode: empCode,
+          employeeName: empName,
+          onDutyRequestId: odId,
+          dutyDate: dateIso,
+          dutyReason: reason,
+          dutyType,
+          holidayName: holiday?.title || undefined,
+          hoursEarned: hoursWorked,
+          hoursUtilized: utilized,
+          remainingBalance: remaining,
+          expiryDate,
+          status,
+          createdAt: existingEntry ? existingEntry.createdAt : new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        ledgerMap.set(entryId, newOrUpdatedEntry);
+        syncedCount++;
+      }
+
+      curr.setDate(curr.getDate() + 1);
+    }
+  }
+
+  const fullLedger = Array.from(ledgerMap.values());
+  saveLocalCompensatoryLedger(fullLedger);
+
+  if (supabase) {
+    (async () => {
+      try {
+        for (const item of fullLedger) {
+          await supabase.from('compensatory_leave_ledger').upsert({
+            id: item.id,
+            tenant_id: item.tenantId || 'jaago-main',
+            employee_id: item.employeeId || '',
+            employee_code: item.employeeCode,
+            employee_name: item.employeeName || '',
+            on_duty_request_id: item.onDutyRequestId,
+            duty_date: item.dutyDate,
+            duty_reason: item.dutyReason,
+            duty_type: item.dutyType,
+            holiday_name: item.holidayName,
+            hours_earned: item.hoursEarned,
+            hours_utilized: item.hoursUtilized,
+            remaining_balance: item.remainingBalance,
+            expiry_date: item.expiryDate,
+            status: item.status,
+            updated_at: item.updatedAt,
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase compensatory_leave_ledger sync error:', err);
+      }
+    })();
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('jaago_compensatory_updated', { detail: { count: syncedCount } }));
+  }
+
+  return { syncedCount };
+}
+
+/**
+ * Deducts Compensatory Leave hours from the employee's ledger using First-In, First-Out (FIFO)
+ * on active, non-expired ledger entries.
+ */
+export async function redeemCompensatoryHours(
+  employeeCode: string,
+  hoursToRedeem: number,
+  _leaveRequestId?: string
+): Promise<{ success: boolean; redeemedHours: number; error?: string }> {
+  if (hoursToRedeem <= 0) return { success: true, redeemedHours: 0 };
+
+  const allLedger = await fetchCompensatoryLedger();
+  const todayStr = new Date().toISOString().split('T')[0]!;
+
+  // Select active unexpired entries for this employee, sorted by expiryDate ascending (FIFO)
+  const empEntries = allLedger
+    .filter(
+      (e) =>
+        e.employeeCode === employeeCode &&
+        e.status === 'ACTIVE' &&
+        Number(e.remainingBalance) > 0 &&
+        e.expiryDate >= todayStr
+    )
+    .sort((a, b) => a.expiryDate.localeCompare(b.expiryDate));
+
+  const totalAvailable = empEntries.reduce((acc, curr) => acc + (Number(curr.remainingBalance) || 0), 0);
+  if (totalAvailable < hoursToRedeem) {
+    return {
+      success: false,
+      redeemedHours: 0,
+      error: `Insufficient active Compensatory Leave balance. Available: ${totalAvailable}h, requested: ${hoursToRedeem}h`,
+    };
+  }
+
+  let remainingToRedeem = hoursToRedeem;
+  const updatedLedgerMap = new Map<string, CompensatoryLedgerEntry>(allLedger.map((e) => [e.id, { ...e }]));
+
+  for (const entry of empEntries) {
+    if (remainingToRedeem <= 0) break;
+    const target = updatedLedgerMap.get(entry.id);
+    if (!target) continue;
+
+    const currentRem = Number(target.remainingBalance) || 0;
+    const deduct = Math.min(currentRem, remainingToRedeem);
+    target.hoursUtilized = Math.round(((Number(target.hoursUtilized) || 0) + deduct) * 100) / 100;
+    target.remainingBalance = Math.round((currentRem - deduct) * 100) / 100;
+    remainingToRedeem = Math.round((remainingToRedeem - deduct) * 100) / 100;
+
+    if (target.remainingBalance <= 0) {
+      target.status = 'FULLY_UTILIZED';
+    }
+    target.updatedAt = new Date().toISOString();
+  }
+
+  const updatedList = Array.from(updatedLedgerMap.values());
+  saveLocalCompensatoryLedger(updatedList);
+
+  const supabase = getSupabase();
+  if (supabase) {
+    (async () => {
+      try {
+        for (const item of updatedList.filter((e) => e.employeeCode === employeeCode)) {
+          await supabase.from('compensatory_leave_ledger').upsert({
+            id: item.id,
+            hours_utilized: item.hoursUtilized,
+            remaining_balance: item.remainingBalance,
+            status: item.status,
+            updated_at: item.updatedAt,
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase compensatory_leave_ledger redeem error:', err);
+      }
+    })();
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('jaago_compensatory_updated', { detail: { redeemed: hoursToRedeem } }));
+  }
+
+  return { success: true, redeemedHours: hoursToRedeem };
+}
+

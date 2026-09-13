@@ -1,5 +1,6 @@
 import { getSupabase } from './supabase-auth';
 import { recordLocalAttendanceLog } from './supabase-attendance';
+import { syncOnDutyToCompensatoryLedger } from './supabase-time-off';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. DATA TYPES & DOMAIN INTERFACES
@@ -628,6 +629,11 @@ export async function approveOnDutyRequest(
     })();
   }
 
+  // Automatically synchronize qualifying weekend/holiday duty into Compensatory Leave Ledger
+  syncOnDutyToCompensatoryLedger(item.employeeCode).catch((err) => {
+    console.warn('Error syncing approved on-duty to compensatory leave ledger:', err);
+  });
+
   // Global Broadcast
   if (typeof window !== 'undefined') {
     window.dispatchEvent(
@@ -636,6 +642,8 @@ export async function approveOnDutyRequest(
       })
     );
     window.dispatchEvent(new CustomEvent('jaago_attendance_updated', { detail: {} }));
+    window.dispatchEvent(new CustomEvent('jaago_compensatory_updated', { detail: { employeeCode: item.employeeCode } }));
+    window.dispatchEvent(new CustomEvent('jaago_leave_allocation_updated'));
   }
 
   return { success: true, data: updatedItem };

@@ -41,6 +41,11 @@ import {
   validateMaternityLeaveRules,
   validatePaternityLeaveRules,
   cleanApplicantReason,
+  CompensatoryLedgerEntry,
+  fetchCompensatoryLedger,
+  calculateCompensatoryBalanceSummary,
+  syncOnDutyToCompensatoryLedger,
+  validateCompensatoryLeaveRules,
 } from '@/lib/supabase-time-off';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import {
@@ -127,8 +132,9 @@ export default function MyLeavePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Comp Off Ledger toggle
+  // Comp Off Ledger
   const [showCompLedger, setShowCompLedger] = useState<boolean>(false);
+  const [compLedger, setCompLedger] = useState<CompensatoryLedgerEntry[]>([]);
 
   // Detail Modal
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequestItem | null>(null);
@@ -138,15 +144,17 @@ export default function MyLeavePage() {
   const [policyErrorModal, setPolicyErrorModal] = useState<{ isOpen: boolean; title: string; reason: string } | null>(null);
 
   const loadData = async () => {
-    const [reqs, allocs, emps, hols] = await Promise.all([
+    const [reqs, allocs, emps, hols, cLedger] = await Promise.all([
       fetchLeaveRequests(),
       fetchLeaveAllocations(),
       fetchEmployeesFromSupabase(),
       fetchPublicHolidays(),
+      fetchCompensatoryLedger(),
     ]);
     if (reqs) setRequests(reqs);
     if (allocs) setAllocations(allocs);
     if (hols) setHolidays(hols);
+    if (cLedger) setCompLedger(cLedger);
     if (emps && emps.length > 0) {
       setEmployees(emps);
       const currentSession = getCurrentUserSession();
@@ -178,6 +186,9 @@ export default function MyLeavePage() {
 
     loadData();
 
+    // Background sync of approved On Duty requests into Compensatory Leave Ledger
+    syncOnDutyToCompensatoryLedger().catch(() => {});
+
     const handleAllocUpdate = () => {
       loadData();
     };
@@ -197,6 +208,8 @@ export default function MyLeavePage() {
     window.addEventListener('jaago_user_updated', handleUserUpdate);
     window.addEventListener('jaago_employees_updated', handleAllocUpdate);
     window.addEventListener('jaago_public_holidays_updated', handleAllocUpdate);
+    window.addEventListener('jaago_compensatory_updated', handleAllocUpdate);
+    window.addEventListener('jaago_onduty_updated', handleAllocUpdate);
 
     return () => {
       window.removeEventListener('jaago_leave_allocation_updated', handleAllocUpdate);
@@ -204,6 +217,8 @@ export default function MyLeavePage() {
       window.removeEventListener('jaago_user_updated', handleUserUpdate);
       window.removeEventListener('jaago_employees_updated', handleAllocUpdate);
       window.removeEventListener('jaago_public_holidays_updated', handleAllocUpdate);
+      window.removeEventListener('jaago_compensatory_updated', handleAllocUpdate);
+      window.removeEventListener('jaago_onduty_updated', handleAllocUpdate);
     };
   }, []);
 
@@ -225,6 +240,16 @@ export default function MyLeavePage() {
       designation: session?.jobTitle || 'Staff',
     };
 
+  // Current Employee Compensatory Leave Ledger & Summary
+  const employeeCompLedger = useMemo(() => {
+    if (!currentEmp?.code) return [];
+    return compLedger.filter((entry) => entry.employeeCode === currentEmp.code);
+  }, [compLedger, currentEmp?.code]);
+
+  const compSummary = useMemo(() => {
+    return calculateCompensatoryBalanceSummary(employeeCompLedger);
+  }, [employeeCompLedger]);
+
   // Current Employee Allocation
   const rawAlloc = allocations.find((a) => a.employeeCode === currentEmp.code);
   const hasAllocation = Boolean(rawAlloc);
@@ -241,6 +266,8 @@ export default function MyLeavePage() {
         paternityAllocated: isMale
           ? (rawAlloc.paternityAllocated && rawAlloc.paternityAllocated > 0 ? rawAlloc.paternityAllocated : 15)
           : 0,
+        compOffAllocated: compSummary.totalHoursEarned > 0 ? compSummary.totalHoursEarned : (rawAlloc.compOffAllocated || 0),
+        compOffUsed: Math.max(rawAlloc.compOffUsed || 0, compSummary.totalHoursUtilized),
       }
     : {
         casualAllocated: 0,
@@ -255,8 +282,8 @@ export default function MyLeavePage() {
         maternityUsed: 0,
         paternityAllocated: isMale ? 15 : 0,
         paternityUsed: 0,
-        compOffAllocated: 0,
-        compOffUsed: 0,
+        compOffAllocated: compSummary.totalHoursEarned,
+        compOffUsed: compSummary.totalHoursUtilized,
         bereavementUsed: 0,
       };
 
@@ -332,7 +359,7 @@ export default function MyLeavePage() {
       case 'Paternity Leave':
         return Math.max(0, currentAlloc.paternityAllocated - (currentAlloc.paternityUsed || 0));
       case 'Compensatory Leave':
-        return Math.max(0, currentAlloc.compOffAllocated - (currentAlloc.compOffUsed || 0));
+        return compSummary.availableHours;
       case 'Bereavement Leave':
         return hasAllocation ? Math.max(0, 5 - (currentAlloc.bereavementUsed || 0)) : 0;
       default:
@@ -341,7 +368,10 @@ export default function MyLeavePage() {
   };
 
   const availableBalance = getAvailableBalance(leaveCategory);
-  const remainingBalanceAfter = availableBalance - totalCalculatedDays;
+  const remainingBalanceAfter =
+    leaveCategory === 'Compensatory Leave'
+      ? compSummary.availableHours - (leaveDurationMode === 'HALF' ? 4 : 8)
+      : availableBalance - totalCalculatedDays;
 
   // Validate policy rules
   useEffect(() => {
@@ -351,8 +381,22 @@ export default function MyLeavePage() {
     const startObj = new Date(startDate);
     startObj.setHours(0, 0, 0, 0);
 
-    // Rule: Leave application cannot exceed available quota
-    if (totalCalculatedDays > availableBalance) {
+    // Rule: Compensatory Leave quota and threshold validation
+    if (leaveCategory === 'Compensatory Leave') {
+      const isHalf = leaveDurationMode === 'HALF';
+      const claimedHours = isHalf ? 4 : 8;
+      const compValidation = validateCompensatoryLeaveRules({
+        employeeCode: currentEmp.code,
+        durationMode: isHalf ? 'HALF' : 'FULL',
+        hoursRequested: claimedHours,
+        availableBalanceHours: compSummary.availableHours,
+        accumulatedTotalHours: compSummary.totalHoursEarned,
+      });
+      if (!compValidation.valid) {
+        setValidationError(compValidation.error || 'Insufficient Compensatory Leave balance');
+        return;
+      }
+    } else if (totalCalculatedDays > availableBalance) {
       setValidationError(
         `Insufficient Balance: Requested ${totalCalculatedDays} day(s) exceeds your available ${leaveCategory} balance of ${availableBalance} day(s).`
       );
@@ -685,7 +729,21 @@ export default function MyLeavePage() {
       }
     }
 
-    if (totalCalculatedDays > availableBalance) {
+    if (leaveCategory === 'Compensatory Leave') {
+      const isHalf = leaveDurationMode === 'HALF';
+      const claimedHours = isHalf ? 4 : 8;
+      const compValidation = validateCompensatoryLeaveRules({
+        employeeCode: currentEmp.code,
+        durationMode: isHalf ? 'HALF' : 'FULL',
+        hoursRequested: claimedHours,
+        availableBalanceHours: compSummary.availableHours,
+        accumulatedTotalHours: compSummary.totalHoursEarned,
+      });
+      if (!compValidation.valid) {
+        showToastMsg(compValidation.error || 'Compensatory Leave request violates policy rules.', 'error');
+        return;
+      }
+    } else if (totalCalculatedDays > availableBalance) {
       showToastMsg(`Insufficient Balance: Requested ${totalCalculatedDays} day(s) exceeds your available ${leaveCategory} balance of ${availableBalance} day(s).`, 'error');
       return;
     }
@@ -771,6 +829,10 @@ export default function MyLeavePage() {
       supervisorCode,
       status: 'Pending',
       appliedAt: new Date().toISOString(),
+      // Compensatory Leave: pass hours claimed so saveLeaveRequest can FIFO-deduct from ledger
+      ...(leaveCategory === 'Compensatory Leave' && {
+        compOffHoursClaimed: leaveDurationMode === 'HALF' ? 4 : 8,
+      }),
     };
 
     setRequests([newReq, ...requests]);
@@ -1685,28 +1747,40 @@ export default function MyLeavePage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40 font-medium">
-                        <tr>
-                          <td className="p-2.5 font-mono">2026-08-21 (Fri)</td>
-                          <td className="p-2.5">Server maintenance over weekend</td>
-                          <td className="p-2.5 font-bold text-amber-500">8.0 hrs</td>
-                          <td className="p-2.5 font-mono text-muted-foreground">2026-10-21</td>
-                          <td className="p-2.5">
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-bold text-[10px]">
-                              Available
-                            </span>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="p-2.5 font-mono">2026-08-14 (Fri)</td>
-                          <td className="p-2.5">Independence Day prep support</td>
-                          <td className="p-2.5 font-bold text-amber-500">8.0 hrs</td>
-                          <td className="p-2.5 font-mono text-muted-foreground">2026-10-14</td>
-                          <td className="p-2.5">
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-500 font-bold text-[10px]">
-                              Available
-                            </span>
-                          </td>
-                        </tr>
+                        {employeeCompLedger.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-4 text-center text-muted-foreground text-xs">
+                              No compensatory leave entries found. Approved weekend/holiday duty will appear here.
+                            </td>
+                          </tr>
+                        ) : (
+                          employeeCompLedger.map((entry) => {
+                            const statusColors: Record<string, string> = {
+                              ACTIVE: 'bg-emerald-500/15 text-emerald-500',
+                              EXPIRED: 'bg-rose-500/15 text-rose-500',
+                              FULLY_UTILIZED: 'bg-muted text-muted-foreground',
+                            };
+                            const statusLabel: Record<string, string> = {
+                              ACTIVE: 'Available',
+                              EXPIRED: 'Expired',
+                              FULLY_UTILIZED: 'Used',
+                            };
+                            const dayOfWeek = new Date(entry.dutyDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+                            return (
+                              <tr key={entry.id}>
+                                <td className="p-2.5 font-mono">{entry.dutyDate} ({dayOfWeek})</td>
+                                <td className="p-2.5">{entry.dutyReason || entry.holidayName || entry.dutyType || '—'}</td>
+                                <td className="p-2.5 font-bold text-amber-500">{entry.hoursEarned.toFixed(1)} hrs</td>
+                                <td className="p-2.5 font-mono text-muted-foreground">{entry.expiryDate}</td>
+                                <td className="p-2.5">
+                                  <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${statusColors[entry.status] ?? 'bg-muted text-muted-foreground'}`}>
+                                    {statusLabel[entry.status] ?? entry.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
                       </tbody>
                     </table>
                   </div>
