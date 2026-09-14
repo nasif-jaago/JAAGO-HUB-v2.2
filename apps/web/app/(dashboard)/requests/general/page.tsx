@@ -18,6 +18,8 @@ import {
   getProcurementRequests,
 } from '@/lib/supabase-procurement';
 import { RequisitionFormWindow } from '@/components/requisition-form-window';
+import { hasModuleAccess, hasDepartmentAccess } from '@/lib/rbac-guard';
+import { getCurrentUserSession } from '@/lib/user-profile-sync';
 
 function GeneralRequisitionContent() {
   const router = useRouter();
@@ -32,6 +34,19 @@ function GeneralRequisitionContent() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [canAccessProcurement, setCanAccessProcurement] = useState(false);
+
+  useEffect(() => {
+    const session = getCurrentUserSession();
+    if (session) {
+      setCanAccessProcurement(
+        Boolean(session.isSuperAdmin) ||
+        Boolean(session.email?.toLowerCase().includes('nasif.kamal')) ||
+        hasDepartmentAccess('admin_procurement', session) ||
+        hasModuleAccess('admin_procurement', session)
+      );
+    }
+  }, []);
 
   // Modal / Window State
   const [isWindowOpen, setIsWindowOpen] = useState(false);
@@ -168,17 +183,19 @@ function GeneralRequisitionContent() {
         </div>
 
         {/* Top-Right action links */}
-        <div className="flex items-center space-x-2">
-          <Link
-            href="/admin-procurement/general-requisitions"
-            target="_blank"
-            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-muted hover:bg-muted/80 text-foreground border border-border transition flex items-center space-x-1.5"
-            title="Open Admin Procurement module"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            <span>Admin Procurement</span>
-          </Link>
-        </div>
+        {canAccessProcurement && (
+          <div className="flex items-center space-x-2">
+            <Link
+              href="/admin-procurement/general-requisitions"
+              target="_blank"
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-muted hover:bg-muted/80 text-foreground border border-border transition flex items-center space-x-1.5"
+              title="Open Admin Procurement module"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              <span>Admin Procurement</span>
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}

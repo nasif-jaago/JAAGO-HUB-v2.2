@@ -47,6 +47,7 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
     let authEmail = '';
     let authUserId = '';
     let authName = '';
+    let authMeta: any = {};
 
     try {
       const {
@@ -60,6 +61,7 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
           supaSession.user.user_metadata?.name ||
           ''
         ).toLowerCase().trim();
+        authMeta = supaSession.user.user_metadata || {};
       }
     } catch {}
 
@@ -191,7 +193,9 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
     };
 
     // Look up any saved custom permissions for this employee
-    let userPermissions = baseSession.permissions;
+    let userPermissions = Array.isArray(authMeta?.permissions)
+      ? authMeta.permissions
+      : baseSession.permissions;
     const lookupKeys = [
       employee.id,
       employee.userId,
@@ -208,7 +212,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       if (saved) {
         try {
           const parsedPerms = JSON.parse(saved);
-          if (Array.isArray(parsedPerms) && parsedPerms.length > 0) {
+          if (Array.isArray(parsedPerms)) {
             userPermissions = parsedPerms;
             break;
           }
@@ -229,7 +233,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       manager: employee.supervisor || 'Founder & Executive Director',
       employeeCode: employee.code,
       workingSchedule: employee.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
-      permissions: userPermissions || baseSession.permissions || (isNasif ? ['*'] : []),
+      permissions: userPermissions !== undefined && userPermissions !== null ? userPermissions : (isNasif ? ['*'] : []),
       roles: isNasif ? ['super_admin', 'coordinator'] : baseSession.roles || ['user'],
       allowRegularization: employee.allowRegularization !== false,
     };

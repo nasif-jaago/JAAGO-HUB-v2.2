@@ -30,10 +30,12 @@ import {
   Sun,
   Moon,
   Coffee,
+  ShieldAlert,
 } from 'lucide-react';
 import { signOutUser } from '@/lib/supabase-auth';
 import { getCurrentUserSession, UserSessionData } from '@/lib/user-profile-sync';
 import { getProcurementRequests, getPurchaseOrders } from '@/lib/supabase-procurement';
+import { hasDepartmentAccess, hasModuleAccess } from '@/lib/rbac-guard';
 
 export type ThemeMode = 'dark' | 'light' | 'espresso';
 
@@ -52,6 +54,8 @@ export default function AdminProcurementLayout({
   const [pendingReqCount, setPendingReqCount] = useState(1);
   const [pendingGenReqCount, setPendingGenReqCount] = useState(1);
   const [openPOCount, setOpenPOCount] = useState(5);
+  const [canAccessProcurement, setCanAccessProcurement] = useState<boolean>(true);
+  const [isAccessChecked, setIsAccessChecked] = useState<boolean>(false);
 
   // Load User & Theme on mount
   useEffect(() => {
@@ -84,23 +88,39 @@ export default function AdminProcurementLayout({
     };
     window.addEventListener('jaago_theme_changed', handleThemeChanged);
 
-    // User session
-    const session = getCurrentUserSession();
-    if (session) {
-      setCurrentUser(session);
-    } else {
-      setCurrentUser({
-        id: 'fo-nasif',
-        fullName: 'Nasif Kamal',
-        jobTitle: 'Coordinator',
-        email: 'nasif.kamal@jaago.com.bd',
-        employeeCode: 'FO032507061190',
-        department: "Founder's Office",
-        organizationName: 'JAAGO Foundation',
-        roles: ['super_admin'],
-        permissions: ['*'],
-      });
-    }
+    // User session & RBAC check
+    const checkAccess = () => {
+      const session = getCurrentUserSession();
+      if (session) {
+        setCurrentUser(session);
+        const canAccess =
+          Boolean(session.isSuperAdmin) ||
+          session.roles?.includes('super_admin') ||
+          Boolean(session.email && session.email.toLowerCase().includes('nasif.kamal')) ||
+          hasDepartmentAccess('admin_procurement', session) ||
+          hasModuleAccess('admin_procurement', session);
+        setCanAccessProcurement(Boolean(canAccess));
+      } else {
+        setCurrentUser({
+          id: 'fo-nasif',
+          fullName: 'Nasif Kamal',
+          jobTitle: 'Coordinator',
+          email: 'nasif.kamal@jaago.com.bd',
+          employeeCode: 'FO032507061190',
+          department: "Founder's Office",
+          organizationName: 'JAAGO Foundation',
+          roles: ['super_admin'],
+          permissions: ['*'],
+        });
+        setCanAccessProcurement(true);
+      }
+      setIsAccessChecked(true);
+    };
+
+    checkAccess();
+    window.addEventListener('jaago_user_updated', checkAccess);
+    window.addEventListener('jaago_rbac_updated', checkAccess);
+    window.addEventListener('storage', checkAccess);
 
     // Badge Counts
     const loadCounts = async () => {
@@ -121,6 +141,9 @@ export default function AdminProcurementLayout({
 
     return () => {
       window.removeEventListener('jaago_theme_changed', handleThemeChanged);
+      window.removeEventListener('jaago_user_updated', checkAccess);
+      window.removeEventListener('jaago_rbac_updated', checkAccess);
+      window.removeEventListener('storage', checkAccess);
       window.removeEventListener('jaago_procurement_updated', handleUpdate);
     };
   }, []);
@@ -460,9 +483,36 @@ export default function AdminProcurementLayout({
         </header>
 
         {/* Main Content View */}
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 overflow-y-auto">
-          {children}
-        </main>
+        {isAccessChecked && !canAccessProcurement ? (
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1700px] w-full mx-auto flex items-center justify-center min-h-[65vh]">
+            <div className="p-8 sm:p-12 rounded-3xl bg-card/95 backdrop-blur-2xl border border-border shadow-2xl text-center max-w-lg space-y-5 animate-in fade-in zoom-in-95">
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 shadow-inner">
+                <ShieldAlert className="h-9 w-9 stroke-[2.5]" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-xl font-black text-foreground">
+                  Access Restricted
+                </h2>
+                <p className="text-xs text-muted-foreground font-medium leading-relaxed">
+                  You do not have active Role-Based Access Control (RBAC) permissions to view or manage the Admin &amp; Procurement module. Please contact your system administrator for permission delegation.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-black uppercase tracking-wider shadow-lg hover:shadow-primary/20 transition transform active:scale-95 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4 stroke-[2.5]" />
+                  <span>Return to My Dashboard</span>
+                </Link>
+              </div>
+            </div>
+          </main>
+        ) : (
+          <main className="flex-1 px-4 sm:px-6 lg:px-8 py-6 overflow-y-auto">
+            {children}
+          </main>
+        )}
       </div>
     </div>
   );

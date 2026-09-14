@@ -1,15 +1,15 @@
 import { normalizeRoleKey, getPermissionsForRole } from '@/lib/rbac-data';
 
 export interface RBACUserContext {
-  id?: string;
-  email?: string;
-  role?: string;
-  roles?: string[];
-  permissions?: string[];
-  isSuperAdmin?: boolean;
-  department?: string;
-  branch?: string;
-  organizationId?: string;
+  id?: string | undefined;
+  email?: string | undefined;
+  role?: string | undefined;
+  roles?: string[] | undefined;
+  permissions?: string[] | undefined;
+  isSuperAdmin?: boolean | undefined;
+  department?: string | undefined;
+  branch?: string | undefined;
+  organizationId?: string | undefined;
 }
 
 /**
@@ -50,7 +50,7 @@ export function getUserPermissions(user?: RBACUserContext | null): string[] {
   }
 
   // 1. Check user-specific explicit permissions or local user override
-  if (Array.isArray(active.permissions) && active.permissions.length > 0) {
+  if (Array.isArray(active.permissions)) {
     return active.permissions;
   }
 
@@ -68,14 +68,14 @@ export function getUserPermissions(user?: RBACUserContext | null): string[] {
         const userSaved = localStorage.getItem(`jaago_user_permissions_${k}`);
         if (userSaved) {
           const parsed = JSON.parse(userSaved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed)) return parsed;
         }
       }
 
       const activePermsSaved = localStorage.getItem('jaago_active_user_permissions');
       if (activePermsSaved) {
         const parsed = JSON.parse(activePermsSaved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {}
   }
@@ -248,6 +248,9 @@ export function hasModuleAccess(
           'procurement.inventory.manage',
           'procurement.settings.manage',
           'dept.admin_procurement.view',
+          'dept.admin_procurement.manage',
+          'dept.admin_procurement.requests',
+          'dept.admin_procurement.reports',
           'dept.admin_procurement.*',
         ],
         user
@@ -284,12 +287,21 @@ export function hasDepartmentAccess(
     return (
       hasPermission(permKey, user) ||
       hasPermission(`dept.${cleanSlug}.*`, user) ||
-      hasPermission('procurement.view', user) ||
-      hasPermission('org.view', user) ||
+      hasPermission(`dept.${cleanSlug}.manage`, user) ||
+      hasPermission(`dept.${cleanSlug}.requests`, user) ||
+      hasPermission(`dept.${cleanSlug}.reports`, user) ||
+      hasModuleAccess('admin_procurement', user) ||
       hasPermission('*', user)
     );
   }
-  return hasPermission(permKey, user) || hasPermission(`dept.${cleanSlug}.*`, user) || hasPermission('*', user);
+  return (
+    hasPermission(permKey, user) ||
+    hasPermission(`dept.${cleanSlug}.*`, user) ||
+    hasPermission(`dept.${cleanSlug}.manage`, user) ||
+    hasPermission(`dept.${cleanSlug}.requests`, user) ||
+    hasPermission(`dept.${cleanSlug}.reports`, user) ||
+    hasPermission('*', user)
+  );
 }
 
 /**
