@@ -42,6 +42,8 @@ import {
   fetchPoliciesFromSupabase,
   savePolicyToSupabase,
   deletePolicyFromSupabase,
+  getDeletedEntityNames,
+  getDeletedEntityIds,
 } from '@/lib/supabase-organization';
 import { formatDisplayDate } from '@/lib/date-format';
 import { resizeAndCropImage } from '@/lib/supabase-storage';
@@ -128,16 +130,20 @@ export default function OrganizationPage() {
     window.addEventListener('jaago_user_updated', checkRbac);
     window.addEventListener('jaago_rbac_updated', checkRbac);
 
+    const deletedNames = getDeletedEntityNames();
+    const deletedIds = getDeletedEntityIds();
+
     fetchOrganizationsFromSupabase().then((orgs) => {
       if (orgs && orgs.length > 0) {
-        setOrganizations(orgs);
+        const filtered = orgs.filter((o) => !deletedIds.has(o.id) && !deletedNames.has(o.name.trim().toLowerCase()));
+        setOrganizations(filtered);
         const globalSavedOrg = typeof window !== 'undefined' ? localStorage.getItem('jaago_selected_org') : null;
         if (globalSavedOrg && globalSavedOrg !== 'ALL') {
-          const match = orgs.find((o) => matchesSelectedOrg(o.name, globalSavedOrg));
+          const match = filtered.find((o) => matchesSelectedOrg(o.name, globalSavedOrg));
           if (match) setSelectedOrg(match);
-          else setSelectedOrg(orgs[0] || null);
+          else setSelectedOrg(filtered[0] || null);
         } else {
-          setSelectedOrg(orgs[0] || null);
+          setSelectedOrg(filtered[0] || null);
         }
       }
     });
@@ -165,8 +171,10 @@ export default function OrganizationPage() {
   useEffect(() => {
     if (selectedOrg) {
       setFormData({ ...selectedOrg });
+      const deletedBranchNames = getDeletedEntityNames();
+      const deletedBranchIds = getDeletedEntityIds();
       fetchBranchesFromSupabase(selectedOrg.id).then((brs) => {
-        setBranches(brs);
+        setBranches(brs.filter((b) => !deletedBranchIds.has(b.id) && !deletedBranchNames.has(b.name.trim().toLowerCase())));
       });
       fetchPoliciesFromSupabase(selectedOrg.id).then((pols) => {
         setPolicies(pols);
@@ -282,15 +290,16 @@ export default function OrganizationPage() {
     showToast('Organization details saved successfully!');
   };
 
-  const handleDeleteOrganization = async (id: string) => {
+  const handleDeleteOrganization = async (id: string, name?: string) => {
     const org = organizations.find((o) => o.id === id);
-    setOrganizations((prev) => prev.filter((o) => o.id !== id));
+    const orgName = (name || org?.name || '').trim();
+    setOrganizations((prev) => prev.filter((o) => o.id !== id && (!orgName || o.name.trim().toLowerCase() !== orgName.toLowerCase())));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
     if (selectedOrg?.id === id) {
       setSelectedOrg(null);
     }
-    await deleteOrganizationFromSupabase(id, org?.name);
-    showToast('Organization entity deleted');
+    await deleteOrganizationFromSupabase(id, orgName);
+    showToast('Organization entity deleted & employee assignments cleared');
   };
 
   // Bulk actions
@@ -330,7 +339,7 @@ export default function OrganizationPage() {
     setOrganizations((prev) => prev.filter((o) => !idsToDelete.includes(o.id)));
     setSelectedIds([]);
     await Promise.all(orgsToDelete.map((org) => deleteOrganizationFromSupabase(org.id, org.name)));
-    showToast(`${count} organization(s) deleted`);
+    showToast(`${count} organization(s) deleted & employee assignments cleared`);
   };
 
   // Branch Handlers
@@ -357,10 +366,12 @@ export default function OrganizationPage() {
     showToast('Branch location added successfully!');
   };
 
-  const handleDeleteBranch = async (id: string) => {
-    setBranches((prev) => prev.filter((b) => b.id !== id));
-    await deleteBranchFromSupabase(id);
-    showToast('Branch location removed successfully');
+  const handleDeleteBranch = async (id: string, name?: string) => {
+    const targetBranch = branches.find((b) => b.id === id);
+    const branchName = (name || targetBranch?.name || '').trim();
+    setBranches((prev) => prev.filter((b) => b.id !== id && (!branchName || b.name.trim().toLowerCase() !== branchName.toLowerCase())));
+    await deleteBranchFromSupabase(id, branchName);
+    showToast('Branch location removed & employee assignments cleared');
   };
 
   // Policy Handlers
@@ -700,7 +711,7 @@ export default function OrganizationPage() {
                         <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
-                            onClick={() => handleDeleteOrganization(org.id)}
+                            onClick={() => handleDeleteOrganization(org.id, org.name)}
                             className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
                             title="Delete Company"
                           >
@@ -760,7 +771,7 @@ export default function OrganizationPage() {
               {!isCreatingNew && (
                 <button
                   type="button"
-                  onClick={() => handleDeleteOrganization(formData.id)}
+                  onClick={() => handleDeleteOrganization(formData.id, formData.name)}
                   className="px-4 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
                   title="Delete this company"
                 >
@@ -1116,7 +1127,7 @@ export default function OrganizationPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleDeleteBranch(br.id)}
+                          onClick={() => handleDeleteBranch(br.id, br.name)}
                           className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition cursor-pointer opacity-0 group-hover:opacity-100"
                           title="Delete Branch"
                         >

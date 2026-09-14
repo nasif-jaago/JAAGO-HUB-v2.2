@@ -27,6 +27,8 @@ import {
   deleteProjectFromSupabase,
   fetchDepartmentsFromSupabase,
   fetchOrganizationsFromSupabase,
+  getDeletedEntityNames,
+  getDeletedEntityIds,
 } from '@/lib/supabase-organization';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
@@ -123,9 +125,15 @@ export default function ProjectsPage() {
   }, []);
 
   useEffect(() => {
+    const deletedNames = getDeletedEntityNames();
+    const deletedIds = getDeletedEntityIds();
     // Auto-sync first, then load all master data
     fetch('/api/v1/hr/entities/sync', { method: 'POST' }).finally(() => {
-      fetchProjectsFromSupabase().then((prjs) => { if (prjs) setProjects(prjs); });
+      fetchProjectsFromSupabase().then((prjs) => {
+        if (prjs) {
+          setProjects(prjs.filter((p) => !deletedIds.has(p.id) && !deletedNames.has(p.name.trim().toLowerCase())));
+        }
+      });
       fetchDepartmentsFromSupabase().then((depts) => { if (depts) setDepartments(depts); });
       fetchOrganizationsFromSupabase().then((orgs) => { if (orgs) setOrganizations(orgs); });
       fetchEmployeesFromSupabase().then((emps) => { if (emps) setEmployees(emps); });
@@ -226,14 +234,29 @@ export default function ProjectsPage() {
     showToast(editingItem ? 'Project updated & employee list synced successfully!' : 'Project created successfully!');
   };
 
-  const handleDelete = async (id: string) => {
-    setProjects((prev) => prev.filter((p) => p.id !== id));
+  const handleDelete = async (id: string, name?: string) => {
+    const targetProject = projects.find((p) => p.id === id);
+    const projectName = (name || targetProject?.name || '').trim();
+
+    setProjects((prev) => prev.filter((p) => p.id !== id && (!projectName || p.name.trim().toLowerCase() !== projectName.toLowerCase())));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
     if (editingItem?.id === id) {
       setShowModal(false);
     }
-    await deleteProjectFromSupabase(id);
-    showToast('Project deleted successfully');
+
+    // Immediately blank out project field for assigned employees in local state
+    if (projectName) {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.project?.trim().toLowerCase() === projectName.toLowerCase()
+            ? { ...e, project: '' }
+            : e
+        )
+      );
+    }
+
+    await deleteProjectFromSupabase(id, projectName);
+    showToast('Project deleted successfully & employee assignments cleared');
   };
 
   // Bulk actions
@@ -269,10 +292,23 @@ export default function ProjectsPage() {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
     const idsToDelete = [...selectedIds];
+    const itemsToDelete = projects.filter((p) => idsToDelete.includes(p.id));
+    const namesToDelete = itemsToDelete.map((p) => p.name.trim().toLowerCase()).filter(Boolean);
+
     setProjects((prev) => prev.filter((p) => !idsToDelete.includes(p.id)));
     setSelectedIds([]);
-    await Promise.all(idsToDelete.map((id) => deleteProjectFromSupabase(id)));
-    showToast(`${count} project(s) deleted`);
+
+    // Immediately blank out project field for assigned employees in local state
+    setEmployees((prev) =>
+      prev.map((e) =>
+        e.project && namesToDelete.includes(e.project.trim().toLowerCase())
+          ? { ...e, project: '' }
+          : e
+      )
+    );
+
+    await Promise.all(itemsToDelete.map((item) => deleteProjectFromSupabase(item.id, item.name)));
+    showToast(`${count} project(s) deleted & employee assignments cleared`);
   };
 
   // Filtered List
@@ -587,7 +623,7 @@ export default function ProjectsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(prj.id)}
+                          onClick={() => handleDelete(prj.id, prj.name)}
                           className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
                           title="Delete Project"
                         >
@@ -800,7 +836,7 @@ export default function ProjectsPage() {
               {editingItem ? (
                 <button
                   type="button"
-                  onClick={() => handleDelete(editingItem.id)}
+                  onClick={() => handleDelete(editingItem.id, editingItem.name)}
                   className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

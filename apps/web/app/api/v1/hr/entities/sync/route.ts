@@ -67,6 +67,12 @@ export async function POST() {
     const missingTeams = new Map<string, string>();
     const missingOrgs = new Map<string, string>();
 
+    const isValidEntityName = (val?: string): boolean => {
+      if (!val || typeof val !== 'string') return false;
+      const lower = val.trim().toLowerCase();
+      return Boolean(lower && lower !== 'n/a' && lower !== 'none' && lower !== '-' && lower !== 'null' && lower !== 'undefined');
+    };
+
     for (const emp of employees as any[]) {
       const dept = emp.department?.trim();
       const desig = emp.designation?.trim();
@@ -74,23 +80,23 @@ export async function POST() {
       const team = emp.team?.trim();
       const org = emp.organization?.trim();
 
-      if (dept && !existingDeptSet.has(dept.toLowerCase()) && !missingDepts.has(dept.toLowerCase())) {
+      if (isValidEntityName(dept) && !existingDeptSet.has(dept.toLowerCase()) && !missingDepts.has(dept.toLowerCase())) {
         missingDepts.set(dept.toLowerCase(), { original: dept, org: org || '' });
         existingDeptSet.add(dept.toLowerCase());
       }
-      if (desig && !existingDesigSet.has(desig.toLowerCase()) && !missingDesigs.has(desig.toLowerCase())) {
+      if (isValidEntityName(desig) && !existingDesigSet.has(desig.toLowerCase()) && !missingDesigs.has(desig.toLowerCase())) {
         missingDesigs.set(desig.toLowerCase(), desig);
         existingDesigSet.add(desig.toLowerCase());
       }
-      if (proj && !existingProjectSet.has(proj.toLowerCase()) && !missingProjects.has(proj.toLowerCase())) {
+      if (isValidEntityName(proj) && !existingProjectSet.has(proj.toLowerCase()) && !missingProjects.has(proj.toLowerCase())) {
         missingProjects.set(proj.toLowerCase(), { original: proj, org: org || '' });
         existingProjectSet.add(proj.toLowerCase());
       }
-      if (team && !existingTeamSet.has(team.toLowerCase()) && !missingTeams.has(team.toLowerCase())) {
+      if (isValidEntityName(team) && !existingTeamSet.has(team.toLowerCase()) && !missingTeams.has(team.toLowerCase())) {
         missingTeams.set(team.toLowerCase(), team);
         existingTeamSet.add(team.toLowerCase());
       }
-      if (org && !existingOrgSet.has(org.toLowerCase()) && !missingOrgs.has(org.toLowerCase())) {
+      if (isValidEntityName(org) && !existingOrgSet.has(org.toLowerCase()) && !missingOrgs.has(org.toLowerCase())) {
         missingOrgs.set(org.toLowerCase(), org);
         existingOrgSet.add(org.toLowerCase());
       }

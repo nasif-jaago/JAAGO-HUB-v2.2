@@ -553,6 +553,56 @@ export default function PnCEmployeesPage() {
       });
     };
 
+    const handleEntityDeleted = (event: any) => {
+      const { entityType, name } = event.detail || {};
+      if (!entityType || !name) return;
+
+      const trimmedName = String(name).trim().toLowerCase();
+
+      // 1. Immediately blank out on matching employee records
+      setEmployees((prev) => {
+        const next = prev.map((emp) => {
+          const updated = { ...emp };
+          if (entityType === 'organization' && emp.organization?.trim().toLowerCase() === trimmedName) {
+            updated.organization = '';
+          }
+          if (entityType === 'department' && emp.department?.trim().toLowerCase() === trimmedName) {
+            updated.department = '';
+          }
+          if (entityType === 'designation' && emp.designation?.trim().toLowerCase() === trimmedName) {
+            updated.designation = '';
+          }
+          if (entityType === 'branch' && emp.branch?.trim().toLowerCase() === trimmedName) {
+            updated.branch = '';
+          }
+          if (entityType === 'project' && emp.project?.trim().toLowerCase() === trimmedName) {
+            updated.project = '';
+          }
+          if (entityType === 'team' && emp.team?.trim().toLowerCase() === trimmedName) {
+            updated.team = '';
+          }
+          if ((entityType === 'insurance' || entityType === 'insurance_category') && emp.insuranceCoverageCategory?.trim().toLowerCase() === trimmedName) {
+            updated.insuranceCoverageCategory = '';
+          }
+          return updated;
+        });
+
+        try {
+          localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(next));
+        } catch {}
+
+        return next;
+      });
+
+      // 2. Refresh master entity lists
+      fetchOrganizationsFromSupabase().then(setMasterOrganizations);
+      fetchDepartmentsFromSupabase().then(setMasterDepartments);
+      fetchBranchesFromSupabase().then(setMasterBranches);
+      fetchDesignationsFromSupabase().then(setMasterDesignations);
+      fetchProjectsFromSupabase().then(setMasterProjects);
+      fetchTeamsFromSupabase().then(setMasterTeams);
+    };
+
     const handleOrgChanged = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       setSelectedOrg(detail === 'ALL' || !detail ? '' : detail);
@@ -565,6 +615,7 @@ export default function PnCEmployeesPage() {
 
     window.addEventListener('jaago_entity_renamed', handleEntityRenamed);
     window.addEventListener('jaago_entity_updated', handleEntityUpdated);
+    window.addEventListener('jaago_entity_deleted', handleEntityDeleted);
     window.addEventListener('jaago_user_revoked', handleUserRevoked);
     window.addEventListener('jaago_user_updated', checkRbac);
     window.addEventListener('jaago_rbac_updated', checkRbac);
@@ -574,6 +625,7 @@ export default function PnCEmployeesPage() {
     return () => {
       window.removeEventListener('jaago_entity_renamed', handleEntityRenamed);
       window.removeEventListener('jaago_entity_updated', handleEntityUpdated);
+      window.removeEventListener('jaago_entity_deleted', handleEntityDeleted);
       window.removeEventListener('jaago_user_revoked', handleUserRevoked);
       window.removeEventListener('jaago_user_updated', checkRbac);
       window.removeEventListener('jaago_rbac_updated', checkRbac);

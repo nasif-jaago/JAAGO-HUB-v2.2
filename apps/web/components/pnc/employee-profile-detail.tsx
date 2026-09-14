@@ -76,6 +76,7 @@ import {
   fetchTeamsFromSupabase,
   fetchDesignationsFromSupabase,
   fetchInsuranceCategoriesFromSupabase,
+  getDeletedEntityNames,
   type OrganizationEntity,
   type OrganizationBranch,
   type DepartmentItem,
@@ -317,13 +318,14 @@ export function EmployeeProfileDetail({
         ]);
         const loadedShifts = getLocalShifts();
         if (isMounted) {
-          setOrganizations(orgs);
-          setBranches(brs);
-          setDepartments(depts);
-          setProjects(projs);
-          setTeams(tms);
-          setDesignations(desigs);
-          setInsuranceCategories(insCats);
+          const deletedNames = getDeletedEntityNames();
+          setOrganizations((orgs || []).filter((o) => !deletedNames.has(o.name.trim().toLowerCase())));
+          setBranches((brs || []).filter((b) => !deletedNames.has(b.name.trim().toLowerCase())));
+          setDepartments((depts || []).filter((d) => !deletedNames.has(d.name.trim().toLowerCase())));
+          setProjects((projs || []).filter((p) => !deletedNames.has(p.name.trim().toLowerCase())));
+          setTeams((tms || []).filter((t) => !deletedNames.has(t.name.trim().toLowerCase())));
+          setDesignations((desigs || []).filter((d) => !deletedNames.has(d.name.trim().toLowerCase())));
+          setInsuranceCategories((insCats || []).filter((c) => !deletedNames.has(c.name.trim().toLowerCase())));
           if (loadedShifts) setShifts(loadedShifts);
         }
       } catch (err) {
@@ -364,8 +366,8 @@ export function EmployeeProfileDetail({
         ...initialData,
         team: initialData.team || '',
         insuranceStatus: initialData.insuranceStatus || 'Active',
-        insuranceCoverageCategory: initialData.insuranceCoverageCategory || 'Standard Full-Time (Plan B)',
-        insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 1500,
+        insuranceCoverageCategory: initialData.insuranceCoverageCategory || '',
+        insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 0,
         employeeHealthInsuranceId: initialData.employeeHealthInsuranceId || '',
         spouseHealthInsuranceId: initialData.spouseHealthInsuranceId || '',
         spouseName: initialData.spouseName || '',
@@ -402,7 +404,7 @@ export function EmployeeProfileDetail({
       // Work
       organization: 'JAAGO Foundation Trust',
       branch: 'Head Office (Banani)',
-      department: 'Program Implementation',
+      department: '',
       project: 'General Operations',
       team: '',
       supervisor: 'Nasif Kamal',
@@ -458,8 +460,8 @@ export function EmployeeProfileDetail({
 
       // Insurance
       insuranceStatus: 'Active',
-      insuranceCoverageCategory: 'Standard Full-Time (Plan B)',
-      insuranceMonthlyPremium: 1500,
+      insuranceCoverageCategory: '',
+      insuranceMonthlyPremium: 0,
       employeeHealthInsuranceId: '',
       spouseHealthInsuranceId: '',
       spouseName: '',
@@ -530,126 +532,144 @@ export function EmployeeProfileDetail({
 
   // Dynamically compute all unique departments (Supabase master + all employee departments + current profile)
   const dynamicDepartments = useMemo(() => {
+    const deletedNames = getDeletedEntityNames();
     const map = new Map<string, string>();
     departments.forEach((d) => {
-      if (d.name && d.name.trim()) map.set(d.name.trim().toLowerCase(), d.name.trim());
+      if (d.name && d.name.trim() && !deletedNames.has(d.name.trim().toLowerCase())) {
+        map.set(d.name.trim().toLowerCase(), d.name.trim());
+      }
     });
     if (Array.isArray(allEmployees)) {
       allEmployees.forEach((emp) => {
         if (emp.department && emp.department.trim()) {
           const key = emp.department.trim().toLowerCase();
-          if (!map.has(key)) map.set(key, emp.department.trim());
+          if (!deletedNames.has(key) && !map.has(key)) map.set(key, emp.department.trim());
         }
       });
     }
     if (formData.department && formData.department.trim()) {
       const key = formData.department.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, formData.department.trim());
+      if (!deletedNames.has(key) && !map.has(key)) map.set(key, formData.department.trim());
     }
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
   }, [departments, allEmployees, formData.department]);
 
   // Dynamically compute all unique designations (Supabase master + all employee designations + current profile)
   const dynamicDesignations = useMemo(() => {
+    const deletedNames = getDeletedEntityNames();
     const map = new Map<string, string>();
     designations.forEach((d) => {
-      if (d.name && d.name.trim()) map.set(d.name.trim().toLowerCase(), d.name.trim());
+      if (d.name && d.name.trim() && !deletedNames.has(d.name.trim().toLowerCase())) {
+        map.set(d.name.trim().toLowerCase(), d.name.trim());
+      }
     });
     if (Array.isArray(allEmployees)) {
       allEmployees.forEach((emp) => {
         if (emp.designation && emp.designation.trim()) {
           const key = emp.designation.trim().toLowerCase();
-          if (!map.has(key)) map.set(key, emp.designation.trim());
+          if (!deletedNames.has(key) && !map.has(key)) map.set(key, emp.designation.trim());
         }
       });
     }
     if (formData.designation && formData.designation.trim()) {
       const key = formData.designation.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, formData.designation.trim());
+      if (!deletedNames.has(key) && !map.has(key)) map.set(key, formData.designation.trim());
     }
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
   }, [designations, allEmployees, formData.designation]);
 
   // Dynamically compute all unique organizations
   const dynamicOrganizations = useMemo(() => {
+    const deletedNames = getDeletedEntityNames();
     const map = new Map<string, string>();
     organizations.forEach((o) => {
-      if (o.name && o.name.trim()) map.set(o.name.trim().toLowerCase(), o.name.trim());
+      if (o.name && o.name.trim() && !deletedNames.has(o.name.trim().toLowerCase())) {
+        map.set(o.name.trim().toLowerCase(), o.name.trim());
+      }
     });
     if (Array.isArray(allEmployees)) {
       allEmployees.forEach((emp) => {
         if (emp.organization && emp.organization.trim()) {
           const key = emp.organization.trim().toLowerCase();
-          if (!map.has(key)) map.set(key, emp.organization.trim());
+          if (!deletedNames.has(key) && !map.has(key)) map.set(key, emp.organization.trim());
         }
       });
     }
     if (formData.organization && formData.organization.trim()) {
       const key = formData.organization.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, formData.organization.trim());
+      if (!deletedNames.has(key) && !map.has(key)) map.set(key, formData.organization.trim());
     }
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
   }, [organizations, allEmployees, formData.organization]);
 
   // Dynamically compute all unique branches
   const dynamicBranches = useMemo(() => {
+    const deletedNames = getDeletedEntityNames();
     const map = new Map<string, string>();
     branches.forEach((b) => {
-      if (b.name && b.name.trim()) map.set(b.name.trim().toLowerCase(), b.name.trim());
+      if (b.name && b.name.trim() && !deletedNames.has(b.name.trim().toLowerCase())) {
+        map.set(b.name.trim().toLowerCase(), b.name.trim());
+      }
     });
     if (Array.isArray(allEmployees)) {
       allEmployees.forEach((emp) => {
         if (emp.branch && emp.branch.trim()) {
           const key = emp.branch.trim().toLowerCase();
-          if (!map.has(key)) map.set(key, emp.branch.trim());
+          if (!deletedNames.has(key) && !map.has(key)) map.set(key, emp.branch.trim());
         }
       });
     }
     if (formData.branch && formData.branch.trim()) {
       const key = formData.branch.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, formData.branch.trim());
+      if (!deletedNames.has(key) && !map.has(key)) map.set(key, formData.branch.trim());
     }
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
   }, [branches, allEmployees, formData.branch]);
 
   // Dynamically compute all unique projects
   const dynamicProjects = useMemo(() => {
+    const deletedNames = getDeletedEntityNames();
     const map = new Map<string, string>();
     projects.forEach((p) => {
-      if (p.name && p.name.trim()) map.set(p.name.trim().toLowerCase(), p.name.trim());
+      if (p.name && p.name.trim() && !deletedNames.has(p.name.trim().toLowerCase())) {
+        map.set(p.name.trim().toLowerCase(), p.name.trim());
+      }
     });
     if (Array.isArray(allEmployees)) {
       allEmployees.forEach((emp) => {
         if (emp.project && emp.project.trim()) {
           const key = emp.project.trim().toLowerCase();
-          if (!map.has(key)) map.set(key, emp.project.trim());
+          if (!deletedNames.has(key) && !map.has(key)) map.set(key, emp.project.trim());
         }
       });
     }
     if (formData.project && formData.project.trim()) {
       const key = formData.project.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, formData.project.trim());
+      if (!deletedNames.has(key) && !map.has(key)) map.set(key, formData.project.trim());
     }
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
   }, [projects, allEmployees, formData.project]);
 
   // Dynamically compute all unique teams
   const dynamicTeams = useMemo(() => {
+    const deletedNames = getDeletedEntityNames();
     const map = new Map<string, string>();
     teams.forEach((t) => {
-      if (t.name && t.name.trim()) map.set(t.name.trim().toLowerCase(), t.name.trim());
+      if (t.name && t.name.trim() && !deletedNames.has(t.name.trim().toLowerCase())) {
+        map.set(t.name.trim().toLowerCase(), t.name.trim());
+      }
     });
     if (Array.isArray(allEmployees)) {
       allEmployees.forEach((emp) => {
         if (emp.team && emp.team.trim()) {
           const key = emp.team.trim().toLowerCase();
-          if (!map.has(key)) map.set(key, emp.team.trim());
+          if (!deletedNames.has(key) && !map.has(key)) map.set(key, emp.team.trim());
         }
       });
     }
     if (formData.team && formData.team.trim()) {
       const key = formData.team.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, formData.team.trim());
+      if (!deletedNames.has(key) && !map.has(key)) map.set(key, formData.team.trim());
     }
     return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
   }, [teams, allEmployees, formData.team]);
@@ -680,8 +700,8 @@ export function EmployeeProfileDetail({
         ...initialData,
         team: initialData.team || '',
         insuranceStatus: initialData.insuranceStatus || 'Active',
-        insuranceCoverageCategory: initialData.insuranceCoverageCategory || 'Standard Full-Time (Plan B)',
-        insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 1500,
+        insuranceCoverageCategory: initialData.insuranceCoverageCategory || '',
+        insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 0,
         employeeHealthInsuranceId: initialData.employeeHealthInsuranceId || '',
         spouseHealthInsuranceId: initialData.spouseHealthInsuranceId || '',
         spouseName: initialData.spouseName || '',
@@ -1762,6 +1782,7 @@ export function EmployeeProfileDetail({
                   onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
                   className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                 >
+                  <option value="">— Unassigned (Blank) —</option>
                   {dynamicDesignations.map((d) => (
                     <option key={d} value={d}>
                       {d}
@@ -1919,6 +1940,7 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
+                    <option value="">— Unassigned (Blank) —</option>
                     {dynamicOrganizations.map((org) => (
                       <option key={org} value={org}>
                         {org}
@@ -1937,6 +1959,7 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
+                    <option value="">— Unassigned (Blank) —</option>
                     {dynamicBranches.map((br) => (
                       <option key={br} value={br}>
                         {br}
@@ -1955,6 +1978,7 @@ export function EmployeeProfileDetail({
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   >
+                    <option value="">— Unassigned (Blank) —</option>
                     {dynamicDepartments.map((dept) => (
                       <option key={dept} value={dept}>
                         {dept}
@@ -3195,19 +3219,12 @@ export function EmployeeProfileDetail({
                   }}
                   className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                 >
-                  {insuranceCategories.length > 0 ? (
-                    insuranceCategories.map((cat) => (
-                      <option key={cat.id} value={cat.name}>
-                        {cat.name} (৳{cat.monthlyPremium?.toLocaleString()}/mo)
-                      </option>
-                    ))
-                  ) : (
-                    <>
-                      <option value="Standard Full-Time (Plan B)">Standard Full-Time (Plan B)</option>
-                      <option value="Executive Coverage (Plan A)">Executive Coverage (Plan A)</option>
-                      <option value="Basic Coverage (Plan C)">Basic Coverage (Plan C)</option>
-                    </>
-                  )}
+                  <option value="">— Unassigned (Blank) —</option>
+                  {insuranceCategories.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name} (৳{cat.monthlyPremium?.toLocaleString()}/mo)
+                    </option>
+                  ))}
                 </select>
               </div>
 

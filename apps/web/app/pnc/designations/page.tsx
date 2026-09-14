@@ -22,6 +22,8 @@ import {
   fetchDesignationsFromSupabase,
   saveDesignationToSupabase,
   deleteDesignationFromSupabase,
+  getDeletedEntityNames,
+  getDeletedEntityIds,
 } from '@/lib/supabase-organization';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
@@ -113,14 +115,21 @@ export default function DesignationsPage() {
       .then(([desigs, emps]) => {
         if (emps) setEmployees(emps);
         if (desigs) {
+          const deletedNames = getDeletedEntityNames();
+          const deletedIds = getDeletedEntityIds();
           const desigMap = new Map<string, DesignationItem>();
-          desigs.forEach((d) => desigMap.set(d.name.trim().toLowerCase(), d));
+          desigs.forEach((d) => {
+            const key = d.name.trim().toLowerCase();
+            if (!deletedNames.has(key) && !deletedIds.has(d.id)) {
+              desigMap.set(key, d);
+            }
+          });
 
           if (emps && emps.length > 0) {
             emps.forEach((e) => {
               if (e.designation && e.designation.trim()) {
                 const key = e.designation.trim().toLowerCase();
-                if (!desigMap.has(key)) {
+                if (!deletedNames.has(key) && !desigMap.has(key)) {
                   desigMap.set(key, {
                     id: `des-${e.designation.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
                     name: e.designation.trim(),
@@ -138,8 +147,10 @@ export default function DesignationsPage() {
       })
       .catch(() => {
         Promise.all([fetchDesignationsFromSupabase(), fetchEmployeesFromSupabase()]).then(([desigs, emps]) => {
+          const deletedNames = getDeletedEntityNames();
+          const deletedIds = getDeletedEntityIds();
           if (emps) setEmployees(emps);
-          if (desigs) setDesignations(desigs);
+          if (desigs) setDesignations(desigs.filter((d) => !deletedIds.has(d.id) && (!d.name || !deletedNames.has(d.name.trim().toLowerCase()))));
         });
       });
   }, []);
@@ -207,14 +218,30 @@ export default function DesignationsPage() {
     showToast(editingItem ? 'Designation updated & employee list synced successfully!' : 'Designation created successfully!');
   };
 
-  const handleDelete = async (id: string) => {
-    setDesignations((prev) => prev.filter((d) => d.id !== id));
+  const handleDelete = async (id: string, name?: string) => {
+    const target = designations.find((d) => d.id === id || (name && d.name.trim().toLowerCase() === name.trim().toLowerCase()));
+    const targetName = name || target?.name || '';
+    const lowerName = targetName.trim().toLowerCase();
+
+    setDesignations((prev) =>
+      prev.filter((d) => d.id !== id && (!lowerName || d.name.trim().toLowerCase() !== lowerName))
+    );
     setSelectedIds((prev) => prev.filter((item) => item !== id));
-    if (editingItem?.id === id) {
+
+    if (lowerName) {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.designation?.trim().toLowerCase() === lowerName ? { ...e, designation: '' } : e
+        )
+      );
+    }
+
+    if (editingItem?.id === id || (lowerName && editingItem?.name?.trim().toLowerCase() === lowerName)) {
       setShowModal(false);
     }
-    await deleteDesignationFromSupabase(id);
-    showToast('Designation deleted successfully');
+
+    await deleteDesignationFromSupabase(id, targetName);
+    showToast('Designation hard deleted and employee assignments cleared');
   };
 
   // Bulk Actions
@@ -249,11 +276,22 @@ export default function DesignationsPage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    const idsToDelete = [...selectedIds];
-    setDesignations((prev) => prev.filter((d) => !idsToDelete.includes(d.id)));
+    const targets = designations.filter((d) => selectedIds.includes(d.id));
+    const targetNames = targets.map((t) => t.name.trim().toLowerCase()).filter(Boolean);
+
+    setDesignations((prev) => prev.filter((d) => !selectedIds.includes(d.id)));
     setSelectedIds([]);
-    await Promise.all(idsToDelete.map((id) => deleteDesignationFromSupabase(id)));
-    showToast(`${count} designation(s) deleted`);
+
+    setEmployees((prev) =>
+      prev.map((e) =>
+        e.designation && targetNames.includes(e.designation.trim().toLowerCase())
+          ? { ...e, designation: '' }
+          : e
+      )
+    );
+
+    await Promise.all(targets.map((t) => deleteDesignationFromSupabase(t.id, t.name)));
+    showToast(`${count} designation(s) hard deleted and employee assignments cleared`);
   };
 
   // Filtered List
@@ -564,7 +602,7 @@ export default function DesignationsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(des.id)}
+                          onClick={() => handleDelete(des.id, des.name)}
                           className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
                           title="Delete Designation"
                         >
@@ -666,7 +704,7 @@ export default function DesignationsPage() {
               {editingItem ? (
                 <button
                   type="button"
-                  onClick={() => handleDelete(editingItem.id)}
+                  onClick={() => handleDelete(editingItem.id, editingItem.name)}
                   className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

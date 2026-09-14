@@ -26,6 +26,8 @@ import {
   saveDepartmentToSupabase,
   deleteDepartmentFromSupabase,
   fetchOrganizationsFromSupabase,
+  getDeletedEntityNames,
+  getDeletedEntityIds,
 } from '@/lib/supabase-organization';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
@@ -137,14 +139,21 @@ export default function DepartmentsPage() {
         if (depts) {
           // Departments are now fully in Supabase — just use them directly.
           // Only add employee-derived items that are still not in Supabase as a safety net.
+          const deletedNames = getDeletedEntityNames();
+          const deletedIds = getDeletedEntityIds();
           const deptMap = new Map<string, DepartmentItem>();
-          depts.forEach((d) => deptMap.set(d.name.trim().toLowerCase(), d));
+          depts.forEach((d) => {
+            const key = d.name.trim().toLowerCase();
+            if (!deletedNames.has(key) && !deletedIds.has(d.id)) {
+              deptMap.set(key, d);
+            }
+          });
 
           if (emps && emps.length > 0) {
             emps.forEach((e) => {
               if (e.department && e.department.trim()) {
                 const key = e.department.trim().toLowerCase();
-                if (!deptMap.has(key)) {
+                if (!deletedNames.has(key) && !deptMap.has(key)) {
                   deptMap.set(key, {
                     id: `dept-${e.department.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
                     name: e.department.trim(),
@@ -167,9 +176,11 @@ export default function DepartmentsPage() {
           fetchOrganizationsFromSupabase(),
           fetchEmployeesFromSupabase(),
         ]).then(([depts, orgs, emps]) => {
+          const deletedNames = getDeletedEntityNames();
+          const deletedIds = getDeletedEntityIds();
           if (orgs) setOrganizations(orgs);
           if (emps) setEmployees(emps);
-          if (depts) setDepartments(depts);
+          if (depts) setDepartments(depts.filter((d) => !deletedIds.has(d.id) && (!d.name || !deletedNames.has(d.name.trim().toLowerCase()))));
         });
       });
   }, []);
@@ -272,14 +283,35 @@ export default function DepartmentsPage() {
     showToast(editingItem ? 'Department updated & employee list synced successfully!' : 'Department created successfully!');
   };
 
-  const handleDelete = async (id: string) => {
-    setDepartments((prev) => prev.filter((d) => d.id !== id));
+  const handleDelete = async (id: string, name?: string) => {
+    const targetDept = departments.find((d) => d.id === id || (name && d.name.trim().toLowerCase() === name.trim().toLowerCase()));
+    const targetName = name || targetDept?.name || '';
+    const lowerName = targetName.trim().toLowerCase();
+
+    // 1. Immediately remove department from UI
+    setDepartments((prev) =>
+      prev.filter(
+        (d) => d.id !== id && (!lowerName || d.name.trim().toLowerCase() !== lowerName)
+      )
+    );
     setSelectedIds((prev) => prev.filter((item) => item !== id));
-    if (editingItem?.id === id) {
+
+    // 2. Immediately blank out department on affected employees in state
+    if (lowerName) {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.department?.trim().toLowerCase() === lowerName ? { ...e, department: '' } : e
+        )
+      );
+    }
+
+    if (editingItem?.id === id || (lowerName && editingItem?.name?.trim().toLowerCase() === lowerName)) {
       setShowModal(false);
     }
-    await deleteDepartmentFromSupabase(id);
-    showToast('Department deleted successfully');
+
+    // 3. Perform hard delete across DB, caches, and employee assignments
+    await deleteDepartmentFromSupabase(id, targetName);
+    showToast('Department hard deleted and employee assignments cleared successfully');
   };
 
   // Bulk actions
@@ -314,11 +346,25 @@ export default function DepartmentsPage() {
   const handleDeleteSelected = async () => {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
-    const idsToDelete = [...selectedIds];
-    setDepartments((prev) => prev.filter((d) => !idsToDelete.includes(d.id)));
+    const targets = departments.filter((d) => selectedIds.includes(d.id));
+    const targetNames = targets.map((t) => t.name.trim().toLowerCase()).filter(Boolean);
+
+    // 1. Immediately remove from departments state
+    setDepartments((prev) => prev.filter((d) => !selectedIds.includes(d.id)));
     setSelectedIds([]);
-    await Promise.all(idsToDelete.map((id) => deleteDepartmentFromSupabase(id)));
-    showToast(`${count} department(s) deleted`);
+
+    // 2. Immediately blank out matching departments on employees state
+    setEmployees((prev) =>
+      prev.map((e) =>
+        e.department && targetNames.includes(e.department.trim().toLowerCase())
+          ? { ...e, department: '' }
+          : e
+      )
+    );
+
+    // 3. Perform hard delete across DB and caches
+    await Promise.all(targets.map((t) => deleteDepartmentFromSupabase(t.id, t.name)));
+    showToast(`${count} department(s) hard deleted and employee assignments cleared`);
   };
 
   // Filtered list
@@ -650,7 +696,7 @@ export default function DepartmentsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(dept.id)}
+                          onClick={() => handleDelete(dept.id, dept.name)}
                           className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
                           title="Delete Department"
                         >
@@ -854,7 +900,7 @@ export default function DepartmentsPage() {
               {editingItem ? (
                 <button
                   type="button"
-                  onClick={() => handleDelete(editingItem.id)}
+                  onClick={() => handleDelete(editingItem.id, editingItem.name)}
                   className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

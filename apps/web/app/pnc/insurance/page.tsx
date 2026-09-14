@@ -21,6 +21,8 @@ import {
   fetchInsuranceCategoriesFromSupabase,
   saveInsuranceCategoryToSupabase,
   deleteInsuranceCategoryFromSupabase,
+  getDeletedEntityNames,
+  getDeletedEntityIds,
 } from '@/lib/supabase-organization';
 import { hasPermission } from '@/lib/rbac-guard';
 
@@ -87,8 +89,12 @@ export default function InsurancePage() {
   }, []);
 
   useEffect(() => {
+    const deletedNames = getDeletedEntityNames();
+    const deletedIds = getDeletedEntityIds();
     fetchInsuranceCategoriesFromSupabase().then((data) => {
-      if (data) setCategories(data);
+      if (data) {
+        setCategories(data.filter((c) => !deletedIds.has(c.id) && !deletedNames.has(c.name.trim().toLowerCase())));
+      }
     });
   }, []);
 
@@ -151,14 +157,17 @@ export default function InsurancePage() {
     showToast(editingItem ? 'Insurance category updated!' : 'Insurance category created!');
   };
 
-  const handleDelete = async (id: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id));
+  const handleDelete = async (id: string, name?: string) => {
+    const targetCat = categories.find((c) => c.id === id);
+    const catName = (name || targetCat?.name || '').trim();
+
+    setCategories((prev) => prev.filter((c) => c.id !== id && (!catName || c.name.trim().toLowerCase() !== catName.toLowerCase())));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
     if (editingItem?.id === id) {
       setShowModal(false);
     }
-    await deleteInsuranceCategoryFromSupabase(id);
-    showToast('Insurance category deleted successfully');
+    await deleteInsuranceCategoryFromSupabase(id, catName);
+    showToast('Insurance category deleted & employee assignments cleared');
   };
 
   // Bulk actions
@@ -194,10 +203,11 @@ export default function InsurancePage() {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
     const idsToDelete = [...selectedIds];
+    const itemsToDelete = categories.filter((c) => idsToDelete.includes(c.id));
     setCategories((prev) => prev.filter((c) => !idsToDelete.includes(c.id)));
     setSelectedIds([]);
-    await Promise.all(idsToDelete.map((id) => deleteInsuranceCategoryFromSupabase(id)));
-    showToast(`${count} category/categories deleted`);
+    await Promise.all(itemsToDelete.map((item) => deleteInsuranceCategoryFromSupabase(item.id, item.name)));
+    showToast(`${count} category/categories deleted & employee assignments cleared`);
   };
 
   // Filtered List
@@ -478,7 +488,7 @@ export default function InsurancePage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(cat.id)}
+                          onClick={() => handleDelete(cat.id, cat.name)}
                           className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
                           title="Delete Category"
                         >
@@ -578,7 +588,7 @@ export default function InsurancePage() {
               {editingItem ? (
                 <button
                   type="button"
-                  onClick={() => handleDelete(editingItem.id)}
+                  onClick={() => handleDelete(editingItem.id, editingItem.name)}
                   className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

@@ -11,7 +11,7 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     code: row.code,
     name: row.name,
     avatarUrl: row.avatar_url || '',
-    designation: row.designation || 'Program Officer',
+    designation: row.designation || '',
     workEmail: row.work_email || '',
     workMobile: row.work_mobile || '',
     workingSchedule: row.working_schedule || 'JAAGO HQ (10:00 AM - 06:00 PM)',
@@ -19,10 +19,10 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     isArchived: row.status === 'Archived' || Boolean(row.is_archived),
 
     // Tab 1: Work
-    organization: row.organization || 'JAAGO Foundation',
-    branch: row.branch || 'Head Office (Banani)',
-    department: row.department || 'Program Implementation',
-    project: row.project || 'General Operations',
+    organization: row.organization || '',
+    branch: row.branch || '',
+    department: row.department || '',
+    project: row.project || '',
     team: row.team || '',
     supervisor: row.supervisor || '',
     secondarySupervisor: row.secondary_supervisor || '',
@@ -77,7 +77,7 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
 
     // Tab 4: Insurance
     insuranceStatus: row.insurance_status || 'Active',
-    insuranceCoverageCategory: row.insurance_coverage_category || 'Standard Full-Time (Plan B)',
+    insuranceCoverageCategory: row.insurance_coverage_category || '',
     insuranceMonthlyPremium: Number(row.insurance_monthly_premium ?? 1500),
     employeeHealthInsuranceId: row.employee_health_insurance_id || '',
     spouseHealthInsuranceId: row.spouse_health_insurance_id || '',

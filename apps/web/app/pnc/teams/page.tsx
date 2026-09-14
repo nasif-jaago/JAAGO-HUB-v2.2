@@ -27,6 +27,8 @@ import {
   deleteTeamFromSupabase,
   fetchDepartmentsFromSupabase,
   fetchProjectsFromSupabase,
+  getDeletedEntityNames,
+  getDeletedEntityIds,
 } from '@/lib/supabase-organization';
 import { fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
 import type { FullEmployeeProfile } from '@/components/pnc/employee-profile-detail';
@@ -129,8 +131,12 @@ export default function TeamsPage() {
   }, []);
 
   useEffect(() => {
+    const deletedNames = getDeletedEntityNames();
+    const deletedIds = getDeletedEntityIds();
     fetchTeamsFromSupabase().then((data) => {
-      if (data) setTeams(data);
+      if (data) {
+        setTeams(data.filter((t) => !deletedIds.has(t.id) && !deletedNames.has(t.name.trim().toLowerCase())));
+      }
     });
     fetchDepartmentsFromSupabase().then((depts) => {
       if (depts) setDepartments(depts);
@@ -270,14 +276,29 @@ export default function TeamsPage() {
     showToast(editingItem ? 'Team updated & employee list synced successfully!' : 'Team created successfully!');
   };
 
-  const handleDelete = async (id: string) => {
-    setTeams((prev) => prev.filter((t) => t.id !== id));
+  const handleDelete = async (id: string, name?: string) => {
+    const targetTeam = teams.find((t) => t.id === id);
+    const teamName = (name || targetTeam?.name || '').trim();
+
+    setTeams((prev) => prev.filter((t) => t.id !== id && (!teamName || t.name.trim().toLowerCase() !== teamName.toLowerCase())));
     setSelectedIds((prev) => prev.filter((item) => item !== id));
     if (editingItem?.id === id) {
       setShowModal(false);
     }
-    await deleteTeamFromSupabase(id);
-    showToast('Team deleted successfully');
+
+    // Immediately blank out team field for assigned employees in local state
+    if (teamName) {
+      setEmployees((prev) =>
+        prev.map((e) =>
+          e.team?.trim().toLowerCase() === teamName.toLowerCase()
+            ? { ...e, team: '' }
+            : e
+        )
+      );
+    }
+
+    await deleteTeamFromSupabase(id, teamName);
+    showToast('Team deleted successfully & employee assignments cleared');
   };
 
   // Bulk actions
@@ -313,10 +334,23 @@ export default function TeamsPage() {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
     const idsToDelete = [...selectedIds];
+    const itemsToDelete = teams.filter((t) => idsToDelete.includes(t.id));
+    const namesToDelete = itemsToDelete.map((t) => t.name.trim().toLowerCase()).filter(Boolean);
+
     setTeams((prev) => prev.filter((t) => !idsToDelete.includes(t.id)));
     setSelectedIds([]);
-    await Promise.all(idsToDelete.map((id) => deleteTeamFromSupabase(id)));
-    showToast(`${count} team(s) deleted`);
+
+    // Immediately blank out team field for assigned employees in local state
+    setEmployees((prev) =>
+      prev.map((e) =>
+        e.team && namesToDelete.includes(e.team.trim().toLowerCase())
+          ? { ...e, team: '' }
+          : e
+      )
+    );
+
+    await Promise.all(itemsToDelete.map((item) => deleteTeamFromSupabase(item.id, item.name)));
+    showToast(`${count} team(s) deleted & employee assignments cleared`);
   };
 
   // Filtered List
@@ -601,7 +635,7 @@ export default function TeamsPage() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete(team.id);
+                      handleDelete(team.id, team.name);
                     }}
                     className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition cursor-pointer opacity-0 group-hover:opacity-100"
                     title="Delete Team"
@@ -907,7 +941,7 @@ export default function TeamsPage() {
               {editingItem ? (
                 <button
                   type="button"
-                  onClick={() => handleDelete(editingItem.id)}
+                  onClick={() => handleDelete(editingItem.id, editingItem.name)}
                   className="px-4 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
