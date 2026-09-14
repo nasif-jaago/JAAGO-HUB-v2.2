@@ -94,11 +94,10 @@ export default function AdminProcurementLayout({
       if (session) {
         setCurrentUser(session);
         const canAccess =
-          Boolean(session.isSuperAdmin) ||
           session.roles?.includes('super_admin') ||
           Boolean(session.email && session.email.toLowerCase().includes('nasif.kamal')) ||
-          hasDepartmentAccess('admin_procurement', session) ||
-          hasModuleAccess('admin_procurement', session);
+          hasDepartmentAccess('admin_procurement') ||
+          hasModuleAccess('admin_procurement');
         setCanAccessProcurement(Boolean(canAccess));
       } else {
         setCurrentUser({

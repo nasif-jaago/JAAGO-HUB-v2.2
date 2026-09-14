@@ -146,6 +146,12 @@ export function DashboardSidebar({
             const slug = d.slug || normalizeDeptSlug(d.name);
             allowed[slug] = Boolean(superAdmin || hasDepartmentAccess(slug, parsed));
           });
+
+          // Auto-grant the user's own department so they always see it
+          if (parsed.department) {
+            const ownDeptSlug = normalizeDeptSlug(parsed.department);
+            allowed[ownDeptSlug] = true;
+          }
           setAllowedDeptSlugs(allowed);
         } else {
           setCanAccessPnC(false);

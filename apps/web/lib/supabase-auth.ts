@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { normalizeRoleKey, getPermissionsForRole } from '@/lib/rbac-data';
+import { normalizeRoleKey, getPermissionsForRole, normalizeDeptSlug } from '@/lib/rbac-data';
 
 export const ALLOWED_WORK_DOMAINS = [
   '@jaago.com.bd',
@@ -245,7 +245,7 @@ export function buildUserSessionPayload(user: any, fallbackEmployee?: any): AppU
     : [normKey];
 
   // Dynamic RBAC Permissions from Central RBAC Matrix or user_metadata
-  const permissions = isSuper
+  let permissions: string[] = isSuper
     ? ['*']
     : Array.isArray(meta['permissions']) && meta['permissions'].length > 0
     ? meta['permissions']
@@ -277,6 +277,14 @@ export function buildUserSessionPayload(user: any, fallbackEmployee?: any): AppU
     matchedEmp?.department ||
     meta['department'] ||
     'General';
+
+  // Auto-inject user's own department permission for department-scoped access
+  if (!isSuper && canonicalDepartment) {
+    const ownDeptPerm = `dept.${normalizeDeptSlug(canonicalDepartment)}.view`;
+    if (!permissions.includes(ownDeptPerm) && !permissions.includes('*')) {
+      permissions = [...permissions, ownDeptPerm];
+    }
+  }
 
   const canonicalBranch =
     matchedEmp?.branch ||

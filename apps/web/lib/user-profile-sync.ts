@@ -4,6 +4,7 @@ import {
   saveEmployeeToSupabase,
   type FullEmployeeProfile,
 } from './supabase-employees';
+import { normalizeDeptSlug } from './rbac-data';
 
 export interface UserSessionData {
   id: string;
@@ -47,7 +48,6 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
     let authEmail = '';
     let authUserId = '';
     let authName = '';
-    let authMeta: any = {};
 
     try {
       const {
@@ -61,7 +61,6 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
           supaSession.user.user_metadata?.name ||
           ''
         ).toLowerCase().trim();
-        authMeta = supaSession.user.user_metadata || {};
       }
     } catch {}
 
@@ -193,9 +192,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
     };
 
     // Look up any saved custom permissions for this employee
-    let userPermissions = Array.isArray(authMeta?.permissions)
-      ? authMeta.permissions
-      : baseSession.permissions;
+    let userPermissions = baseSession.permissions;
     const lookupKeys = [
       employee.id,
       employee.userId,
@@ -217,6 +214,15 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
             break;
           }
         } catch {}
+      }
+    }
+
+    // Auto-inject user's own department permission so they always have access
+    // to their own department portal (e.g., Child Welfare user sees Child Welfare)
+    if (employee.department && Array.isArray(userPermissions) && !userPermissions.includes('*')) {
+      const ownDeptPerm = `dept.${normalizeDeptSlug(employee.department)}.view`;
+      if (!userPermissions.includes(ownDeptPerm)) {
+        userPermissions = [...userPermissions, ownDeptPerm];
       }
     }
 

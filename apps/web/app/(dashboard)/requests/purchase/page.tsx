@@ -41,10 +41,10 @@ function PurchaseRequisitionContent() {
     const session = getCurrentUserSession();
     if (session) {
       setCanAccessProcurement(
-        Boolean(session.isSuperAdmin) ||
+        session.roles?.includes('super_admin') ||
         Boolean(session.email?.toLowerCase().includes('nasif.kamal')) ||
-        hasDepartmentAccess('admin_procurement', session) ||
-        hasModuleAccess('admin_procurement', session)
+        hasDepartmentAccess('admin_procurement') ||
+        hasModuleAccess('admin_procurement')
       );
     }
   }, []);
