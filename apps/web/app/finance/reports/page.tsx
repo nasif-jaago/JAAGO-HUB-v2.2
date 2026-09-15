@@ -225,7 +225,7 @@ export default function FinanceReportsPage() {
                 {agingReport.filter((r) => r.bucket === '< 15 Days').length}
               </div>
             </div>
-            <div className="p-4 rounded-2xl bg-card border border-amber-500/30 bg-amber-500/5">
+            <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5">
               <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase">
                 15 &ndash; 30 Days (Adjustment Reminder)
               </span>
@@ -233,7 +233,7 @@ export default function FinanceReportsPage() {
                 {agingReport.filter((r) => r.bucket === '15 - 30 Days').length}
               </div>
             </div>
-            <div className="p-4 rounded-2xl bg-card border border-rose-500/30 bg-rose-500/5">
+            <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/5">
               <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase">
                 &gt; 30 Days (Overdue Alert)
               </span>
