@@ -630,6 +630,14 @@ export const STANDARD_DEPARTMENTS_CONFIG: DepartmentConfigItem[] = [
     href: '/admin-procurement',
   },
   {
+    name: 'Finance & Accounting',
+    slug: 'finance_accounting',
+    code: 'FNA',
+    icon: 'DollarSign',
+    description: 'Expense advance requests, liquidations, payment vouchers, and financial audit reports.',
+    href: '/finance',
+  },
+  {
     name: 'Child Welfare',
     slug: 'child_welfare',
     code: 'CW',

@@ -340,11 +340,11 @@ export function DashboardSidebar({
                       {[
                         { label: 'General Requisition...', icon: Briefcase, href: '/requests/general' },
                         { label: 'Purchase Requisition...', icon: ShoppingCart, href: '/requests/purchase' },
-                        { label: 'Expenses', icon: DollarSign, href: '/workflows' },
+                        { label: 'Expenses', icon: DollarSign, href: '/requests/expenses' },
                         { label: 'Recruitment Requisition...', icon: UserPlus, href: '/workflows' },
                         { label: 'Sign Request', icon: PenTool, href: '/workflows' },
                         { label: 'Tax & NOC Request...', icon: DollarSign, href: '/workflows' },
-                        { label: 'Payment Voucher...', icon: Receipt, href: '/workflows' },
+                        { label: 'Payment Voucher...', icon: Receipt, href: '/finance/payment-vouchers' },
                         { label: 'Meeting Rooms', icon: Calendar, href: '/meeting-rooms' },
                         { label: 'Volunteering Program...', icon: Award, href: '/workflows' },
                       ].map((item, idx) => {

@@ -294,6 +294,17 @@ export function hasDepartmentAccess(
       hasPermission('*', user)
     );
   }
+  if (cleanSlug === 'finance_accounting' || cleanSlug === 'finance') {
+    return (
+      hasPermission(permKey, user) ||
+      hasPermission(`dept.${cleanSlug}.*`, user) ||
+      hasPermission(`dept.${cleanSlug}.manage`, user) ||
+      hasPermission('finance.journals.view', user) ||
+      hasPermission('finance.budget.manage', user) ||
+      hasModuleAccess('payroll', user) ||
+      hasPermission('*', user)
+    );
+  }
   return (
     hasPermission(permKey, user) ||
     hasPermission(`dept.${cleanSlug}.*`, user) ||
