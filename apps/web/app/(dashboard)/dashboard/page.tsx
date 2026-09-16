@@ -2017,7 +2017,6 @@ export default function DashboardPage() {
                       isCheckedIn ? 'text-amber-300' : 'text-emerald-800 dark:text-emerald-400'
                     }`}>
                       <span>CHECK IN</span>
-                      {hasCheckedInToday && <span className="text-[7.5px] px-1 py-0.2 rounded bg-amber-400/20 text-amber-200 font-bold">&bull; RECORDED</span>}
                     </div>
                     <div className={`hero-btn-time text-xs font-black font-mono leading-none pt-0.5 ${
                       isCheckedIn ? 'text-amber-200' : 'text-emerald-950 dark:text-emerald-300'
@@ -2057,7 +2056,6 @@ export default function DashboardPage() {
                   <div>
                     <div className="hero-btn-title text-[9px] font-black uppercase tracking-wider flex items-center space-x-1">
                       <span>CHECK OUT</span>
-                      {hasCheckedOutToday && <span className="text-[7.5px] px-1 py-0.2 rounded bg-rose-500/20 text-rose-200 font-bold">&bull; RECORDED</span>}
                     </div>
                     <div className="hero-btn-time text-xs font-black font-mono leading-none pt-0.5">
                       {hasCheckedInToday && hasCheckedOutToday ? (checkOutTime || '-- : -- : --') : '-- : -- : --'}
