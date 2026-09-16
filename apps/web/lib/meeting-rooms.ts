@@ -35,6 +35,14 @@ export interface RoomBooking {
   updatedAt: string;
 }
 
+export interface BookingConflictDetail {
+  roomName: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  conflictingBooking: RoomBooking;
+}
+
 export const DEFAULT_ROOMS: MeetingRoom[] = [
   {
     id: 'room-1',
@@ -522,6 +530,49 @@ export function isBookingOwner(
   }
 
   return false;
+}
+
+/**
+ * Returns current local date formatted as "YYYY-MM-DD"
+ */
+export function getPresentDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Returns current local time formatted as "HH:mm" (24-hour)
+ */
+export function getPresentTimeString(date?: Date): string {
+  const d = date || new Date();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
+ * Returns end time formatted as "HH:mm", by default 1 hour after the given or present time
+ */
+export function getDefaultEndTimeString(startTimeStr?: string): string {
+  const now = new Date();
+  if (startTimeStr) {
+    const parts = startTimeStr.split(':');
+    if (parts.length >= 2) {
+      const h = parseInt(parts[0] || '0', 10);
+      const m = parseInt(parts[1] || '0', 10);
+      if (!isNaN(h) && !isNaN(m)) {
+        now.setHours(h);
+        now.setMinutes(m);
+      }
+    }
+  }
+  const end = new Date(now.getTime() + 60 * 60 * 1000);
+  const hours = String(end.getHours()).padStart(2, '0');
+  const minutes = String(end.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
 }
 
 const ROOMS_STORAGE_KEY = 'jaago_meeting_rooms';

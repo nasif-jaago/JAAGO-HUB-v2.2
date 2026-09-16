@@ -25,6 +25,7 @@ import {
 import {
   MeetingRoom,
   RoomBooking,
+  BookingConflictDetail,
   getMeetingRooms,
   saveMeetingRoom,
   deleteMeetingRoom,
@@ -36,7 +37,11 @@ import {
   formatDayDisplay,
   ROOM_PRESET_IMAGES,
   STANDARD_AMENITIES,
+  getPresentDateString,
+  getPresentTimeString,
+  getDefaultEndTimeString,
 } from '@/lib/meeting-rooms';
+import { BookingConflictModal } from '@/components/meeting-rooms/booking-conflict-modal';
 
 export default function AdminMeetingRoomsPage() {
   const [rooms, setRooms] = useState<MeetingRoom[]>([]);
@@ -79,15 +84,18 @@ export default function AdminMeetingRoomsPage() {
   const [bookingFormData, setBookingFormData] = useState({
     roomId: '',
     title: '',
-    date: new Date().toISOString().split('T')[0] || '2026-09-16',
-    startTime: '10:00',
-    endTime: '11:00',
+    date: getPresentDateString(),
+    startTime: getPresentTimeString(),
+    endTime: getDefaultEndTimeString(),
     bookedByName: 'Habibur Rahman',
     bookedByCode: 'AP0112',
     bookedByDept: 'Admin & Procurement',
     attendeesCount: 5,
     notes: '',
   });
+
+  // Duplicate / Conflict Alert Pop-up Modal State
+  const [conflictAlert, setConflictAlert] = useState<BookingConflictDetail | null>(null);
 
   // Policy Settings State
   const [policySettings, setPolicySettings] = useState({
@@ -269,16 +277,38 @@ export default function AdminMeetingRoomsPage() {
     showToast(`"${room.name}" status updated to ${status}`);
   };
 
+  // Live collision check for the active admin booking form inputs
+  const liveConflict = useMemo(() => {
+    if (!bookingFormData.roomId || !bookingFormData.date || !bookingFormData.startTime || !bookingFormData.endTime) return null;
+    const conflict = checkRoomCollision(
+      bookingFormData.roomId,
+      bookingFormData.date,
+      bookingFormData.startTime,
+      bookingFormData.endTime,
+      editingBooking?.id
+    );
+    if (conflict) {
+      const room = rooms.find((r) => r.id === bookingFormData.roomId);
+      return {
+        roomName: room?.name || conflict.roomName,
+        conflict,
+      };
+    }
+    return null;
+  }, [bookingFormData.roomId, bookingFormData.date, bookingFormData.startTime, bookingFormData.endTime, editingBooking, rooms, bookings]);
+
   // ── Booking Handlers ───────────────────────────────────────────────────────
   const handleOpenAddBooking = (room?: MeetingRoom) => {
     setEditingBooking(null);
     const targetRoom = room || rooms[0];
+    const nowStart = getPresentTimeString();
+    const nowEnd = getDefaultEndTimeString(nowStart);
     setBookingFormData({
       roomId: targetRoom ? targetRoom.id : '',
       title: '',
-      date: new Date().toISOString().split('T')[0] || '2026-09-16',
-      startTime: '10:00',
-      endTime: '11:30',
+      date: getPresentDateString(),
+      startTime: nowStart,
+      endTime: nowEnd,
       bookedByName: 'Habibur Rahman',
       bookedByCode: 'AP0112',
       bookedByDept: 'Admin & Procurement',
@@ -329,7 +359,7 @@ export default function AdminMeetingRoomsPage() {
       return;
     }
 
-    // Check collision (skip collision check against self if editing)
+    // Check collision (skip collision check against self if editing) — Strictly disallow duplicate booking
     const conflict = checkRoomCollision(
       bookingFormData.roomId,
       bookingFormData.date,
@@ -339,11 +369,14 @@ export default function AdminMeetingRoomsPage() {
     );
 
     if (conflict) {
-      showToast(
-        `Time conflict: "${conflict.title}" already scheduled (${conflict.startTime} - ${conflict.endTime})`,
-        'error'
-      );
-      return;
+      setConflictAlert({
+        roomName: selectedRoom.name,
+        date: bookingFormData.date,
+        startTime: bookingFormData.startTime,
+        endTime: bookingFormData.endTime,
+        conflictingBooking: conflict,
+      });
+      return; // Strictly do not allow duplicate booking
     }
 
     const bookingPayload: RoomBooking = {
@@ -1643,9 +1676,13 @@ export default function AdminMeetingRoomsPage() {
                     type="time"
                     required
                     value={bookingFormData.startTime}
-                    onChange={(e) =>
-                      setBookingFormData({ ...bookingFormData, startTime: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const newStart = e.target.value;
+                      const startMin = timeStringToMinutes(newStart);
+                      const endMin = timeStringToMinutes(bookingFormData.endTime);
+                      const newEnd = endMin <= startMin ? getDefaultEndTimeString(newStart) : bookingFormData.endTime;
+                      setBookingFormData({ ...bookingFormData, startTime: newStart, endTime: newEnd });
+                    }}
                     className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none cursor-pointer"
                   />
                 </div>
@@ -1665,6 +1702,19 @@ export default function AdminMeetingRoomsPage() {
                   />
                 </div>
               </div>
+
+              {/* Live Collision / Duplicate Warning inside Admin Form */}
+              {liveConflict && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-xs space-y-1.5 animate-in fade-in">
+                  <div className="flex items-center space-x-1.5 text-rose-600 dark:text-rose-400 font-bold">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>Time Conflict / Duplicate Detected</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    This room is already reserved on <span className="font-bold text-foreground">{bookingFormData.date}</span> from <span className="font-bold text-rose-600 dark:text-rose-400">{liveConflict.conflict.startTime} to {liveConflict.conflict.endTime}</span> for &ldquo;<span className="font-semibold text-foreground">{liveConflict.conflict.title}</span>&rdquo; by <span className="font-bold text-foreground">{liveConflict.conflict.bookedByName}</span>.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -1752,6 +1802,14 @@ export default function AdminMeetingRoomsPage() {
           </div>
         </div>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ── MODAL: BOOKING CONFLICT / DUPLICATE POP-UP ALERT ──────── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      <BookingConflictModal
+        conflict={conflictAlert}
+        onClose={() => setConflictAlert(null)}
+      />
     </div>
   );
 }
