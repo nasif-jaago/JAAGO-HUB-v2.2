@@ -272,7 +272,23 @@ export async function DELETE(request: Request) {
   try {
     cachedAuthUsers = null;
     const body = await request.json();
-    const { codes } = body;
+    const { codes, isSuperAdmin, requesterEmail } = body;
+    const headerRole = (request.headers.get('x-user-role') || '').toUpperCase();
+    const headerEmail = (request.headers.get('x-user-email') || '').toLowerCase();
+
+    // STRICT GOVERNANCE: Only Super Admin can delete employee records
+    const isSuper =
+      isSuperAdmin === true ||
+      headerRole === 'SUPER_ADMIN' ||
+      headerEmail.includes('nasif.kamal') ||
+      Boolean(requesterEmail && requesterEmail.toLowerCase().includes('nasif.kamal'));
+
+    if (!isSuper) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: Employee deletion is strictly restricted to Super Admin only.' },
+        { status: 403 }
+      );
+    }
 
     if (!codes || !Array.isArray(codes) || codes.length === 0) {
       return NextResponse.json({ success: false, error: 'Array of employee codes required' }, { status: 400 });

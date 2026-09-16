@@ -219,18 +219,27 @@ export default function PnCEmployeesPage() {
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
 
   // ── COLUMN SELECTION & CUSTOMIZATION ──
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState<(keyof FullEmployeeProfile)[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem('jaago_pnc_employee_custom_columns_v2');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState<(keyof FullEmployeeProfile)[]>(
+    DEFAULT_VISIBLE_COLUMN_KEYS
+  );
+
+  // Restore client-side custom column preferences after hydration to eliminate SSR hydration mismatch
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('jaago_pnc_employee_custom_columns_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const validKeys = parsed.filter((key: any) =>
+            ALL_EMPLOYEE_COLUMNS.some((c) => c.key === key)
+          );
+          if (validKeys.length > 0) {
+            setVisibleColumnKeys(validKeys);
+          }
         }
-      } catch {}
-    }
-    return DEFAULT_VISIBLE_COLUMN_KEYS;
-  });
+      }
+    } catch {}
+  }, []);
   const [isColumnsMenuOpen, setIsColumnsMenuOpen] = useState(false);
   const [columnSearchQuery, setColumnSearchQuery] = useState('');
   const columnsMenuRef = useRef<HTMLDivElement>(null);
@@ -340,13 +349,15 @@ export default function PnCEmployeesPage() {
           parsed.isSuperAdmin === true ||
           rawRoleUpper === 'SUPER_ADMIN' ||
           rawRole.toLowerCase() === 'super_admin' ||
+          (Array.isArray(parsed.roles) && parsed.roles.some((r: string) => r.toString().toUpperCase() === 'SUPER_ADMIN' || r.toString().toLowerCase() === 'super_admin')) ||
           Boolean(parsed.email && parsed.email.toLowerCase().includes('nasif.kamal'));
 
         const viewAll = isSuper || hasPermission('hr.employees.view_all', parsed);
         const viewDept = isSuper || viewAll || hasPermission('hr.employees.view_dept', parsed);
         const createEmp = isSuper || hasPermission('hr.employees.create', parsed);
         const editEmp = isSuper || hasPermission('hr.employees.edit', parsed);
-        const deleteEmp = isSuper || hasPermission('hr.employees.delete', parsed);
+        // STRICT CONSTRAINT: Employee deletion is exclusively reserved for Super Admin only
+        const deleteEmp = Boolean(isSuper);
         const exportEmp = isSuper || hasPermission('hr.employees.export', parsed);
         const importEmp = isSuper || hasPermission('hr.employees.import', parsed);
         const massUpdateEmp = isSuper || hasPermission('hr.employees.mass_update', parsed);
@@ -1692,6 +1703,15 @@ function toCanonicalOrgName(raw: string): string {
   };
 
   const handleDeleteEmployee = async (code: string) => {
+    if (!canDeleteEmployee) {
+      alert('Access Denied: Only a Super Admin is authorized to delete employee profiles.');
+      return;
+    }
+    const target = employees.find((e) => e.code === code);
+    const targetLabel = target ? ` "${target.name}" (${code})` : ` (${code})`;
+    if (!window.confirm(`Are you sure you want to permanently delete employee${targetLabel}? This action is irreversible and restricted to Super Admin.`)) {
+      return;
+    }
     await withLoading(async () => {
       const updated = employees.filter((e) => e.code !== code);
       persistEmployees(updated);
@@ -1703,7 +1723,14 @@ function toCanonicalOrgName(raw: string): string {
   };
 
   const handleDeleteSelected = async () => {
+    if (!canDeleteEmployee) {
+      alert('Access Denied: Only a Super Admin is authorized to delete employee profiles.');
+      return;
+    }
     if (selectedCodes.length === 0) return;
+    if (!window.confirm(`Are you sure you want to permanently delete ${selectedCodes.length} selected employee record(s)? This action is irreversible and restricted to Super Admin.`)) {
+      return;
+    }
     await withLoading(async () => {
       const updated = employees.filter((e) => !selectedCodes.includes(e.code));
       persistEmployees(updated);
@@ -1741,6 +1768,7 @@ function toCanonicalOrgName(raw: string): string {
             );
           }}
           onBack={() => setSelectedProfile(null)}
+          isSuperAdmin={canDeleteEmployee}
           onDelete={canDeleteEmployee ? handleDeleteEmployee : undefined}
           onCreateUser={canCreateEmployee ? handleCreateUserForEmployee : undefined}
         />

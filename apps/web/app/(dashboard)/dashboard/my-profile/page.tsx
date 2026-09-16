@@ -569,9 +569,9 @@ export default function MyProfilePage() {
                       />
                     </div>
 
-                    {/* Work Mobile */}
+                    {/* Official Phone Numbers / Personal Phone */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">Work Mobile</label>
+                      <label className="text-xs font-bold text-foreground">Official Phone Numbers / Personal Phone</label>
                       <input
                         type="tel"
                         value={profile.workMobile || ''}

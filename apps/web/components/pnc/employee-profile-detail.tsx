@@ -150,8 +150,12 @@ export interface FullEmployeeProfile {
   // Personal Contact
   personalEmail: string;
   personalPhone: string;
+  // Bank Information
   bankName: string;
+  bankBranch?: string;
   bankAccountNumber: string;
+  bankRoutingNumber?: string;
+  bankSwiftCode?: string;
   // Personal Information
   nickName: string;
   nid: string;
@@ -173,6 +177,12 @@ export interface FullEmployeeProfile {
   // Contract Overview
   joiningDate: string; // YYYY-MM-DD
   contractEndDate: string; // YYYY-MM-DD
+  confirmationDate?: string; // YYYY-MM-DD
+  isNoticePeriod?: boolean;
+  noticePeriodDate?: string; // YYYY-MM-DD
+  noticePeriodStartDate?: string; // YYYY-MM-DD
+  noticePeriodEndDate?: string; // YYYY-MM-DD
+  resignationDate?: string; // YYYY-MM-DD
   wageType: 'Fixed' | 'Hourly';
   wage: number;
   salaryJulDec: number;
@@ -259,7 +269,8 @@ interface EmployeeProfileDetailProps {
     team?: string | undefined;
     workingSchedule?: string | undefined;
   }[];
-  currentUser?: { fullName: string; jobTitle: string } | undefined;
+  currentUser?: { fullName: string; jobTitle: string; role?: string; isSuperAdmin?: boolean } | undefined;
+  isSuperAdmin?: boolean | undefined;
   readOnly?: boolean | undefined;
   onSave: (updatedProfile: FullEmployeeProfile) => void;
   onBack: () => void;
@@ -281,6 +292,7 @@ export function EmployeeProfileDetail({
   initialData,
   allEmployees,
   currentUser = { fullName: 'Nasif Kamal', jobTitle: 'Coordinator' },
+  isSuperAdmin,
   readOnly = false,
   onSave,
   onBack,
@@ -289,6 +301,11 @@ export function EmployeeProfileDetail({
   onProfileChange,
 }: EmployeeProfileDetailProps) {
   const isNew = !initialData?.id;
+  const isSuper = isSuperAdmin ?? Boolean(
+    currentUser?.isSuperAdmin ||
+    currentUser?.role === 'SUPER_ADMIN' ||
+    (currentUser?.fullName && currentUser.fullName.toLowerCase().includes('nasif'))
+  );
 
   // Active Tab state: 'WORK' | 'PERSONAL' | 'PAYROLL' | 'CONTRACTS' | 'INSURANCE' | 'DSP' | 'LEAVE_ATTENDANCE' | 'LOG_HISTORY'
   const [activeTab, setActiveTab] = useState<'WORK' | 'PERSONAL' | 'PAYROLL' | 'CONTRACTS' | 'INSURANCE' | 'DSP' | 'LEAVE_ATTENDANCE' | 'LOG_HISTORY'>('WORK');
@@ -377,7 +394,16 @@ export function EmployeeProfileDetail({
         child2Name: initialData.child2Name || '',
         child3HealthInsuranceId: initialData.child3HealthInsuranceId || '',
         child3Name: initialData.child3Name || '',
+        bankBranch: initialData.bankBranch || (initialData as any).bank_branch || '',
+        bankRoutingNumber: initialData.bankRoutingNumber || (initialData as any).bank_routing_number || '',
+        bankSwiftCode: initialData.bankSwiftCode || (initialData as any).bank_swift_code || '',
         logHistory: initialData.logHistory || [],
+        isNoticePeriod: Boolean((initialData as any).isNoticePeriod ?? (initialData as any).is_notice_period),
+        noticePeriodDate: initialData.noticePeriodEndDate || initialData.noticePeriodDate || (initialData as any).notice_period_end_date || (initialData as any).notice_period_date || '',
+        noticePeriodStartDate: initialData.noticePeriodStartDate || (initialData as any).notice_period_start_date || '',
+        noticePeriodEndDate: initialData.noticePeriodEndDate || initialData.noticePeriodDate || (initialData as any).notice_period_end_date || (initialData as any).notice_period_date || '',
+        resignationDate: initialData.resignationDate || (initialData as any).resignation_date || '',
+        confirmationDate: initialData.confirmationDate || (initialData as any).confirmation_date || '',
         allowRegularization:
           (initialData as any).allowRegularization !== undefined
             ? (initialData as any).allowRegularization !== false
@@ -416,7 +442,10 @@ export function EmployeeProfileDetail({
       personalEmail: '',
       personalPhone: '',
       bankName: 'Eastern Bank Ltd',
+      bankBranch: '',
       bankAccountNumber: '',
+      bankRoutingNumber: '',
+      bankSwiftCode: '',
       nickName: '',
       nid: '',
       bloodGroup: 'B+',
@@ -434,6 +463,12 @@ export function EmployeeProfileDetail({
       // Payroll
       joiningDate: new Date().toISOString().slice(0, 10),
       contractEndDate: '2028-12-31',
+      confirmationDate: '',
+      isNoticePeriod: false,
+      noticePeriodDate: '',
+      noticePeriodStartDate: '',
+      noticePeriodEndDate: '',
+      resignationDate: '',
       wageType: 'Fixed',
       wage: 65000,
       salaryJulDec: 65000,
@@ -711,6 +746,15 @@ export function EmployeeProfileDetail({
         child2Name: initialData.child2Name || '',
         child3HealthInsuranceId: initialData.child3HealthInsuranceId || '',
         child3Name: initialData.child3Name || '',
+        bankBranch: initialData.bankBranch || (initialData as any).bank_branch || '',
+        bankRoutingNumber: initialData.bankRoutingNumber || (initialData as any).bank_routing_number || '',
+        bankSwiftCode: initialData.bankSwiftCode || (initialData as any).bank_swift_code || '',
+        isNoticePeriod: Boolean((initialData as any).isNoticePeriod ?? (initialData as any).is_notice_period),
+        noticePeriodDate: initialData.noticePeriodEndDate || initialData.noticePeriodDate || (initialData as any).notice_period_end_date || (initialData as any).notice_period_date || '',
+        noticePeriodStartDate: initialData.noticePeriodStartDate || (initialData as any).notice_period_start_date || '',
+        noticePeriodEndDate: initialData.noticePeriodEndDate || initialData.noticePeriodDate || (initialData as any).notice_period_end_date || (initialData as any).notice_period_date || '',
+        resignationDate: initialData.resignationDate || (initialData as any).resignation_date || '',
+        confirmationDate: initialData.confirmationDate || (initialData as any).confirmation_date || '',
       });
       originalStateRef.current = { ...initialData };
       setSupervisorQuery(initialData.supervisor || '');
@@ -1377,7 +1421,7 @@ export function EmployeeProfileDetail({
       { key: 'status', label: 'Employment Status' },
       { key: 'designation', label: 'Designation' },
       { key: 'workEmail', label: 'Work Email' },
-      { key: 'workMobile', label: 'Mobile' },
+      { key: 'workMobile', label: 'Official Phone Numbers / Personal Phone' },
       { key: 'department', label: 'Department' },
       { key: 'organization', label: 'Organization' },
       { key: 'branch', label: 'Branch' },
@@ -1388,7 +1432,12 @@ export function EmployeeProfileDetail({
       { key: 'workingSchedule', label: 'Working Schedule' },
       { key: 'personalEmail', label: 'Personal Email' },
       { key: 'bankName', label: 'Bank Name' },
+      { key: 'bankBranch', label: 'Bank Branch' },
       { key: 'bankAccountNumber', label: 'Bank Account Number' },
+      { key: 'bankRoutingNumber', label: 'Bank Routing Number' },
+      { key: 'bankSwiftCode', label: 'Bank SWIFT Code' },
+      { key: 'emergencyContactName', label: 'Emergency Contact Person' },
+      { key: 'emergencyPhone', label: 'Emergency Contact Phone' },
       { key: 'bloodGroup', label: 'Blood Group' },
       { key: 'birthday', label: 'Birthday' },
       { key: 'maritalStatus', label: 'Marital Status' },
@@ -1396,6 +1445,12 @@ export function EmployeeProfileDetail({
       { key: 'wage', label: 'Wage' },
       { key: 'joiningDate', label: 'Joining Date' },
       { key: 'contractEndDate', label: 'Contract End Date' },
+      { key: 'confirmationDate', label: 'Confirmation Date' },
+      { key: 'isNoticePeriod', label: 'Notice Period Status' },
+      { key: 'resignationDate', label: 'Date of Resignation' },
+      { key: 'noticePeriodStartDate', label: 'Notice Period Start Date' },
+      { key: 'noticePeriodEndDate', label: 'Notice Period End Date' },
+      { key: 'noticePeriodDate', label: 'Notice Period Date' },
       { key: 'contractType', label: 'Contract Type' },
       { key: 'officeDays', label: 'DSP Office Days' },
       { key: 'officeHours', label: 'DSP Office Hours' },
@@ -1524,13 +1579,19 @@ export function EmployeeProfileDetail({
             </button>
           )}
 
-          {/* Delete Profile Button */}
-          {!isNew && onDelete && (
+          {/* Delete Profile Button - Strictly Restricted to Super Admin Only */}
+          {!isNew && isSuper && onDelete && (
             <button
               type="button"
-              onClick={() => onDelete(formData.code)}
-              className="px-4 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30"
-              title="Delete this employee profile"
+              onClick={() => {
+                if (!isSuper) {
+                  alert('Access Denied: Only a Super Admin is authorized to delete employee profiles.');
+                  return;
+                }
+                onDelete(formData.code);
+              }}
+              className="px-4 py-2 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 border border-rose-500/30 active:scale-95"
+              title="Delete this employee profile (Super Admin Only)"
             >
               <Trash2 className="h-3.5 w-3.5" />
               <span>Delete</span>
@@ -1835,10 +1896,10 @@ export function EmployeeProfileDetail({
                 </div>
               </div>
 
-              {/* Mobile */}
+              {/* Official Phone Numbers / Personal Phone */}
               <div className="space-y-1">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                  Mobile
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block truncate" title="Official Phone Numbers / Personal Phone">
+                  Official Phone Numbers / Personal Phone
                 </label>
                 <div className="relative">
                   <input
@@ -2226,7 +2287,7 @@ export function EmployeeProfileDetail({
             ═══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'PERSONAL' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Left Column: Personal Contact & Emergency Contact */}
+            {/* Left Column: Personal Contact, Emergency Contact & Bank Information */}
             <div className="space-y-6">
               {/* 1. PERSONAL CONTACT */}
               <div className="space-y-4">
@@ -2265,37 +2326,10 @@ export function EmployeeProfileDetail({
                       className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
                     />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                        Bank Name
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.bankName}
-                        onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                        placeholder="e.g. Eastern Bank Ltd"
-                        className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                        Bank Account Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.bankAccountNumber}
-                        onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
-                        placeholder="e.g. 1041234567890"
-                        className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-mono font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                      />
-                    </div>
-                  </div>
                 </div>
               </div>
 
-              {/* 2. EMERGENCY CONTACT */}
+              {/* 2. EMERGENCY CONTACT (Separate Block) */}
               <div className="space-y-4 pt-2">
                 <div className="border-b border-border/70 pb-2.5">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-2">
@@ -2330,6 +2364,89 @@ export function EmployeeProfileDetail({
                       placeholder="+880 1700 000000"
                       className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. BANK INFORMATION (Separate Block) */}
+              <div className="space-y-4 pt-2">
+                <div className="border-b border-border/70 pb-2.5">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-2">
+                    <div className="h-6 w-6 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                      <Building2 className="h-3.5 w-3.5" />
+                    </div>
+                    <span>Bank Information</span>
+                  </h3>
+                </div>
+
+                <div className="space-y-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                        Bank Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.bankName}
+                        onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                        placeholder="e.g. Eastern Bank Ltd"
+                        className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                        Branch Name
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.bankBranch || ''}
+                        onChange={(e) => setFormData({ ...formData, bankBranch: e.target.value })}
+                        placeholder="e.g. Banani Branch"
+                        className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                        Bank Account Number
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.bankAccountNumber}
+                        onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
+                        placeholder="e.g. 1041234567890"
+                        className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-mono font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                        Routing Number
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.bankRoutingNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, bankRoutingNumber: e.target.value })}
+                        placeholder="e.g. 085261234"
+                        className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-mono font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                        SWIFT Code
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.bankSwiftCode || ''}
+                        onChange={(e) => setFormData({ ...formData, bankSwiftCode: e.target.value.toUpperCase() })}
+                        placeholder="e.g. EBLDBDDH"
+                        className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-mono font-medium text-foreground uppercase placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2602,6 +2719,20 @@ export function EmployeeProfileDetail({
                     type="date"
                     value={formData.contractEndDate}
                     onChange={(e) => setFormData({ ...formData, contractEndDate: e.target.value })}
+                    className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                  />
+                </div>
+
+                {/* Confirmation Date */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center space-x-1">
+                    <CalendarIcon className="h-3 w-3 text-amber-500" />
+                    <span>Confirmation Date</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.confirmationDate || ''}
+                    onChange={(e) => setFormData({ ...formData, confirmationDate: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
                   />
                 </div>
@@ -2997,9 +3128,11 @@ export function EmployeeProfileDetail({
                 <div className="mt-1">
                   {(() => {
                     const latest = employeeContracts[0];
-                    const status = latest ? deriveContractStatus(latest) : 'Active';
+                    const status = formData.isNoticePeriod ? 'Notice Period' : (latest ? deriveContractStatus(latest) : 'Active');
                     const color =
-                      status === 'Active'
+                      status === 'Notice Period'
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                        : status === 'Active'
                         ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
                         : status === 'Expiring'
                         ? 'bg-amber-500/10 text-amber-500 border-amber-500/30'
@@ -3034,6 +3167,151 @@ export function EmployeeProfileDetail({
                 </span>
                 <span className="text-[10px] text-muted-foreground">Gross monthly BDT</span>
               </div>
+            </div>
+
+            {/* Notice Period & Separation Governance Card */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-surface/50 border border-border/80 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/60 pb-3.5">
+                <div className="flex items-center space-x-3">
+                  <div
+                    className={`h-9 w-9 rounded-xl flex items-center justify-center transition-colors shadow-xs ${
+                      formData.isNoticePeriod
+                        ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h4 className="text-xs sm:text-sm font-bold text-foreground">Notice Period</h4>
+                      {formData.isNoticePeriod ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          Active Notice Period
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                          Standard Active
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Toggle whether this employee is currently serving a contractual notice period before separation.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Toggle Button: On / Off */}
+                <div className="flex items-center space-x-2.5 self-end sm:self-center">
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {formData.isNoticePeriod ? 'Active' : 'Inactive'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={Boolean(formData.isNoticePeriod)}
+                    onClick={() => {
+                      const next = !formData.isNoticePeriod;
+                      const today = new Date().toISOString().slice(0, 10);
+                      setFormData({
+                        ...formData,
+                        isNoticePeriod: next,
+                        resignationDate: next ? (formData.resignationDate || today) : '',
+                        noticePeriodStartDate: next ? (formData.noticePeriodStartDate || today) : '',
+                        noticePeriodEndDate: next ? (formData.noticePeriodEndDate || formData.noticePeriodDate || today) : '',
+                        noticePeriodDate: next ? (formData.noticePeriodEndDate || formData.noticePeriodDate || today) : '',
+                      });
+                    }}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500/50 ${
+                      formData.isNoticePeriod ? 'bg-amber-500' : 'bg-muted-foreground/30'
+                    }`}
+                    title={formData.isNoticePeriod ? 'Notice period is ON. Click to turn OFF.' : 'Notice period is OFF. Click to turn ON.'}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                        formData.isNoticePeriod ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                  <span
+                    className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
+                      formData.isNoticePeriod
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {formData.isNoticePeriod ? 'ON' : 'OFF'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Conditional Calendar Date Fields: Opens when ON */}
+              {formData.isNoticePeriod && (
+                <div className="pt-2 border-t border-border/50 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                    {/* 1. Date of Resignation */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center space-x-1.5">
+                        <CalendarIcon className="h-3.5 w-3.5 text-amber-500" />
+                        <span>Date of Resignation</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          value={formData.resignationDate || ''}
+                          onChange={(e) => setFormData({ ...formData, resignationDate: e.target.value })}
+                          className="w-full h-10 px-3.5 rounded-xl bg-surface/70 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Official date employee submitted their resignation letter.
+                      </p>
+                    </div>
+
+                    {/* 2. Notice Period Start Date */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center space-x-1.5">
+                        <CalendarIcon className="h-3.5 w-3.5 text-amber-500" />
+                        <span>Notice Period Start Date</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          value={formData.noticePeriodStartDate || ''}
+                          onChange={(e) => setFormData({ ...formData, noticePeriodStartDate: e.target.value })}
+                          className="w-full h-10 px-3.5 rounded-xl bg-surface/70 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Contractual commencement date of formal notice period.
+                      </p>
+                    </div>
+
+                    {/* 3. Notice Period End Date / Last Working Day */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center space-x-1.5">
+                        <CalendarIcon className="h-3.5 w-3.5 text-amber-500" />
+                        <span>Notice Period End Date <span className="text-amber-500">*</span></span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          value={formData.noticePeriodEndDate || formData.noticePeriodDate || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFormData({ ...formData, noticePeriodEndDate: val, noticePeriodDate: val });
+                          }}
+                          className="w-full h-10 px-3.5 rounded-xl bg-surface/70 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-sm"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Last operational working day. Synchronized with final settlement.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Contracts List Table */}

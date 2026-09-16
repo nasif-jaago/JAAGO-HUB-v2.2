@@ -30,7 +30,7 @@ export const ALL_EMPLOYEE_COLUMNS: EmployeeColumnConfig[] = [
   { key: 'secondarySupervisor', label: 'Secondary Supervisor', category: 'Work Information', defaultVisible: false, minWidth: '150px' },
   { key: 'workLocation', label: 'Work Location', category: 'Work Information', defaultVisible: false, minWidth: '140px' },
   { key: 'workEmail', label: 'Work Email', category: 'Work Information', defaultVisible: false, minWidth: '180px' },
-  { key: 'workMobile', label: 'Work Mobile', category: 'Work Information', defaultVisible: false, minWidth: '130px' },
+  { key: 'workMobile', label: 'Official Phone Numbers / Personal Phone', category: 'Work Information', defaultVisible: false, minWidth: '190px' },
   { key: 'remark', label: 'Work Remark', category: 'Work Information', defaultVisible: false, minWidth: '160px' },
 
   // ── Personal Information ──
@@ -50,11 +50,20 @@ export const ALL_EMPLOYEE_COLUMNS: EmployeeColumnConfig[] = [
   { key: 'emergencyPhone', label: 'Emergency Phone', category: 'Personal Information', defaultVisible: false, minWidth: '130px' },
   { key: 'dependentChildren', label: 'Children Count', category: 'Personal Information', defaultVisible: false, minWidth: '110px', type: 'number' },
   { key: 'bankName', label: 'Bank Name', category: 'Personal Information', defaultVisible: false, minWidth: '140px' },
+  { key: 'bankBranch', label: 'Bank Branch', category: 'Personal Information', defaultVisible: false, minWidth: '140px' },
   { key: 'bankAccountNumber', label: 'Bank Account No', category: 'Personal Information', defaultVisible: false, minWidth: '150px' },
+  { key: 'bankRoutingNumber', label: 'Routing Number', category: 'Personal Information', defaultVisible: false, minWidth: '140px' },
+  { key: 'bankSwiftCode', label: 'SWIFT Code', category: 'Personal Information', defaultVisible: false, minWidth: '130px' },
 
   // ── Payroll & Compensation ──
   { key: 'joiningDate', label: 'Joining Date', category: 'Payroll & Compensation', defaultVisible: true, minWidth: '120px', type: 'date' },
   { key: 'contractEndDate', label: 'Contract End Date', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '130px', type: 'date' },
+  { key: 'confirmationDate', label: 'Confirmation Date', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '135px', type: 'date' },
+  { key: 'isNoticePeriod', label: 'Notice Period', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '120px' },
+  { key: 'resignationDate', label: 'Date of Resignation', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '145px', type: 'date' },
+  { key: 'noticePeriodStartDate', label: 'Notice Period Start Date', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '165px', type: 'date' },
+  { key: 'noticePeriodEndDate', label: 'Notice Period End Date', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '160px', type: 'date' },
+  { key: 'noticePeriodDate', label: 'Notice Period Date', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '140px', type: 'date' },
   { key: 'wageType', label: 'Wage Type', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '100px' },
   { key: 'wage', label: 'Gross Salary', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '120px', type: 'number' },
   { key: 'salaryJulDec', label: 'Salary Jul-Dec', category: 'Payroll & Compensation', defaultVisible: false, minWidth: '120px', type: 'number' },

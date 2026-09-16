@@ -1,4 +1,5 @@
 import { getSupabase } from './supabase-auth';
+import { getCurrentUserSession } from './user-profile-sync';
 import type { FullEmployeeProfile, LogHistoryEntry } from '@/components/pnc/employee-profile-detail';
 export type { FullEmployeeProfile, LogHistoryEntry };
 
@@ -33,7 +34,10 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     personalEmail: row.personal_email || '',
     personalPhone: row.personal_phone || '',
     bankName: row.bank_name || '',
+    bankBranch: row.bank_branch || '',
     bankAccountNumber: row.bank_account_number || '',
+    bankRoutingNumber: row.bank_routing_number || '',
+    bankSwiftCode: row.bank_swift_code || '',
     nickName: row.nick_name || '',
     nid: row.nid || '',
     bloodGroup: row.blood_group || '',
@@ -48,9 +52,15 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     homeAddress: row.home_address || '',
     dependentChildren: Number(row.dependent_children || 0),
 
-    // Tab 3: Payroll
+    // Tab 3: Payroll & Contracts
     joiningDate: row.joining_date ? row.joining_date.slice(0, 10) : '',
     contractEndDate: row.contract_end_date ? row.contract_end_date.slice(0, 10) : '',
+    confirmationDate: row.confirmation_date ? row.confirmation_date.slice(0, 10) : '',
+    isNoticePeriod: Boolean(row.is_notice_period),
+    noticePeriodDate: row.notice_period_end_date ? row.notice_period_end_date.slice(0, 10) : (row.notice_period_date ? row.notice_period_date.slice(0, 10) : ''),
+    noticePeriodStartDate: row.notice_period_start_date ? row.notice_period_start_date.slice(0, 10) : '',
+    noticePeriodEndDate: row.notice_period_end_date ? row.notice_period_end_date.slice(0, 10) : (row.notice_period_date ? row.notice_period_date.slice(0, 10) : ''),
+    resignationDate: row.resignation_date ? row.resignation_date.slice(0, 10) : '',
     wageType: row.wage_type || 'Fixed',
     wage: Number(row.wage || 0),
     salaryJulDec: Number(row.salary_jul_dec || 0),
@@ -202,7 +212,10 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     personal_email: profile.personalEmail || null,
     personal_phone: profile.personalPhone || null,
     bank_name: profile.bankName || null,
+    bank_branch: profile.bankBranch || null,
     bank_account_number: profile.bankAccountNumber || null,
+    bank_routing_number: profile.bankRoutingNumber || null,
+    bank_swift_code: profile.bankSwiftCode || null,
     nick_name: profile.nickName || null,
     nid: profile.nid || null,
     blood_group: profile.bloodGroup || null,
@@ -217,9 +230,15 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     home_address: profile.homeAddress || null,
     dependent_children: sanitizeNumber(profile.dependentChildren, 0),
 
-    // Tab 3: Payroll
+    // Tab 3: Payroll & Contracts
     joining_date: sanitizeDate(profile.joiningDate),
     contract_end_date: sanitizeDate(profile.contractEndDate),
+    confirmation_date: sanitizeDate(profile.confirmationDate),
+    is_notice_period: Boolean(profile.isNoticePeriod),
+    notice_period_date: sanitizeDate(profile.noticePeriodEndDate || profile.noticePeriodDate),
+    notice_period_start_date: sanitizeDate(profile.noticePeriodStartDate),
+    notice_period_end_date: sanitizeDate(profile.noticePeriodEndDate || profile.noticePeriodDate),
+    resignation_date: sanitizeDate(profile.resignationDate),
     wage_type: profile.wageType,
     wage: sanitizeNumber(profile.wage, 0),
     salary_jul_dec: sanitizeNumber(profile.salaryJulDec, 0),
@@ -439,15 +458,33 @@ export async function unarchiveEmployeesInSupabase(codes: string[]): Promise<boo
 }
 
 /**
- * Bulk delete employees permanently from Supabase
+ * Bulk delete employees permanently from Supabase (Super Admin Only)
  */
 export async function deleteEmployeesFromSupabase(codes: string[]): Promise<boolean> {
   codes.forEach((c) => addDeletedEmployeeCode(c));
   try {
+    const session = typeof window !== 'undefined' ? getCurrentUserSession() : null;
+    const sessAny = session as any;
+    const rawRole = (sessAny?.role || (Array.isArray(session?.roles) ? session?.roles[0] : '') || '').toString();
+    const isSuper =
+      sessAny?.isSuperAdmin === true ||
+      rawRole.toUpperCase() === 'SUPER_ADMIN' ||
+      rawRole.toLowerCase() === 'super_admin' ||
+      (Array.isArray(session?.roles) && session?.roles.some((r: string) => r.toString().toUpperCase() === 'SUPER_ADMIN' || r.toString().toLowerCase() === 'super_admin')) ||
+      Boolean(session?.email && session.email.toLowerCase().includes('nasif.kamal'));
+
     const res = await fetch('/api/v1/hr/employees', {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codes }),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-role': isSuper ? 'SUPER_ADMIN' : rawRole,
+        'x-user-email': session?.email || '',
+      },
+      body: JSON.stringify({
+        codes,
+        isSuperAdmin: isSuper,
+        requesterEmail: session?.email || '',
+      }),
     });
     if (res.ok) {
       invalidateCache('pnc_employees_list');
