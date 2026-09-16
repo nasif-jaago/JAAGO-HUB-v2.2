@@ -24,12 +24,13 @@ export interface RoomBooking {
   startTime: string; // "11:00" (24h) or "11:00 AM"
   endTime: string; // "13:00" (24h) or "01:00 PM"
   bookedByName: string;
-  bookedByCode?: string;
-  bookedByDept?: string;
-  bookedByAvatar?: string;
-  attendeesCount?: number;
-  notes?: string;
-  status?: 'Confirmed' | 'Cancelled' | 'Pending';
+  bookedByCode?: string | undefined;
+  bookedByDept?: string | undefined;
+  bookedByAvatar?: string | undefined;
+  bookedByEmail?: string | undefined;
+  attendeesCount?: number | undefined;
+  notes?: string | undefined;
+  status?: ('Confirmed' | 'Cancelled' | 'Pending') | undefined;
   createdAt: string;
   updatedAt: string;
 }
@@ -463,6 +464,66 @@ export const DEFAULT_BOOKINGS: RoomBooking[] = [
   },
 ];
 
+export const ROOM_PRESET_IMAGES = [
+  { label: 'Conference Hall A', url: '/rooms/room-1.jpg?v=2' },
+  { label: 'Seminar Training Hall', url: '/rooms/room-2.jpg?v=2' },
+  { label: 'Townhall Assembly', url: '/rooms/room-3.jpg?v=2' },
+  { label: 'VBD Collaborative Lounge', url: '/rooms/room-4.jpg?v=2' },
+  { label: 'Quiet Focus Pod', url: '/rooms/room-5.jpg?v=2' },
+  { label: 'Glass Executive Room', url: '/rooms/room-6.jpg?v=2' },
+  { label: 'VIP Boardroom Suite', url: '/rooms/room-7.jpg?v=2' },
+  { label: 'Modern Hybrid Suite', url: 'https://images.unsplash.com/photo-1517502884422-41eaead166d4?auto=format&fit=crop&w=800&q=80' },
+  { label: 'Executive Boardroom', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80' },
+  { label: 'Creative Workshop Hub', url: 'https://images.unsplash.com/photo-1505409859467-3a796fd5798e?auto=format&fit=crop&w=800&q=80' },
+];
+
+export const STANDARD_AMENITIES = [
+  'Air Conditioned',
+  'High Speed WiFi',
+  'Wall Display TV',
+  'Conference Table',
+  'Ergonomic Mesh Chairs',
+  'Video Conference Setup',
+  'Conference Audio Puck',
+  'Podium & Mic',
+  'Whiteboard & Markers',
+  'Presenter Workstation',
+  'Central AC',
+  'Wireless Microphones',
+  'Glass Sliding Pod',
+  'Discussion Table',
+];
+
+/**
+ * Check if the given user owns a booking
+ */
+export function isBookingOwner(
+  booking: RoomBooking,
+  user?: { name?: string; code?: string; email?: string } | null
+): boolean {
+  if (!user || !booking) return false;
+
+  const userCode = (user.code || '').trim().toLowerCase();
+  const userName = (user.name || '').trim().toLowerCase();
+  const userEmail = (user.email || '').trim().toLowerCase();
+
+  const bookedByCode = (booking.bookedByCode || '').trim().toLowerCase();
+  const bookedByName = (booking.bookedByName || '').trim().toLowerCase();
+  const bookedByEmail = ((booking as any).bookedByEmail || '').trim().toLowerCase();
+
+  if (userCode && bookedByCode && userCode === bookedByCode) return true;
+  if (userEmail && bookedByEmail && userEmail === bookedByEmail) return true;
+
+  if (userName && bookedByName) {
+    if (userName === bookedByName) return true;
+    if (userName.length > 3 && (bookedByName.includes(userName) || userName.includes(bookedByName))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 const ROOMS_STORAGE_KEY = 'jaago_meeting_rooms';
 const BOOKINGS_STORAGE_KEY = 'jaago_room_bookings';
 
@@ -479,24 +540,7 @@ export function getMeetingRooms(): MeetingRoom[] {
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_ROOMS;
-
-    // Migrate legacy room images and synchronize default rooms metadata
-    const migrated = parsed.map((room: MeetingRoom) => {
-      const defaultMatch = DEFAULT_ROOMS.find((dr) => dr.id === room.id);
-      if (defaultMatch) {
-        return {
-          ...room,
-          name: defaultMatch.name,
-          image: defaultMatch.image,
-          amenities: defaultMatch.amenities,
-          description: defaultMatch.description,
-        };
-      }
-      return room;
-    });
-
-    localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(migrated));
-    return migrated;
+    return parsed;
   } catch (err) {
     console.error('Error loading rooms from storage:', err);
     return DEFAULT_ROOMS;
@@ -526,7 +570,7 @@ export function saveMeetingRoom(room: MeetingRoom): void {
 }
 
 /**
- * Delete a meeting room
+ * Delete a meeting room and cleanup associated bookings
  */
 export function deleteMeetingRoom(id: string): void {
   if (typeof window === 'undefined') return;
@@ -535,6 +579,14 @@ export function deleteMeetingRoom(id: string): void {
     const filtered = existing.filter((r) => r.id !== id);
     localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(filtered));
     window.dispatchEvent(new CustomEvent('jaago_meeting_rooms_updated'));
+
+    // Clean up bookings associated with the deleted room
+    const bookings = getRoomBookings();
+    const remainingBookings = bookings.filter((b) => b.roomId !== id);
+    if (remainingBookings.length !== bookings.length) {
+      localStorage.setItem(BOOKINGS_STORAGE_KEY, JSON.stringify(remainingBookings));
+      window.dispatchEvent(new CustomEvent('jaago_bookings_updated'));
+    }
   } catch (err) {
     console.error('Error deleting room:', err);
   }

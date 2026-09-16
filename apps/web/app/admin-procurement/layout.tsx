@@ -31,6 +31,7 @@ import {
   Moon,
   Coffee,
   ShieldAlert,
+  DoorOpen,
 } from 'lucide-react';
 import { signOutUser } from '@/lib/supabase-auth';
 import { getCurrentUserSession, UserSessionData } from '@/lib/user-profile-sync';
@@ -188,6 +189,7 @@ export default function AdminProcurementLayout({
     { label: 'UNITS / UOM', href: '/admin-procurement/units', icon: Ruler },
     { label: 'WAREHOUSES', href: '/admin-procurement/warehouses', icon: Warehouse },
     { label: 'CONTRACTS', href: '/admin-procurement/contracts', icon: FileSignature },
+    { label: 'MEETING ROOMS', href: '/admin-procurement/meeting-rooms', icon: DoorOpen },
     { label: 'BUDGET & APPROVALS', href: '/admin-procurement/budgets', icon: DollarSign },
     { label: 'REPORTS & ANALYTICS', href: '/admin-procurement/reports', icon: BarChart3 },
     { label: 'SETTINGS', href: '/admin-procurement/settings', icon: Settings },
@@ -207,6 +209,7 @@ export default function AdminProcurementLayout({
     if (pathname.includes('/units')) return 'Units / UOM';
     if (pathname.includes('/warehouses')) return 'Warehouses';
     if (pathname.includes('/contracts')) return 'Contracts';
+    if (pathname.includes('/meeting-rooms')) return 'Meeting Rooms Setting';
     if (pathname.includes('/budgets')) return 'Budget & Approvals';
     if (pathname.includes('/reports')) return 'Reports & Analytics';
     if (pathname.includes('/settings')) return 'Settings';

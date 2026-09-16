@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   ShieldCheck,
   Hash,
@@ -11,6 +12,8 @@ import {
   RotateCcw,
   Sliders,
   Check,
+  DoorOpen,
+  ArrowRight,
 } from 'lucide-react';
 import {
   getProcurementSettings,
@@ -22,7 +25,7 @@ import {
 export default function ProcurementSettingsPage() {
   const [settings, setSettings] = useState<ProcurementSettings>(INITIAL_SETTINGS);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'numbering' | 'approvals' | 'tax' | 'notifications'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'numbering' | 'approvals' | 'tax' | 'notifications' | 'meeting-rooms'>('general');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -118,6 +121,7 @@ export default function ProcurementSettingsPage() {
           { id: 'approvals', label: 'Approval Matrix', icon: ShieldCheck },
           { id: 'tax', label: 'Tax & Compliance', icon: DollarSign },
           { id: 'notifications', label: 'Notifications', icon: Bell },
+          { id: 'meeting-rooms', label: 'Meeting Rooms Setting', icon: DoorOpen },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -375,6 +379,80 @@ export default function ProcurementSettingsPage() {
                   defaultChecked
                   className="h-5 w-5 rounded border-border text-primary cursor-pointer"
                 />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 6: Meeting Rooms Setting */}
+        {activeTab === 'meeting-rooms' && (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between border-b border-border/50 pb-2">
+              <div>
+                <h2 className="text-sm font-extrabold uppercase tracking-wider text-muted-foreground">
+                  Meeting Room Settings &amp; Allocation Controls
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Administer meeting rooms, configure floor layouts, add or edit rooms, and manage reservations.
+                </p>
+              </div>
+
+              <Link
+                href="/admin-procurement/meeting-rooms"
+                className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-black text-xs shadow-sm hover:bg-primary/90 transition transform active:scale-95"
+              >
+                <span>Open Full Meeting Rooms Console</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              <div className="p-4 rounded-2xl bg-surface border border-border space-y-2">
+                <div className="h-8 w-8 rounded-xl bg-primary/10 text-[#F5C200] flex items-center justify-center font-black">
+                  <DoorOpen className="h-4 w-4" />
+                </div>
+                <h3 className="font-extrabold text-foreground text-xs">Room Directory &amp; Setup</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Add new conference rooms, edit existing capacities, customize amenities, and adjust operational status.
+                </p>
+                <Link
+                  href="/admin-procurement/meeting-rooms"
+                  className="inline-flex items-center space-x-1 text-xs font-bold text-amber-500 hover:underline pt-1"
+                >
+                  <span>Manage Rooms</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-surface border border-border space-y-2">
+                <div className="h-8 w-8 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-black">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <h3 className="font-extrabold text-foreground text-xs">Reservation Schedules</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  View full organization schedule and exercise admin authority to cancel/delete or reschedule any booking.
+                </p>
+                <Link
+                  href="/admin-procurement/meeting-rooms"
+                  className="inline-flex items-center space-x-1 text-xs font-bold text-blue-500 hover:underline pt-1"
+                >
+                  <span>View Bookings Register</span>
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-surface border border-border space-y-2">
+                <div className="h-8 w-8 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-black">
+                  <Sliders className="h-4 w-4" />
+                </div>
+                <h3 className="font-extrabold text-foreground text-xs">Unified Policy Sync</h3>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Changes made here instantly synchronize across Admin &amp; Procurement and My Dashboard Request Meeting Room.
+                </p>
+                <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-500 pt-1">
+                  <Check className="h-3 w-3" />
+                  <span>Real-time Active</span>
+                </span>
               </div>
             </div>
           </div>

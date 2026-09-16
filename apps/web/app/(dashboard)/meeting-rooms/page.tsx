@@ -24,8 +24,6 @@ import {
   MeetingRoom,
   RoomBooking,
   getMeetingRooms,
-  saveMeetingRoom,
-  deleteMeetingRoom,
   getRoomBookings,
   saveRoomBooking,
   createMultiDateBookings,
@@ -33,8 +31,9 @@ import {
   checkRoomCollision,
   timeStringToMinutes,
   formatDayDisplay,
+  isBookingOwner,
 } from '@/lib/meeting-rooms';
-import { getActiveEmployeeProfile } from '@/lib/user-profile-sync';
+import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
 import { formatDisplayDate } from '@/lib/date-format';
 
 export default function MeetingRoomsPage() {
@@ -45,6 +44,7 @@ export default function MeetingRoomsPage() {
     name: '',
     code: '',
     department: '',
+    email: '',
   });
 
   // Filter States
@@ -75,19 +75,6 @@ export default function MeetingRoomsPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRoomForDetails, setSelectedRoomForDetails] = useState<MeetingRoom | null>(null);
 
-  const [showRoomEditModal, setShowRoomEditModal] = useState(false);
-  const [editingRoom, setEditingRoom] = useState<MeetingRoom | null>(null);
-  const [roomFormData, setRoomFormData] = useState<Partial<MeetingRoom>>({
-    name: '',
-    capacity: 10,
-    floor: 'Floor 1',
-    location: 'Floor 1 • HQ - JAAGO Foundation',
-    status: 'Available',
-    amenities: ['Air Conditioned', 'High Speed WiFi'],
-    image: '',
-    description: '',
-  });
-
   const [showEditBookingModal, setShowEditBookingModal] = useState(false);
   const [editingBooking, setEditingBooking] = useState<RoomBooking | null>(null);
 
@@ -105,7 +92,25 @@ export default function MeetingRoomsPage() {
           name: emp.name,
           code: emp.code,
           department: emp.department || "Founder's Office / FC",
+          email: emp.workEmail || emp.personalEmail || '',
         });
+      } else {
+        const session = getCurrentUserSession();
+        if (session) {
+          setCurrentUser({
+            name: session.fullName || 'Nasif Kamal',
+            code: session.employeeCode || 'FO032507061190',
+            department: session.department || "Founder's Office / FC",
+            email: session.email || 'nasif.kamal@jaago.com.bd',
+          });
+        } else {
+          setCurrentUser({
+            name: 'Nasif Kamal',
+            code: 'FO032507061190',
+            department: "Founder's Office / FC",
+            email: 'nasif.kamal@jaago.com.bd',
+          });
+        }
       }
     });
 
@@ -113,9 +118,11 @@ export default function MeetingRoomsPage() {
 
     window.addEventListener('jaago_meeting_rooms_updated', loadData);
     window.addEventListener('jaago_bookings_updated', loadData);
+    window.addEventListener('storage', loadData);
     return () => {
       window.removeEventListener('jaago_meeting_rooms_updated', loadData);
       window.removeEventListener('jaago_bookings_updated', loadData);
+      window.removeEventListener('storage', loadData);
     };
   }, []);
 
@@ -328,12 +335,13 @@ export default function MeetingRoomsPage() {
         title: bookingFormData.title.trim(),
         startTime: bookingFormData.startTime,
         endTime: bookingFormData.endTime,
-        bookedByName: currentUser.name,
-        bookedByCode: currentUser.code,
-        bookedByDept: currentUser.department,
+        bookedByName: currentUser.name || 'Nasif Kamal',
+        bookedByCode: currentUser.code || 'FO032507061190',
+        bookedByDept: currentUser.department || "Founder's Office / FC",
         attendeesCount: Number(bookingFormData.attendeesCount) || 2,
         notes: bookingFormData.notes.trim(),
         status: 'Confirmed',
+        ...((currentUser.email ? { bookedByEmail: currentUser.email } : {}) as any),
       },
       bookingFormData.dates
     );
@@ -351,65 +359,12 @@ export default function MeetingRoomsPage() {
     setShowDetailsModal(true);
   };
 
-  // ── Add/Edit Room Handlers ──────────────────────────────────────────────────
-  const handleOpenAddRoom = () => {
-    setEditingRoom(null);
-    setRoomFormData({
-      name: `${rooms.length + 1}. New Meeting Room`,
-      capacity: 12,
-      floor: 'Floor 1',
-      location: 'Floor 1 • HQ - JAAGO Foundation',
-      status: 'Available',
-      amenities: ['Air Conditioned', 'Whiteboard', 'High Speed WiFi'],
-      image: 'https://images.unsplash.com/photo-1517502884422-41eaead166d4?auto=format&fit=crop&w=800&q=80',
-      description: 'Modern collaborative meeting workspace.',
-    });
-    setShowRoomEditModal(true);
-  };
-
-  const handleOpenEditRoom = (room: MeetingRoom) => {
-    setEditingRoom(room);
-    setRoomFormData({ ...room });
-    setShowRoomEditModal(true);
-  };
-
-  const handleSaveRoom = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!roomFormData.name?.trim()) {
-      showToast('Please enter room name', 'error');
+  // ── Edit Booking Handlers (Restricted to Own Bookings Only) ─────────────────
+  const handleOpenEditBooking = (b: RoomBooking) => {
+    if (!isBookingOwner(b, currentUser)) {
+      showToast('You can only edit your own bookings.', 'error');
       return;
     }
-
-    const payload: MeetingRoom = {
-      id: editingRoom?.id || `room-${Date.now()}`,
-      name: roomFormData.name.trim(),
-      roomNumber: editingRoom?.roomNumber || rooms.length + 1,
-      capacity: Number(roomFormData.capacity) || 10,
-      floor: roomFormData.floor || 'Floor 1',
-      location: roomFormData.location || 'Floor 1 • HQ - JAAGO Foundation',
-      status: (roomFormData.status as any) || 'Available',
-      amenities: roomFormData.amenities || ['Air Conditioned'],
-      image:
-        roomFormData.image?.trim() ||
-        'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80',
-      description: roomFormData.description?.trim() || '',
-      createdAt: editingRoom?.createdAt || new Date().toISOString(),
-    };
-
-    saveMeetingRoom(payload);
-    setShowRoomEditModal(false);
-    showToast(editingRoom ? 'Room details updated successfully' : 'New meeting room added');
-  };
-
-  const handleDeleteRoom = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to remove "${name}"?`)) {
-      deleteMeetingRoom(id);
-      showToast(`Meeting room "${name}" deleted`);
-    }
-  };
-
-  // ── Edit Booking Handlers ───────────────────────────────────────────────────
-  const handleOpenEditBooking = (b: RoomBooking) => {
     setEditingBooking(b);
     setShowEditBookingModal(true);
   };
@@ -418,12 +373,22 @@ export default function MeetingRoomsPage() {
     e.preventDefault();
     if (!editingBooking) return;
 
+    if (!isBookingOwner(editingBooking, currentUser)) {
+      showToast('You can only edit your own bookings.', 'error');
+      return;
+    }
+
     saveRoomBooking(editingBooking);
     setShowEditBookingModal(false);
     showToast('Booking updated successfully');
   };
 
   const handleDeleteBooking = (id: string, title: string) => {
+    const booking = bookings.find((b) => b.id === id);
+    if (booking && !isBookingOwner(booking, currentUser)) {
+      showToast('You are only authorized to cancel your own bookings.', 'error');
+      return;
+    }
     if (confirm(`Cancel and delete booking "${title}"?`)) {
       deleteRoomBooking(id);
       showToast('Booking cancelled');
@@ -512,15 +477,6 @@ export default function MeetingRoomsPage() {
               <span>CALENDAR</span>
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={handleOpenAddRoom}
-            className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 font-black text-xs uppercase tracking-wider transition flex items-center space-x-2 shadow-lg shadow-amber-500/20 cursor-pointer active:scale-95 flex-shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            <span>ADD ROOM</span>
-          </button>
         </div>
       </div>
 
@@ -680,19 +636,9 @@ export default function MeetingRoomsPage() {
 
                   {/* Body Info */}
                   <div className="p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-extrabold text-foreground text-base group-hover:text-amber-500 transition line-clamp-1">
-                        {room.name}
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditRoom(room)}
-                        className="p-1 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
-                        title="Edit Room"
-                      >
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <h3 className="font-extrabold text-foreground text-base group-hover:text-amber-500 transition line-clamp-1">
+                      {room.name}
+                    </h3>
 
                     <div className="flex items-center space-x-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
                       <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
@@ -815,14 +761,6 @@ export default function MeetingRoomsPage() {
                           title="Details"
                         >
                           <Info className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditRoom(room)}
-                          className="p-1.5 rounded-xl text-muted-foreground hover:text-amber-500 hover:bg-surface transition cursor-pointer"
-                          title="Edit"
-                        >
-                          <Edit2 className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
@@ -988,24 +926,38 @@ export default function MeetingRoomsPage() {
                       <span className="font-mono font-black text-amber-600 dark:text-amber-400">
                         {b.startTime} - {b.endTime}
                       </span>
-                      <div className="flex items-center space-x-1">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditBooking(b)}
-                          className="p-1 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
-                          title="Edit Booking"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteBooking(b.id, b.title)}
-                          className="p-1 text-muted-foreground hover:text-rose-500 transition cursor-pointer"
-                          title="Delete Booking"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
+                      {(() => {
+                        const isOwn = isBookingOwner(b, currentUser);
+                        return (
+                          <div className="flex items-center space-x-1">
+                            {isOwn && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-primary/20 text-[#F5C200] border border-primary/30 text-[9px] font-black mr-1">
+                                My Booking
+                              </span>
+                            )}
+                            {isOwn && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditBooking(b)}
+                                className="p-1 text-muted-foreground hover:text-amber-500 transition cursor-pointer"
+                                title="Edit My Booking"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </button>
+                            )}
+                            {isOwn && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteBooking(b.id, b.title)}
+                                className="p-1 text-muted-foreground hover:text-rose-500 transition cursor-pointer"
+                                title="Cancel My Booking"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <div className="space-y-1">
@@ -1345,147 +1297,7 @@ export default function MeetingRoomsPage() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* ── MODAL 3: ADD / EDIT ROOM ─────────────────────────────── */}
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {showRoomEditModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-3xl bg-card border border-border shadow-2xl p-6 sm:p-7 space-y-5">
-            <div className="flex items-center justify-between border-b border-border/70 pb-3">
-              <h3 className="text-lg font-black text-foreground">
-                {editingRoom ? 'Edit Room Details' : 'Add New Meeting Room'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowRoomEditModal(false)}
-                className="p-1 rounded-xl text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleSaveRoom} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Room Name <span className="text-amber-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={roomFormData.name || ''}
-                  onChange={(e) => setRoomFormData({ ...roomFormData, name: e.target.value })}
-                  placeholder="e.g. 1. Meeting Room In"
-                  className="w-full h-10 px-3.5 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                    Capacity (Seats)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    value={roomFormData.capacity || 10}
-                    onChange={(e) => setRoomFormData({ ...roomFormData, capacity: Number(e.target.value) })}
-                    className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                    Status
-                  </label>
-                  <select
-                    value={roomFormData.status || 'Available'}
-                    onChange={(e) => setRoomFormData({ ...roomFormData, status: e.target.value as any })}
-                    className="w-full h-10 px-3 rounded-xl bg-surface border border-border text-xs font-bold text-foreground focus:outline-none cursor-pointer"
-                  >
-                    <option value="Available">Available</option>
-                    <option value="In Use">In Use</option>
-                    <option value="Booked">Booked</option>
-                    <option value="Maintenance">Maintenance</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Location String
-                </label>
-                <input
-                  type="text"
-                  value={roomFormData.location || ''}
-                  onChange={(e) => setRoomFormData({ ...roomFormData, location: e.target.value })}
-                  placeholder="e.g. Floor 1 • HQ - JAAGO Foundation"
-                  className="w-full h-10 px-3.5 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Photo URL
-                </label>
-                <input
-                  type="url"
-                  value={roomFormData.image || ''}
-                  onChange={(e) => setRoomFormData({ ...roomFormData, image: e.target.value })}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full h-10 px-3.5 rounded-xl bg-surface border border-border text-xs font-semibold text-foreground focus:outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                  Description
-                </label>
-                <textarea
-                  rows={2}
-                  value={roomFormData.description || ''}
-                  onChange={(e) => setRoomFormData({ ...roomFormData, description: e.target.value })}
-                  placeholder="Brief description of the room..."
-                  className="w-full p-2.5 rounded-xl bg-surface border border-border text-xs font-medium text-foreground focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-border/70">
-                {editingRoom ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleDeleteRoom(editingRoom.id, editingRoom.name);
-                      setShowRoomEditModal(false);
-                    }}
-                    className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl transition cursor-pointer"
-                    title="Delete Room"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                ) : (
-                  <div />
-                )}
-
-                <div className="flex items-center space-x-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowRoomEditModal(false)}
-                    className="px-4 py-2.5 rounded-xl bg-surface text-muted-foreground text-xs font-bold cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md transition cursor-pointer"
-                  >
-                    Save Room
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ═══════════════════════════════════════════════════════════ */}
       {/* ── MODAL 4: EDIT BOOKING ────────────────────────────────── */}
