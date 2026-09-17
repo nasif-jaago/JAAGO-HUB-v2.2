@@ -14,8 +14,10 @@ import {
   Users,
   Plus,
   Trash2,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   getActiveEmployeeProfile,
   updateEmployeeProfileDetails,
@@ -104,10 +106,12 @@ const EMPTY_PROFILE: FullEmployeeProfile = {
 };
 
 export default function MyProfilePage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'personal' | 'password'>('personal');
   const [profile, setProfile] = useState<FullEmployeeProfile>(EMPTY_PROFILE);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savedSuccessfully, setSavedSuccessfully] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -120,8 +124,32 @@ export default function MyProfilePage() {
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Standard & user-friendly window close / navigation
+  const handleCloseWindow = () => {
+    if (typeof window !== 'undefined') {
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.close();
+          return;
+        }
+      } catch {
+        // window.opener guard
+      }
+
+      try {
+        window.close();
+      } catch {
+        // window.close guard
+      }
+
+      // Smoothly navigate back to dashboard
+      router.push('/dashboard');
+    }
+  };
 
   // Load employee profile from Supabase
   useEffect(() => {
@@ -181,33 +209,40 @@ export default function MyProfilePage() {
     }
   };
 
-  // Handle Personal Details Save
+  // Handle Personal Details Save & Auto-close
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setSuccessMessage(null);
     setErrorMessage(null);
+    setSavedSuccessfully(false);
 
     try {
       const res = await updateEmployeeProfileDetails(profile);
       if (res.success) {
-        setSuccessMessage('Your profile information has been updated and synchronized with Employee Directory!');
-        setTimeout(() => setSuccessMessage(null), 5000);
+        setSavedSuccessfully(true);
+        setSuccessMessage('Profile saved successfully! Closing window and returning to dashboard...');
+        
+        // Brief user-friendly delay to view confirmation before closing/navigating
+        setTimeout(() => {
+          handleCloseWindow();
+        }, 850);
       } else {
         setErrorMessage(res.error || 'Failed to update profile.');
+        setSaving(false);
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Unexpected error while saving.');
-    } finally {
       setSaving(false);
     }
   };
 
-  // Handle Password Update
+  // Handle Password Update & Auto-close
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMessage(null);
     setErrorMessage(null);
+    setPasswordSaved(false);
 
     if (!newPassword || newPassword.length < 6) {
       setErrorMessage('New password must be at least 6 characters long.');
@@ -232,14 +267,16 @@ export default function MyProfilePage() {
         throw error;
       }
 
-      setSuccessMessage('Password successfully updated! You can use your new password for your next login.');
+      setPasswordSaved(true);
+      setSuccessMessage('Password successfully updated! Closing window and returning to dashboard...');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setTimeout(() => setSuccessMessage(null), 6000);
+      setTimeout(() => {
+        handleCloseWindow();
+      }, 950);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to update password. Please check your credentials.');
-    } finally {
       setPasswordLoading(false);
     }
   };
@@ -277,6 +314,17 @@ export default function MyProfilePage() {
           <span>&gt;</span>
           <span className="text-foreground font-bold">My Profile</span>
         </div>
+
+        {/* Close Window / Return to Dashboard */}
+        <button
+          type="button"
+          onClick={handleCloseWindow}
+          className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border border-border bg-card hover:bg-surface text-xs font-bold text-muted-foreground hover:text-foreground transition cursor-pointer shadow-sm active:scale-95"
+          title="Close profile and return to dashboard"
+        >
+          <X className="h-3.5 w-3.5" />
+          <span>Close Window</span>
+        </button>
       </div>
 
       {/* Alert Notifications */}
@@ -780,16 +828,25 @@ export default function MyProfilePage() {
                 </div>
 
                 {/* Save Profile Button */}
-                <div className="pt-6 flex justify-start">
+                <div className="pt-6 flex flex-wrap items-center gap-3">
                   <button
                     type="submit"
-                    disabled={saving}
-                    className="px-8 py-3.5 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-black text-xs uppercase tracking-wider shadow-lg flex items-center space-x-2 transition transform active:scale-95 cursor-pointer disabled:opacity-50"
+                    disabled={saving || savedSuccessfully}
+                    className={`px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg flex items-center space-x-2 transition transform active:scale-95 cursor-pointer disabled:opacity-90 ${
+                      savedSuccessfully
+                        ? 'bg-emerald-600 text-white shadow-emerald-500/20'
+                        : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                    }`}
                   >
-                    {saving ? (
+                    {saving && !savedSuccessfully ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
                         <span>SAVING CHANGES...</span>
+                      </>
+                    ) : savedSuccessfully ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                        <span>SAVED! CLOSING...</span>
                       </>
                     ) : (
                       <>
@@ -797,6 +854,15 @@ export default function MyProfilePage() {
                         <span>SAVE PROFILE CHANGES</span>
                       </>
                     )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCloseWindow}
+                    disabled={saving || savedSuccessfully}
+                    className="px-6 py-3.5 rounded-2xl border border-border bg-surface hover:bg-muted/40 text-muted-foreground hover:text-foreground font-bold text-xs uppercase tracking-wider transition cursor-pointer disabled:opacity-50"
+                  >
+                    Cancel / Close
                   </button>
                 </div>
               </form>
@@ -877,16 +943,25 @@ export default function MyProfilePage() {
                 </div>
 
                 {/* Submit Update Password Button (Screenshot 4) */}
-                <div className="pt-2">
+                <div className="pt-2 flex items-center gap-3">
                   <button
                     type="submit"
-                    disabled={passwordLoading}
-                    className="w-full py-4 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer disabled:opacity-50"
+                    disabled={passwordLoading || passwordSaved}
+                    className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 transition transform active:scale-95 cursor-pointer disabled:opacity-90 ${
+                      passwordSaved
+                        ? 'bg-emerald-600 text-white shadow-emerald-500/20'
+                        : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                    }`}
                   >
-                    {passwordLoading ? (
+                    {passwordLoading && !passwordSaved ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
                         <span>UPDATING PASSWORD...</span>
+                      </>
+                    ) : passwordSaved ? (
+                      <>
+                        <CheckCircle2 className="h-4 w-4 stroke-[2.5]" />
+                        <span>UPDATED! CLOSING...</span>
                       </>
                     ) : (
                       <>
