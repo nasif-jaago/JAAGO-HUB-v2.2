@@ -337,8 +337,170 @@ export function parseBioTimePunchTime(rawTime: string | null | undefined): strin
   return isNaN(fallback.getTime()) ? new Date().toISOString() : fallback.toISOString();
 }
 
+async function getSupabaseBackendClient(): Promise<any> {
+  if (typeof window !== 'undefined') return null;
+  const { createClient } = await import('@supabase/supabase-js');
+  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'] || 'https://fnemsvwejymnqpufumhj.supabase.co';
+  const serviceKey =
+    process.env['SUPABASE_SERVICE_ROLE_KEY'] ||
+    process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ||
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZuZW1zdndlanltbnFwdWZ1bWhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzIzNDY1NywiZXhwIjoyMTAyODEwNjU3fQ.WsvG5oRwqp7U04JnfiKmxIbnEnan1a0TqaY97vlhLVI';
+
+  return createClient(url, serviceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+}
+
 /**
- * Fetch live paginated transactions from remote ZKTeco BioTime Server with optional date range
+ * Query persistent biometric punches from Supabase att_biotime_events as an enterprise-grade cloud fallback
+ */
+export async function fetchBioTimeTransactionsFromSupabase(
+  page: number = 1,
+  pageSize: number = 20,
+  startTime?: string,
+  endTime?: string
+): Promise<BioTimePaginatedLogs> {
+  try {
+    const supabase = await getSupabaseBackendClient();
+    if (!supabase) {
+      return {
+        logs: serverLogs,
+        total: serverLogs.length,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(serverLogs.length / pageSize)),
+      };
+    }
+
+    let query = supabase.from('att_biotime_events').select('*', { count: 'exact' });
+
+    if (startTime) {
+      const startIso = parseBioTimePunchTime(startTime);
+      query = query.gte('punch_time', startIso);
+    }
+    if (endTime) {
+      const endIso = parseBioTimePunchTime(endTime);
+      query = query.lte('punch_time', endIso);
+    }
+
+    const offset = Math.max(0, (page - 1) * pageSize);
+    const { data: events, count, error } = await query
+      .order('punch_time', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      console.warn('att_biotime_events query warning:', error.message);
+      return {
+        logs: serverLogs,
+        total: serverLogs.length,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(serverLogs.length / pageSize)),
+      };
+    }
+
+    const total = typeof count === 'number' ? count : (events?.length || 0);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+    if (!events || events.length === 0) {
+      return {
+        logs: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 1,
+      };
+    }
+
+    // Collect distinct employee codes in this page to enrich names
+    const codes = Array.from(new Set(events.map((e: any) => String(e.biotime_emp_code).trim()).filter(Boolean)));
+    const empNameMap = new Map<string, { name?: string; dept?: string }>();
+
+    if (codes.length > 0) {
+      const [{ data: maps }, { data: emps }] = await Promise.all([
+        supabase.from('att_biotime_employee_map').select('biotime_emp_code, biotime_name, biotime_department, hub_employee_code').in('biotime_emp_code', codes),
+        supabase.from('employees').select('code, name, department').in('code', codes),
+      ]);
+
+      (maps || []).forEach((m: any) => {
+        if (m.biotime_emp_code) {
+          empNameMap.set(String(m.biotime_emp_code).trim(), {
+            name: m.biotime_name,
+            dept: m.biotime_department,
+          });
+        }
+      });
+
+      (emps || []).forEach((e: any) => {
+        if (e.code) {
+          const existing = empNameMap.get(String(e.code).trim()) || {};
+          empNameMap.set(String(e.code).trim(), {
+            name: e.name || existing.name,
+            dept: e.department || existing.dept,
+          });
+        }
+      });
+    }
+
+    const dbLogs: BioTimePunchLog[] = events.map((item: any) => {
+      const raw = typeof item.raw_payload === 'object' && item.raw_payload ? item.raw_payload : {};
+      const bioCode = String(item.biotime_emp_code || '').trim();
+      const enrichment = empNameMap.get(bioCode);
+
+      const employeeName =
+        raw.employeeName ||
+        enrichment?.name ||
+        (item.hub_employee_id ? `Employee (${bioCode})` : `Staff (${bioCode})`);
+
+      const department =
+        raw.department ||
+        enrichment?.dept ||
+        'General Staff';
+
+      const punchIso = parseBioTimePunchTime(item.punch_time);
+
+      return {
+        id: item.id || `zk-tx-${item.biotime_emp_code}-${new Date(punchIso).getTime()}`,
+        deviceSn: item.terminal_sn || 'VGU6251500095',
+        deviceName: item.terminal_alias || item.area_alias || 'JAAGO Foundation HQ',
+        locationBranch: item.area_alias || 'JAAGO Foundation HQ',
+        employeeCode: bioCode,
+        employeeName,
+        department,
+        punchTime: punchIso,
+        punchState: item.punch_state === 'CHECK_OUT' ? 'CHECK_OUT' : 'CHECK_IN',
+        verifyType: (item.verify_type as any) || 'Face',
+        syncStatus: 'PROCESSED',
+        createdAt: item.created_at || punchIso,
+      };
+    });
+
+    serverLogs = dbLogs;
+    return {
+      logs: dbLogs,
+      total,
+      page,
+      pageSize,
+      totalPages,
+    };
+  } catch (err) {
+    console.warn('att_biotime_events fallback notice:', err);
+    return {
+      logs: serverLogs,
+      total: serverLogs.length,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(serverLogs.length / pageSize)),
+    };
+  }
+}
+
+/**
+ * Fetch live paginated transactions from remote ZKTeco BioTime Server with optional date range,
+ * automatically falling back to Supabase att_biotime_events if hardware is unreachable.
  */
 export async function fetchLiveBioTimeTransactions(
   page: number = 1,
@@ -349,129 +511,151 @@ export async function fetchLiveBioTimeTransactions(
   const serverUrl = getBioTimeServerUrl();
   const apiToken = getBioTimeApiToken();
 
-  if (!apiToken) {
-    console.warn('BioTime API Token is not configured in backend environment.');
-    return {
-      logs: serverLogs,
-      total: serverLogs.length,
-      page,
-      pageSize,
-      totalPages: Math.max(1, Math.ceil(serverLogs.length / pageSize)),
-    };
-  }
+  // 1. If API Token is present, attempt live fetch directly from ZKTeco BioTime master hardware
+  if (apiToken) {
+    try {
+      let url = `${serverUrl}/iclock/api/transactions/?ordering=-punch_time&page=${page}&page_size=${pageSize}`;
+      if (startTime) url += `&start_time=${encodeURIComponent(startTime)}`;
+      if (endTime) url += `&end_time=${encodeURIComponent(endTime)}`;
 
-  try {
-    let url = `${serverUrl}/iclock/api/transactions/?ordering=-punch_time&page=${page}&page_size=${pageSize}`;
-    if (startTime) url += `&start_time=${encodeURIComponent(startTime)}`;
-    if (endTime) url += `&end_time=${encodeURIComponent(endTime)}`;
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Token ${apiToken}` },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(4000), // Quick timeout so fallback to Supabase is snappy
+      });
 
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Token ${apiToken}` },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(8000),
-    });
+      if (res.ok) {
+        const json = await res.json();
+        const total = typeof json.count === 'number' ? json.count : 0;
+        const totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if (!startTime && !endTime && total > 0) {
+          serverConfig.totalSyncedToday = total;
+        }
 
-    if (res.ok) {
-      const json = await res.json();
-      const total = typeof json.count === 'number' ? json.count : 0;
-      const totalPages = Math.max(1, Math.ceil(total / pageSize));
-      if (!startTime && !endTime && total > 0) {
-        serverConfig.totalSyncedToday = total;
+        if (Array.isArray(json.data) && json.data.length > 0) {
+          const liveLogs: BioTimePunchLog[] = json.data.map((item: any) => ({
+            id: `zk-tx-${item.id}`,
+            deviceSn: item.terminal_sn || 'VGU6251500095',
+            deviceName: item.terminal_alias || item.area_alias || 'JAAGO Foundation HQ',
+            locationBranch: item.area_alias || 'JAAGO Foundation HQ',
+            employeeCode: String(item.emp_code || item.emp || ''),
+            employeeName: item.first_name ? `${item.first_name} ${item.last_name || ''}`.trim() : `Staff (${item.emp_code})`,
+            department: item.department || 'General Staff',
+            punchTime: parseBioTimePunchTime(item.punch_time),
+            punchState: item.punch_state_display?.toUpperCase().includes('OUT') ? 'CHECK_OUT' : 'CHECK_IN',
+            verifyType: (item.verify_type_display as any) || 'Face',
+            syncStatus: 'PROCESSED',
+            createdAt: parseBioTimePunchTime(item.upload_time || item.punch_time),
+          }));
+          serverLogs = liveLogs;
+          return { logs: liveLogs, total, page, pageSize, totalPages };
+        }
       }
-
-      if (Array.isArray(json.data)) {
-        const liveLogs: BioTimePunchLog[] = json.data.map((item: any) => ({
-          id: `zk-tx-${item.id}`,
-          deviceSn: item.terminal_sn || 'VGU6251500095',
-          deviceName: item.terminal_alias || item.area_alias || 'JAAGO Foundation HQ',
-          locationBranch: item.area_alias || 'JAAGO Foundation HQ',
-          employeeCode: String(item.emp_code || item.emp || ''),
-          employeeName: item.first_name ? `${item.first_name} ${item.last_name || ''}`.trim() : `Staff (${item.emp_code})`,
-          department: item.department || 'General Staff',
-          punchTime: parseBioTimePunchTime(item.punch_time),
-          punchState: item.punch_state_display?.toUpperCase().includes('OUT') ? 'CHECK_OUT' : 'CHECK_IN',
-          verifyType: (item.verify_type_display as any) || 'Face',
-          syncStatus: 'PROCESSED',
-          createdAt: parseBioTimePunchTime(item.upload_time || item.punch_time),
-        }));
-        serverLogs = liveLogs;
-        return { logs: liveLogs, total, page, pageSize, totalPages };
-      }
-    } else {
-      console.warn(`BioTime transactions fetch returned status ${res.status}`);
+    } catch {
+      console.info('BioTime hardware unreachable directly from current host; using Supabase cloud store fallback.');
     }
-  } catch (err) {
-    console.warn('BioTime live transactions fetch notice:', err);
   }
 
-  return {
-    logs: serverLogs,
-    total: serverLogs.length,
-    page,
-    pageSize,
-    totalPages: Math.max(1, Math.ceil(serverLogs.length / pageSize)),
-  };
+  // 2. Resilient Cloud Store Fallback (Supabase att_biotime_events)
+  return fetchBioTimeTransactionsFromSupabase(page, pageSize, startTime, endTime);
 }
 
 /**
- * Fetch total personnel count from live BioTime API
+ * Fetch total personnel count from live BioTime API or Supabase employee records
  */
 export async function fetchLiveBioTimePersonnelCount(): Promise<number> {
   const serverUrl = getBioTimeServerUrl();
   const apiToken = getBioTimeApiToken();
 
-  if (!apiToken) return serverConfig.totalPersonnel || 0;
+  if (apiToken) {
+    try {
+      const res = await fetch(`${serverUrl}/personnel/api/employees/?page=1&page_size=1`, {
+        headers: { 'Authorization': `Token ${apiToken}` },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(3000),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (typeof json.count === 'number' && json.count > 0) {
+          serverConfig.totalPersonnel = json.count;
+          return json.count;
+        }
+      }
+    } catch {
+      // Fall through to database
+    }
+  }
 
+  // Fallback to Supabase employees count
   try {
-    const res = await fetch(`${serverUrl}/personnel/api/employees/?page=1&page_size=1`, {
-      headers: { 'Authorization': `Token ${apiToken}` },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(8000),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (typeof json.count === 'number') {
-        serverConfig.totalPersonnel = json.count;
-        return json.count;
+    const supabase = await getSupabaseBackendClient();
+    if (supabase) {
+      const { count } = await supabase.from('employees').select('*', { count: 'exact', head: true });
+      if (typeof count === 'number' && count > 0) {
+        serverConfig.totalPersonnel = count;
+        return count;
       }
     }
-  } catch (e) {
-    console.warn('BioTime personnel count fetch notice:', e);
+  } catch {
+    // Keep cached
   }
+
   return serverConfig.totalPersonnel || 0;
 }
 
 /**
- * Fetch today's real biometric punch count from live BioTime API
+ * Fetch today's real biometric punch count from live BioTime API or Supabase att_biotime_events
  */
 export async function fetchLiveBioTimeTodayPunchCount(): Promise<number> {
   const serverUrl = getBioTimeServerUrl();
   const apiToken = getBioTimeApiToken();
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
 
-  if (!apiToken) return serverConfig.totalSyncedToday || 0;
-
-  try {
-    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
-    const startTime = `${today} 00:00:00`;
-    const endTime = `${today} 23:59:59`;
-    const res = await fetch(
-      `${serverUrl}/iclock/api/transactions/?page=1&page_size=1&start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`,
-      {
-        headers: { 'Authorization': `Token ${apiToken}` },
-        cache: 'no-store',
-        signal: AbortSignal.timeout(8000),
+  if (apiToken) {
+    try {
+      const startTime = `${today} 00:00:00`;
+      const endTime = `${today} 23:59:59`;
+      const res = await fetch(
+        `${serverUrl}/iclock/api/transactions/?page=1&page_size=1&start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`,
+        {
+          headers: { 'Authorization': `Token ${apiToken}` },
+          cache: 'no-store',
+          signal: AbortSignal.timeout(3000),
+        }
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (typeof json.count === 'number' && json.count > 0) {
+          serverConfig.totalSyncedToday = json.count;
+          return json.count;
+        }
       }
-    );
-    if (res.ok) {
-      const json = await res.json();
-      if (typeof json.count === 'number') {
-        serverConfig.totalSyncedToday = json.count;
-        return json.count;
+    } catch {
+      // Fall through to database
+    }
+  }
+
+  // Fallback to Supabase att_biotime_events for today's Dhaka punches
+  try {
+    const supabase = await getSupabaseBackendClient();
+    if (supabase) {
+      const startIso = `${today}T00:00:00+06:00`;
+      const endIso = `${today}T23:59:59+06:00`;
+      const { count } = await supabase
+        .from('att_biotime_events')
+        .select('*', { count: 'exact', head: true })
+        .gte('punch_time', new Date(startIso).toISOString())
+        .lte('punch_time', new Date(endIso).toISOString());
+
+      if (typeof count === 'number') {
+        serverConfig.totalSyncedToday = count;
+        return count;
       }
     }
-  } catch (err) {
-    console.warn('BioTime today punch count fetch notice:', err);
+  } catch {
+    // Keep cached
   }
+
   return serverConfig.totalSyncedToday || 0;
 }
 

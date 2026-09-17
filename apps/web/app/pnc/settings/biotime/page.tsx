@@ -96,7 +96,7 @@ export default function BioTimeControlCenterPage() {
     const size = targetPageSize || pageSize;
     setIsLogsLoading(true);
     try {
-      const logsRes = await fetch(`/api/v1/biotime/logs?page=${targetPage}&pageSize=${size}`);
+      const logsRes = await fetch(`/api/v1/biotime/logs?view=raw&page=${targetPage}&pageSize=${size}`);
       const logsData = await logsRes.json();
       if (logsData.success && logsData.data) {
         setPunchLogs(logsData.data);

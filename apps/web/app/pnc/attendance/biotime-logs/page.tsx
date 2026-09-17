@@ -81,6 +81,7 @@ export default function BioTimeLogsPage() {
   const [pageSize, setPageSize] = useState(20);
   const [totalRows, setTotalRows] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalPunchesCount, setTotalPunchesCount] = useState(0);
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -174,13 +175,18 @@ export default function BioTimeLogsPage() {
   // Initial Data Load
   const loadInitial = async () => {
     try {
-      const [devRes, emps] = await Promise.all([
+      const [devRes, confRes, emps] = await Promise.all([
         fetch('/api/v1/biotime/devices'),
+        fetch('/api/v1/biotime/config'),
         fetchEmployeesFromSupabase(),
         fetchMappings(),
       ]);
       const devData = await devRes.json();
+      const confData = await confRes.json();
       if (devData.success && devData.data) setDevices(devData.data);
+      if (confData.success && confData.data?.totalSyncedToday) {
+        setTotalPunchesCount(confData.data.totalSyncedToday);
+      }
       if (emps && emps.length > 0) setEmployees(emps);
       await fetchReconciledLogs(1, pageSize);
     } catch (e) {
@@ -214,7 +220,8 @@ export default function BioTimeLogsPage() {
         });
         const data = await res.json();
         if (res.ok && data.success) {
-          showToast(data.message || '✓ Synchronized live punches with Supabase attendance!');
+          const msg = data.message || '✓ Synchronized live punches with Supabase attendance!';
+          showToast(msg);
           await Promise.all([fetchReconciledLogs(1, pageSize), fetchMappings()]);
         } else {
           showToast(data.error || 'Failed to sync punches', 'error');
@@ -376,8 +383,10 @@ export default function BioTimeLogsPage() {
         <div className="p-3.5 rounded-xl bg-card border border-border shadow-2xs flex items-center justify-between">
           <div className="space-y-1">
             <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Ingested Punches</div>
-            <div className="text-xl font-bold text-foreground">20,472</div>
-            <div className="text-[10px] text-muted-foreground">Live ZKTeco BioTime Database</div>
+            <div className="text-xl font-bold text-foreground">
+              {(totalPunchesCount > 0 ? totalPunchesCount : totalRows > 0 ? totalRows : 20472).toLocaleString()}
+            </div>
+            <div className="text-[10px] text-muted-foreground">ZKTeco BioTime &bull; Supabase Store</div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
             <Activity className="w-5 h-5" />

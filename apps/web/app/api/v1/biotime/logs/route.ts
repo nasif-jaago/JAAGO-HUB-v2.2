@@ -25,7 +25,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = Math.max(5, Math.min(100, parseInt(searchParams.get('pageSize') || searchParams.get('limit') || '20', 10)));
-    const view = searchParams.get('view') || 'reconciled'; // 'reconciled' | 'raw'
+    // Default to 'raw' if not specified (for /pnc/settings/biotime), or 'reconciled' when explicitly requested
+    const view = searchParams.get('view') || 'raw';
     const query = searchParams.get('q')?.toLowerCase().trim() || '';
     const startDate = searchParams.get('startDate') || '';
     const endDate = searchParams.get('endDate') || '';
@@ -34,30 +35,49 @@ export async function GET(request: Request) {
     const startTime = startDate ? `${startDate} 00:00:00` : undefined;
     const endTime = endDate ? `${endDate} 23:59:59` : undefined;
 
-    // Fetch batch of raw live transactions from ZKTeco BioTime
-    const fetchSize = view === 'reconciled' ? 200 : pageSize;
-    const result = await fetchLiveBioTimeTransactions(view === 'reconciled' ? 1 : page, fetchSize, startTime, endTime);
-
+    // ── Raw Punch View (e.g. for /pnc/settings/biotime Terminal Management) ──
     if (view === 'raw') {
+      const result = await fetchLiveBioTimeTransactions(page, pageSize, startTime, endTime);
+      let logs = result.logs;
+      if (query) {
+        logs = logs.filter(
+          (l) =>
+            l.employeeName?.toLowerCase().includes(query) ||
+            l.employeeCode?.toLowerCase().includes(query) ||
+            l.deviceSn?.toLowerCase().includes(query) ||
+            l.deviceName?.toLowerCase().includes(query) ||
+            l.department?.toLowerCase().includes(query)
+        );
+      }
       return NextResponse.json({
         success: true,
-        data: result.logs,
-        total: result.total,
+        data: logs,
+        total: query ? logs.length : result.total,
         page: result.page,
         pageSize: result.pageSize,
-        totalPages: result.totalPages,
+        totalPages: query ? Math.max(1, Math.ceil(logs.length / pageSize)) : result.totalPages,
       });
     }
 
     // ── Reconciled Daily View (RFID, Name, Employee ID, Dept, Branch, Device, Date, Check In, Check Out, Status) ──
+    // Fetch generous batch of raw transactions across requested date filters
+    const result = await fetchLiveBioTimeTransactions(1, 1000, startTime, endTime);
+
     const supabaseAdmin = getSupabaseAdminClient();
     let empsList: any[] = [];
+    const mapByBioCode = new Map<string, any>();
+
     if (supabaseAdmin) {
-      const { data: emps } = await supabaseAdmin
-        .from('employees')
-        .select('id, code, name, department, branch, rfid')
-        .limit(1000);
+      const [{ data: emps }, { data: maps }] = await Promise.all([
+        supabaseAdmin.from('employees').select('id, code, name, department, branch, rfid').limit(2000),
+        supabaseAdmin.from('att_biotime_employee_map').select('*').limit(2000),
+      ]);
       if (emps) empsList = emps;
+      if (maps) {
+        maps.forEach((m) => {
+          if (m.biotime_emp_code) mapByBioCode.set(String(m.biotime_emp_code).trim(), m);
+        });
+      }
     }
 
     // Create fast lookup maps by rfid, code, and trimmed lowercase employee name
@@ -143,20 +163,33 @@ export async function GET(request: Request) {
       // If an employee punched their biometric scan today, they are Present
       const status: 'Present' | 'Absent' = group.punches.length > 0 ? 'Present' : 'Absent';
 
-      // Match with P&C Employee database by RFID, Code, or Name
+      // Match with P&C Employee database by RFID, Code, Mapping, or Name
       const cleanRfid = group.rfid.trim();
-      const matchedEmp = empRfidMap.get(cleanRfid) ||
+      const mappedRecord = mapByBioCode.get(cleanRfid);
+      const matchedEmp =
+        (mappedRecord?.hub_employee_code ? empCodeMap.get(mappedRecord.hub_employee_code) : null) ||
+        empRfidMap.get(cleanRfid) ||
         empCodeMap.get(cleanRfid) ||
         empNameMap.get(group.name.toLowerCase().trim()) ||
-        empsList.find((e) => e.name && (group.name.toLowerCase().includes(e.name.toLowerCase()) || e.name.toLowerCase().includes(group.name.toLowerCase())));
+        empsList.find(
+          (e) =>
+            e.name &&
+            (group.name.toLowerCase().includes(e.name.toLowerCase()) ||
+              e.name.toLowerCase().includes(group.name.toLowerCase()))
+        );
+
+      const resolvedName = matchedEmp?.name || mappedRecord?.biotime_name || group.name;
+      const resolvedCode = matchedEmp?.code || mappedRecord?.hub_employee_code || `JF-${group.rfid}`;
+      const resolvedDept = matchedEmp?.department || mappedRecord?.biotime_department || group.department || 'General Staff';
+      const resolvedBranch = matchedEmp?.branch || 'JAAGO Foundation HQ';
 
       reconciledRows.push({
         id: `rec-${key}`,
         rfid: group.rfid,
-        name: group.name,
-        employeeId: matchedEmp?.code || `JF-${group.rfid}`,
-        department: matchedEmp?.department || group.department || 'General Staff',
-        branch: matchedEmp?.branch || 'JAAGO Foundation HQ',
+        name: resolvedName,
+        employeeId: resolvedCode,
+        department: resolvedDept,
+        branch: resolvedBranch,
         deviceLocation: group.deviceLocation,
         date: group.date,
         checkIn: checkInFormatted,
@@ -205,3 +238,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, error: err.message || 'Failed to fetch BioTime logs' }, { status: 500 });
   }
 }
+
