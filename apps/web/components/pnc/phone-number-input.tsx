@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Phone, ChevronDown, X, Check } from 'lucide-react';
+import { Phone, ChevronDown } from 'lucide-react';
 
 export interface CountryCodeItem {
   code: string;
@@ -23,48 +23,51 @@ export const COUNTRY_LIST: CountryCodeItem[] = [
   { code: 'SA', name: 'Saudi Arabia', dialCode: '+966', flag: '🇸🇦', maxDigits: 10 },
   { code: 'QA', name: 'Qatar', dialCode: '+974', flag: '🇶🇦', maxDigits: 8 },
   { code: 'KW', name: 'Kuwait', dialCode: '+965', flag: '🇰🇼', maxDigits: 8 },
-  { code: 'OM', name: 'Oman', dialCode: '+968', flag: '🇴🇲', maxDigits: 8 },
   { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳', maxDigits: 10 },
-  { code: 'PK', name: 'Pakistan', dialCode: '+92', flag: '🇵🇰', maxDigits: 11 },
-  { code: 'DE', name: 'Germany', dialCode: '+49', flag: '🇩🇪', maxDigits: 12 },
-  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷', maxDigits: 10 },
-  { code: 'IT', name: 'Italy', dialCode: '+39', flag: '🇮🇹', maxDigits: 11 },
-  { code: 'JP', name: 'Japan', dialCode: '+81', flag: '🇯🇵', maxDigits: 11 },
-  { code: 'CN', name: 'China', dialCode: '+86', flag: '🇨🇳', maxDigits: 11 },
-  { code: 'TR', name: 'Turkey', dialCode: '+90', flag: '🇹🇷', maxDigits: 10 },
+  { code: 'PK', name: 'Pakistan', dialCode: '+92', flag: '🇵🇰', maxDigits: 10 },
+  { code: 'NP', name: 'Nepal', dialCode: '+977', flag: '🇳🇵', maxDigits: 10 },
   { code: 'OTHER', name: 'Other', dialCode: '+', flag: '🌐', maxDigits: 15 },
 ];
 
-function normalizeBDLocal(digits: string): string {
-  // If 10 digits starting with 1 (e.g. 1750710193), normalize to standard 11 digits with leading 0 (01750710193)
-  if (digits.length === 10 && digits.startsWith('1')) {
-    return `0${digits}`;
+/**
+ * Normalizes a Bangladesh local number to standard 11-digit format starting with 01
+ */
+function normalizeBDLocal(rawDigits: string): string {
+  if (!rawDigits) return '';
+  const digits = rawDigits.replace(/[^0-9]/g, '');
+
+  if (digits.startsWith('880')) {
+    const after = digits.slice(3);
+    return after.startsWith('0') ? after.slice(0, 11) : ('0' + after).slice(0, 11);
   }
-  // Max 11 digits for Bangladesh
+
+  if (digits.startsWith('1') && digits.length === 10) {
+    return '0' + digits;
+  }
+
   return digits.slice(0, 11);
 }
 
-function parsePhoneNumber(phoneStr: string | null | undefined): {
+/**
+ * Parses an incoming phone number into { countryCode, dialCode, localDigits }
+ */
+function parsePhoneNumber(rawStr: string | null | undefined): {
   countryCode: string;
   dialCode: string;
   localDigits: string;
 } {
-  if (!phoneStr || typeof phoneStr !== 'string') {
+  if (!rawStr || typeof rawStr !== 'string') {
     return { countryCode: 'BD', dialCode: '+880', localDigits: '' };
   }
 
-  let cleanStr = phoneStr.trim();
+  let cleanStr = rawStr.trim();
   if (!cleanStr) {
     return { countryCode: 'BD', dialCode: '+880', localDigits: '' };
   }
 
-  // Handle scientific notation from spreadsheets (e.g. 8.80E+12)
-  if (/^[0-9]\.[0-9]+[eE]\+[0-9]+$/.test(cleanStr)) {
-    try {
-      cleanStr = BigInt(Math.round(Number(cleanStr))).toString();
-    } catch {
-      // ignore conversion failure
-    }
+  // Handle scientific notation or corrupt numbers from spreadsheets (e.g. 8.80E+12)
+  if (/[eE]\+?/.test(cleanStr)) {
+    return { countryCode: 'BD', dialCode: '+880', localDigits: '' };
   }
 
   // Sort dial codes by length descending so +880 matches before +88 or +1
@@ -77,18 +80,27 @@ function parsePhoneNumber(phoneStr: string | null | undefined): {
     if (cleanStr.startsWith(c.dialCode)) {
       const rest = cleanStr.slice(c.dialCode.length).replace(/[^0-9]/g, '');
       const localDigits = c.code === 'BD' ? normalizeBDLocal(rest) : rest.slice(0, c.maxDigits);
+      if (/^0+$/.test(localDigits)) {
+        return { countryCode: c.code, dialCode: c.dialCode, localDigits: '' };
+      }
       return { countryCode: c.code, dialCode: c.dialCode, localDigits };
     }
 
     if (cleanStr.startsWith(bareDial) && cleanStr.length > bareDial.length + 5) {
       const rest = cleanStr.slice(bareDial.length).replace(/[^0-9]/g, '');
       const localDigits = c.code === 'BD' ? normalizeBDLocal(rest) : rest.slice(0, c.maxDigits);
+      if (/^0+$/.test(localDigits)) {
+        return { countryCode: c.code, dialCode: c.dialCode, localDigits: '' };
+      }
       return { countryCode: c.code, dialCode: c.dialCode, localDigits };
     }
   }
 
   // Fallback: If only digits and looks like a BD number
   const onlyDigits = cleanStr.replace(/[^0-9]/g, '');
+  if (/^0+$/.test(onlyDigits)) {
+    return { countryCode: 'BD', dialCode: '+880', localDigits: '' };
+  }
   if (onlyDigits.startsWith('01') || onlyDigits.length === 11 || onlyDigits.length === 10) {
     return {
       countryCode: 'BD',
@@ -143,35 +155,26 @@ export function PhoneNumberInput({
       return;
     }
 
-    // For Bangladesh:
-    // Format to standard E.164 (+8801XXXXXXXXX) while allowing the user to view/type 01XXXXXXXXX
     if (countryCode === 'BD') {
-      const standard = digits.startsWith('0') ? digits.slice(1) : digits;
-      onChange(`${dialCode}${standard}`);
-    } else {
-      onChange(`${dialCode}${digits}`);
+      // BD format: standard international E.164 +8801XXXXXXXXX
+      const bdDigits = digits.startsWith('0') ? digits.slice(1) : digits;
+      onChange(`+880${bdDigits}`);
+      return;
     }
+
+    onChange(`${dialCode}${digits}`);
   };
 
   const handleCountryChange = (newCode: string) => {
     setSelectedCountryCode(newCode);
     const country = COUNTRY_LIST.find((c) => c.code === newCode) || COUNTRY_LIST[0]!;
-    const clamped = country.code === 'BD' ? normalizeBDLocal(localDigits) : localDigits.slice(0, country.maxDigits);
-    setLocalDigits(clamped);
-    emitValue(country.dialCode, clamped, newCode);
+    const clampedDigits = localDigits.slice(0, country.maxDigits);
+    setLocalDigits(clampedDigits);
+    emitValue(country.dialCode, clampedDigits, newCode);
   };
 
   const handleDigitsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-
-    // If user pasted a full number with country code
-    if (raw.startsWith('+') || raw.includes(' ')) {
-      const p = parsePhoneNumber(raw);
-      setSelectedCountryCode(p.countryCode);
-      setLocalDigits(p.localDigits);
-      emitValue(p.dialCode, p.localDigits, p.countryCode);
-      return;
-    }
 
     // Only allow numeric digits
     const digitsOnly = raw.replace(/[^0-9]/g, '');
@@ -183,13 +186,7 @@ export function PhoneNumberInput({
     emitValue(currentCountry.dialCode, clamped, selectedCountryCode);
   };
 
-  const handleClear = () => {
-    setLocalDigits('');
-    onChange('');
-  };
-
   const isBD = selectedCountryCode === 'BD';
-  const isCompleteBD = isBD && localDigits.length === 11;
 
   return (
     <div className={`space-y-1 ${className}`}>
@@ -234,47 +231,9 @@ export function PhoneNumberInput({
             placeholder={
               placeholder || (isBD ? '01711000000' : 'Phone number')
             }
-            className="w-full h-10 pl-8 pr-16 rounded-r-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 focus:z-10 shadow-sm transition"
+            className="w-full h-10 pl-8 pr-3.5 rounded-r-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 focus:z-10 shadow-sm transition"
           />
           <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-
-          {/* Right Controls: Digit Counter & Clear Button */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 z-20">
-            {isBD && localDigits.length > 0 && (
-              <span
-                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border transition-colors flex items-center gap-0.5 ${
-                  isCompleteBD
-                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                    : 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20'
-                }`}
-                title={
-                  isCompleteBD
-                    ? 'Complete 11-digit mobile number'
-                    : `Must be 11 digits (currently ${localDigits.length}/11)`
-                }
-              >
-                {isCompleteBD && <Check className="w-2.5 h-2.5" />}
-                {localDigits.length}/11
-              </span>
-            )}
-
-            {!isBD && localDigits.length > 0 && (
-              <span className="text-[10px] font-mono font-semibold text-muted-foreground/80 bg-muted px-1.5 py-0.5 rounded">
-                {localDigits.length}/{maxDigits}
-              </span>
-            )}
-
-            {localDigits && !disabled && (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="p-0.5 rounded text-muted-foreground hover:text-foreground transition cursor-pointer"
-                title="Clear phone number"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
         </div>
       </div>
     </div>
