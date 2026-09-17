@@ -100,11 +100,13 @@ export async function GET(request: Request) {
           name: log.employeeName,
           department: log.department || 'General Staff',
           deviceLocation: log.deviceName || log.locationBranch || 'JAAGO Foundation HQ',
-          date: punchDate || '2026-09-07',
+          date: punchDate || new Date().toISOString().split('T')[0] || '2026-09-17',
           punches: [],
         });
       }
-      grouped.get(key)!.punches.push(new Date(log.punchTime));
+      if (!isNaN(d.getTime())) {
+        grouped.get(key)!.punches.push(d);
+      }
     });
 
     const reconciledRows: BioTimeReconciledRow[] = [];

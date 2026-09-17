@@ -871,13 +871,22 @@ export default function BioTimeControlCenterPage() {
               </div>
 
               <div>
-                <label className="font-semibold text-foreground">API Token / Security Secret</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground">API Token / Security Secret</label>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Protected in .env
+                  </span>
+                </div>
                 <input
                   type="password"
                   value={config.apiToken}
                   onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
+                  placeholder="•••••••••••••••• (Protected in .env)"
                   className="mt-1 w-full px-3 py-1.5 rounded-lg bg-background border border-border font-mono text-[11px] focus:outline-none focus:ring-1 focus:ring-cyan-500"
                 />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  API token is securely managed in server environment variables and protected from outsiders.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

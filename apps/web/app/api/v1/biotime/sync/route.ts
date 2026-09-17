@@ -44,6 +44,8 @@ export async function POST(request: Request) {
       for (const punch of liveLogs) {
         const matchedEmp = empMap.get(punch.employeeCode.trim());
         const punchDateObj = new Date(punch.punchTime);
+        if (isNaN(punchDateObj.getTime())) continue;
+
         const todayDate = punchDateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
         const dhakaHoursStr = punchDateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour12: false, hour: '2-digit' });
         const dhakaMinsStr = punchDateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', minute: '2-digit' });

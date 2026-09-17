@@ -61,8 +61,8 @@ export const INITIAL_BIOTIME_CONFIG: BioTimeConfig = {
   syncIntervalMinutes: 5,
   lastSyncTime: new Date().toISOString(),
   lastSyncStatus: 'SUCCESS',
-  totalSyncedToday: 20472,
-  totalPersonnel: 148,
+  totalSyncedToday: 0,
+  totalPersonnel: 0,
   webhookUrl: 'https://hub.jaago.com.bd/api/v1/biotime/push',
   companyCode: 'JAAGO_BD',
   autoCreateAttendanceRecords: true,
@@ -72,43 +72,61 @@ let serverDevices: BioTimeDevice[] = [];
 let serverConfig: BioTimeConfig = { ...INITIAL_BIOTIME_CONFIG };
 let serverLogs: BioTimePunchLog[] = [];
 
+export function getBioTimeServerUrl(): string {
+  return process.env.BIOTIME_SERVER_URL || serverConfig.serverUrl || 'http://182.160.105.162:4390';
+}
+
+export function getBioTimeApiToken(): string {
+  return process.env.BIOTIME_API_TOKEN || serverConfig.apiToken || '';
+}
+
 /**
- * Fetch live devices from remote ZKTeco BioTime Server (http://182.160.105.162:4390)
+ * Fetch live devices from remote ZKTeco BioTime Server
  */
 export async function fetchLiveBioTimeDevices(): Promise<BioTimeDevice[]> {
-  const serverUrl = process.env.BIOTIME_SERVER_URL || 'http://182.160.105.162:4390';
-  const apiToken = process.env.BIOTIME_API_TOKEN || 'bdb2bffa3748e8aa85fc43bcdc1e51690f89eb20';
+  const serverUrl = getBioTimeServerUrl();
+  const apiToken = getBioTimeApiToken();
+
+  if (!apiToken) {
+    console.warn('BioTime API Token is not configured in backend environment.');
+    return serverDevices;
+  }
 
   try {
     const res = await fetch(`${serverUrl}/iclock/api/terminals/`, {
       headers: { 'Authorization': `Token ${apiToken}` },
       cache: 'no-store',
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (res.ok) {
       const json = await res.json();
       if (Array.isArray(json.data) && json.data.length > 0) {
-        const liveDevices: BioTimeDevice[] = json.data.map((item: any) => ({
-          id: `bio-dev-${item.id || item.sn}`,
-          name: item.alias || item.terminal_name || `Terminal ${item.sn}`,
-          serialNumber: item.sn,
-          ipAddress: item.ip_address || '192.168.1.1',
-          port: 4370,
-          locationBranch: item.area_name || item.area?.area_name || 'Banani HQ (Dhaka)',
-          deviceType: item.face_count > 0 ? 'Face Recognition' : 'Fingerprint Scanner',
-          protocol: item.push_ver?.includes('Push') ? 'ZKTeco Push SDK' : 'ADMS Protocol',
-          status: 'ONLINE',
-          lastHeartbeat: item.last_activity || new Date().toISOString(),
-          pingLatencyMs: Math.floor(Math.random() * 20) + 12,
-          totalUsers: Number(item.user_count || 0),
-          totalPunches: Number(item.transaction_count || 0),
-          firmwareVersion: item.fw_ver || 'Ver 8.2.4',
-          isActive: true,
-        }));
+        const liveDevices: BioTimeDevice[] = json.data.map((item: any) => {
+          const isOnline = String(item.state) === '1' || String(item.state) === '4';
+          return {
+            id: `bio-dev-${item.id || item.sn}`,
+            name: item.alias || item.terminal_name || `Terminal ${item.sn}`,
+            serialNumber: item.sn,
+            ipAddress: item.ip_address || '192.168.1.1',
+            port: 4370,
+            locationBranch: item.area_name || item.area?.area_name || 'Banani HQ (Dhaka)',
+            deviceType: (item.face_count && Number(item.face_count) > 0) ? 'Face Recognition' : 'Fingerprint Scanner',
+            protocol: item.push_ver?.includes('Push') ? 'ZKTeco Push SDK' : 'ADMS Protocol',
+            status: isOnline ? 'ONLINE' : 'OFFLINE',
+            lastHeartbeat: item.last_activity ? parseBioTimePunchTime(item.last_activity) : new Date().toISOString(),
+            pingLatencyMs: Math.floor(Math.random() * 20) + 12,
+            totalUsers: Number(item.user_count || 0),
+            totalPunches: Number(item.transaction_count || 0),
+            firmwareVersion: item.fw_ver || 'Ver 8.2.4',
+            isActive: true,
+          };
+        });
         serverDevices = liveDevices;
         return liveDevices;
       }
+    } else {
+      console.warn(`BioTime terminals fetch returned status ${res.status}`);
     }
   } catch (err) {
     console.warn('BioTime live device fetch notice:', err);
@@ -152,8 +170,19 @@ export async function fetchLiveBioTimeTransactions(
   startTime?: string,
   endTime?: string
 ): Promise<BioTimePaginatedLogs> {
-  const serverUrl = process.env.BIOTIME_SERVER_URL || 'http://182.160.105.162:4390';
-  const apiToken = process.env.BIOTIME_API_TOKEN || 'bdb2bffa3748e8aa85fc43bcdc1e51690f89eb20';
+  const serverUrl = getBioTimeServerUrl();
+  const apiToken = getBioTimeApiToken();
+
+  if (!apiToken) {
+    console.warn('BioTime API Token is not configured in backend environment.');
+    return {
+      logs: serverLogs,
+      total: serverLogs.length,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(serverLogs.length / pageSize)),
+    };
+  }
 
   try {
     let url = `${serverUrl}/iclock/api/transactions/?ordering=-punch_time&page=${page}&page_size=${pageSize}`;
@@ -163,14 +192,16 @@ export async function fetchLiveBioTimeTransactions(
     const res = await fetch(url, {
       headers: { 'Authorization': `Token ${apiToken}` },
       cache: 'no-store',
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(8000),
     });
 
     if (res.ok) {
       const json = await res.json();
-      const total = typeof json.count === 'number' ? json.count : 20472;
-      const totalPages = Math.ceil(total / pageSize);
-      serverConfig.totalSyncedToday = total;
+      const total = typeof json.count === 'number' ? json.count : 0;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      if (!startTime && !endTime && total > 0) {
+        serverConfig.totalSyncedToday = total;
+      }
 
       if (Array.isArray(json.data)) {
         const liveLogs: BioTimePunchLog[] = json.data.map((item: any) => ({
@@ -190,6 +221,8 @@ export async function fetchLiveBioTimeTransactions(
         serverLogs = liveLogs;
         return { logs: liveLogs, total, page, pageSize, totalPages };
       }
+    } else {
+      console.warn(`BioTime transactions fetch returned status ${res.status}`);
     }
   } catch (err) {
     console.warn('BioTime live transactions fetch notice:', err);
@@ -208,13 +241,16 @@ export async function fetchLiveBioTimeTransactions(
  * Fetch total personnel count from live BioTime API
  */
 export async function fetchLiveBioTimePersonnelCount(): Promise<number> {
-  const serverUrl = process.env.BIOTIME_SERVER_URL || 'http://182.160.105.162:4390';
-  const apiToken = process.env.BIOTIME_API_TOKEN || 'bdb2bffa3748e8aa85fc43bcdc1e51690f89eb20';
+  const serverUrl = getBioTimeServerUrl();
+  const apiToken = getBioTimeApiToken();
+
+  if (!apiToken) return serverConfig.totalPersonnel || 0;
 
   try {
     const res = await fetch(`${serverUrl}/personnel/api/employees/?page=1&page_size=1`, {
       headers: { 'Authorization': `Token ${apiToken}` },
       cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
     });
     if (res.ok) {
       const json = await res.json();
@@ -226,7 +262,41 @@ export async function fetchLiveBioTimePersonnelCount(): Promise<number> {
   } catch (e) {
     console.warn('BioTime personnel count fetch notice:', e);
   }
-  return serverConfig.totalPersonnel || 148;
+  return serverConfig.totalPersonnel || 0;
+}
+
+/**
+ * Fetch today's real biometric punch count from live BioTime API
+ */
+export async function fetchLiveBioTimeTodayPunchCount(): Promise<number> {
+  const serverUrl = getBioTimeServerUrl();
+  const apiToken = getBioTimeApiToken();
+
+  if (!apiToken) return serverConfig.totalSyncedToday || 0;
+
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+    const startTime = `${today} 00:00:00`;
+    const endTime = `${today} 23:59:59`;
+    const res = await fetch(
+      `${serverUrl}/iclock/api/transactions/?page=1&page_size=1&start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`,
+      {
+        headers: { 'Authorization': `Token ${apiToken}` },
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      }
+    );
+    if (res.ok) {
+      const json = await res.json();
+      if (typeof json.count === 'number') {
+        serverConfig.totalSyncedToday = json.count;
+        return json.count;
+      }
+    }
+  } catch (err) {
+    console.warn('BioTime today punch count fetch notice:', err);
+  }
+  return serverConfig.totalSyncedToday || 0;
 }
 
 export function getBioTimeDevices(): BioTimeDevice[] {
