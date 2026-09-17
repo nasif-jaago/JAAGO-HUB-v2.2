@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
+import { WorkEmailInput } from './work-email-input';
 import { NewContractModal } from '@/components/contracts/NewContractModal';
 import { ContractDocumentModal } from '@/components/contracts/ContractDocumentModal';
 import {
@@ -1880,21 +1881,13 @@ export function EmployeeProfileDetail({
               </div>
 
               {/* Work Email */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                  Work Email
-                </label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    value={formData.workEmail}
-                    onChange={(e) => setFormData({ ...formData, workEmail: e.target.value })}
-                    placeholder="name@jaago.com.bd"
-                    className="w-full h-10 pl-8 pr-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                  />
-                  <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                </div>
-              </div>
+              <WorkEmailInput
+                value={formData.workEmail}
+                onChange={(newEmail) => setFormData({ ...formData, workEmail: newEmail })}
+                employeeName={formData.name}
+                employeeCode={formData.code}
+                organization={formData.organization}
+              />
 
               {/* Official Phone Numbers / Personal Phone */}
               <div className="space-y-1">
