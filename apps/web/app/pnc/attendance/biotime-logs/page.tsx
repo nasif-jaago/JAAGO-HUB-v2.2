@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { BioTimeDevice } from '@/lib/biotime-data';
 import { FullEmployeeProfile, fetchEmployeesFromSupabase } from '@/lib/supabase-employees';
+import { BioTimeEmployeeCombobox } from '@/components/pnc/biotime-employee-combobox';
 import { formatDisplayDate } from '@/lib/date-format';
 import { JaagoSpinner } from '@/components/ui/jaago-loading-overlay';
 import { useLoading } from '@/components/providers/loading-provider';
@@ -71,6 +72,7 @@ export default function BioTimeLogsPage() {
   const [mappingSearch, setMappingSearch] = useState('');
   const [mappingFilter, setMappingFilter] = useState<'ALL' | 'UNMATCHED'>('UNMATCHED');
   const [savingMappingCode, setSavingMappingCode] = useState<string | null>(null);
+  const [activeComboboxCode, setActiveComboboxCode] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -893,8 +895,16 @@ export default function BioTimeLogsPage() {
 
                     return filtered.map((m) => {
                       const isSaving = savingMappingCode === m.biotimeEmpCode;
+                      const isActiveCombobox = activeComboboxCode === m.biotimeEmpCode;
                       return (
-                        <tr key={m.id} className="hover:bg-accent/20 transition-all text-[11px]">
+                        <tr
+                          key={m.id}
+                          className={`transition-all text-[11px] ${
+                            isActiveCombobox
+                              ? 'relative z-30 bg-cyan-500/5'
+                              : 'hover:bg-accent/20 relative z-0'
+                          }`}
+                        >
                           <td className="p-3 font-mono font-bold text-cyan-700 dark:text-cyan-300">
                             {m.biotimeEmpCode}
                           </td>
@@ -919,20 +929,21 @@ export default function BioTimeLogsPage() {
                               </span>
                             )}
                           </td>
-                          <td className="p-3">
-                            <select
-                              value={m.hubEmployeeCode || ''}
-                              disabled={isSaving}
-                              onChange={(e) => handleSaveMapping(m.biotimeEmpCode, e.target.value)}
-                              className="w-full max-w-sm px-2.5 py-1 rounded-lg bg-background border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-1 focus:ring-cyan-500 shadow-2xs"
-                            >
-                              <option value="">-- Unlinked / Quarantined --</option>
-                              {employees.map((emp) => (
-                                <option key={emp.id} value={emp.code}>
-                                  {emp.name} ({emp.code}) &bull; {emp.designation}
-                                </option>
-                              ))}
-                            </select>
+                          <td className={`p-3 ${isActiveCombobox ? 'relative z-30' : 'relative z-1'}`}>
+                            <BioTimeEmployeeCombobox
+                              biotimeEmpCode={m.biotimeEmpCode}
+                              biotimeName={m.biotimeName}
+                              currentHubCode={m.hubEmployeeCode}
+                              currentHubName={m.hubEmployeeName}
+                              currentHubDesignation={m.hubDesignation}
+                              currentHubDepartment={m.hubDepartment}
+                              employees={employees}
+                              isSaving={isSaving}
+                              onSave={handleSaveMapping}
+                              onActiveChange={(isActive) => {
+                                setActiveComboboxCode(isActive ? m.biotimeEmpCode : null);
+                              }}
+                            />
                           </td>
                           <td className="p-3 text-right">
                             {isSaving ? (
