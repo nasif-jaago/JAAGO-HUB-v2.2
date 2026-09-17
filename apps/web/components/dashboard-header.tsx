@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Check,
   X,
+  Loader2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -52,6 +53,20 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutProgress, setSignOutProgress] = useState(0);
+
+  useEffect(() => {
+    const handleProgress = (e: Event) => {
+      const customEvent = e as CustomEvent<{ progress: number; status: string }>;
+      if (customEvent.detail) {
+        setIsSigningOut(true);
+        setSignOutProgress(customEvent.detail.progress ?? 0);
+      }
+    };
+    window.addEventListener('jaago_signout_progress', handleProgress);
+    return () => window.removeEventListener('jaago_signout_progress', handleProgress);
+  }, []);
 
   const notifMenuRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -217,6 +232,9 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
   };
 
   const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    setSignOutProgress(15);
     await signOutUser();
   };
 
@@ -379,11 +397,16 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
         {/* Mobile Quick Sign Out Button */}
         <button
           onClick={handleSignOut}
-          className="sm:hidden p-2 rounded-xl text-destructive hover:bg-destructive/10 transition border border-destructive/20 cursor-pointer"
+          disabled={isSigningOut}
+          className="sm:hidden p-2 rounded-xl text-destructive hover:bg-destructive/10 transition border border-destructive/20 cursor-pointer disabled:opacity-75 disabled:cursor-wait"
           title="Sign Out"
           aria-label="Sign Out"
         >
-          <LogOut className="h-4 w-4" />
+          {isSigningOut ? (
+            <Loader2 className="h-4 w-4 animate-spin text-destructive" />
+          ) : (
+            <LogOut className="h-4 w-4" />
+          )}
         </button>
 
         {/* Shift Mobile View & Desktop View Button */}
@@ -574,10 +597,26 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
                 </button>
                 <button
                   onClick={handleSignOut}
-                  className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl transition cursor-pointer"
+                  disabled={isSigningOut}
+                  className="w-full relative overflow-hidden flex items-center space-x-2.5 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 rounded-xl transition cursor-pointer disabled:opacity-85 disabled:cursor-wait"
                 >
-                  <LogOut className="h-4 w-4" />
-                  <span>Sign Out</span>
+                  {isSigningOut ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-destructive shrink-0" />
+                      <span className="font-bold">Signing Out...</span>
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-destructive/20">
+                        <div
+                          className="h-full bg-destructive transition-all duration-300 ease-out"
+                          style={{ width: `${Math.max(10, signOutProgress)}%` }}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <LogOut className="h-4 w-4 shrink-0" />
+                      <span>Sign Out</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

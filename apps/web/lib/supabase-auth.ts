@@ -372,6 +372,25 @@ export function buildUserSessionPayload(user: any, fallbackEmployee?: any): AppU
  * Completely sign out user from Supabase, clear local storage & cookies, and redirect to /login
  */
 export async function signOutUser() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('jaago_signout_progress', {
+        detail: { progress: 15, status: 'Initiating secure sign-out...' },
+      })
+    );
+  }
+
+  // Smooth short interval for visual feedback
+  await new Promise((r) => setTimeout(r, 120));
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('jaago_signout_progress', {
+        detail: { progress: 35, status: 'Closing active Supabase session...' },
+      })
+    );
+  }
+
   try {
     const supabase = getSupabase();
     await supabase.auth.signOut();
@@ -379,11 +398,25 @@ export async function signOutUser() {
     console.error('Supabase sign out error:', err);
   }
 
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('jaago_signout_progress', {
+        detail: { progress: 65, status: 'Invalidating server auth cookies...' },
+      })
+    );
+  }
+
   try {
     await fetch('/api/v1/auth/sign-out', { method: 'POST' });
   } catch {}
 
   if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('jaago_signout_progress', {
+        detail: { progress: 85, status: 'Clearing local session & tokens...' },
+      })
+    );
+
     localStorage.removeItem('jaago_access_token');
     localStorage.removeItem('jaago_user');
     localStorage.removeItem('jaago_is_checked_in');
@@ -407,6 +440,16 @@ export async function signOutUser() {
 
     document.cookie = 'jaago_access_token=; path=/; max-age=0; SameSite=Lax';
     document.cookie = 'jaago_user=; path=/; max-age=0; SameSite=Lax';
+
+    window.dispatchEvent(
+      new CustomEvent('jaago_signout_progress', {
+        detail: { progress: 100, status: 'Redirecting to login...' },
+      })
+    );
+
+    // Brief visual pause to show completed 100% state before navigation
+    await new Promise((r) => setTimeout(r, 350));
+
     window.location.href = '/login';
   }
 }

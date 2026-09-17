@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import { loadingManager } from '@/lib/loading-manager';
 import { JaagoLoadingOverlay } from '@/components/ui/jaago-loading-overlay';
+import { SignOutProgressOverlay } from '@/components/sign-out-progress-overlay';
 
 interface LoadingContextValue {
   isLoading: boolean;
@@ -59,6 +60,8 @@ export function LoadingProvider({ children }: { children: React.ReactNode }) {
         message={state.message}
         onDismiss={() => loadingManager.clear()}
       />
+      {/* ── Global Animated Sign-Out Progress Overlay ── */}
+      <SignOutProgressOverlay />
     </LoadingContext.Provider>
   );
 }
