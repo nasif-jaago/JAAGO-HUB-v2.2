@@ -7,27 +7,54 @@ export interface CountryCodeItem {
   code: string;
   name: string;
   dialCode: string;
-  flag: string;
   maxDigits: number;
+  letterClasses: string[];
 }
 
 export const COUNTRY_LIST: CountryCodeItem[] = [
-  { code: 'BD', name: 'Bangladesh', dialCode: '+880', flag: '🇧🇩', maxDigits: 11 },
-  { code: 'GB', name: 'UK', dialCode: '+44', flag: '🇬🇧', maxDigits: 11 },
-  { code: 'US', name: 'USA', dialCode: '+1', flag: '🇺🇸', maxDigits: 10 },
-  { code: 'CA', name: 'Canada', dialCode: '+1', flag: '🇨🇦', maxDigits: 10 },
-  { code: 'AU', name: 'Australia', dialCode: '+61', flag: '🇦🇺', maxDigits: 10 },
-  { code: 'MY', name: 'Malaysia', dialCode: '+60', flag: '🇲🇾', maxDigits: 10 },
-  { code: 'SG', name: 'Singapore', dialCode: '+65', flag: '🇸🇬', maxDigits: 9 },
-  { code: 'AE', name: 'UAE', dialCode: '+971', flag: '🇦🇪', maxDigits: 10 },
-  { code: 'SA', name: 'Saudi Arabia', dialCode: '+966', flag: '🇸🇦', maxDigits: 10 },
-  { code: 'QA', name: 'Qatar', dialCode: '+974', flag: '🇶🇦', maxDigits: 8 },
-  { code: 'KW', name: 'Kuwait', dialCode: '+965', flag: '🇰🇼', maxDigits: 8 },
-  { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳', maxDigits: 10 },
-  { code: 'PK', name: 'Pakistan', dialCode: '+92', flag: '🇵🇰', maxDigits: 10 },
-  { code: 'NP', name: 'Nepal', dialCode: '+977', flag: '🇳🇵', maxDigits: 10 },
-  { code: 'OTHER', name: 'Other', dialCode: '+', flag: '🌐', maxDigits: 15 },
+  { code: 'BD', name: 'Bangladesh', dialCode: '+880', maxDigits: 11, letterClasses: ['flag-char-green', 'flag-char-red'] },
+  { code: 'UK', name: 'UK', dialCode: '+44', maxDigits: 11, letterClasses: ['flag-char-blue', 'flag-char-red'] },
+  { code: 'US', name: 'USA', dialCode: '+1', maxDigits: 10, letterClasses: ['flag-char-blue', 'flag-char-red'] },
+  { code: 'CA', name: 'Canada', dialCode: '+1', maxDigits: 10, letterClasses: ['flag-char-red', 'flag-char-red'] },
+  { code: 'AU', name: 'Australia', dialCode: '+61', maxDigits: 10, letterClasses: ['flag-char-blue', 'flag-char-red'] },
+  { code: 'MY', name: 'Malaysia', dialCode: '+60', maxDigits: 10, letterClasses: ['flag-char-blue', 'flag-char-yellow'] },
+  { code: 'SG', name: 'Singapore', dialCode: '+65', maxDigits: 9, letterClasses: ['flag-char-red', 'flag-char-maroon'] },
+  { code: 'AE', name: 'UAE', dialCode: '+971', maxDigits: 10, letterClasses: ['flag-char-green', 'flag-char-red'] },
+  { code: 'SA', name: 'Saudi Arabia', dialCode: '+966', maxDigits: 10, letterClasses: ['flag-char-green', 'flag-char-emerald'] },
+  { code: 'QA', name: 'Qatar', dialCode: '+974', maxDigits: 8, letterClasses: ['flag-char-maroon', 'flag-char-red'] },
+  { code: 'KW', name: 'Kuwait', dialCode: '+965', maxDigits: 8, letterClasses: ['flag-char-green', 'flag-char-red'] },
+  { code: 'IN', name: 'India', dialCode: '+91', maxDigits: 10, letterClasses: ['flag-char-orange', 'flag-char-green'] },
+  { code: 'PK', name: 'Pakistan', dialCode: '+92', maxDigits: 10, letterClasses: ['flag-char-green', 'flag-char-emerald'] },
+  { code: 'NP', name: 'Nepal', dialCode: '+977', maxDigits: 10, letterClasses: ['flag-char-red', 'flag-char-blue'] },
+  { code: 'OTHER', name: 'Other', dialCode: '+', maxDigits: 15, letterClasses: ['flag-char-cyan', 'flag-char-cyan', 'flag-char-cyan', 'flag-char-cyan', 'flag-char-cyan'] },
 ];
+
+/**
+ * Component to render country code letters styled with their national flag colors
+ */
+export function FlagColoredCode({
+  code,
+  letterClasses,
+  className = '',
+}: {
+  code: string;
+  letterClasses?: string[] | undefined;
+  className?: string | undefined;
+}) {
+  const chars = code.split('');
+  return (
+    <span className={`inline-flex font-black tracking-wider ${className}`}>
+      {chars.map((char, index) => {
+        const colorClass = letterClasses?.[index] || '';
+        return (
+          <span key={index} className={colorClass}>
+            {char}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
 
 /**
  * Normalizes a Bangladesh local number to standard 11-digit format starting with 01
@@ -149,7 +176,9 @@ export function PhoneNumberInput({
 
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>(parsed.countryCode);
   const [localDigits, setLocalDigits] = useState<string>(parsed.localDigits);
+  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const isUserTypingRef = useRef<boolean>(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Sync internal state when external value changes
   useEffect(() => {
@@ -161,9 +190,33 @@ export function PhoneNumberInput({
     setLocalDigits(parsed.localDigits);
   }, [parsed.countryCode, parsed.localDigits]);
 
+  // Click outside and escape key handling
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDropdownOpen]);
+
   const currentCountry = useMemo(() => {
+    const codeToMatch = selectedCountryCode === 'GB' ? 'UK' : selectedCountryCode;
     return (
-      COUNTRY_LIST.find((c) => c.code === selectedCountryCode) ||
+      COUNTRY_LIST.find((c) => c.code === codeToMatch) ||
       COUNTRY_LIST[0]!
     );
   }, [selectedCountryCode]);
@@ -187,11 +240,12 @@ export function PhoneNumberInput({
   };
 
   const handleCountryChange = (newCode: string) => {
-    setSelectedCountryCode(newCode);
-    const country = COUNTRY_LIST.find((c) => c.code === newCode) || COUNTRY_LIST[0]!;
+    const code = newCode === 'GB' ? 'UK' : newCode;
+    setSelectedCountryCode(code);
+    const country = COUNTRY_LIST.find((c) => c.code === code) || COUNTRY_LIST[0]!;
     const clampedDigits = localDigits.slice(0, country.maxDigits);
     setLocalDigits(clampedDigits);
-    emitValue(country.dialCode, clampedDigits, newCode);
+    emitValue(country.dialCode, clampedDigits, code);
   };
 
   const handleDigitsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -235,24 +289,77 @@ export function PhoneNumberInput({
         </label>
       )}
 
-      {/* Input Group: Fast Country Dropdown + Phone Input */}
-      <div className="flex items-center group relative shadow-sm">
+      {/* Input Group: Country Dropdown + Phone Input */}
+      <div className={`flex items-center group relative shadow-sm ${isDropdownOpen ? 'z-30' : ''}`}>
         {/* Left: Country Code Dropdown */}
-        <div className="relative shrink-0 w-[115px] sm:w-[130px]">
-          <select
-            value={selectedCountryCode}
+        <div ref={dropdownRef} className="relative shrink-0 w-[115px] sm:w-[130px]">
+          <button
+            type="button"
             disabled={disabled}
-            onChange={(e) => handleCountryChange(e.target.value)}
-            className={`w-full ${heightClass} pl-2.5 pr-7 ${leftRounded} bg-muted/70 hover:bg-muted/90 border border-r-0 border-border text-xs sm:text-[12px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer appearance-none transition`}
+            onClick={() => !disabled && setIsDropdownOpen((prev) => !prev)}
+            className={`w-full ${heightClass} px-2.5 ${leftRounded} bg-muted/70 hover:bg-muted/90 border border-r-0 border-border text-xs sm:text-[12px] font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary cursor-pointer transition flex items-center justify-between select-none ${
+              disabled ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
             title="Select Country Code"
+            aria-expanded={isDropdownOpen}
+            aria-haspopup="listbox"
           >
-            {COUNTRY_LIST.map((c) => (
-              <option key={c.code} value={c.code} className="bg-card text-foreground font-medium">
-                {c.flag} {c.code} ({c.dialCode})
-              </option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <span className="flex items-center gap-1.5 truncate">
+              <FlagColoredCode
+                code={currentCountry.code}
+                letterClasses={currentCountry.letterClasses}
+              />
+              <span className="text-foreground/80 font-semibold text-xs sm:text-[12px]">
+                ({currentCountry.dialCode})
+              </span>
+            </span>
+            <ChevronDown
+              className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 shrink-0 ${
+                isDropdownOpen ? 'rotate-180 text-foreground' : ''
+              }`}
+            />
+          </button>
+
+          {/* Dropdown Menu */}
+          {isDropdownOpen && (
+            <div
+              role="listbox"
+              className="absolute top-full left-0 mt-1 w-56 sm:w-64 max-h-60 overflow-y-auto z-50 rounded-xl bg-card border border-border shadow-2xl py-1 divide-y divide-border/20 focus:outline-none animate-in fade-in-50 zoom-in-95"
+            >
+              {COUNTRY_LIST.map((c) => {
+                const isSelected = c.code === currentCountry.code;
+                return (
+                  <button
+                    key={c.code}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => {
+                      handleCountryChange(c.code);
+                      setIsDropdownOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left text-xs sm:text-sm flex items-center justify-between hover:bg-muted/80 transition-colors cursor-pointer ${
+                      isSelected ? 'bg-primary/10 font-bold' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <FlagColoredCode
+                        code={c.code}
+                        letterClasses={c.letterClasses}
+                        className="text-xs sm:text-sm min-w-[26px]"
+                      />
+                      <span className="text-foreground font-medium truncate">
+                        {c.name}
+                      </span>
+                    </div>
+                    <span className="text-muted-foreground text-xs font-mono font-medium shrink-0 ml-2">
+                      {c.dialCode}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Right: Phone Number Input */}
@@ -276,3 +383,4 @@ export function PhoneNumberInput({
     </div>
   );
 }
+

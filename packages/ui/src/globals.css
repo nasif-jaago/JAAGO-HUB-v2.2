@@ -243,4 +243,70 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* ── National Flag Colors for Country Code Letters (Tri-Theme Fidelity) ── */
+  .flag-char-green {
+    color: #15803d;
+  }
+  .dark .flag-char-green,
+  .espresso .flag-char-green {
+    color: #22c55e;
+  }
+
+  .flag-char-red {
+    color: #dc2626;
+  }
+  .dark .flag-char-red,
+  .espresso .flag-char-red {
+    color: #ef4444;
+  }
+
+  .flag-char-blue {
+    color: #2563eb;
+  }
+  .dark .flag-char-blue,
+  .espresso .flag-char-blue {
+    color: #3b82f6;
+  }
+
+  .flag-char-orange {
+    color: #ea580c;
+  }
+  .dark .flag-char-orange,
+  .espresso .flag-char-orange {
+    color: #f97316;
+  }
+
+  .flag-char-yellow {
+    color: #ca8a04;
+  }
+  .dark .flag-char-yellow,
+  .espresso .flag-char-yellow {
+    color: #facc15;
+  }
+
+  .flag-char-maroon {
+    color: #881337;
+  }
+  .dark .flag-char-maroon,
+  .espresso .flag-char-maroon {
+    color: #fb7185;
+  }
+
+  .flag-char-emerald {
+    color: #059669;
+  }
+  .dark .flag-char-emerald,
+  .espresso .flag-char-emerald {
+    color: #34d399;
+  }
+
+  .flag-char-cyan {
+    color: #0891b2;
+  }
+  .dark .flag-char-cyan,
+  .espresso .flag-char-cyan {
+    color: #22d3ee;
+  }
 }
+
