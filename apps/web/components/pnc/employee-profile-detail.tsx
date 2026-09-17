@@ -41,6 +41,7 @@ import {
   Edit3,
   XCircle,
   Paperclip,
+  Users,
 } from 'lucide-react';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
@@ -174,6 +175,10 @@ export interface FullEmployeeProfile {
   passportNo: string;
   homeAddress: string;
   dependentChildren: number;
+  // Family Information
+  fatherName?: string | undefined;
+  motherName?: string | undefined;
+  childrenNames?: string[] | undefined;
 
   // ── Tab 3: Payroll ──
   // Contract Overview
@@ -461,6 +466,10 @@ export function EmployeeProfileDetail({
       passportNo: '',
       homeAddress: 'Road 11, Banani, Dhaka-1213',
       dependentChildren: 0,
+      fatherName: '',
+      motherName: '',
+      spouseName: '',
+      childrenNames: [],
 
       // Payroll
       joiningDate: new Date().toISOString().slice(0, 10),
@@ -501,7 +510,6 @@ export function EmployeeProfileDetail({
       insuranceMonthlyPremium: 0,
       employeeHealthInsuranceId: '',
       spouseHealthInsuranceId: '',
-      spouseName: '',
       child1HealthInsuranceId: '',
       child1Name: '',
       child2HealthInsuranceId: '',
@@ -2643,6 +2651,142 @@ export function EmployeeProfileDetail({
                       className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-mono font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* 6. FAMILY INFORMATION */}
+              <div className="space-y-4 pt-2">
+                <div className="border-b border-border/70 pb-2.5">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center space-x-2">
+                    <div className="h-6 w-6 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                      <Users className="h-3.5 w-3.5" />
+                    </div>
+                    <span>Family Information</span>
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+                  {/* Father's Name */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                      Father&apos;s Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.fatherName || ''}
+                      onChange={(e) => setFormData({ ...formData, fatherName: e.target.value })}
+                      placeholder="e.g. Kamal Uddin"
+                      className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                    />
+                  </div>
+
+                  {/* Mother's Name */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                      Mother&apos;s Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.motherName || ''}
+                      onChange={(e) => setFormData({ ...formData, motherName: e.target.value })}
+                      placeholder="e.g. Sufia Begum"
+                      className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                    />
+                  </div>
+
+                  {/* Spouse / Wife's Name */}
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                      Spouse / Wife&apos;s Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.spouseName || ''}
+                      onChange={(e) => setFormData({ ...formData, spouseName: e.target.value })}
+                      placeholder="e.g. Nusrat Jahan"
+                      className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Children's Names (Multi-entry dynamic list) */}
+                <div className="space-y-2.5 pt-2 border-t border-border/40">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                      Children&apos;s Names ({formData.childrenNames?.length || 0})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = formData.childrenNames || [];
+                        const updated = [...current, ''];
+                        setFormData({
+                          ...formData,
+                          childrenNames: updated,
+                          dependentChildren: Math.max(formData.dependentChildren || 0, updated.length),
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Child</span>
+                    </button>
+                  </div>
+
+                  {(!formData.childrenNames || formData.childrenNames.length === 0) ? (
+                    <div className="py-2.5 px-3 rounded-xl border border-dashed border-border/70 text-center text-xs text-muted-foreground">
+                      No children listed.{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            childrenNames: [''],
+                            dependentChildren: Math.max(formData.dependentChildren || 0, 1),
+                          });
+                        }}
+                        className="text-amber-600 dark:text-amber-400 font-bold hover:underline cursor-pointer"
+                      >
+                        + Add Child Name
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {formData.childrenNames.map((childName, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-muted-foreground w-14 shrink-0">
+                            Child {idx + 1}:
+                          </span>
+                          <input
+                            type="text"
+                            value={childName}
+                            onChange={(e) => {
+                              const updated = [...(formData.childrenNames || [])];
+                              updated[idx] = e.target.value;
+                              setFormData({ ...formData, childrenNames: updated });
+                            }}
+                            placeholder={`e.g. Child ${idx + 1} Name`}
+                            className="flex-1 h-9 px-3 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = (formData.childrenNames || []).filter((_, i) => i !== idx);
+                              setFormData({
+                                ...formData,
+                                childrenNames: updated,
+                                dependentChildren: updated.length,
+                              });
+                            }}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 transition cursor-pointer"
+                            title="Remove Child"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

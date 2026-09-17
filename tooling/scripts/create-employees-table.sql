@@ -66,6 +66,10 @@ CREATE TABLE public.employees (
     passport_no                 VARCHAR(100),
     home_address                TEXT,
     dependent_children          INT DEFAULT 0,
+    father_name                 VARCHAR(255),
+    mother_name                 VARCHAR(255),
+    spouse_name                 VARCHAR(255),
+    children_names              JSONB DEFAULT '[]'::jsonb,
 
     -- Tab 3: Payroll, Compensation & Benefits
     joining_date                DATE DEFAULT CURRENT_DATE,

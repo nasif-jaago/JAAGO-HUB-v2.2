@@ -51,6 +51,14 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     passportNo: row.passport_no || '',
     homeAddress: row.home_address || '',
     dependentChildren: Number(row.dependent_children || 0),
+    fatherName: row.father_name || '',
+    motherName: row.mother_name || '',
+    spouseName: row.spouse_name || '',
+    childrenNames: Array.isArray(row.children_names)
+      ? row.children_names.filter((c: any) => typeof c === 'string' && c.trim())
+      : typeof row.children_names === 'string' && row.children_names.trim()
+      ? row.children_names.split(/[;,]/).map((s: string) => s.trim()).filter(Boolean)
+      : [row.child1_name, row.child2_name, row.child3_name].filter(Boolean),
 
     // Tab 3: Payroll & Contracts
     joiningDate: row.joining_date ? row.joining_date.slice(0, 10) : '',
@@ -91,7 +99,6 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     insuranceMonthlyPremium: Number(row.insurance_monthly_premium ?? 1500),
     employeeHealthInsuranceId: row.employee_health_insurance_id || '',
     spouseHealthInsuranceId: row.spouse_health_insurance_id || '',
-    spouseName: row.spouse_name || '',
     child1HealthInsuranceId: row.child1_health_insurance_id || '',
     child1Name: row.child1_name || '',
     child2HealthInsuranceId: row.child2_health_insurance_id || '',
@@ -229,6 +236,10 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     passport_no: profile.passportNo || null,
     home_address: profile.homeAddress || null,
     dependent_children: sanitizeNumber(profile.dependentChildren, 0),
+    father_name: profile.fatherName || null,
+    mother_name: profile.motherName || null,
+    spouse_name: profile.spouseName || null,
+    children_names: profile.childrenNames && profile.childrenNames.length > 0 ? profile.childrenNames : [],
 
     // Tab 3: Payroll & Contracts
     joining_date: sanitizeDate(profile.joiningDate),
@@ -269,7 +280,6 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     insurance_monthly_premium: sanitizeNumber(profile.insuranceMonthlyPremium, 1500),
     employee_health_insurance_id: profile.employeeHealthInsuranceId || null,
     spouse_health_insurance_id: profile.spouseHealthInsuranceId || null,
-    spouse_name: profile.spouseName || null,
     child1_health_insurance_id: profile.child1HealthInsuranceId || null,
     child1_name: profile.child1Name || null,
     child2_health_insurance_id: profile.child2HealthInsuranceId || null,

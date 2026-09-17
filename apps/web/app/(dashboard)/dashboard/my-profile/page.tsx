@@ -11,6 +11,9 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  Users,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -58,6 +61,10 @@ const EMPTY_PROFILE: FullEmployeeProfile = {
   passportNo: '',
   homeAddress: '',
   dependentChildren: 0,
+  fatherName: '',
+  motherName: '',
+  spouseName: '',
+  childrenNames: [],
 
   // Payroll
   joiningDate: '',
@@ -638,6 +645,137 @@ export default function MyProfilePage() {
                         className="w-full px-4 py-3 rounded-2xl bg-surface border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* ── SECTION 4: FAMILY INFORMATION ── */}
+                <div className="pt-6 border-t border-border/60 space-y-4">
+                  <div className="flex items-center space-x-2 text-xs font-black uppercase tracking-wider text-amber-500">
+                    <Users className="h-4 w-4" />
+                    <span>FAMILY INFORMATION</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    {/* Father's Name */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground">
+                        Father&apos;s Name
+                      </label>
+                      <input
+                        type="text"
+                        value={profile.fatherName || ''}
+                        onChange={(e) => handleFieldChange('fatherName', e.target.value)}
+                        placeholder="e.g. Kamal Uddin"
+                        className="w-full px-4 py-3 rounded-2xl bg-surface border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+                      />
+                    </div>
+
+                    {/* Mother's Name */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-foreground">
+                        Mother&apos;s Name
+                      </label>
+                      <input
+                        type="text"
+                        value={profile.motherName || ''}
+                        onChange={(e) => handleFieldChange('motherName', e.target.value)}
+                        placeholder="e.g. Sufia Begum"
+                        className="w-full px-4 py-3 rounded-2xl bg-surface border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+                      />
+                    </div>
+
+                    {/* Spouse / Wife's Name */}
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label className="text-xs font-bold text-foreground">
+                        Spouse / Wife&apos;s Name
+                      </label>
+                      <input
+                        type="text"
+                        value={profile.spouseName || ''}
+                        onChange={(e) => handleFieldChange('spouseName', e.target.value)}
+                        placeholder="e.g. Nusrat Jahan"
+                        className="w-full px-4 py-3 rounded-2xl bg-surface border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Children's Names (Multi-entry dynamic list) */}
+                  <div className="pt-2 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-foreground">
+                        Children&apos;s Names ({profile.childrenNames?.length || 0})
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = profile.childrenNames || [];
+                          const updated = [...current, ''];
+                          setProfile({
+                            ...profile,
+                            childrenNames: updated,
+                            dependentChildren: Math.max(profile.dependentChildren || 0, updated.length),
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-amber-500 hover:text-amber-600 transition cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Child</span>
+                      </button>
+                    </div>
+
+                    {(!profile.childrenNames || profile.childrenNames.length === 0) ? (
+                      <div className="py-3 px-4 rounded-2xl border border-dashed border-border/80 text-center text-xs text-muted-foreground">
+                        No children listed.{' '}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProfile({
+                              ...profile,
+                              childrenNames: [''],
+                              dependentChildren: Math.max(profile.dependentChildren || 0, 1),
+                            });
+                          }}
+                          className="text-amber-500 font-bold hover:underline cursor-pointer"
+                        >
+                          + Add Child Name
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {profile.childrenNames.map((childName, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-muted-foreground w-16 shrink-0">
+                              Child {idx + 1}:
+                            </span>
+                            <input
+                              type="text"
+                              value={childName}
+                              onChange={(e) => {
+                                const updated = [...(profile.childrenNames || [])];
+                                updated[idx] = e.target.value;
+                                setProfile({ ...profile, childrenNames: updated });
+                              }}
+                              placeholder={`e.g. Child ${idx + 1} Name`}
+                              className="flex-1 px-4 py-2.5 rounded-2xl bg-surface border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = (profile.childrenNames || []).filter((_, i) => i !== idx);
+                                setProfile({
+                                  ...profile,
+                                  childrenNames: updated,
+                                  dependentChildren: updated.length,
+                                });
+                              }}
+                              className="p-2 rounded-xl text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 transition cursor-pointer"
+                              title="Remove Child"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

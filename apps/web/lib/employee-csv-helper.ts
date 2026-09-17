@@ -43,6 +43,10 @@ export const EMPLOYEE_CSV_COLUMNS: CSVColumnDefinition[] = [
   { header: 'Emergency Contact Name', key: 'emergencyContactName', aliases: ['emergency_contact_name', 'emergency contact name', 'emergency_name'], defaultValue: '' },
   { header: 'Emergency Contact Phone', key: 'emergencyPhone', aliases: ['emergency_phone', 'emergency phone', 'emergency_contact_phone'], defaultValue: '' },
   { header: 'Dependent Children', key: 'dependentChildren', aliases: ['dependent_children', 'dependent children', 'children_count'], type: 'number', defaultValue: 0 },
+  { header: 'Father\'s Name', key: 'fatherName', aliases: ['father_name', 'father name', 'fathers_name', 'father'], defaultValue: '' },
+  { header: 'Mother\'s Name', key: 'motherName', aliases: ['mother_name', 'mother name', 'mothers_name', 'mother'], defaultValue: '' },
+  { header: 'Spouse / Wife\'s Name', key: 'spouseName', aliases: ['spouse_name', 'spouse name', 'wife_name', 'wife name', 'husband_name', 'spouse'], defaultValue: '' },
+  { header: 'Children Names', key: 'childrenNames', aliases: ['children_names', 'children names', 'child_names', 'child names', 'children'], defaultValue: '' },
   { header: 'Bank Name', key: 'bankName', aliases: ['bank_name', 'bank name', 'bank'], defaultValue: '' },
   { header: 'Bank Branch', key: 'bankBranch', aliases: ['bank_branch', 'branch_name', 'bank branch', 'branch'], defaultValue: '' },
   { header: 'Bank Account Number', key: 'bankAccountNumber', aliases: ['bank_account_number', 'bank account number', 'account_no', 'bank_account'], defaultValue: '' },
@@ -87,7 +91,6 @@ export const EMPLOYEE_CSV_COLUMNS: CSVColumnDefinition[] = [
   { header: 'Insurance Coverage Category', key: 'insuranceCoverageCategory', aliases: ['insurance_coverage_category', 'insurance category', 'coverage_plan'], defaultValue: 'Standard Full-Time (Plan B)' },
   { header: 'Insurance Monthly Premium', key: 'insuranceMonthlyPremium', aliases: ['insurance_monthly_premium', 'insurance premium', 'monthly_premium'], type: 'number', defaultValue: 1500 },
   { header: 'Employee Health Insurance ID', key: 'employeeHealthInsuranceId', aliases: ['employee_health_insurance_id', 'health_insurance_id', 'insurance_id'], defaultValue: '' },
-  { header: 'Spouse Name', key: 'spouseName', aliases: ['spouse_name', 'spouse name', 'wife_name', 'husband_name'], defaultValue: '' },
   { header: 'Spouse Health Insurance ID', key: 'spouseHealthInsuranceId', aliases: ['spouse_health_insurance_id', 'spouse insurance id'], defaultValue: '' },
   { header: 'Child 1 Name', key: 'child1Name', aliases: ['child1_name', 'child 1 name'], defaultValue: '' },
   { header: 'Child 1 Health Insurance ID', key: 'child1HealthInsuranceId', aliases: ['child1_health_insurance_id', 'child 1 insurance id'], defaultValue: '' },
@@ -142,7 +145,10 @@ export function exportEmployeesToComprehensiveCSV(employees: FullEmployeeProfile
   const headerRow = EMPLOYEE_CSV_COLUMNS.map((col) => escapeCSVValue(col.header)).join(',');
   const dataRows = employees.map((emp) => {
     return EMPLOYEE_CSV_COLUMNS.map((col) => {
-      const val = emp[col.key];
+      let val: any = emp[col.key];
+      if (col.key === 'childrenNames' && Array.isArray(val)) {
+        val = val.join('; ');
+      }
       return escapeCSVValue(val !== undefined ? val : col.defaultValue ?? '');
     }).join(',');
   });
@@ -189,7 +195,11 @@ export function generateComprehensiveEmployeeTemplateCSV(): string {
       homeAddress: 'House 12, Road 4, Sector 3, Uttara, Dhaka-1230',
       emergencyContactName: 'Kamal Uddin',
       emergencyPhone: '+8801711223344',
-      dependentChildren: 0,
+      dependentChildren: 2,
+      fatherName: 'Late Kamal Uddin',
+      motherName: 'Sufia Begum',
+      spouseName: 'Nusrat Jahan',
+      childrenNames: ['Aayan Kamal', 'Zara Kamal'],
       bankName: 'BRAC Bank Ltd',
       bankBranch: 'Gulshan Branch',
       bankAccountNumber: '1501203456789001',
@@ -230,7 +240,6 @@ export function generateComprehensiveEmployeeTemplateCSV(): string {
       insuranceCoverageCategory: 'Executive Full Coverage (Plan A)',
       insuranceMonthlyPremium: 2500,
       employeeHealthInsuranceId: 'INS-JAAGO-2026-001',
-      spouseName: '',
       spouseHealthInsuranceId: '',
       child1Name: '',
       child1HealthInsuranceId: '',
@@ -473,7 +482,13 @@ export function parseComprehensiveEmployeeCSV(csvText: string): {
 
       const cleanVal = cellVal.replace(/^["']|["']$/g, '').trim();
 
-      if (colDef.type === 'number') {
+      if (colDef.key === 'childrenNames') {
+        if (cleanVal) {
+          rowObj.childrenNames = cleanVal.split(/[;,]/).map((s: string) => s.trim()).filter(Boolean);
+        } else {
+          rowObj.childrenNames = [];
+        }
+      } else if (colDef.type === 'number') {
         const num = parseFloat(cleanVal.replace(/[^0-9.-]/g, ''));
         rowObj[colDef.key] = isNaN(num) ? colDef.defaultValue ?? 0 : num;
       } else if (colDef.type === 'boolean') {
@@ -532,7 +547,11 @@ export function parseComprehensiveEmployeeCSV(csvText: string): {
       homeAddress: rowObj.homeAddress || '',
       emergencyContactName: rowObj.emergencyContactName || '',
       emergencyPhone: rowObj.emergencyPhone || '',
-      dependentChildren: Number(rowObj.dependentChildren || 0),
+      dependentChildren: Number(rowObj.dependentChildren || (Array.isArray(rowObj.childrenNames) ? rowObj.childrenNames.length : 0)),
+      fatherName: rowObj.fatherName || '',
+      motherName: rowObj.motherName || '',
+      spouseName: rowObj.spouseName || '',
+      childrenNames: Array.isArray(rowObj.childrenNames) ? rowObj.childrenNames : [],
       bankName: rowObj.bankName || '',
       bankBranch: rowObj.bankBranch || '',
       bankAccountNumber: rowObj.bankAccountNumber || '',
@@ -577,7 +596,6 @@ export function parseComprehensiveEmployeeCSV(csvText: string): {
       insuranceCoverageCategory: rowObj.insuranceCoverageCategory || 'Standard Full-Time (Plan B)',
       insuranceMonthlyPremium: Number(rowObj.insuranceMonthlyPremium ?? 1500),
       employeeHealthInsuranceId: rowObj.employeeHealthInsuranceId || '',
-      spouseName: rowObj.spouseName || '',
       spouseHealthInsuranceId: rowObj.spouseHealthInsuranceId || '',
       child1Name: rowObj.child1Name || '',
       child1HealthInsuranceId: rowObj.child1HealthInsuranceId || '',

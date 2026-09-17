@@ -226,15 +226,29 @@ export async function POST(request: Request) {
       error = upsertRes.error;
     }
 
-    if (error && error.message?.includes('is_archived')) {
-      const { is_archived, ...fallbackPayload } = employeePayload;
-      const retry = await supabaseAdmin
-        .from('employees')
-        .upsert(fallbackPayload, { onConflict: 'code' })
-        .select()
-        .single();
-      data = retry.data;
-      error = retry.error;
+    if (error && (error.code === 'PGRST204' || error.message?.includes('father_name') || error.message?.includes('mother_name') || error.message?.includes('children_names') || error.message?.includes('is_archived'))) {
+      const { father_name, mother_name, children_names, is_archived, ...fallbackPayload } = employeePayload;
+      if (body.id && !body.id.startsWith('emp-')) {
+        const retryUpdate = await supabaseAdmin
+          .from('employees')
+          .update(fallbackPayload)
+          .eq('id', body.id)
+          .select()
+          .maybeSingle();
+        if (!retryUpdate.error && retryUpdate.data) {
+          data = retryUpdate.data;
+          error = null;
+        }
+      }
+      if (!data) {
+        const retry = await supabaseAdmin
+          .from('employees')
+          .upsert(fallbackPayload, { onConflict: 'code' })
+          .select()
+          .maybeSingle();
+        data = retry.data;
+        error = retry.error;
+      }
     }
 
     if (error) {

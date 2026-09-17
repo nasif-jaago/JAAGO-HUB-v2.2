@@ -53,6 +53,10 @@ CREATE TABLE public.employees (
     passport_no VARCHAR(100),
     home_address TEXT,
     dependent_children INT DEFAULT 0,
+    father_name VARCHAR(255),
+    mother_name VARCHAR(255),
+    spouse_name VARCHAR(255),
+    children_names JSONB DEFAULT '[]'::jsonb,
 
     -- ── TAB 3: PAYROLL ──
     joining_date DATE,
