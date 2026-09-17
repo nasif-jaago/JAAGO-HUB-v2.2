@@ -194,17 +194,12 @@ export function PhoneNumberInput({
   return (
     <div className={`space-y-1 ${className}`}>
       {label && (
-        <div className="flex items-center justify-between">
-          <label
-            className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block truncate"
-            title={label}
-          >
-            {label}
-          </label>
-          <span className="text-[10px] text-muted-foreground/80">
-            {isBD ? '(11-digit Mobile Number)' : `(Max ${maxDigits} digits)`}
-          </span>
-        </div>
+        <label
+          className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block truncate"
+          title={label}
+        >
+          {label}
+        </label>
       )}
 
       {/* Input Group: Fast Country Dropdown + Phone Input */}

@@ -256,14 +256,9 @@ export function WorkEmailInput({
 
   return (
     <div ref={containerRef} className={`space-y-1 relative ${className}`}>
-      <div className="flex items-center justify-between">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-          Work Email
-        </label>
-        <span className="text-[10px] text-muted-foreground/80">
-          (Domain Selector &bull; Fast-Fill)
-        </span>
-      </div>
+      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+        Work Email
+      </label>
 
       {/* Input Group: Username/ID input + Domain Dropdown */}
       <div className="flex items-center group relative">
