@@ -45,6 +45,7 @@ import {
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { AvatarCropModal } from './avatar-crop-modal';
 import { WorkEmailInput } from './work-email-input';
+import { PhoneNumberInput } from './phone-number-input';
 import { NewContractModal } from '@/components/contracts/NewContractModal';
 import { ContractDocumentModal } from '@/components/contracts/ContractDocumentModal';
 import {
@@ -1890,21 +1891,12 @@ export function EmployeeProfileDetail({
               />
 
               {/* Official Phone Numbers / Personal Phone */}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block truncate" title="Official Phone Numbers / Personal Phone">
-                  Official Phone Numbers / Personal Phone
-                </label>
-                <div className="relative">
-                  <input
-                    type="tel"
-                    value={formData.workMobile}
-                    onChange={(e) => setFormData({ ...formData, workMobile: e.target.value })}
-                    placeholder="+880 1711 000000"
-                    className="w-full h-10 pl-8 pr-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                  />
-                  <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                </div>
-              </div>
+              <PhoneNumberInput
+                label="Official Phone Numbers / Personal Phone"
+                value={formData.workMobile}
+                onChange={(newMobile) => setFormData({ ...formData, workMobile: newMobile })}
+                placeholder="01711000000"
+              />
 
               {/* Working Schedule (Connected with Attendance Shift Management) */}
               <div className="space-y-1">
@@ -2307,18 +2299,12 @@ export function EmployeeProfileDetail({
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Personal Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.personalPhone}
-                      onChange={(e) => setFormData({ ...formData, personalPhone: e.target.value })}
-                      placeholder="+880 1811 000000"
-                      className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                    />
-                  </div>
+                  <PhoneNumberInput
+                    label="Personal Phone"
+                    value={formData.personalPhone}
+                    onChange={(newPhone) => setFormData({ ...formData, personalPhone: newPhone })}
+                    placeholder="01811000000"
+                  />
                 </div>
               </div>
 
@@ -2346,18 +2332,12 @@ export function EmployeeProfileDetail({
                       className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Emergency Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.emergencyPhone}
-                      onChange={(e) => setFormData({ ...formData, emergencyPhone: e.target.value })}
-                      placeholder="+880 1700 000000"
-                      className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                    />
-                  </div>
+                  <PhoneNumberInput
+                    label="Emergency Phone"
+                    value={formData.emergencyPhone}
+                    onChange={(newPhone) => setFormData({ ...formData, emergencyPhone: newPhone })}
+                    placeholder="01700000000"
+                  />
                 </div>
               </div>
 
