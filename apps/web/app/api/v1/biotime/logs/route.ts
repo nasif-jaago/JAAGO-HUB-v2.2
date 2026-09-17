@@ -60,8 +60,8 @@ export async function GET(request: Request) {
     }
 
     // ── Reconciled Daily View (RFID, Name, Employee ID, Dept, Branch, Device, Date, Check In, Check Out, Status) ──
-    // Fetch generous batch of raw transactions across requested date filters
-    const result = await fetchLiveBioTimeTransactions(1, 1000, startTime, endTime);
+    // Fetch all raw transactions for the requested date range to group into daily summaries
+    const result = await fetchLiveBioTimeTransactions(1, 5000, startTime, endTime);
 
     const supabaseAdmin = getSupabaseAdminClient();
     let empsList: any[] = [];

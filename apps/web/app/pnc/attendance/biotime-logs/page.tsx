@@ -172,25 +172,35 @@ export default function BioTimeLogsPage() {
     }
   };
 
-  // Initial Data Load
+  // Initial Data Load — uses allSettled so a failure in one call never blocks the table data
   const loadInitial = async () => {
     try {
-      const [devRes, confRes, emps] = await Promise.all([
-        fetch('/api/v1/biotime/devices'),
-        fetch('/api/v1/biotime/config'),
+      // Fire supporting data fetches independently; never let them block reconciled logs
+      const [devResult, confResult, empsResult] = await Promise.allSettled([
+        fetch('/api/v1/biotime/devices').then((r) => r.json()),
+        fetch('/api/v1/biotime/config').then((r) => r.json()),
         fetchEmployeesFromSupabase(),
         fetchMappings(),
       ]);
-      const devData = await devRes.json();
-      const confData = await confRes.json();
-      if (devData.success && devData.data) setDevices(devData.data);
-      if (confData.success && confData.data?.totalSyncedToday) {
-        setTotalPunchesCount(confData.data.totalSyncedToday);
+
+      if (devResult.status === 'fulfilled' && devResult.value?.success && devResult.value.data) {
+        setDevices(devResult.value.data);
       }
-      if (emps && emps.length > 0) setEmployees(emps);
+      if (confResult.status === 'fulfilled' && confResult.value?.success && confResult.value.data?.totalSyncedToday) {
+        setTotalPunchesCount(confResult.value.data.totalSyncedToday);
+      }
+      if (empsResult.status === 'fulfilled' && empsResult.value && Array.isArray(empsResult.value) && empsResult.value.length > 0) {
+        setEmployees(empsResult.value);
+      }
+    } catch (e) {
+      console.error('Error loading supporting data:', e);
+    }
+
+    // Always fetch reconciled logs regardless of whether supporting data succeeded
+    try {
       await fetchReconciledLogs(1, pageSize);
     } catch (e) {
-      console.error('Error loading initial data:', e);
+      console.error('Error fetching reconciled logs:', e);
     } finally {
       setIsLoading(false);
     }
@@ -384,7 +394,7 @@ export default function BioTimeLogsPage() {
           <div className="space-y-1">
             <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Ingested Punches</div>
             <div className="text-xl font-bold text-foreground">
-              {(totalPunchesCount > 0 ? totalPunchesCount : totalRows > 0 ? totalRows : 20472).toLocaleString()}
+              {(totalPunchesCount > 0 ? totalPunchesCount : totalRows).toLocaleString()}
             </div>
             <div className="text-[10px] text-muted-foreground">ZKTeco BioTime &bull; Supabase Store</div>
           </div>

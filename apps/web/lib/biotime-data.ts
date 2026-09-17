@@ -64,7 +64,7 @@ export const INITIAL_BIOTIME_CONFIG: BioTimeConfig = {
   syncIntervalMinutes: 5,
   lastSyncTime: new Date().toISOString(),
   lastSyncStatus: 'SUCCESS',
-  totalSyncedToday: 20472,
+  totalSyncedToday: 0,
   totalPersonnel: 148,
   webhookUrl: 'https://hub.jaago.com.bd/api/v1/biotime/push',
   companyCode: 'JAAGO_BD',
