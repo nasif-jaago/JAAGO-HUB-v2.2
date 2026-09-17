@@ -49,6 +49,7 @@ import {
   MessageSquare,
   Mail,
   LogOut,
+  Loader2,
   ChevronDown,
   ChevronRight,
   ChevronLeft,
@@ -190,7 +191,17 @@ export function DashboardSidebar({
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  React.useEffect(() => {
+    const handleProgress = () => setIsSigningOut(true);
+    window.addEventListener('jaago_signout_progress', handleProgress);
+    return () => window.removeEventListener('jaago_signout_progress', handleProgress);
+  }, []);
+
   const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
     await signOutUser();
   };
 
@@ -696,13 +707,18 @@ export function DashboardSidebar({
 
         <button
           onClick={handleSignOut}
+          disabled={isSigningOut}
           title="Sign Out"
           className={`w-full py-2 ${
             collapsed ? 'px-2 justify-center' : 'px-3 justify-center space-x-2'
-          } rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 font-bold text-xs uppercase tracking-wider flex items-center transition cursor-pointer`}
+          } rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 font-bold text-xs uppercase tracking-wider flex items-center transition cursor-pointer disabled:opacity-75 disabled:cursor-wait`}
         >
-          <LogOut className="h-3.5 w-3.5 flex-shrink-0" />
-          {!collapsed && <span>SIGN OUT</span>}
+          {isSigningOut ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
+          ) : (
+            <LogOut className="h-3.5 w-3.5 flex-shrink-0" />
+          )}
+          {!collapsed && <span>{isSigningOut ? 'SIGNING OUT...' : 'SIGN OUT'}</span>}
         </button>
       </div>
     </aside>
