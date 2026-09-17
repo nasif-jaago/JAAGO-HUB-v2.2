@@ -109,20 +109,29 @@ export const POST = createApiHandler({
       const directResetUrl = `${origin}/reset-password?token_hash=${hashedToken}&type=recovery`;
       const resetActionLink = linkData.properties?.action_link || directResetUrl;
 
-      // 4. Dual-Channel Delivery:
-      // Channel A: Native Supabase Auth delivery (if configured in Supabase Cloud)
-      try {
-        await supabaseAdmin.auth.resetPasswordForEmail(cleanEmail, {
+      // 4. Dual-Channel Concurrent Delivery with Timeout Protection:
+      // Channel A: Native Supabase Auth delivery
+      const nativeDeliveryPromise = supabaseAdmin.auth
+        .resetPasswordForEmail(cleanEmail, {
           redirectTo: `${origin}/reset-password`,
+        })
+        .then((res) => {
+          if (res.error) {
+            logger.info('AUTH', 'user.reset_password.native_supabase_note', {
+              metadata: { email: cleanEmail, note: res.error.message },
+            });
+          }
+          return res;
+        })
+        .catch((supaErr: any) => {
+          logger.info('AUTH', 'user.reset_password.native_supabase_note', {
+            metadata: { email: cleanEmail, note: supaErr?.message },
+          });
+          return { error: supaErr };
         });
-      } catch (supaErr: any) {
-        logger.info('AUTH', 'user.reset_password.native_supabase_note', {
-          metadata: { email: cleanEmail, note: supaErr?.message },
-        });
-      }
 
       // Channel B: Central Outbound Mailer Service (Brevo SMTP with branded template)
-      const mailResult = await sendEmail({
+      const mailerDeliveryPromise = sendEmail({
         templateKey: 'auth.password_reset',
         to: cleanEmail,
         variables: {
@@ -130,17 +139,31 @@ export const POST = createApiHandler({
           resetUrl: directResetUrl,
         },
         module: 'auth',
-      });
+      })
+        .then((mailResult) => {
+          if (!mailResult.success) {
+            logger.warn('AUTH', 'user.reset_password.email_warning', {
+              metadata: { email: cleanEmail, error: mailResult.errorReason },
+            });
+          } else {
+            logger.info('AUTH', 'user.reset_password.dispatched_smtp', {
+              metadata: { email: cleanEmail, logId: mailResult.logId },
+            });
+          }
+          return mailResult;
+        })
+        .catch((mailErr: any) => {
+          logger.warn('AUTH', 'user.reset_password.email_warning', {
+            metadata: { email: cleanEmail, error: mailErr?.message },
+          });
+          return { success: false, errorReason: mailErr?.message };
+        });
 
-      if (!mailResult.success) {
-        logger.warn('AUTH', 'user.reset_password.email_warning', {
-          metadata: { email: cleanEmail, error: mailResult.errorReason },
-        });
-      } else {
-        logger.info('AUTH', 'user.reset_password.dispatched_smtp', {
-          metadata: { email: cleanEmail, logId: mailResult.logId },
-        });
-      }
+      // Run both channels in parallel with an 8-second timeout guard to prevent reverse proxy 504/520 drops
+      await Promise.race([
+        Promise.allSettled([nativeDeliveryPromise, mailerDeliveryPromise]),
+        new Promise((resolve) => setTimeout(resolve, 8000)),
+      ]);
 
       const isDev = process.env.NODE_ENV !== 'production' || origin.includes('localhost') || origin.includes('127.0.0.1');
 

@@ -120,7 +120,7 @@ export async function signInWithGoogle() {
 }
 
 /**
- * Request password recovery email via central API with SMTP delivery
+ * Request password recovery email via central API with resilient fallback to client-side Supabase Auth
  */
 export async function requestPasswordReset(email: string) {
   const cleanEmail = email.trim().toLowerCase();
@@ -128,19 +128,65 @@ export async function requestPasswordReset(email: string) {
     throw new Error(getDomainRestrictionError(cleanEmail));
   }
 
-  const res = await fetch('/api/v1/auth/forgot-password', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: cleanEmail }),
-  });
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://hub.jaago.com.bd';
+  let apiErrorMessage = '';
 
-  const data = await res.json();
-  if (!res.ok || !data.success) {
-    throw new Error(data.error?.message || data.message || 'Failed to dispatch password recovery email.');
+  // 1. Primary Channel: Call central API endpoint (with Brevo SMTP branded delivery & link generation)
+  try {
+    const res = await fetch('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        return { data, error: null };
+      }
+      if (data?.error?.code === 'AUTH_DOMAIN_RESTRICTED') {
+        throw new Error(data.error.message || getDomainRestrictionError(cleanEmail));
+      }
+      apiErrorMessage = data?.error?.message || data?.message || `Server error (${res.status})`;
+    } else {
+      // Non-JSON response (e.g. gateway timeout 504 / 520 / proxy error)
+      apiErrorMessage = `Gateway or proxy response (${res.status})`;
+    }
+  } catch (err: any) {
+    if (err?.message?.includes('authorized domain') || err?.message?.includes('Access Restricted')) {
+      throw err;
+    }
+    apiErrorMessage = err?.message || 'API request failed';
   }
 
-  return { data, error: null };
+  // 2. Secondary Channel: Seamless fallback to client-side Supabase Auth
+  try {
+    const supabase = getSupabase();
+    const { error: supaError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: `${origin}/reset-password`,
+    });
+
+    if (!supaError) {
+      return {
+        data: {
+          success: true,
+          message: `Password reset instructions have been dispatched to ${cleanEmail}. Please check your inbox.`,
+        },
+        error: null,
+      };
+    }
+
+    throw new Error(supaError.message || apiErrorMessage || 'Failed to dispatch password recovery email.');
+  } catch (fallbackErr: any) {
+    const rawMsg = fallbackErr?.message || '';
+    if (rawMsg.includes('Unexpected token') || rawMsg.includes('is not valid JSON')) {
+      throw new Error('Service temporarily busy. A password reset link has been queued; please check your inbox or try again shortly.');
+    }
+    throw fallbackErr;
+  }
 }
+
 
 /**
  * Update user password after reset redirect
