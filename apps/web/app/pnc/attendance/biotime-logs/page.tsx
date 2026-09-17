@@ -72,7 +72,6 @@ export default function BioTimeLogsPage() {
   const [mappingSearch, setMappingSearch] = useState('');
   const [mappingFilter, setMappingFilter] = useState<'ALL' | 'UNMATCHED'>('UNMATCHED');
   const [savingMappingCode, setSavingMappingCode] = useState<string | null>(null);
-  const [activeComboboxCode, setActiveComboboxCode] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -769,7 +768,7 @@ export default function BioTimeLogsPage() {
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {showMappingModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-card border border-border/80 rounded-3xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
+          <div className="bg-card border border-border/80 rounded-3xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-5 border-b border-border/70">
               <div className="flex items-center gap-2.5">
@@ -855,13 +854,13 @@ export default function BioTimeLogsPage() {
             {/* Modal Table Body */}
             <div className="overflow-y-auto flex-1 p-0">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-muted/60 sticky top-0 z-10 border-b border-border text-[10px] uppercase font-bold text-muted-foreground">
+                <thead className="bg-card sticky top-0 z-20 border-b border-border shadow-xs text-[10px] uppercase font-bold text-muted-foreground">
                   <tr>
-                    <th className="p-3">BioTime ID / RFID</th>
-                    <th className="p-3">BioTime Device Name</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3">Mapped HUB Employee</th>
-                    <th className="p-3 text-right">Action</th>
+                    <th className="p-3 w-32">BioTime ID / RFID</th>
+                    <th className="p-3 w-56">BioTime Device Name</th>
+                    <th className="p-3 w-28">Status</th>
+                    <th className="p-3 min-w-[280px]">Mapped HUB Employee</th>
+                    <th className="p-3 w-24 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40">
@@ -895,16 +894,8 @@ export default function BioTimeLogsPage() {
 
                     return filtered.map((m) => {
                       const isSaving = savingMappingCode === m.biotimeEmpCode;
-                      const isActiveCombobox = activeComboboxCode === m.biotimeEmpCode;
                       return (
-                        <tr
-                          key={m.id}
-                          className={`transition-all text-[11px] ${
-                            isActiveCombobox
-                              ? 'relative z-30 bg-cyan-500/5'
-                              : 'hover:bg-accent/20 relative z-0'
-                          }`}
-                        >
+                        <tr key={m.id} className="hover:bg-accent/20 transition-all text-[11px]">
                           <td className="p-3 font-mono font-bold text-cyan-700 dark:text-cyan-300">
                             {m.biotimeEmpCode}
                           </td>
@@ -929,7 +920,7 @@ export default function BioTimeLogsPage() {
                               </span>
                             )}
                           </td>
-                          <td className={`p-3 ${isActiveCombobox ? 'relative z-30' : 'relative z-1'}`}>
+                          <td className="p-3">
                             <BioTimeEmployeeCombobox
                               biotimeEmpCode={m.biotimeEmpCode}
                               biotimeName={m.biotimeName}
@@ -940,9 +931,6 @@ export default function BioTimeLogsPage() {
                               employees={employees}
                               isSaving={isSaving}
                               onSave={handleSaveMapping}
-                              onActiveChange={(isActive) => {
-                                setActiveComboboxCode(isActive ? m.biotimeEmpCode : null);
-                              }}
                             />
                           </td>
                           <td className="p-3 text-right">
