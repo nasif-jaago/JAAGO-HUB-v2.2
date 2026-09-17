@@ -47,6 +47,7 @@ import {
 import { EmployeeToUserModal } from '@/components/admin/employee-to-user-modal';
 import { formatDisplayDate } from '@/lib/date-format';
 import { JaagoSpinner } from '@/components/ui/jaago-loading-overlay';
+import { PhoneNumberInput } from '@/components/ui/phone-number-input';
 import {
   INITIAL_ROLES,
   RoleItem,
@@ -1404,13 +1405,11 @@ export default function UserManagementPage() {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-muted-foreground pb-1">Phone Number</label>
-                  <input
-                    type="text"
+                  <PhoneNumberInput
+                    label="Phone Number"
+                    labelClassName="block font-bold text-muted-foreground pb-1 text-xs"
                     value={newUserForm.phone}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
-                    placeholder="+880 1711 000000"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-border text-foreground focus:ring-1 focus:ring-primary"
+                    onChange={(val) => setNewUserForm({ ...newUserForm, phone: val })}
                   />
                 </div>
               </div>

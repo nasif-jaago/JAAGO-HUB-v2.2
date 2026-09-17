@@ -45,6 +45,7 @@ import {
   getDeletedEntityNames,
   getDeletedEntityIds,
 } from '@/lib/supabase-organization';
+import { PhoneNumberInput } from '@/components/ui/phone-number-input';
 import { formatDisplayDate } from '@/lib/date-format';
 import { resizeAndCropImage } from '@/lib/supabase-storage';
 import { hasPermission } from '@/lib/rbac-guard';
@@ -1006,18 +1007,11 @@ export default function OrganizationPage() {
 
                 {/* Right Column: Contact, Domain & Brand Color */}
                 <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
-                      Phone
-                    </label>
-                    <input
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="8801766666654"
-                      className="w-full h-10 px-3.5 rounded-xl bg-surface/50 border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
-                    />
-                  </div>
+                  <PhoneNumberInput
+                    label="Phone"
+                    value={formData.phone || ''}
+                    onChange={(val) => setFormData({ ...formData, phone: val })}
+                  />
 
                   <div className="space-y-1">
                     <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
@@ -1362,18 +1356,12 @@ export default function OrganizationPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
-                    PHONE
-                  </label>
-                  <input
-                    type="tel"
-                    value={branchForm.phone}
-                    onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })}
-                    placeholder="e.g. +8802..."
-                    className="w-full h-10 px-3.5 rounded-xl bg-surface border border-border text-xs sm:text-[13px] font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
-                  />
-                </div>
+                <PhoneNumberInput
+                  label="Phone"
+                  labelClassName="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block"
+                  value={branchForm.phone || ''}
+                  onChange={(val) => setBranchForm({ ...branchForm, phone: val })}
+                />
                 <div className="space-y-1">
                   <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
                     EMAIL

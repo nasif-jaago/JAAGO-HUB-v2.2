@@ -21,6 +21,7 @@ import {
   saveProcurementVendor,
   ProcurementVendor,
 } from '@/lib/supabase-procurement';
+import { PhoneNumberInput } from '@/components/ui/phone-number-input';
 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState<ProcurementVendor[]>([]);
@@ -660,15 +661,12 @@ export default function VendorsPage() {
                   />
                 </div>
                 <div>
-                  <label className="font-extrabold uppercase text-[10px] text-muted-foreground block mb-1">
-                    Phone / Mobile
-                  </label>
-                  <input
-                    type="text"
+                  <PhoneNumberInput
+                    label="Phone / Mobile"
+                    labelClassName="font-extrabold uppercase text-[10px] text-muted-foreground block mb-1"
+                    size="sm"
                     value={formPhone}
-                    onChange={(e) => setFormPhone(e.target.value)}
-                    placeholder="e.g. 01711223344"
-                    className="w-full px-3 py-2 rounded-xl bg-surface border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+                    onChange={(val) => setFormPhone(val)}
                   />
                 </div>
               </div>

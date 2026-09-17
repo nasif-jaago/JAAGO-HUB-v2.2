@@ -25,6 +25,7 @@ import {
 import type { FullEmployeeProfile } from '@/lib/supabase-employees';
 import { uploadEmployeePhoto } from '@/lib/supabase-storage';
 import { getSupabase } from '@/lib/supabase-auth';
+import { PhoneNumberInput } from '@/components/ui/phone-number-input';
 
 const EMPTY_PROFILE: FullEmployeeProfile = {
   id: '',
@@ -613,28 +614,24 @@ export default function MyProfilePage() {
                     </div>
 
                     {/* Personal Phone */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">Personal Phone</label>
-                      <input
-                        type="tel"
-                        value={profile.personalPhone || ''}
-                        onChange={(e) => handleFieldChange('personalPhone', e.target.value)}
-                        placeholder="+880 1811 000000"
-                        className="w-full px-4 py-3 rounded-2xl bg-surface border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
-                      />
-                    </div>
+                    <PhoneNumberInput
+                      label="Personal Phone"
+                      labelClassName="text-xs font-bold text-foreground"
+                      size="lg"
+                      roundedClassName="rounded-2xl"
+                      value={profile.personalPhone || ''}
+                      onChange={(val) => handleFieldChange('personalPhone', val)}
+                    />
 
                     {/* Official Phone Numbers / Personal Phone */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">Official Phone Numbers / Personal Phone</label>
-                      <input
-                        type="tel"
-                        value={profile.workMobile || ''}
-                        onChange={(e) => handleFieldChange('workMobile', e.target.value)}
-                        placeholder="+880 1711 000000"
-                        className="w-full px-4 py-3 rounded-2xl bg-surface border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
-                      />
-                    </div>
+                    <PhoneNumberInput
+                      label="Official Phone Numbers / Personal Phone"
+                      labelClassName="text-xs font-bold text-foreground"
+                      size="lg"
+                      roundedClassName="rounded-2xl"
+                      value={profile.workMobile || ''}
+                      onChange={(val) => handleFieldChange('workMobile', val)}
+                    />
 
                     {/* Work Location */}
                     <div className="space-y-1.5">
@@ -683,16 +680,14 @@ export default function MyProfilePage() {
                     </div>
 
                     {/* Emergency Phone */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-foreground">Emergency Phone</label>
-                      <input
-                        type="tel"
-                        value={profile.emergencyPhone || ''}
-                        onChange={(e) => handleFieldChange('emergencyPhone', e.target.value)}
-                        placeholder="+880 1811 999000"
-                        className="w-full px-4 py-3 rounded-2xl bg-surface border border-border text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-sm"
-                      />
-                    </div>
+                    <PhoneNumberInput
+                      label="Emergency Phone"
+                      labelClassName="text-xs font-bold text-foreground"
+                      size="lg"
+                      roundedClassName="rounded-2xl"
+                      value={profile.emergencyPhone || ''}
+                      onChange={(val) => handleFieldChange('emergencyPhone', val)}
+                    />
                   </div>
                 </div>
 
