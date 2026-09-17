@@ -12,14 +12,13 @@ import {
   Clock,
   TrendingUp,
   ExternalLink,
+  History,
 } from 'lucide-react';
 import {
   ProcurementRequest,
   getProcurementRequests,
 } from '@/lib/supabase-procurement';
 import { RequisitionFormWindow } from '@/components/requisition-form-window';
-import { hasModuleAccess, hasDepartmentAccess } from '@/lib/rbac-guard';
-import { getCurrentUserSession } from '@/lib/user-profile-sync';
 
 function GeneralRequisitionContent() {
   const router = useRouter();
@@ -34,20 +33,6 @@ function GeneralRequisitionContent() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [canAccessProcurement, setCanAccessProcurement] = useState(false);
-
-  useEffect(() => {
-    const session = getCurrentUserSession();
-    if (session) {
-      setCanAccessProcurement(
-        session.roles?.includes('super_admin') ||
-        Boolean(session.email?.toLowerCase().includes('nasif.kamal')) ||
-        hasDepartmentAccess('admin_procurement') ||
-        hasModuleAccess('admin_procurement')
-      );
-    }
-  }, []);
-
   // Modal / Window State
   const [isWindowOpen, setIsWindowOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
@@ -178,24 +163,24 @@ function GeneralRequisitionContent() {
             General Requisition Log
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Internal requisitions, operations equipment, and cross-departmental supply requests. Connected with Admin Procurement.
+            Internal requisitions, operations equipment, and cross-departmental supply requests.
           </p>
         </div>
 
         {/* Top-Right action links */}
-        {canAccessProcurement && (
-          <div className="flex items-center space-x-2">
-            <Link
-              href="/admin-procurement/general-requisitions"
-              target="_blank"
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-muted hover:bg-muted/80 text-foreground border border-border transition flex items-center space-x-1.5"
-              title="Open Admin Procurement module"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              <span>Admin Procurement</span>
-            </Link>
-          </div>
-        )}
+        <div className="flex items-center space-x-2">
+          <a
+            href="https://jaagohub.jaago.com.bd/?view=general-requisition"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-muted hover:bg-muted/80 text-foreground border border-border transition flex items-center space-x-1.5 shadow-sm group"
+            title="Open JAAGO Hub General Requisition Log History"
+          >
+            <History className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span>Log History</span>
+            <ExternalLink className="h-3 w-3 text-muted-foreground/60 group-hover:text-foreground transition-colors ml-0.5" />
+          </a>
+        </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
