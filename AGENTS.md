@@ -14,3 +14,9 @@ All module development in this codebase must strictly adhere to the [Zero-Anomal
    - **Defensive Property Access:** External APIs, PostgREST payloads, route parameters, and store states can return `null` or `undefined`. Always provide explicit null guards and safe fallbacks.
    - **Safe String & Array Chaining:** Never execute `.split()`, `.replace()`, `.trim()`, or `.toUpperCase()` on unguarded strings or element accesses (e.g., `arr[0]`). Use validated helper functions like `getInitials()`.
    - **Safe Number & Date Formatting:** Never call `.toFixed()`, `.toLocaleString()`, or `.getTime()` without validating that the number is finite and the date is valid (`!isNaN(date.getTime())`).
+7. **Strict Database Security & Zero-Vulnerability RLS Standard:**
+   - **Zero Anonymous Write Access:** Never grant the `anon` role `INSERT`, `UPDATE`, or `DELETE` permissions on any database table.
+   - **Sensitive Data Isolation:** Tables storing personal employee information, financials, salaries, attendance records, biometric logs, or system audits must restrict access strictly to `authenticated` and `service_role`.
+   - **Views Must Use Security Invoker:** Every Postgres view in public schema must be declared with `WITH (security_invoker = true)` to enforce querying user RLS.
+   - **Explicit Two-Tier Policies:** Every table must define clear boundaries for `service_role` (server APIs & background workers) and `authenticated` (logged-in staff/admins).
+   - **Zero Data Loss & Connection Safety:** All migrations must be non-destructive and maintain active live connectivity without breaking existing application routes or sessions.

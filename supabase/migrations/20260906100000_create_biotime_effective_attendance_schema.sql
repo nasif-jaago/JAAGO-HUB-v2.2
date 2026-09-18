@@ -68,7 +68,8 @@ CREATE POLICY "Allow full access on att_biotime_events" ON public.att_biotime_ev
 -- Unions GPS punches (attendance_records / attendance_events) with BioTime punches
 -- Counting rule: Counted In = MIN(all ins), Counted Out = MAX(all outs) in Asia/Dhaka
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE VIEW public.att_effective_daily AS
+CREATE OR REPLACE VIEW public.att_effective_daily
+WITH (security_invoker = true) AS
 WITH 
 -- 1. GPS events normalized to Asia/Dhaka day
 gps_punches AS (
