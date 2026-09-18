@@ -47,6 +47,7 @@ import {
   findAdvanceByCodeOrId,
 } from '@/lib/supabase-finance';
 import { getCurrentUserSession } from '@/lib/user-profile-sync';
+import { countWords, clampToMaxWords } from '@/lib/word-counter';
 import { ApprovalChainModal } from './approval-chain-modal';
 
 interface HoverPreviewMeta {
@@ -195,6 +196,7 @@ export function LiquidationFormWindow({
   const [previewFitMode, setPreviewFitMode] = useState<'fit' | 'scroll'>('scroll');
   const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
   const subjectRef = useRef<HTMLTextAreaElement | null>(null);
+  const activityNameRef = useRef<HTMLTextAreaElement | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0] || '';
 
@@ -205,6 +207,7 @@ export function LiquidationFormWindow({
     linkedAdvanceCode: '',
     advanceAmountTaken: 0,
     subject: '',
+    activityName: '',
     employeeName: '',
     employeeCode: '',
     employeeDesignation: '',
@@ -262,6 +265,16 @@ export function LiquidationFormWindow({
     }
   }, [formData.subject, isOpen]);
 
+  // Auto-adjust Activity Name textarea height on value change or dialog open
+  useEffect(() => {
+    if (activityNameRef.current) {
+      activityNameRef.current.style.height = 'auto';
+      activityNameRef.current.style.height = `${Math.max(38, activityNameRef.current.scrollHeight)}px`;
+    }
+  }, [formData.activityName, isOpen]);
+
+  const subjectWordCount = useMemo(() => countWords(formData.subject), [formData.subject]);
+
   // --- Auto-populate from Advance Request ---
   const handlePopulateFromAdvance = (adv: FinanceAdvanceRequest) => {
     setFormData((prev) => ({
@@ -269,7 +282,8 @@ export function LiquidationFormWindow({
       linkedAdvanceId: adv.id,
       linkedAdvanceCode: adv.expenseCode,
       advanceAmountTaken: adv.totalAmount,
-      subject: adv.title,
+      subject: adv.title ? clampToMaxWords(adv.title, 15) : '',
+      activityName: adv.activityName || '',
       employeeName: adv.employeeName,
       employeeCode: adv.employeeCode,
       employeeDesignation: adv.employeeDesignation,
@@ -652,7 +666,11 @@ export function LiquidationFormWindow({
   // --- Save / Submit Handlers ---
   const handleSave = async (submitStatus: 'Draft' | 'Submitted') => {
     if (!formData.subject || !formData.subject.trim()) {
-      setErrorMsg('Subject / Purpose of Visit or Expense is required.');
+      setErrorMsg('Subject / Purpose of Settlement is required.');
+      return;
+    }
+    if (countWords(formData.subject) > 15) {
+      setErrorMsg(`Subject / Purpose of Settlement cannot exceed 15 words (currently ${countWords(formData.subject)} words). Please shorten it.`);
       return;
     }
     setErrorMsg('');
@@ -666,6 +684,7 @@ export function LiquidationFormWindow({
       } = {
         ...formData,
         subject: formData.subject.trim(),
+        activityName: (formData.activityName || '').trim(),
         employeeName: formData.employeeName || 'Staff Member',
         totalActualExpenses,
         longTravelSubtotal,
@@ -930,9 +949,26 @@ export function LiquidationFormWindow({
                     <span>SUBJECT / PURPOSE OF SETTLEMENT *</span>
                     <span className="text-rose-500 font-bold">(Mandatory)</span>
                   </label>
-                  <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 font-medium select-none">
-                    Auto-adjusts &amp; Resizable
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-md transition-all duration-150 select-none ${
+                        subjectWordCount === 0
+                          ? 'text-emerald-600/70 dark:text-emerald-400/70 bg-emerald-100/50 dark:bg-emerald-900/30'
+                          : subjectWordCount < 12
+                          ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100/70 dark:bg-emerald-900/50'
+                          : subjectWordCount < 15
+                          ? 'text-amber-700 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-900/50 border border-amber-300/50'
+                          : subjectWordCount === 15
+                          ? 'text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/60 border border-amber-400/60 font-bold'
+                          : 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/60 border border-rose-300/50 font-bold'
+                      }`}
+                    >
+                      {subjectWordCount} / 15 words{subjectWordCount >= 15 ? ' (limit)' : ''}
+                    </span>
+                    <span className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 font-medium select-none hidden sm:inline">
+                      Auto-adjusts &amp; Resizable
+                    </span>
+                  </div>
                 </div>
                 <textarea
                   ref={subjectRef}
@@ -940,13 +976,73 @@ export function LiquidationFormWindow({
                   rows={1}
                   value={formData.subject || ''}
                   onChange={(e) => {
-                    setFormData((prev) => ({ ...prev, subject: e.target.value }));
+                    const clamped = clampToMaxWords(e.target.value, 15);
+                    setFormData((prev) => ({ ...prev, subject: clamped }));
                     e.target.style.height = 'auto';
                     e.target.style.height = `${Math.max(38, e.target.scrollHeight)}px`;
                   }}
-                  placeholder="e.g. Field Assessment Visit to Cox's Bazar & Settlement of Travel Advance"
-                  className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15 transition-colors shadow-2xs resize-y min-h-[38px] leading-relaxed"
+                  placeholder="e.g. Field Assessment Visit to Cox's Bazar & Settlement of Travel Advance (max 15 words)"
+                  className={`w-full bg-white dark:bg-zinc-900 border rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15 transition-colors shadow-2xs resize-y min-h-[38px] leading-relaxed ${
+                    subjectWordCount >= 15
+                      ? 'border-amber-400/80 dark:border-amber-500/80'
+                      : 'border-slate-200 dark:border-zinc-700'
+                  }`}
                 />
+                {subjectWordCount >= 15 && (
+                  <p className="text-[10.5px] text-amber-600 dark:text-amber-400 font-medium mt-1">
+                    Word limit reached (15 / 15 words).
+                  </p>
+                )}
+              </div>
+
+              {/* Activity Details Box (Activity Name & Activity Code) */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50/80 dark:bg-zinc-900/50 border border-slate-200/80 dark:border-zinc-800/80">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  {/* Activity Name */}
+                  <div className="sm:col-span-8 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Activity Name
+                      </label>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium select-none">
+                        Auto-adjusts &amp; Resizable
+                      </span>
+                    </div>
+                    <textarea
+                      ref={activityNameRef}
+                      disabled={readOnly}
+                      rows={1}
+                      value={formData.activityName || ''}
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, activityName: e.target.value }));
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.max(38, e.target.scrollHeight)}px`;
+                      }}
+                      placeholder="e.g. Rohingya Camp Education Monitoring & School Facilities Review"
+                      className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15 transition-colors shadow-2xs resize-y min-h-[38px] leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Activity Code */}
+                  <div className="sm:col-span-4 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Activity Code
+                      </label>
+                      <span className="text-[9.5px] font-mono text-slate-500 dark:text-slate-400 bg-slate-200/60 dark:bg-zinc-800 px-1 py-0.2 rounded">
+                        Budget Line
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      disabled={readOnly}
+                      value={formData.activityCode || ''}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, activityCode: e.target.value }))}
+                      placeholder="e.g. ACT-2026-CSB-01"
+                      className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 text-xs font-mono font-semibold text-slate-800 dark:text-zinc-100 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15 min-h-[38px]"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Grid 2-cols: Employee Name & Code */}
@@ -1005,34 +1101,19 @@ export function LiquidationFormWindow({
                 </div>
               </div>
 
-              {/* Grid 2-cols: Project & Activity Code */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                    Project
-                  </label>
-                  <input
-                    type="text"
-                    disabled={readOnly}
-                    value={formData.project || ''}
-                    onChange={(e) => setFormData({ ...formData, project: e.target.value })}
-                    placeholder="Project Name"
-                    className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-zinc-100 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                    Activity Code / Budget Line
-                  </label>
-                  <input
-                    type="text"
-                    disabled={readOnly}
-                    value={formData.activityCode || ''}
-                    onChange={(e) => setFormData({ ...formData, activityCode: e.target.value })}
-                    placeholder="e.g. ACT-2026-CSB-01"
-                    className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-zinc-100 focus:border-emerald-600"
-                  />
-                </div>
+              {/* Project */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                  Project
+                </label>
+                <input
+                  type="text"
+                  disabled={readOnly}
+                  value={formData.project || ''}
+                  onChange={(e) => setFormData({ ...formData, project: e.target.value })}
+                  placeholder="Project Name"
+                  className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-zinc-100 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/15"
+                />
               </div>
 
               {/* Grid 2-cols: Visiting Place & Duration */}

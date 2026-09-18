@@ -30,6 +30,7 @@ import {
 } from '@/lib/supabase-finance';
 import { fetchProjectsFromSupabase, ProjectItem } from '@/lib/supabase-organization';
 import { getCurrentUserSession } from '@/lib/user-profile-sync';
+import { countWords, clampToMaxWords } from '@/lib/word-counter';
 import { ApprovalChainModal } from './approval-chain-modal';
 
 interface AdvanceRequestFormWindowProps {
@@ -52,12 +53,14 @@ export function AdvanceRequestFormWindow({
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const subjectRef = useRef<HTMLTextAreaElement | null>(null);
+  const activityNameRef = useRef<HTMLTextAreaElement | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0] || '';
 
   // Form State
   const [formData, setFormData] = useState<Partial<FinanceAdvanceRequest>>({
     title: '',
+    activityName: '',
     employeeName: '',
     employeeCode: '',
     employeeDesignation: '',
@@ -113,6 +116,16 @@ export function AdvanceRequestFormWindow({
       subjectRef.current.style.height = `${Math.max(38, subjectRef.current.scrollHeight)}px`;
     }
   }, [formData.title, isOpen]);
+
+  // Auto-adjust Activity Name textarea height on value change or dialog open
+  useEffect(() => {
+    if (activityNameRef.current) {
+      activityNameRef.current.style.height = 'auto';
+      activityNameRef.current.style.height = `${Math.max(38, activityNameRef.current.scrollHeight)}px`;
+    }
+  }, [formData.activityName, isOpen]);
+
+  const titleWordCount = useMemo(() => countWords(formData.title), [formData.title]);
 
   // Section Subtotals & Grand Total Calculations
   const longTravelSubtotal = useMemo(() => {
@@ -362,6 +375,10 @@ export function AdvanceRequestFormWindow({
       setErrorMsg('Subject / Purpose of Visit or Expense is required.');
       return;
     }
+    if (countWords(formData.title) > 15) {
+      setErrorMsg(`Subject / Purpose of Visit cannot exceed 15 words (currently ${countWords(formData.title)} words). Please shorten it.`);
+      return;
+    }
     setErrorMsg('');
     setSaving(true);
 
@@ -552,9 +569,26 @@ export function AdvanceRequestFormWindow({
                     <span>SUBJECT / PURPOSE OF VISIT *</span>
                     <span className="text-rose-500 font-bold">(Mandatory)</span>
                   </label>
-                  <span className="text-[10px] text-blue-600/70 dark:text-blue-400/70 font-medium select-none">
-                    Auto-adjusts &amp; Resizable
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-md transition-all duration-150 select-none ${
+                        titleWordCount === 0
+                          ? 'text-blue-600/70 dark:text-blue-400/70 bg-blue-100/50 dark:bg-blue-900/30'
+                          : titleWordCount < 12
+                          ? 'text-blue-700 dark:text-blue-300 bg-blue-100/70 dark:bg-blue-900/50'
+                          : titleWordCount < 15
+                          ? 'text-amber-700 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-900/50 border border-amber-300/50'
+                          : titleWordCount === 15
+                          ? 'text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/60 border border-amber-400/60 font-bold'
+                          : 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/60 border border-rose-300/50 font-bold'
+                      }`}
+                    >
+                      {titleWordCount} / 15 words{titleWordCount >= 15 ? ' (limit)' : ''}
+                    </span>
+                    <span className="text-[10px] text-blue-600/70 dark:text-blue-400/70 font-medium select-none hidden sm:inline">
+                      Auto-adjusts &amp; Resizable
+                    </span>
+                  </div>
                 </div>
                 <textarea
                   ref={subjectRef}
@@ -562,13 +596,73 @@ export function AdvanceRequestFormWindow({
                   rows={1}
                   value={formData.title || ''}
                   onChange={(e) => {
-                    setFormData((prev) => ({ ...prev, title: e.target.value }));
+                    const clamped = clampToMaxWords(e.target.value, 15);
+                    setFormData((prev) => ({ ...prev, title: clamped }));
                     e.target.style.height = 'auto';
                     e.target.style.height = `${Math.max(38, e.target.scrollHeight)}px`;
                   }}
-                  placeholder="e.g. Field Assessment Visit to Cox's Bazar Rohingya Camp Schools"
-                  className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/15 transition-colors shadow-2xs resize-y min-h-[38px] leading-relaxed"
+                  placeholder="e.g. Field Assessment Visit to Cox's Bazar Rohingya Camp Schools (max 15 words)"
+                  className={`w-full bg-white dark:bg-zinc-900 border rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/15 transition-colors shadow-2xs resize-y min-h-[38px] leading-relaxed ${
+                    titleWordCount >= 15
+                      ? 'border-amber-400/80 dark:border-amber-500/80'
+                      : 'border-slate-200 dark:border-zinc-700'
+                  }`}
                 />
+                {titleWordCount >= 15 && (
+                  <p className="text-[10.5px] text-amber-600 dark:text-amber-400 font-medium mt-1">
+                    Word limit reached (15 / 15 words).
+                  </p>
+                )}
+              </div>
+
+              {/* Activity Details Box (Activity Name & Activity Code) */}
+              <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50/80 dark:bg-zinc-900/50 border border-slate-200/80 dark:border-zinc-800/80">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  {/* Activity Name */}
+                  <div className="sm:col-span-8 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Activity Name
+                      </label>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium select-none">
+                        Auto-adjusts &amp; Resizable
+                      </span>
+                    </div>
+                    <textarea
+                      ref={activityNameRef}
+                      disabled={readOnly}
+                      rows={1}
+                      value={formData.activityName || ''}
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, activityName: e.target.value }));
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.max(38, e.target.scrollHeight)}px`;
+                      }}
+                      placeholder="e.g. Rohingya Camp Education Monitoring & School Facilities Review"
+                      className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/15 transition-colors shadow-2xs resize-y min-h-[38px] leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Activity Code */}
+                  <div className="sm:col-span-4 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Activity Code
+                      </label>
+                      <span className="text-[9.5px] font-mono text-slate-500 dark:text-slate-400 bg-slate-200/60 dark:bg-zinc-800 px-1 py-0.2 rounded">
+                        Budget Line
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      disabled={readOnly}
+                      value={formData.activityCode || ''}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, activityCode: e.target.value }))}
+                      placeholder="e.g. ACT-2026-CSB-01"
+                      className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-xl px-3.5 py-2 text-xs font-mono font-semibold text-slate-800 dark:text-zinc-100 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/15 min-h-[38px]"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Grid 2-cols: Employee Name & Code */}
@@ -627,43 +721,28 @@ export function AdvanceRequestFormWindow({
                 </div>
               </div>
 
-              {/* Grid 2-cols: Project & Activity Code */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                    Project
-                  </label>
-                  <select
-                    disabled={readOnly}
-                    value={formData.project || ''}
-                    onChange={(e) => setFormData({ ...formData, project: e.target.value })}
-                    className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 dark:text-zinc-100 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/15"
-                  >
-                    <option value="">Select Project...</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.name}>
-                        {p.name}
-                      </option>
-                    ))}
-                    <option value="Founder's Office">Founder&apos;s Office</option>
-                    <option value="Child Welfare Sponsorship">Child Welfare Sponsorship</option>
-                    <option value="Digital School Modernization">Digital School Modernization</option>
-                    <option value="General Operations">General Operations</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                    Activity Code / Budget Line
-                  </label>
-                  <input
-                    type="text"
-                    disabled={readOnly}
-                    value={formData.activityCode || ''}
-                    onChange={(e) => setFormData({ ...formData, activityCode: e.target.value })}
-                    placeholder="e.g. ACT-2026-CSB-01"
-                    className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 dark:text-zinc-100 focus:border-blue-600"
-                  />
-                </div>
+              {/* Project */}
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                  Project
+                </label>
+                <select
+                  disabled={readOnly}
+                  value={formData.project || ''}
+                  onChange={(e) => setFormData({ ...formData, project: e.target.value })}
+                  className="w-full bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 dark:text-zinc-100 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/15"
+                >
+                  <option value="">Select Project...</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                  <option value="Founder's Office">Founder&apos;s Office</option>
+                  <option value="Child Welfare Sponsorship">Child Welfare Sponsorship</option>
+                  <option value="Digital School Modernization">Digital School Modernization</option>
+                  <option value="General Operations">General Operations</option>
+                </select>
               </div>
 
               {/* Grid 2-cols: Visiting Place & Duration */}

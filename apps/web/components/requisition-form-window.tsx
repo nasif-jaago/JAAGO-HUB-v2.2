@@ -43,6 +43,7 @@ import {
 import { fetchProjectsFromSupabase, ProjectItem } from '@/lib/supabase-organization';
 import { fetchEmployeesFromSupabase, FullEmployeeProfile } from '@/lib/supabase-employees';
 import { getActiveEmployeeProfile, getCurrentUserSession } from '@/lib/user-profile-sync';
+import { countWords, clampToMaxWords } from '@/lib/word-counter';
 
 /**
  * 12 Predefined Approval Roles strictly matching JAAGO Workflow Standard
@@ -516,6 +517,8 @@ export function RequisitionFormWindow({
   // Form Fields
   const [project, setProject] = useState('Digital School Modernization');
   const [activityCode, setActivityCode] = useState('ACT-2026-081');
+  const [activityName, setActivityName] = useState('');
+  const activityNameRef = useRef<HTMLTextAreaElement | null>(null);
   const [company, setCompany] = useState('JAAGO Foundation Trust');
   const [department, setDepartment] = useState("Founder's Office");
   const [requestOwner, setRequestOwner] = useState('Nasif Kamal');
@@ -523,6 +526,7 @@ export function RequisitionFormWindow({
   const [supervisor, setSupervisor] = useState('S M Nayeem Rahman');
   const [reference, setReference] = useState('');
   const [subject, setSubject] = useState('');
+  const subjectWordCount = useMemo(() => countWords(subject), [subject]);
   const [date, setDate] = useState('');
   const [budget, setBudget] = useState<string>('');
 
@@ -535,6 +539,14 @@ export function RequisitionFormWindow({
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'Low' | 'Normal' | 'High' | 'Urgent'>('Normal');
+
+  // Auto-adjust Activity Name textarea height on value change or dialog open
+  useEffect(() => {
+    if (activityNameRef.current) {
+      activityNameRef.current.style.height = 'auto';
+      activityNameRef.current.style.height = `${Math.max(38, activityNameRef.current.scrollHeight)}px`;
+    }
+  }, [activityName, isOpen]);
 
   // Line items
   const [items, setItems] = useState<RequisitionLineItem[]>([]);
@@ -788,6 +800,7 @@ export function RequisitionFormWindow({
       setRequestOwnerCode(initialData.requestOwnerCode || currentUser.code);
       setProject(initialData.project || 'Digital School Modernization');
       setActivityCode(initialData.activityCode || '');
+      setActivityName(initialData.activityName || '');
       setCompany(initialData.company || currentUser.company);
       setSupervisor(initialData.supervisor || currentUser.supervisor);
       setBudget(initialData.budget ? String(initialData.budget) : String(initialData.estAmount || ''));
@@ -882,6 +895,7 @@ export function RequisitionFormWindow({
         })
       );
       setSubject('');
+      setActivityName('');
       setReasonForPurchase('');
       setDeliveryInstructions('Deliver directly to Banani Central Depot, Floor 2.');
       setDescription('');
@@ -1715,6 +1729,10 @@ export function RequisitionFormWindow({
       alert('Please provide a Subject / Title for this requisition before resubmitting.');
       return;
     }
+    if (countWords(subject) > 15) {
+      alert(`Subject cannot exceed 15 words (currently ${countWords(subject)} words). Please shorten it.`);
+      return;
+    }
 
     const itemsWithNames = items.filter((it) => it.name && it.name.trim().length > 0);
     if (itemsWithNames.length === 0) {
@@ -1837,6 +1855,11 @@ export function RequisitionFormWindow({
       return;
     }
 
+    if (!isDraft && countWords(subject) > 15) {
+      alert(`Subject cannot exceed 15 words (currently ${countWords(subject)} words). Please shorten the subject before submitting.`);
+      return;
+    }
+
     // STRICT INVENTORY VALIDATION: "do not allow the user to input a new custom item. Always add item data from inventory."
     const itemsWithNames = items.filter((it) => it.name && it.name.trim().length > 0);
     if (!isDraft && itemsWithNames.length === 0) {
@@ -1932,6 +1955,7 @@ export function RequisitionFormWindow({
         attachments,
         project,
         activityCode,
+        activityName,
         company,
         supervisor,
         budget: Number(budget) || finalTotal,
@@ -2151,6 +2175,10 @@ export function RequisitionFormWindow({
                       alert('Please provide a Subject / Title for this requisition.');
                       return;
                     }
+                    if (countWords(subject) > 15) {
+                      alert(`Subject cannot exceed 15 words (currently ${countWords(subject)} words). Please shorten it.`);
+                      return;
+                    }
                     setShowApprovalModal(true);
                   }}
                   disabled={isSubmitting}
@@ -2227,46 +2255,25 @@ export function RequisitionFormWindow({
                     </select>
                   </div>
 
-                  {/* 2-Column Row: Activity code & Department */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[11px] font-semibold text-muted-foreground">
-                          Activity code
-                        </label>
-                        <span className="text-[9.5px] text-muted-foreground font-mono">Auto</span>
-                      </div>
-                      <input
-                        type="text"
-                        readOnly={!isFormEditable}
-                        value={activityCode}
-                        onChange={(e) => setActivityCode(e.target.value)}
-                        placeholder="PRJ-GEN"
-                        className={`w-full px-2.5 py-1.5 bg-muted/40 dark:bg-muted/20 border border-dashed border-border rounded-xl text-xs font-mono font-semibold text-foreground/90 focus:outline-none transition ${
-                          !isFormEditable ? 'cursor-not-allowed opacity-75' : 'focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500'
-                        }`}
-                      />
+                  {/* Department */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-semibold text-muted-foreground">
+                        Department
+                      </label>
+                      <span className="text-[9.5px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300/40 px-1.5 py-0.2 rounded-full shadow-2xs">
+                        Logged
+                      </span>
                     </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[11px] font-semibold text-muted-foreground">
-                          Department
-                        </label>
-                        <span className="text-[9.5px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 border border-emerald-300/40 px-1.5 py-0.2 rounded-full shadow-2xs">
-                          Logged
-                        </span>
-                      </div>
-                      <input
-                        type="text"
-                        readOnly={!isFormEditable}
-                        value={department}
-                        onChange={(e) => setDepartment(e.target.value)}
-                        className={`w-full px-2.5 py-1.5 bg-muted/40 dark:bg-muted/20 border border-dashed border-border rounded-xl text-xs font-medium text-foreground/90 focus:outline-none transition truncate ${
-                          !isFormEditable ? 'cursor-not-allowed opacity-75' : 'focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500'
-                        }`}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      readOnly={!isFormEditable}
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className={`w-full px-2.5 py-1.5 bg-muted/40 dark:bg-muted/20 border border-dashed border-border rounded-xl text-xs font-medium text-foreground/90 focus:outline-none transition truncate ${
+                        !isFormEditable ? 'cursor-not-allowed opacity-75' : 'focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500'
+                      }`}
+                    />
                   </div>
 
                   {/* Company */}
@@ -2421,20 +2428,102 @@ export function RequisitionFormWindow({
               <div className="p-5 space-y-3.5">
                 {/* Subject * */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-muted-foreground mb-1">
-                    Subject *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-semibold text-muted-foreground">
+                      Subject *
+                    </label>
+                    <span
+                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded transition-all duration-150 select-none ${
+                        subjectWordCount === 0
+                          ? 'text-muted-foreground/60 bg-muted/30'
+                          : subjectWordCount < 12
+                          ? 'text-foreground/80 bg-muted/60'
+                          : subjectWordCount < 15
+                          ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300/40'
+                          : subjectWordCount === 15
+                          ? 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 border border-amber-400/50 font-bold'
+                          : 'text-rose-700 dark:text-rose-300 bg-rose-100 dark:bg-rose-900/50 border border-rose-300/50 font-bold'
+                      }`}
+                    >
+                      {subjectWordCount} / 15 words{subjectWordCount >= 15 ? ' (limit)' : ''}
+                    </span>
+                  </div>
                   <input
                     type="text"
                     readOnly={!isFormEditable}
                     value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    placeholder="Subject..."
-                    className={`w-full px-3 py-2 bg-white dark:bg-muted/40 border border-border rounded-xl text-xs font-medium text-foreground shadow-xs focus:outline-none transition ${
-                      !isFormEditable ? 'cursor-not-allowed opacity-75 bg-muted/20' : 'focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500'
+                    onChange={(e) => setSubject(clampToMaxWords(e.target.value, 15))}
+                    placeholder="Subject (max 15 words)..."
+                    className={`w-full px-3 py-2 bg-white dark:bg-muted/40 border rounded-xl text-xs font-medium text-foreground shadow-xs focus:outline-none transition ${
+                      !isFormEditable
+                        ? 'cursor-not-allowed opacity-75 bg-muted/20 border-border'
+                        : subjectWordCount >= 15
+                        ? 'border-amber-400/80 dark:border-amber-500/80 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500'
+                        : 'border-border focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500'
                     }`}
                     required
                   />
+                  {subjectWordCount >= 15 && (
+                    <p className="text-[10.5px] text-amber-600 dark:text-amber-400 font-medium mt-1">
+                      Word limit reached (15 / 15 words).
+                    </p>
+                  )}
+                </div>
+
+                {/* 2-Column Row: Activity Name & Activity Code (Auto-adjusts & Resizable) */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                  {/* Activity Name */}
+                  <div className="sm:col-span-8 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-semibold text-muted-foreground">
+                        Activity Name
+                      </label>
+                      <span className="text-[10px] text-muted-foreground/70 font-medium select-none">
+                        Auto-adjusts &amp; Resizable
+                      </span>
+                    </div>
+                    <textarea
+                      ref={activityNameRef}
+                      readOnly={!isFormEditable}
+                      rows={1}
+                      value={activityName}
+                      onChange={(e) => {
+                        setActivityName(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.max(38, e.target.scrollHeight)}px`;
+                      }}
+                      placeholder="e.g. Field Assessment & Activity Implementation..."
+                      className={`w-full px-3 py-2 bg-white dark:bg-muted/40 border border-border rounded-xl text-xs font-medium text-foreground shadow-xs focus:outline-none transition resize-y min-h-[38px] leading-relaxed ${
+                        !isFormEditable
+                          ? 'cursor-not-allowed opacity-75 bg-muted/20'
+                          : 'focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500'
+                      }`}
+                    />
+                  </div>
+
+                  {/* Activity Code */}
+                  <div className="sm:col-span-4 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-semibold text-muted-foreground">
+                        Activity Code
+                      </label>
+                      <span className="text-[9.5px] font-mono text-muted-foreground/80 bg-muted/60 px-1 py-0.2 rounded border border-border/50">
+                        Auto
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      readOnly={!isFormEditable}
+                      value={activityCode}
+                      onChange={(e) => setActivityCode(e.target.value)}
+                      placeholder="PRJ-GEN"
+                      className={`w-full px-3 py-2 bg-white dark:bg-muted/40 border border-border rounded-xl text-xs font-mono font-semibold text-foreground shadow-xs focus:outline-none transition min-h-[38px] ${
+                        !isFormEditable
+                          ? 'cursor-not-allowed opacity-75 bg-muted/20'
+                          : 'focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500'
+                      }`}
+                    />
+                  </div>
                 </div>
 
                 {/* 3-Column Row: Date, Priority, Budget */}

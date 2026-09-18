@@ -110,6 +110,7 @@ export interface ProcurementRequest {
   attachments?: Array<{ id?: string; name: string; size?: string; url?: string }> | undefined;
   project?: string | undefined;
   activityCode?: string | undefined;
+  activityName?: string | undefined;
   company?: string | undefined;
   supervisor?: string | undefined;
   budget?: number | undefined;
@@ -894,6 +895,7 @@ export async function saveProcurementRequest(req: Partial<ProcurementRequest> & 
       attachments: req.attachments || [],
       project: req.project || 'General Operations',
       activityCode: req.activityCode || '',
+      activityName: req.activityName || '',
       company: req.company || (isTrust ? 'JAAGO Foundation Trust' : 'JAAGO Foundation'),
       supervisor: req.supervisor || '',
       budget: req.budget !== undefined ? req.budget : req.estAmount,
@@ -928,6 +930,8 @@ export async function saveProcurementRequest(req: Partial<ProcurementRequest> & 
         attachments: target.attachments,
         created_at: target.createdAt,
         updated_at: target.updatedAt,
+        activity_name: target.activityName || null,
+        activity_code: target.activityCode || null,
       },
       { onConflict: 'pr_number' }
     );

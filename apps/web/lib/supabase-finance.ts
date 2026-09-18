@@ -114,6 +114,7 @@ export interface FinanceAdvanceRequest {
   department: string;
   project: string;
   activityCode: string; // Activity code / Budget Line
+  activityName?: string | undefined;
   visitingPlace: string;
   duration: string; // e.g. "3 Days"
   requestDate: string; // YYYY-MM-DD
@@ -167,6 +168,7 @@ export interface FinanceLiquidationForm {
   department: string;
   project: string;
   activityCode: string;
+  activityName?: string | undefined;
   visitingPlace: string;
   duration: string;
 
@@ -969,6 +971,7 @@ export async function saveFinanceAdvanceRequest(
       department: req.department || '',
       project: req.project || 'General Operations',
       activityCode: req.activityCode || '',
+      activityName: req.activityName || '',
       visitingPlace: req.visitingPlace || '',
       duration: req.duration || '1 Day',
       requestDate: req.requestDate || now.split('T')[0]!,
@@ -1084,6 +1087,7 @@ export async function saveFinanceLiquidation(
       department: liq.department || '',
       project: liq.project || '',
       activityCode: liq.activityCode || '',
+      activityName: liq.activityName || '',
       visitingPlace: liq.visitingPlace || '',
       duration: liq.duration || '',
       dateAdvanceTaken: liq.dateAdvanceTaken || '',
