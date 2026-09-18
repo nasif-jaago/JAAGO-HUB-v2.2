@@ -120,14 +120,89 @@ export default function AuthCallbackPage() {
         return;
       }
 
+      // 1. Extract Google Profile Picture from OAuth Metadata
+      const googleAvatar =
+        session.user?.user_metadata?.avatar_url ||
+        session.user?.user_metadata?.picture ||
+        session.user?.identities?.[0]?.identity_data?.avatar_url ||
+        session.user?.identities?.[0]?.identity_data?.picture ||
+        '';
+
+      // 2. Automatically sync Google profile picture & provision employee profile in Supabase
+      let syncedEmployee: any = null;
+      if (email) {
+        try {
+          const supabase = getSupabase();
+          // Direct client-side update with active session if already exists
+          if (googleAvatar) {
+            await supabase
+              .from('employees')
+              .update({ avatar_url: googleAvatar, user_id: session.user.id })
+              .or(`work_email.ilike.${email},personal_email.ilike.${email}`);
+          }
+
+          // Trigger server-side sync with service_role to guarantee full DB persistence & auto-provisioning for upcoming new users
+          const syncRes = await fetch('/api/v1/auth/sync-google-profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              userId: session.user.id,
+              email: email,
+              avatarUrl: googleAvatar,
+              fullName: session.user.user_metadata?.full_name || session.user.user_metadata?.name,
+            }),
+            signal: AbortSignal.timeout(4000),
+          }).catch((err) => {
+            console.warn('[Auth Callback] sync-google-profile call error:', err);
+            return null;
+          });
+
+          if (syncRes && syncRes.ok) {
+            const syncData = await syncRes.json().catch(() => null);
+            if (syncData?.data?.employee) {
+              syncedEmployee = syncData.data.employee;
+            }
+          }
+        } catch (syncErr) {
+          console.warn('[Auth Callback] Could not persist Google avatar to Supabase:', syncErr);
+        }
+      }
+
       // Pre-fetch canonical employee profile so jaago_user is accurate from instant zero
-      let empProfile = null;
+      let empProfile: any = null;
       try {
         empProfile = await getActiveEmployeeProfile();
+        if (!empProfile && syncedEmployee) {
+          // If active employee profile was freshly provisioned, map syncedEmployee
+          empProfile = {
+            id: syncedEmployee.id,
+            userId: syncedEmployee.user_id || session.user.id,
+            code: syncedEmployee.code,
+            name: syncedEmployee.name,
+            workEmail: syncedEmployee.work_email,
+            personalEmail: syncedEmployee.personal_email,
+            avatarUrl: syncedEmployee.avatar_url || googleAvatar,
+            designation: syncedEmployee.designation,
+            department: syncedEmployee.department,
+            organization: syncedEmployee.organization,
+            branch: syncedEmployee.branch,
+            status: syncedEmployee.status,
+            isUser: syncedEmployee.is_user,
+          };
+        }
+        if (empProfile && googleAvatar && !empProfile.avatarUrl) {
+          empProfile.avatarUrl = googleAvatar;
+        }
       } catch {}
 
-      // Store in localStorage
+      // Store in localStorage & ensure googleAvatar is active
       const userPayload = buildUserSessionPayload(session.user, empProfile);
+      if (googleAvatar && !userPayload.avatarUrl) {
+        userPayload.avatarUrl = googleAvatar;
+      }
 
       if (typeof window !== 'undefined') {
         localStorage.setItem('jaago_access_token', session.access_token);

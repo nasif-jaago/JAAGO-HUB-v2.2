@@ -1920,6 +1920,7 @@ export default function DashboardPage() {
                   <img
                     src={user.avatarUrl}
                     alt={user.fullName}
+                    referrerPolicy="no-referrer"
                     onError={() => setImgError(true)}
                     className="h-full w-full object-cover object-top rounded-[13px] sm:rounded-[15px] transition-transform duration-300 group-hover:scale-105 select-none"
                   />

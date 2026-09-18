@@ -52,6 +52,40 @@ export async function GET(request: Request) {
         const rawRole = meta['role'] || 'USER';
         const mappedRole = rawRole.toUpperCase() === 'OFFICER' || rawRole === 'Officer' ? 'USER' : rawRole;
 
+        const googleAvatar = meta['avatar_url'] || meta['picture'] || '';
+        if (matchingEmp && googleAvatar && !matchingEmp.avatar_url) {
+          matchingEmp.avatar_url = googleAvatar;
+          void (async () => {
+            try {
+              await supabaseAdmin
+                .from('employees')
+                .update({ avatar_url: googleAvatar, user_id: su.id })
+                .eq('id', matchingEmp.id);
+            } catch {}
+          })();
+        } else if (!matchingEmp && emailLower) {
+          const autoCode = `JFT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const resolvedName = meta['full_name'] || meta['name'] || su.email?.split('@')[0] || 'Staff Member';
+          void (async () => {
+            try {
+              await supabaseAdmin.from('employees').insert({
+                code: autoCode,
+                name: resolvedName,
+                work_email: emailLower,
+                personal_email: emailLower,
+                avatar_url: googleAvatar || null,
+                user_id: su.id,
+                designation: meta['job_title'] || 'Staff Member',
+                department: meta['department'] || 'General',
+                organization: 'JAAGO Foundation Trust',
+                branch: meta['branch'] || 'Head Office (Banani)',
+                status: 'active',
+                is_user: true,
+              });
+            } catch {}
+          })();
+        }
+
         return {
           id: su.id,
           fullName: matchingEmp?.name || meta['full_name'] || meta['name'] || su.email?.split('@')[0] || 'User',
@@ -64,7 +98,7 @@ export async function GET(request: Request) {
           status: su.banned_until ? 'suspended' : 'active',
           employeeId: linkedCode,
           isEmployeeLinked: isLinked,
-          avatarUrl: matchingEmp?.avatar_url || meta['avatar_url'] || meta['picture'] || '',
+          avatarUrl: matchingEmp?.avatar_url || googleAvatar || '',
           createdAt: su.created_at || new Date().toISOString(),
           lastLoginAt: su.last_sign_in_at || null,
         };

@@ -57,6 +57,8 @@ function resolveServiceRoleKey(): string | undefined {
         path.resolve(process.cwd(), '.env.local'),
         path.resolve(process.cwd(), 'apps/web/.env.local'),
         path.resolve(process.cwd(), 'apps/web/.env'),
+        'd:/JAAGO-HUB-v2.2/.env.local',
+        'd:/JAAGO-HUB-v2.2/apps/web/.env.local',
         path.resolve(process.cwd(), '../../.env'),
       ];
       for (const file of candidates) {

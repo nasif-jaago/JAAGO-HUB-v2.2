@@ -55,6 +55,8 @@ import {
   ChevronLeft,
   ExternalLink,
   BookOpen,
+  Network,
+  Share2,
 } from 'lucide-react';
 
 export interface DashboardSidebarProps {
@@ -79,6 +81,7 @@ export function DashboardSidebar({
     attendance: false,
     organization: false,
     settings: false,
+    ai_agent: true,
   });
 
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -184,6 +187,9 @@ export function DashboardSidebar({
   React.useEffect(() => {
     if (pathname?.startsWith('/requests')) {
       setOpenSections((prev) => ({ ...prev, requests: true }));
+    }
+    if (pathname?.startsWith('/admin/integrations')) {
+      setOpenSections((prev) => ({ ...prev, settings: true, ai_agent: true }));
     }
   }, [pathname]);
 
@@ -642,13 +648,61 @@ export function DashboardSidebar({
                     <Server className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span>API Settings</span>
                   </Link>
-                  <Link
-                    href="/admin/integrations"
-                    className="w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10 transition"
-                  >
-                    <Bot className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span>AI Agent &amp; Integrations</span>
-                  </Link>
+                  {/* AI Agent (Submenu Container with MCP under it) */}
+                  <div className="space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection('ai_agent')}
+                      title="AI Agent"
+                      className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                        pathname?.startsWith('/admin/integrations')
+                          ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                          : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <Bot className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        <span>AI Agent</span>
+                      </div>
+                      {openSections['ai_agent'] ? (
+                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </button>
+
+                    {openSections['ai_agent'] && (
+                      <div className="pl-4 space-y-0.5 border-l border-sidebar-border/50 ml-3.5 text-sidebar-foreground animate-in fade-in duration-100">
+                        <Link
+                          href="/admin/integrations"
+                          className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
+                            pathname === '/admin/integrations'
+                              ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                              : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
+                          } transition`}
+                        >
+                          <Share2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                          <span>AI Integrations</span>
+                        </Link>
+                        <Link
+                          href="/admin/integrations/mcp-server"
+                          className={`w-full flex items-center justify-between space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
+                            pathname?.startsWith('/admin/integrations/mcp-server')
+                              ? 'bg-sidebar-active text-sidebar-active-foreground font-bold shadow-sm'
+                              : 'text-sidebar-foreground/80 hover:text-primary hover:bg-sidebar-foreground/10'
+                          } transition`}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Network className="h-3.5 w-3.5 text-purple-400 flex-shrink-0" />
+                            <span>MCP</span>
+                          </div>
+                          <span className="px-1.5 py-0.2 text-[9px] font-mono font-bold bg-purple-500/20 text-purple-300 rounded border border-purple-500/30">
+                            LIVE
+                          </span>
+                        </Link>
+                      </div>
+                    )}
+                  </div>
                   <Link
                     href="/admin/rbac"
                     className={`w-full flex items-center space-x-2.5 px-3 py-1.5 rounded-lg text-xs font-medium ${

@@ -21,3 +21,4 @@ export * from './attendance';
 export * from './finance';
 export * from './studio';
 export * from './email';
+export * from './mcp';

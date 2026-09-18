@@ -1038,19 +1038,27 @@ export default function UserManagementPage() {
                       {/* User (Avatar + Name + Email) */}
                       <td className="p-4">
                         <div className="flex items-center space-x-3">
-                          <div className="h-9 w-9 rounded-xl bg-primary/20 border border-primary/30 text-primary font-black text-xs flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+                          <div className="h-9 w-9 rounded-xl bg-primary/20 border border-primary/30 text-primary font-black text-xs flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm relative">
                             {user.avatarUrl ? (
                               <img
                                 src={user.avatarUrl}
                                 alt={user.fullName}
+                                referrerPolicy="no-referrer"
                                 className="h-full w-full object-cover"
                                 onError={(e) => {
-                                  (e.target as HTMLElement).style.display = 'none';
+                                  const target = e.target as HTMLElement;
+                                  target.style.display = 'none';
+                                  const fallback = target.parentElement?.querySelector('.admin-avatar-fallback');
+                                  if (fallback) (fallback as HTMLElement).style.display = 'flex';
                                 }}
                               />
-                            ) : (
-                              initials
-                            )}
+                            ) : null}
+                            <span
+                              className="admin-avatar-fallback flex items-center justify-center text-xs font-black text-primary"
+                              style={{ display: user.avatarUrl ? 'none' : 'flex' }}
+                            >
+                              {initials}
+                            </span>
                           </div>
                           <div>
                             <div className="font-bold text-foreground flex items-center space-x-1.5">

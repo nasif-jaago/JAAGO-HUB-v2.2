@@ -32,6 +32,7 @@
     "@jaago/storage": "file:../packages/storage",
     "@jaago/ui": "file:../packages/ui",
     "@jaago/workflow": "file:../packages/workflow",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@supabase/supabase-js": "^2.47.10",
     "clsx": "^2.1.1",
     "lucide-react": "^0.468.0",

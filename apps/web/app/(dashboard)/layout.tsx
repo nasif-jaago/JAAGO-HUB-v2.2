@@ -53,10 +53,48 @@ export default function DashboardLayout({
     // Fetch fresh employee profile from Supabase
     getActiveEmployeeProfile().then((emp) => {
       if (emp && isMounted) {
-        setCurrentUser({
-          fullName: emp.name,
-          jobTitle: emp.designation,
-          avatarUrl: emp.avatarUrl || '',
+        setCurrentUser((prev) => ({
+          fullName: emp.name || prev.fullName,
+          jobTitle: emp.designation || prev.jobTitle,
+          avatarUrl: emp.avatarUrl || prev.avatarUrl || '',
+        }));
+      } else if (!emp && isMounted) {
+        // Fallback self-heal: if upcoming user logged in without callback or employee profile was missing,
+        // trigger background sync to auto-provision and sync avatar
+        supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+          if (currentSession?.user?.email) {
+            const gAvatar =
+              currentSession.user.user_metadata?.avatar_url ||
+              currentSession.user.user_metadata?.picture ||
+              '';
+            fetch('/api/v1/auth/sync-google-profile', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${currentSession.access_token}`,
+              },
+              body: JSON.stringify({
+                userId: currentSession.user.id,
+                email: currentSession.user.email,
+                avatarUrl: gAvatar,
+                fullName:
+                  currentSession.user.user_metadata?.full_name ||
+                  currentSession.user.user_metadata?.name,
+              }),
+            })
+              .then((res) => res.json())
+              .then((resData) => {
+                if (resData?.data?.employee && isMounted) {
+                  const newEmp = resData.data.employee;
+                  setCurrentUser((prev) => ({
+                    fullName: newEmp.name || prev.fullName,
+                    jobTitle: newEmp.designation || prev.jobTitle,
+                    avatarUrl: newEmp.avatar_url || prev.avatarUrl || '',
+                  }));
+                }
+              })
+              .catch(() => {});
+          }
         });
       }
     });

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Boxes,
   ShieldCheck,
@@ -10,6 +11,8 @@ import {
   MessageSquare,
   DollarSign,
   RefreshCw,
+  Network,
+  ArrowRight,
 } from 'lucide-react';
 
 interface Connector {
@@ -85,18 +88,28 @@ export default function IntegrationsPage() {
               Integrations &amp; Connectors Hub
             </h1>
             <p className="text-xs text-muted-foreground">
-              AES-256-GCM Secret Vault &bull; Circuit Breaker Health &bull; Governed MCP Server
+              AES-256-GCM Secret Vault &bull; Circuit Breaker Health &bull; MCP
             </p>
           </div>
         </div>
 
-        <button
-          onClick={handleRefresh}
-          className="px-4 py-2.5 rounded-2xl bg-surface border border-border hover:border-primary/40 font-bold text-xs flex items-center space-x-2 text-foreground transition shadow-sm"
-        >
-          <RefreshCw className={`h-4 w-4 text-primary ${refreshing ? 'animate-spin' : ''}`} />
-          <span>Health Probe Sync</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <Link
+            href="/admin/integrations/mcp-server"
+            className="px-4 py-2.5 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:text-purple-300 font-bold text-xs flex items-center space-x-2 transition shadow-sm"
+          >
+            <Network className="h-4 w-4" />
+            <span>MCP</span>
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          <button
+            onClick={handleRefresh}
+            className="px-4 py-2.5 rounded-2xl bg-surface border border-border hover:border-primary/40 font-bold text-xs flex items-center space-x-2 text-foreground transition shadow-sm"
+          >
+            <RefreshCw className={`h-4 w-4 text-primary ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Health Probe Sync</span>
+          </button>
+        </div>
       </div>
 
       {/* ── 4 STAT CARDS ── */}
@@ -134,16 +147,20 @@ export default function IntegrationsPage() {
           <div className="text-[11px] text-muted-foreground">Zero tripped fallbacks</div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-bold uppercase tracking-wider">
-            <span>MCP AI TOOLS</span>
-            <Bot className="h-4 w-4 text-purple-400" />
+        <Link
+          href="/admin/integrations/mcp-server"
+          className="p-5 rounded-2xl bg-card border border-purple-500/30 hover:border-purple-500/60 shadow-xl space-y-2 group transition hover:scale-[1.01]"
+        >
+          <div className="flex items-center justify-between text-purple-400 text-[11px] font-bold uppercase tracking-wider">
+            <span>MCP AI SERVER</span>
+            <Network className="h-4 w-4 text-purple-400 group-hover:scale-110 transition" />
           </div>
-          <div className="text-3xl font-black tracking-tight text-purple-400 font-mono">
-            2 Governed
+          <div className="text-3xl font-black tracking-tight text-purple-400 font-mono flex items-center justify-between">
+            <span>Governed</span>
+            <ArrowRight className="h-5 w-5 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all text-purple-400" />
           </div>
-          <div className="text-[11px] text-muted-foreground">RBAC permission gated</div>
-        </div>
+          <div className="text-[11px] text-muted-foreground">Live Bot Tracker &bull; Department Scopes</div>
+        </Link>
       </div>
 
       {/* ── CONNECTOR CARDS GRID ── */}
@@ -203,6 +220,19 @@ export default function IntegrationsPage() {
                           </span>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {c.type === 'ai_agent' && (
+                    <div className="pt-2">
+                      <Link
+                        href="/admin/integrations/mcp-server"
+                        className="w-full py-2 px-3 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-bold text-xs flex items-center justify-center space-x-2 transition"
+                      >
+                        <Network className="h-3.5 w-3.5" />
+                        <span>Manage MCP</span>
+                        <ArrowRight className="h-3.5 w-3.5 ml-auto" />
+                      </Link>
                     </div>
                   )}
                 </div>

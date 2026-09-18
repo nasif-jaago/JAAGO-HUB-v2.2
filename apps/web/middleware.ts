@@ -19,6 +19,7 @@ const PUBLIC_API_PATHS = [
   '/api/v1/auth/sign-in',
   '/api/v1/auth/login',
   '/api/v1/auth/forgot-password',
+  '/api/v1/auth/sync-google-profile',
   '/api/v1/biotime',
   '/api/v1/attendance/auto-checkout',
   '/api/v1/attendance/me/today',
@@ -32,6 +33,7 @@ const PUBLIC_API_PATHS = [
   '/api/v1/emails/regularization-notification',
   '/api/v1/procurement/requests/notify-step',
   '/api/v1/workflows',
+  '/api/mcp',
   '/health',
 ];
 
@@ -45,6 +47,11 @@ export function middleware(request: NextRequest) {
     pathname === '/favicon.ico';
 
   if (isStaticAsset) {
+    return NextResponse.next();
+  }
+
+  // 1b. MCP Connection Link public routes: /c/[token]/mcp
+  if (pathname.startsWith('/c/')) {
     return NextResponse.next();
   }
 

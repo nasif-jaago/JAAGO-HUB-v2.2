@@ -554,26 +554,36 @@ export function DashboardHeader({ onToggleSidebar, user }: DashboardHeaderProps)
             onClick={() => setShowUserMenu(!showUserMenu)}
             className="flex items-center space-x-2 p-0.5 rounded-full hover:ring-2 hover:ring-primary/50 transition cursor-pointer"
           >
-            <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-black flex items-center justify-center text-xs shadow-md overflow-hidden border border-primary/40">
+            <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-black flex items-center justify-center text-xs shadow-md overflow-hidden border border-primary/40 relative">
               {mounted && user?.avatarUrl ? (
                 <img
                   src={user.avatarUrl}
                   alt={user?.fullName || 'User'}
+                  referrerPolicy="no-referrer"
                   className="h-full w-full object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLElement;
+                    target.style.display = 'none';
+                    const fallback = target.parentElement?.querySelector('.header-avatar-fallback');
+                    if (fallback) (fallback as HTMLElement).style.display = 'inline';
+                  }}
                 />
-              ) : (
-                <span suppressHydrationWarning>
-                  {user?.fullName
-                    ? user.fullName
-                        .trim()
-                        .split(/\s+/)
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((n) => n[0]?.toUpperCase() || '')
-                        .join('')
-                    : ''}
-                </span>
-              )}
+              ) : null}
+              <span
+                suppressHydrationWarning
+                className="header-avatar-fallback"
+                style={{ display: mounted && user?.avatarUrl ? 'none' : 'inline' }}
+              >
+                {user?.fullName
+                  ? user.fullName
+                      .trim()
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((n) => n[0]?.toUpperCase() || '')
+                      .join('')
+                  : ''}
+              </span>
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground hidden sm:block" />
           </button>

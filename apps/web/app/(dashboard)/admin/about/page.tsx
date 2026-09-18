@@ -14,9 +14,13 @@ import {
   Boxes,
   Scale,
   Flame,
+  Bot,
+  Database,
+  Terminal,
+  Code,
 } from 'lucide-react';
 
-type TabType = 'constitution' | 'architecture' | 'telemetry' | 'packages';
+type TabType = 'constitution' | 'architecture' | 'telemetry' | 'packages' | 'mcp';
 
 interface TelemetryStep {
   step: number;
@@ -224,6 +228,7 @@ export default function AboutPage() {
             { id: 'architecture', label: '🗺️ Architecture Workflow', icon: Layers },
             { id: 'telemetry', label: '⚡ Live Request-to-DB Telemetry', icon: Activity },
             { id: 'packages', label: '📦 Monorepo Package Matrix', icon: Boxes },
+            { id: 'mcp', label: '🤖 MCP Architecture & Database', icon: Bot },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -662,6 +667,644 @@ export default function AboutPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* ── TAB 5: MCP BACKEND ARCHITECTURE & DATABASE BLUEPRINT ─── */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {activeTab === 'mcp' && (
+        <div className="bg-[#FAF6EC] border-2 border-[#D9CEB8] rounded-3xl p-6 sm:p-10 shadow-xl space-y-10 font-serif leading-relaxed text-[#2D2315]">
+          {/* Masthead Banner */}
+          <div className="text-center border-b-4 border-double border-[#6C5B42] pb-6 space-y-2">
+            <div className="text-[11px] font-mono uppercase tracking-[0.3em] font-extrabold text-[#746249]">
+              THE OFFICIAL ENGINEERING GAZETTE &bull; VOL. II &bull; SPECIAL TECHNICAL BULLETIN 2026
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-[#22170B] uppercase">
+              GOVERNED MCP ENGINE &amp; DATABASE BLUEPRINT
+            </h2>
+            <div className="text-xs font-mono italic text-[#63533C] pt-1">
+              Model Context Protocol (JSON-RPC 2.0 &amp; SSE) &bull; Zero-Trust Token Vault &bull; 109 Governed Entities &bull; Supabase PostgreSQL
+            </div>
+            {/* Architectural Badges */}
+            <div className="flex flex-wrap justify-center gap-2 pt-3 font-sans text-[11px] font-bold">
+              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>MCP Protocol 2026-07-28 &bull; Stateless</span>
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-[#E5DCB7] text-[#4A3B22] border border-[#D0C4A4]">
+                RFC 6749 OAuth 2.1 Bearer Tokens
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 border border-purple-300">
+                SHA-256 One-Way Credentials
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 border border-blue-300">
+                109 Governed Resources &amp; Tools
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                Non-Repudiable Append-Only Audit
+              </span>
+            </div>
+          </div>
+
+          {/* § 1.0 MCP Backend Architecture & 7-Stage Request Pipeline */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between border-b border-[#D2C5AB] pb-1.5">
+              <h3 className="text-xl font-bold text-[#2A1E11] uppercase tracking-wide flex items-center space-x-2">
+                <span>§ 1.0</span>
+                <span>MCP Backend Architecture &amp; 7-Stage Pipeline</span>
+              </h3>
+              <span className="text-[10px] font-mono font-bold bg-[#E4D9C1] px-2.5 py-0.5 rounded-full border border-[#CABDA1]">
+                CORE RUNTIME
+              </span>
+            </div>
+            <p className="text-sm">
+              The JAAGO HUB Model Context Protocol (MCP) server is implemented as a high-performance, stateless gateway under <code className="font-mono text-xs bg-[#E4D8C1] px-1.5 py-0.5 rounded">/api/mcp</code>. It bridges external and internal AI agents (Claude Desktop, Cursor, Custom Automation) with JAAGO HUB&apos;s modular ERP domain services while enforcing strict department boundaries and Row-Level Security:
+            </p>
+
+            {/* Visual 7-Stage Execution Flow */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-2.5 pt-2 text-xs font-sans">
+              {[
+                {
+                  step: '1. CLIENT',
+                  name: 'Agent Ingress',
+                  tech: 'Claude / Cursor / SDK',
+                  desc: 'Dispatches JSON-RPC 2.0 with Bearer mcp_live_<token>',
+                  badge: 'TLS 1.3',
+                },
+                {
+                  step: '2. GATEWAY',
+                  name: 'Protocol Handshake',
+                  tech: 'POST /api/mcp',
+                  desc: 'Stateless HTTP/SSE, protocol version negotiation (2026-07-28)',
+                  badge: 'Next.js BFF',
+                },
+                {
+                  step: '3. AUTH VAULT',
+                  name: 'SHA-256 Auth',
+                  tech: 'mcp_agent_credentials',
+                  desc: 'Constant-time token hash verification; rejects revoked/suspended bots',
+                  badge: 'Zero Plaintext',
+                },
+                {
+                  step: '4. RATE LIMIT',
+                  name: 'Token Bucket',
+                  tech: 'Sliding Window',
+                  desc: 'Enforces 120 req/min per agent with Redis/In-memory mutex protection',
+                  badge: '429 Guard',
+                },
+                {
+                  step: '5. GOVERNANCE',
+                  name: 'Scope Gatekeeper',
+                  tech: 'mcp_agent_scopes',
+                  desc: 'Validates read/write grants against 109 system modules before execution',
+                  badge: 'Strict RBAC',
+                },
+                {
+                  step: '6. EXECUTION',
+                  name: 'Domain Kernel',
+                  tech: 'core-application',
+                  desc: 'Sandboxed dispatch to Attendance, HR, Payroll & Finance services',
+                  badge: 'Zod DTO',
+                },
+                {
+                  step: '7. AUDIT LOG',
+                  name: 'Telemetry Spool',
+                  tech: 'mcp_activity',
+                  desc: 'Immutable audit log recording latency, client IP, params & outcomes',
+                  badge: 'Append-Only',
+                },
+              ].map((item) => (
+                <div
+                  key={item.step}
+                  className="p-3.5 rounded-2xl bg-[#EDE3CF] border border-[#D5C9B3] space-y-1.5 shadow-sm flex flex-col justify-between"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] font-mono font-bold text-[#8C7654]">{item.step}</span>
+                      <span className="text-[8px] font-mono font-bold bg-[#DECFAF] text-[#4E3E27] px-1.5 py-0.2 rounded border border-[#CBBCA0]">
+                        {item.badge}
+                      </span>
+                    </div>
+                    <div className="font-extrabold text-xs text-[#221A10]">{item.name}</div>
+                    <div className="text-[10px] font-mono text-[#946A1B]">{item.tech}</div>
+                    <p className="text-[11px] text-[#63533B] font-serif leading-snug">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* § 2.0 PostgreSQL Database System & ERD Specification */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between border-b border-[#D2C5AB] pb-1.5">
+              <h3 className="text-xl font-bold text-[#2A1E11] uppercase tracking-wide flex items-center space-x-2">
+                <span>§ 2.0</span>
+                <span>Supabase PostgreSQL Database Schema (6 Core Tables)</span>
+              </h3>
+              <span className="text-[10px] font-mono font-bold bg-[#E4D9C1] px-2.5 py-0.5 rounded-full border border-[#CABDA1]">
+                DATA INTEGRITY
+              </span>
+            </div>
+            <p className="text-sm">
+              The MCP subsystem stores operational metadata across 6 isolated tables in the primary Supabase PostgreSQL cluster. These tables enforce cascade referential integrity, one-way credential hashing, and Row-Level Security:
+            </p>
+
+            {/* Table Matrix */}
+            <div className="overflow-x-auto rounded-2xl border border-[#D5C9B3]">
+              <table className="w-full text-left border-collapse text-xs font-sans">
+                <thead>
+                  <tr className="bg-[#E4D8C1] border-b border-[#D5C9B3] text-[11px] font-extrabold uppercase text-[#4D3F2B]">
+                    <th className="py-2.5 px-4">PostgreSQL Table</th>
+                    <th className="py-2.5 px-4">Primary Keys &amp; Foreign Keys</th>
+                    <th className="py-2.5 px-4">Security &amp; Rationale</th>
+                    <th className="py-2.5 px-4">Key Columns</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#DCD1BA] bg-[#EFE6D4]">
+                  {[
+                    {
+                      table: 'public.mcp_modules',
+                      keys: 'PK: module_key (VARCHAR 50)',
+                      sec: 'Public catalog of 109 system entities (Core, Depts, Menus, Pages)',
+                      cols: 'module_key, label, description, is_active, category, route_path, department_id',
+                    },
+                    {
+                      table: 'public.mcp_agents',
+                      keys: 'PK: id (UUID), FK: org_id -> organizations(id)',
+                      sec: 'Registered AI bots; status: active | suspended | revoked',
+                      cols: 'id, org_id, name, description, agent_type, status, created_by, created_at',
+                    },
+                    {
+                      table: 'public.mcp_agent_credentials',
+                      keys: 'PK: id (UUID), FK: agent_id -> mcp_agents(id) ON DELETE CASCADE',
+                      sec: 'Zero plaintext at rest. Token verified via SHA-256 hex digest',
+                      cols: 'id, agent_id, token_hash (UNIQUE), token_prefix, audience, expires_at, revoked_at',
+                    },
+                    {
+                      table: 'public.mcp_agent_scopes',
+                      keys: 'PK: id (UUID), FKs: agent_id, module_key, UNIQUE(agent_id, module_key, permission)',
+                      sec: 'Fine-grained grants: read | write | delete with optional JSONB resource_filter',
+                      cols: 'id, agent_id, module_key, permission, resource_filter, granted_by, granted_at',
+                    },
+                    {
+                      table: 'public.mcp_connections',
+                      keys: 'PK: id (UUID), FK: agent_id -> mcp_agents(id) ON DELETE CASCADE',
+                      sec: 'Live bot heartbeat tracking, protocol version negotiation & IP logging',
+                      cols: 'id, agent_id, client_name, client_version, protocol_version, ip_address, status, last_seen_at',
+                    },
+                    {
+                      table: 'public.mcp_activity',
+                      keys: 'PK: id (UUID), FKs: agent_id, connection_id (ON DELETE SET NULL)',
+                      sec: 'Immutable append-only audit trail with parameter sanitization & duration_ms',
+                      cols: 'id, agent_id, mcp_method, mcp_name, module_key, outcome, duration_ms, params_digest, trace_id',
+                    },
+                  ].map((row, idx) => (
+                    <tr key={idx} className="hover:bg-[#E8DFC9] transition">
+                      <td className="py-2.5 px-4 font-mono font-extrabold text-[#2A1F13]">{row.table}</td>
+                      <td className="py-2.5 px-4 font-mono text-[11px] text-[#785E2C]">{row.keys}</td>
+                      <td className="py-2.5 px-4 text-[#4E412F]">{row.sec}</td>
+                      <td className="py-2.5 px-4 font-mono text-[10px] text-[#554631]">{row.cols}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* DDL Schema Code Display */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-sans font-bold text-[#4B3B23]">
+                <div className="flex items-center space-x-2">
+                  <Database className="h-4 w-4 text-[#946A1B]" />
+                  <span>Production PostgreSQL DDL (supabase/migrations/20260918010000_create_mcp_governed_server_schema.sql)</span>
+                </div>
+                <button
+                  onClick={() =>
+                    copyToClipboard(
+                      `-- ==============================================================================
+-- JAAGO HUB GOVERNED MCP SERVER SCHEMA & DATABASE SYSTEM SPECIFICATION
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.mcp_modules (
+    module_key VARCHAR(50) PRIMARY KEY,
+    label VARCHAR(100) NOT NULL,
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    category VARCHAR(20) DEFAULT 'core' NOT NULL,
+    route_path VARCHAR(200),
+    department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.mcp_agents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    org_id TEXT REFERENCES public.organizations(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    agent_type VARCHAR(50) DEFAULT 'custom' NOT NULL,
+    status VARCHAR(20) DEFAULT 'active' NOT NULL,
+    created_by VARCHAR(100),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.mcp_agent_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID NOT NULL REFERENCES public.mcp_agents(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    token_prefix VARCHAR(16) NOT NULL,
+    audience VARCHAR(100) DEFAULT 'https://hub.jaago.com.bd/api/mcp' NOT NULL,
+    expires_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    created_by VARCHAR(100),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.mcp_agent_scopes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID NOT NULL REFERENCES public.mcp_agents(id) ON DELETE CASCADE,
+    module_key VARCHAR(50) NOT NULL REFERENCES public.mcp_modules(module_key) ON DELETE CASCADE,
+    permission VARCHAR(20) NOT NULL CHECK (permission IN ('read', 'write', 'delete')),
+    resource_filter JSONB,
+    granted_by VARCHAR(100),
+    granted_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_agent_module_perm UNIQUE (agent_id, module_key, permission)
+);
+
+CREATE TABLE IF NOT EXISTS public.mcp_connections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID NOT NULL REFERENCES public.mcp_agents(id) ON DELETE CASCADE,
+    client_name VARCHAR(100),
+    client_version VARCHAR(50),
+    protocol_version VARCHAR(20) DEFAULT '2026-07-28' NOT NULL,
+    client_capabilities JSONB DEFAULT '{}'::jsonb,
+    ip_address VARCHAR(45),
+    status VARCHAR(20) DEFAULT 'active' NOT NULL,
+    request_count INTEGER DEFAULT 1 NOT NULL,
+    first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.mcp_activity (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID REFERENCES public.mcp_agents(id) ON DELETE SET NULL,
+    connection_id UUID REFERENCES public.mcp_connections(id) ON DELETE SET NULL,
+    mcp_method VARCHAR(50) NOT NULL,
+    mcp_name VARCHAR(100),
+    module_key VARCHAR(50),
+    permission_used VARCHAR(20),
+    outcome VARCHAR(20) NOT NULL,
+    denial_reason TEXT,
+    duration_ms INTEGER,
+    params_digest JSONB DEFAULT '{}'::jsonb,
+    trace_id VARCHAR(64),
+    ip_address VARCHAR(45),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_mcp_cred_hash ON public.mcp_agent_credentials(token_hash);
+CREATE INDEX IF NOT EXISTS idx_mcp_scopes_agent ON public.mcp_agent_scopes(agent_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_activity_agent ON public.mcp_activity(agent_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mcp_activity_outcome ON public.mcp_activity(outcome);`,
+                      'ddl-schema'
+                    )
+                  }
+                  className="px-3 py-1 rounded-lg bg-[#E2D6C0] hover:bg-[#D5C6AC] border border-[#C5B497] font-mono text-[11px] flex items-center space-x-1.5 transition cursor-pointer"
+                >
+                  {copiedSection === 'ddl-schema' ? <Check className="h-3 w-3 text-emerald-700" /> : <Copy className="h-3 w-3" />}
+                  <span>{copiedSection === 'ddl-schema' ? 'DDL Copied!' : 'Copy SQL DDL'}</span>
+                </button>
+              </div>
+              <pre className="p-4 rounded-2xl bg-[#2E2012] text-[#F5C518] font-mono text-xs overflow-x-auto border border-[#C5A869] shadow-inner max-h-64 no-scrollbar">
+{`CREATE TABLE public.mcp_modules (
+    module_key VARCHAR(50) PRIMARY KEY,
+    label VARCHAR(100) NOT NULL,
+    category VARCHAR(20) DEFAULT 'core' NOT NULL, -- 'core' | 'department' | 'menu' | 'page'
+    route_path VARCHAR(200)
+);
+
+CREATE TABLE public.mcp_agents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    agent_type VARCHAR(50) DEFAULT 'custom' NOT NULL,
+    status VARCHAR(20) DEFAULT 'active' NOT NULL -- 'active' | 'suspended' | 'revoked'
+);
+
+CREATE TABLE public.mcp_agent_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID NOT NULL REFERENCES public.mcp_agents(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL UNIQUE, -- SHA-256 one-way digest
+    token_prefix VARCHAR(16) NOT NULL,      -- e.g. "jhmcp_live_abc1"
+    audience VARCHAR(100) DEFAULT 'https://hub.jaago.com.bd/api/mcp'
+);
+
+CREATE TABLE public.mcp_agent_scopes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID NOT NULL REFERENCES public.mcp_agents(id) ON DELETE CASCADE,
+    module_key VARCHAR(50) NOT NULL REFERENCES public.mcp_modules(module_key) ON DELETE CASCADE,
+    permission VARCHAR(20) NOT NULL CHECK (permission IN ('read', 'write', 'delete')),
+    CONSTRAINT uq_agent_module_perm UNIQUE (agent_id, module_key, permission)
+);
+
+CREATE TABLE public.mcp_activity (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agent_id UUID REFERENCES public.mcp_agents(id) ON DELETE SET NULL,
+    mcp_method VARCHAR(50) NOT NULL,        -- 'tools/call', 'resources/read'
+    mcp_name VARCHAR(100),                  -- e.g. 'attendance.check_in'
+    outcome VARCHAR(20) NOT NULL,           -- 'ok' | 'denied' | 'error'
+    duration_ms INTEGER,
+    params_digest JSONB,                    -- Redacted parameters
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);`}
+              </pre>
+            </div>
+          </section>
+
+          {/* § 3.0 Governed Tools & Resource Catalog (109 System Entities) */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between border-b border-[#D2C5AB] pb-1.5">
+              <h3 className="text-xl font-bold text-[#2A1E11] uppercase tracking-wide flex items-center space-x-2">
+                <span>§ 3.0</span>
+                <span>Governed Tools &amp; Dynamic Catalog (109 System Entities)</span>
+              </h3>
+              <span className="text-[10px] font-mono font-bold bg-[#E4D9C1] px-2.5 py-0.5 rounded-full border border-[#CABDA1]">
+                AUTOMATIC DISCOVERY
+              </span>
+            </div>
+            <p className="text-sm">
+              The MCP server exposes all business tools and queryable resources dynamically using uniform resource identifiers (<code className="font-mono text-xs bg-[#E4D8C1] px-1.5 py-0.5 rounded">{'${category}://${module_key}'}</code>). The catalog is auto-synchronized at boot via <code className="font-mono text-xs bg-[#E4D8C1] px-1.5 py-0.5 rounded">apps/web/lib/mcp/module-sync.ts</code>:
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs font-sans">
+              <div className="p-4 rounded-2xl bg-[#EDE3CF] border border-[#D5C9B3] space-y-1.5">
+                <div className="font-extrabold text-[#291E11] flex items-center justify-between">
+                  <span>Core Modules</span>
+                  <span className="font-mono text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">15 Entities</span>
+                </div>
+                <p className="text-[11px] text-[#63533C] font-serif">
+                  Attendance, HR Directory, Payroll, Finance, Procurement, Documents, Organization, Settings, GPS, RBAC.
+                </p>
+                <div className="font-mono text-[10px] text-[#8C7654]">URI: core://&lt;module_key&gt;</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#EDE3CF] border border-[#D5C9B3] space-y-1.5">
+                <div className="font-extrabold text-[#291E11] flex items-center justify-between">
+                  <span>Departments</span>
+                  <span className="font-mono text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-bold">34 Live Records</span>
+                </div>
+                <p className="text-[11px] text-[#63533C] font-serif">
+                  Dynamically synchronized from the live Supabase <code className="font-mono">departments</code> table, mapped to business units.
+                </p>
+                <div className="font-mono text-[10px] text-[#8C7654]">URI: department://&lt;dept_key&gt;</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#EDE3CF] border border-[#D5C9B3] space-y-1.5">
+                <div className="font-extrabold text-[#291E11] flex items-center justify-between">
+                  <span>Portal Menus</span>
+                  <span className="font-mono text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">9 Top-Level</span>
+                </div>
+                <p className="text-[11px] text-[#63533C] font-serif">
+                  Main navigation menus including Dashboards, Requests, Admin, People &amp; Culture, and Settings.
+                </p>
+                <div className="font-mono text-[10px] text-[#8C7654]">URI: menu://&lt;menu_key&gt;</div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[#EDE3CF] border border-[#D5C9B3] space-y-1.5">
+                <div className="font-extrabold text-[#291E11] flex items-center justify-between">
+                  <span>Pages &amp; Submenus</span>
+                  <span className="font-mono text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">51 Sub-Routes</span>
+                </div>
+                <p className="text-[11px] text-[#63533C] font-serif">
+                  Granular pages across all ERP areas: Employee Directory, Attendance Logs, Payslips, Studio-Lite, etc.
+                </p>
+                <div className="font-mono text-[10px] text-[#8C7654]">URI: page://&lt;page_key&gt;</div>
+              </div>
+            </div>
+          </section>
+
+          {/* § 4.0 Developer Integration Guide & Client Configurations */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between border-b border-[#D2C5AB] pb-1.5">
+              <h3 className="text-xl font-bold text-[#2A1E11] uppercase tracking-wide flex items-center space-x-2">
+                <span>§ 4.0</span>
+                <span>Developer Integration Guide &amp; Client Configurations</span>
+              </h3>
+              <span className="text-[10px] font-mono font-bold bg-[#E4D9C1] px-2.5 py-0.5 rounded-full border border-[#CABDA1]">
+                QUICKSTART
+              </span>
+            </div>
+            <p className="text-sm">
+              Any developer or authorized AI client can connect to the JAAGO HUB MCP server by supplying an issued bearer token. Below are the drop-in configuration manifests for Claude Desktop, Cursor AI, and direct HTTP testing:
+            </p>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 font-sans text-xs">
+              {/* Claude Desktop Config */}
+              <div className="p-4 rounded-2xl bg-[#EDE3CF] border border-[#D5C9B3] space-y-2">
+                <div className="flex items-center justify-between font-bold text-[#291E11]">
+                  <div className="flex items-center space-x-2">
+                    <Bot className="h-4 w-4 text-[#946A1B]" />
+                    <span>Claude Desktop (claude_desktop_config.json)</span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      copyToClipboard(
+                        JSON.stringify(
+                          {
+                            mcpServers: {
+                              'jaago-hub': {
+                                command: 'npx',
+                                args: [
+                                  '-y',
+                                  'mcp-remote',
+                                  'https://hub.jaago.com.bd/api/mcp',
+                                  '--header',
+                                  'Authorization: Bearer <YOUR_MCP_LIVE_TOKEN>',
+                                ],
+                              },
+                            },
+                          },
+                          null,
+                          2
+                        ),
+                        'claude-cfg'
+                      )
+                    }
+                    className="px-2 py-0.5 rounded bg-[#DECFAF] hover:bg-[#D3C19E] text-[10px] font-mono border border-[#C6B696] cursor-pointer"
+                  >
+                    {copiedSection === 'claude-cfg' ? 'Copied!' : 'Copy Config'}
+                  </button>
+                </div>
+                <pre className="p-3 rounded-xl bg-[#2E2012] text-[#F5C518] font-mono text-[11px] overflow-x-auto no-scrollbar border border-[#C5A869]">
+{`{
+  "mcpServers": {
+    "jaago-hub": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://hub.jaago.com.bd/api/mcp",
+        "--header",
+        "Authorization: Bearer <YOUR_MCP_LIVE_TOKEN>"
+      ]
+    }
+  }
+}`}
+                </pre>
+              </div>
+
+              {/* Cursor AI Config */}
+              <div className="p-4 rounded-2xl bg-[#EDE3CF] border border-[#D5C9B3] space-y-2">
+                <div className="flex items-center justify-between font-bold text-[#291E11]">
+                  <div className="flex items-center space-x-2">
+                    <Code className="h-4 w-4 text-[#946A1B]" />
+                    <span>Cursor AI / Windsurf (.cursor/mcp.json)</span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      copyToClipboard(
+                        JSON.stringify(
+                          {
+                            mcpServers: {
+                              'jaago-hub': {
+                                url: 'https://hub.jaago.com.bd/api/mcp',
+                                headers: {
+                                  Authorization: 'Bearer <YOUR_MCP_LIVE_TOKEN>',
+                                },
+                              },
+                            },
+                          },
+                          null,
+                          2
+                        ),
+                        'cursor-cfg'
+                      )
+                    }
+                    className="px-2 py-0.5 rounded bg-[#DECFAF] hover:bg-[#D3C19E] text-[10px] font-mono border border-[#C6B696] cursor-pointer"
+                  >
+                    {copiedSection === 'cursor-cfg' ? 'Copied!' : 'Copy Config'}
+                  </button>
+                </div>
+                <pre className="p-3 rounded-xl bg-[#2E2012] text-[#F5C518] font-mono text-[11px] overflow-x-auto no-scrollbar border border-[#C5A869]">
+{`{
+  "mcpServers": {
+    "jaago-hub": {
+      "url": "https://hub.jaago.com.bd/api/mcp",
+      "headers": {
+        "Authorization": "Bearer <YOUR_MCP_LIVE_TOKEN>"
+      }
+    }
+  }
+}`}
+                </pre>
+              </div>
+            </div>
+
+            {/* Direct cURL Verification */}
+            <div className="p-4 rounded-2xl bg-[#2E2012] text-[#F5C518] font-mono text-xs space-y-2 border border-[#C5A869] shadow-inner">
+              <div className="flex items-center justify-between text-[#E7DFCD]">
+                <div className="flex items-center space-x-2">
+                  <Terminal className="h-4 w-4 text-emerald-400" />
+                  <span className="font-bold text-white uppercase text-[11px]">Direct Terminal Verification (cURL)</span>
+                </div>
+                <button
+                  onClick={() =>
+                    copyToClipboard(
+                      `curl -X POST https://hub.jaago.com.bd/api/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer <YOUR_MCP_LIVE_TOKEN>" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list",
+    "params": {}
+  }'`,
+                      'curl-cmd'
+                    )
+                  }
+                  className="px-2 py-0.5 rounded bg-[#4E3923] hover:bg-[#63492D] text-[10px] border border-[#8C6F4B] text-[#F5C518] cursor-pointer"
+                >
+                  {copiedSection === 'curl-cmd' ? 'Copied!' : 'Copy cURL'}
+                </button>
+              </div>
+              <pre className="text-[#E7DFCD] text-[11px] overflow-x-auto no-scrollbar pt-1">
+{`curl -X POST https://hub.jaago.com.bd/api/mcp \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer <YOUR_MCP_LIVE_TOKEN>" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list",
+    "params": {}
+  }'`}
+              </pre>
+            </div>
+          </section>
+
+          {/* § 5.0 Internal BFF & Protocol REST Endpoints */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between border-b border-[#D2C5AB] pb-1.5">
+              <h3 className="text-xl font-bold text-[#2A1E11] uppercase tracking-wide flex items-center space-x-2">
+                <span>§ 5.0</span>
+                <span>Internal BFF &amp; Developer REST API Matrix</span>
+              </h3>
+              <span className="text-[10px] font-mono font-bold bg-[#E4D9C1] px-2.5 py-0.5 rounded-full border border-[#CABDA1]">
+                HTTP ROUTES
+              </span>
+            </div>
+            <div className="overflow-x-auto rounded-2xl border border-[#D5C9B3]">
+              <table className="w-full text-left border-collapse text-xs font-sans">
+                <thead>
+                  <tr className="bg-[#E4D8C1] border-b border-[#D5C9B3] text-[11px] font-extrabold uppercase text-[#4D3F2B]">
+                    <th className="py-2.5 px-4">Method &amp; Endpoint</th>
+                    <th className="py-2.5 px-4">Authentication</th>
+                    <th className="py-2.5 px-4">Description &amp; Handlers</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#DCD1BA] bg-[#EFE6D4]">
+                  {[
+                    {
+                      route: 'POST /api/mcp',
+                      auth: 'Bearer mcp_live_<token>',
+                      desc: 'Official Model Context Protocol JSON-RPC 2.0 endpoint (initialize, tools/list, tools/call, resources/read).',
+                    },
+                    {
+                      route: 'GET /api/v1/mcp/live',
+                      auth: 'Session Cookie / Bearer',
+                      desc: 'Server telemetry, active connections count, sliding 60s throughput, denied requests & real-time audit feed.',
+                    },
+                    {
+                      route: 'GET /api/v1/mcp/modules',
+                      auth: 'Session Cookie / Bearer',
+                      desc: 'Returns all 109 auto-synchronized platform modules, operational departments, menus, and sub-pages.',
+                    },
+                    {
+                      route: 'GET / POST / DELETE /api/v1/mcp/agents',
+                      auth: 'Admin Session Guard',
+                      desc: 'Register new AI bots, generate one-time bearer tokens, update operational status, or revoke credentials.',
+                    },
+                    {
+                      route: 'GET / POST / PUT /api/v1/mcp/scopes',
+                      auth: 'Admin Session Guard',
+                      desc: 'Query scope matrices, grant bulk read/write permissions across 109 entities, or revoke access.',
+                    },
+                    {
+                      route: 'POST /api/v1/mcp/scopes/test-permission',
+                      auth: 'Admin Session Guard',
+                      desc: 'Interactive testing utility to dry-run whether an agent is authorized for a specific tool and action.',
+                    },
+                  ].map((row, idx) => (
+                    <tr key={idx} className="hover:bg-[#E8DFC9] transition">
+                      <td className="py-2.5 px-4 font-mono font-extrabold text-[#946A1B]">{row.route}</td>
+                      <td className="py-2.5 px-4 font-mono text-[11px] text-[#4F3F2A]">{row.auth}</td>
+                      <td className="py-2.5 px-4 text-[#5E4F39]">{row.desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
       )}
     </div>
