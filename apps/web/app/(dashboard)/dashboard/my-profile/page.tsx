@@ -41,6 +41,8 @@ const EMPTY_PROFILE: FullEmployeeProfile = {
   branch: 'Head Office (Banani)',
   department: '',
   project: '',
+  team: '',
+  crossDepartments: [],
   supervisor: '',
   secondarySupervisor: '',
   workLocation: 'Banani, Dhaka',

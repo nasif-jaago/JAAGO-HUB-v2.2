@@ -40,6 +40,7 @@ CREATE TABLE public.employees (
     department                  VARCHAR(150) NOT NULL DEFAULT 'Founder''s Office / FC',
     project                     VARCHAR(255) DEFAULT 'Tech 4 Development',
     team                        VARCHAR(255) DEFAULT 'Core Development Team',
+    cross_departments           JSONB DEFAULT '[]'::jsonb,
     supervisor                  VARCHAR(255),
     secondary_supervisor        VARCHAR(255),
     work_location               VARCHAR(255) DEFAULT 'Banani, Dhaka',

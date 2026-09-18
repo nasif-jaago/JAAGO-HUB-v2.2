@@ -8,6 +8,7 @@ import {
   Upload,
   ArrowLeft,
   Save,
+  Check,
   CheckCircle2,
   AlertCircle,
   Building2,
@@ -110,6 +111,7 @@ import {
   validatePaternityLeaveRules,
 } from '@/lib/supabase-time-off';
 import { saveEmployeeToSupabase } from '@/lib/supabase-employees';
+import { getCurrentUserSession } from '@/lib/user-profile-sync';
 import { invalidateCache } from '@/lib/data-cache';
 
 export type EmployeeStatus = 'Active' | 'Terminated' | 'Resigned' | 'Incomplete' | 'Archived';
@@ -144,6 +146,7 @@ export interface FullEmployeeProfile {
   department: string;
   project: string;
   team?: string | undefined;
+  crossDepartments?: string[] | undefined;
   supervisor: string;
   secondarySupervisor: string;
   workLocation: string;
@@ -295,6 +298,20 @@ const LEAVE_GROUPS = ['Standard Full-time', 'DSP Faculty Group', 'Project Staff'
 const DEFAULT_OFFICE_DAYS = ['Sunday to Thursday', 'Sunday to Thursday (Full Week)', 'Monday to Friday', 'Saturday to Wednesday'] as const;
 const DEFAULT_OFFICE_HOURS = ['08:00 AM - 04:00 PM', '09:00 AM - 05:00 PM', '10:00 AM - 06:00 PM', '08:30 AM - 04:30 PM', '07:30 AM - 03:30 PM'] as const;
 
+function parseCrossDepartments(val: any): string[] {
+  if (Array.isArray(val)) return val.filter((v) => typeof v === 'string' && v.trim());
+  if (typeof val === 'string' && val.trim()) {
+    if (val.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) return parsed.filter((v) => typeof v === 'string' && v.trim());
+      } catch {}
+    }
+    return val.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 export function EmployeeProfileDetail({
   initialData,
   allEmployees,
@@ -389,6 +406,7 @@ export function EmployeeProfileDetail({
       return {
         ...initialData,
         team: initialData.team || '',
+        crossDepartments: parseCrossDepartments(initialData.crossDepartments ?? (initialData as any).cross_departments),
         insuranceStatus: initialData.insuranceStatus || 'Active',
         insuranceCoverageCategory: initialData.insuranceCoverageCategory || '',
         insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 0,
@@ -440,6 +458,7 @@ export function EmployeeProfileDetail({
       department: '',
       project: 'General Operations',
       team: '',
+      crossDepartments: [],
       supervisor: 'Nasif Kamal',
       secondarySupervisor: 'S M Nayeem Rahman',
       workLocation: 'Banani, Dhaka',
@@ -744,6 +763,7 @@ export function EmployeeProfileDetail({
       setFormData({
         ...initialData,
         team: initialData.team || '',
+        crossDepartments: parseCrossDepartments(initialData.crossDepartments ?? (initialData as any).cross_departments),
         insuranceStatus: initialData.insuranceStatus || 'Active',
         insuranceCoverageCategory: initialData.insuranceCoverageCategory || '',
         insuranceMonthlyPremium: initialData.insuranceMonthlyPremium ?? 0,
@@ -789,6 +809,76 @@ export function EmployeeProfileDetail({
   const supervisorRef = useRef<HTMLDivElement>(null);
   const secSupervisorRef = useRef<HTMLDivElement>(null);
 
+  // Cross Department multi-select state
+  const [isCrossDeptOpen, setIsCrossDeptOpen] = useState(false);
+  const [crossDeptSearch, setCrossDeptSearch] = useState('');
+  const crossDeptRef = useRef<HTMLDivElement>(null);
+
+  const updateCrossDepartments = (next: string[]) => {
+    setFormData((prev) => ({ ...prev, crossDepartments: next }));
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('jaago_active_cross_departments', JSON.stringify(next));
+
+        const empCode = formData.code || formData.id;
+        if (empCode) {
+          localStorage.setItem(`jaago_employee_cross_departments_${empCode}`, JSON.stringify(next));
+          localStorage.setItem(`jaago_employee_cross_departments_${empCode.replace(/^FO/, 'F0')}`, JSON.stringify(next));
+          localStorage.setItem(`jaago_employee_cross_departments_${empCode.replace(/^F0/, 'FO')}`, JSON.stringify(next));
+        }
+        const rawMap = localStorage.getItem('jaago_cross_departments_map');
+        const map = rawMap ? JSON.parse(rawMap) : {};
+        if (formData.code) {
+          map[formData.code] = next;
+          map[formData.code.replace(/^FO/, 'F0')] = next;
+          map[formData.code.replace(/^F0/, 'FO')] = next;
+        }
+        if (formData.id) map[formData.id] = next;
+        if (formData.workEmail) map[formData.workEmail.toLowerCase().trim()] = next;
+        if (formData.name) map[formData.name.toLowerCase().trim()] = next;
+        localStorage.setItem('jaago_cross_departments_map', JSON.stringify(map));
+
+        const session = getCurrentUserSession();
+        if (session) {
+          session.crossDepartments = next;
+          localStorage.setItem('jaago_user', JSON.stringify(session));
+          document.cookie = `jaago_user=${encodeURIComponent(JSON.stringify(session))}; path=/; max-age=604800; SameSite=Lax`;
+        }
+
+        // Also update cached list in jaago_pnc_employees_v2 so employee immediately carries crossDepartments
+        const cachedRaw = localStorage.getItem('jaago_pnc_employees_v2');
+        if (cachedRaw) {
+          try {
+            const list = JSON.parse(cachedRaw);
+            if (Array.isArray(list)) {
+              const updatedList = list.map((e: any) => {
+                const codeMatch = (e.code && (e.code === formData.code || e.code.replace(/^FO/, 'F0') === formData.code?.replace(/^FO/, 'F0')));
+                const idMatch = (e.id && e.id === formData.id);
+                const emailMatch = (formData.workEmail && e.workEmail?.toLowerCase() === formData.workEmail.toLowerCase());
+                if (codeMatch || idMatch || emailMatch) {
+                  return { ...e, crossDepartments: next };
+                }
+                return e;
+              });
+              localStorage.setItem('jaago_pnc_employees_v2', JSON.stringify(updatedList));
+            }
+          } catch {}
+        }
+
+        window.dispatchEvent(
+          new CustomEvent('jaago_cross_departments_updated', {
+            detail: { crossDepartments: next, code: empCode },
+          })
+        );
+        window.dispatchEvent(
+          new CustomEvent('jaago_user_updated', {
+            detail: { crossDepartments: next },
+          })
+        );
+      } catch {}
+    }
+  };
+
   // Click outside to auto-close dropdowns
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -797,6 +887,9 @@ export function EmployeeProfileDetail({
       }
       if (secSupervisorRef.current && !secSupervisorRef.current.contains(event.target as Node)) {
         setShowSecSupervisorDropdown(false);
+      }
+      if (crossDeptRef.current && !crossDeptRef.current.contains(event.target as Node)) {
+        setIsCrossDeptOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -1496,6 +1589,9 @@ export function EmployeeProfileDetail({
     originalStateRef.current = updatedProfile;
     setFormData(updatedProfile);
 
+    // Save cross departments to local fast cache
+    updateCrossDepartments(updatedProfile.crossDepartments || []);
+
     onSave(updatedProfile);
 
     setSaveToast({
@@ -2077,6 +2173,176 @@ export function EmployeeProfileDetail({
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Cross Department (Interactive Multi-Select Field) */}
+                <div ref={crossDeptRef} className="space-y-1 relative">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground block">
+                      Cross Department
+                    </label>
+                    <span className="text-[10px] text-muted-foreground/80">
+                      {(formData.crossDepartments || []).length > 0
+                        ? `${(formData.crossDepartments || []).length} selected`
+                        : 'Multiple allowed'}
+                    </span>
+                  </div>
+
+                  {/* Multi-Select Trigger Container */}
+                  <div
+                    onClick={() => {
+                      if (!readOnly) setIsCrossDeptOpen((prev) => !prev);
+                    }}
+                    className={`w-full min-h-[40px] px-3 py-1.5 rounded-xl bg-surface/50 border ${
+                      isCrossDeptOpen ? 'border-amber-500 ring-1 ring-amber-500' : 'border-border'
+                    } text-xs sm:text-[13px] font-medium text-foreground cursor-pointer shadow-sm flex flex-wrap items-center gap-1.5 transition`}
+                  >
+                    {(formData.crossDepartments || []).length > 0 ? (
+                      (formData.crossDepartments || []).map((dept) => (
+                        <span
+                          key={dept}
+                          className="inline-flex items-center space-x-1 pl-2 pr-1.5 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-500 text-[11px] font-semibold shadow-xs transition-all hover:bg-amber-500/25"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className="truncate max-w-[130px]">{dept}</span>
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const next = (formData.crossDepartments || []).filter((d) => d !== dept);
+                                updateCrossDepartments(next);
+                              }}
+                              className="p-0.5 rounded hover:bg-amber-500/30 text-amber-500 hover:text-amber-400 transition cursor-pointer"
+                              title={`Remove ${dept}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground/40 text-xs py-1">
+                        Select cross departments...
+                      </span>
+                    )}
+
+                    <div className="ml-auto flex items-center space-x-1 text-muted-foreground pl-1">
+                      {(formData.crossDepartments || []).length > 0 && !readOnly && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateCrossDepartments([]);
+                          }}
+                          className="p-1 rounded hover:bg-surface text-muted-foreground hover:text-foreground text-[10px] font-bold cursor-pointer"
+                          title="Clear all"
+                        >
+                          Clear
+                        </button>
+                      )}
+                      <ChevronRight
+                        className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                          isCrossDeptOpen ? 'rotate-90 text-amber-500' : 'text-muted-foreground'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Dropdown Menu with Search & Checkboxes */}
+                  {isCrossDeptOpen && !readOnly && (
+                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-card border border-border rounded-2xl shadow-2xl p-2.5 z-40 space-y-2 animate-in fade-in zoom-in-95 duration-150">
+                      {/* Search Bar */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={crossDeptSearch}
+                          onChange={(e) => setCrossDeptSearch(e.target.value)}
+                          placeholder="Search department..."
+                          className="w-full h-8 pl-8 pr-3 rounded-lg bg-surface/80 border border-border text-xs text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-inner"
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                      </div>
+
+                      {/* Quick Actions */}
+                      <div className="flex items-center justify-between px-1 text-[11px] text-muted-foreground">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateCrossDepartments([...dynamicDepartments]);
+                          }}
+                          className="font-semibold text-amber-500 hover:underline cursor-pointer"
+                        >
+                          Select All ({dynamicDepartments.length})
+                        </button>
+                        {(formData.crossDepartments || []).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateCrossDepartments([]);
+                            }}
+                            className="font-semibold text-rose-400 hover:underline cursor-pointer"
+                          >
+                            Deselect All
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Department Checklist */}
+                      <div className="max-h-52 overflow-y-auto space-y-0.5 pr-1">
+                        {dynamicDepartments
+                          .filter((d) => d.toLowerCase().includes(crossDeptSearch.toLowerCase().trim()))
+                          .map((dept) => {
+                            const isChecked = (formData.crossDepartments || []).includes(dept);
+                            return (
+                              <button
+                                key={dept}
+                                type="button"
+                                onClick={() => {
+                                  const current = formData.crossDepartments || [];
+                                  const next = isChecked
+                                    ? current.filter((d) => d !== dept)
+                                    : [...current, dept];
+                                  updateCrossDepartments(next);
+                                }}
+                                className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition cursor-pointer text-xs ${
+                                  isChecked
+                                    ? 'bg-amber-500/10 text-amber-500 font-bold'
+                                    : 'hover:bg-surface text-foreground font-medium'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-2.5 min-w-0">
+                                  <div
+                                    className={`h-4 w-4 rounded-md border flex items-center justify-center transition ${
+                                      isChecked
+                                        ? 'bg-amber-500 border-amber-500 text-slate-950'
+                                        : 'border-border bg-surface/50'
+                                    }`}
+                                  >
+                                    {isChecked && <Check className="h-3 w-3 stroke-[3]" />}
+                                  </div>
+                                  <span className="truncate">{dept}</span>
+                                </div>
+                                {dept === formData.department && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface border border-border text-muted-foreground font-mono">
+                                    Primary
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        {dynamicDepartments.filter((d) =>
+                          d.toLowerCase().includes(crossDeptSearch.toLowerCase().trim())
+                        ).length === 0 && (
+                          <div className="p-3 text-center text-xs text-muted-foreground italic">
+                            No matching departments found
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Supervisor (Interactive Autocomplete Search >= 3 chars) */}

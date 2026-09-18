@@ -226,8 +226,8 @@ export async function POST(request: Request) {
       error = upsertRes.error;
     }
 
-    if (error && (error.code === 'PGRST204' || error.message?.includes('father_name') || error.message?.includes('mother_name') || error.message?.includes('children_names') || error.message?.includes('is_archived'))) {
-      const { father_name, mother_name, children_names, is_archived, ...fallbackPayload } = employeePayload;
+    if (error && (error.code === 'PGRST204' || error.message?.includes('father_name') || error.message?.includes('mother_name') || error.message?.includes('children_names') || error.message?.includes('cross_departments') || error.message?.includes('is_archived'))) {
+      const { father_name, mother_name, children_names, cross_departments, is_archived, ...fallbackPayload } = employeePayload;
       if (body.id && !body.id.startsWith('emp-')) {
         const retryUpdate = await supabaseAdmin
           .from('employees')

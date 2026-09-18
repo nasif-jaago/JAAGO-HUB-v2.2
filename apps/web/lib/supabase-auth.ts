@@ -215,6 +215,7 @@ export interface AppUserSession {
   role: string;
   permissions: string[];
   isSuperAdmin: boolean;
+  crossDepartments?: string[];
 }
 
 export function buildUserSessionPayload(user: any, fallbackEmployee?: any): AppUserSession {
@@ -367,6 +368,11 @@ export function buildUserSessionPayload(user: any, fallbackEmployee?: any): AppU
     role: canonicalRole,
     permissions,
     isSuperAdmin: isSuper,
+    crossDepartments:
+      matchedEmp?.crossDepartments ||
+      meta['cross_departments'] ||
+      meta['crossDepartments'] ||
+      [],
   };
 }
 

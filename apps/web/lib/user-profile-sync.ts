@@ -21,6 +21,7 @@ export interface UserSessionData {
   roles?: string[] | undefined;
   permissions?: string[] | undefined;
   allowRegularization?: boolean | undefined;
+  crossDepartments?: string[] | undefined;
 }
 
 /**
@@ -98,6 +99,14 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
       if (searchCode && (empCode === searchCode.toLowerCase() || empId === searchCode)) {
         return true;
       }
+      // Normalized code match (handle letter O vs digit 0)
+      if (searchCode) {
+        const normSearch = searchCode.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const normEmp = empCode.replace(/[^a-z0-9]/g, '');
+        if (normSearch && normEmp && normSearch === normEmp) {
+          return true;
+        }
+      }
       // Full Name exact match
       if (searchName && empName === searchName) {
         return true;
@@ -112,13 +121,51 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
       return false;
     };
 
+    const hydrateCrossDepts = (emp: FullEmployeeProfile): FullEmployeeProfile => {
+      if (Array.isArray(emp.crossDepartments) && emp.crossDepartments.length > 0) return emp;
+      if (typeof window === 'undefined') return emp;
+      try {
+        const rawActive = localStorage.getItem('jaago_active_cross_departments');
+        if (rawActive) {
+          const p = JSON.parse(rawActive);
+          if (Array.isArray(p) && p.length > 0) return { ...emp, crossDepartments: p };
+        }
+        const codes = [
+          emp.code,
+          emp.code?.replace(/^FO/, 'F0'),
+          emp.code?.replace(/^F0/, 'FO'),
+        ].filter(Boolean) as string[];
+        for (const c of codes) {
+          const rawCode = localStorage.getItem(`jaago_employee_cross_departments_${c}`);
+          if (rawCode) {
+            const p = JSON.parse(rawCode);
+            if (Array.isArray(p) && p.length > 0) return { ...emp, crossDepartments: p };
+          }
+        }
+        const rawMap = localStorage.getItem('jaago_cross_departments_map');
+        if (rawMap) {
+          const map = JSON.parse(rawMap);
+          const list =
+            map[emp.code] ||
+            map[emp.code?.replace(/^FO/, 'F0')] ||
+            map[emp.code?.replace(/^F0/, 'FO')] ||
+            map[emp.id] ||
+            (emp.workEmail ? map[emp.workEmail.toLowerCase().trim()] : null) ||
+            (emp.name ? map[emp.name.toLowerCase().trim()] : null);
+          if (Array.isArray(list) && list.length > 0) return { ...emp, crossDepartments: list };
+        }
+      } catch {}
+      return emp;
+    };
+
     // 3. Fetch from Supabase
     const allEmployees = await fetchEmployeesFromSupabase();
     if (allEmployees && allEmployees.length > 0) {
       const match = allEmployees.find(isEmployeeMatch);
       if (match) {
-        syncEmployeeToLocalUser(match);
-        return match;
+        const hydrated = hydrateCrossDepts(match);
+        syncEmployeeToLocalUser(hydrated);
+        return hydrated;
       }
     }
 
@@ -128,8 +175,9 @@ export async function getActiveEmployeeProfile(): Promise<FullEmployeeProfile | 
       const cachedList: FullEmployeeProfile[] = JSON.parse(cachedRaw);
       const match = cachedList.find(isEmployeeMatch);
       if (match) {
-        syncEmployeeToLocalUser(match);
-        return match;
+        const hydrated = hydrateCrossDepts(match);
+        syncEmployeeToLocalUser(hydrated);
+        return hydrated;
       }
     }
   } catch (err) {
@@ -226,6 +274,51 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       }
     }
 
+    let userCrossDepts = employee.crossDepartments;
+    if (!Array.isArray(userCrossDepts) || userCrossDepts.length === 0) {
+      if (typeof window !== 'undefined') {
+        try {
+          const rawActive = localStorage.getItem('jaago_active_cross_departments');
+          if (rawActive) {
+            const p = JSON.parse(rawActive);
+            if (Array.isArray(p) && p.length > 0) userCrossDepts = p;
+          }
+          const empCode = employee.code || employee.id || '';
+          const codes = [
+            empCode,
+            empCode.replace(/^FO/, 'F0'),
+            empCode.replace(/^F0/, 'FO'),
+          ].filter(Boolean);
+          for (const c of codes) {
+            if (!Array.isArray(userCrossDepts) || userCrossDepts.length === 0) {
+              const rawCode = localStorage.getItem(`jaago_employee_cross_departments_${c}`);
+              if (rawCode) {
+                const p = JSON.parse(rawCode);
+                if (Array.isArray(p) && p.length > 0) userCrossDepts = p;
+              }
+            }
+          }
+          if (!Array.isArray(userCrossDepts) || userCrossDepts.length === 0) {
+            const rawMap = localStorage.getItem('jaago_cross_departments_map');
+            if (rawMap) {
+              const map = JSON.parse(rawMap);
+              const list =
+                map[empCode] ||
+                map[empCode.replace(/^FO/, 'F0')] ||
+                map[empCode.replace(/^F0/, 'FO')] ||
+                map[employee.id] ||
+                (employee.workEmail ? map[employee.workEmail.toLowerCase().trim()] : null) ||
+                (employee.name ? map[employee.name.toLowerCase().trim()] : null);
+              if (Array.isArray(list) && list.length > 0) userCrossDepts = list;
+            }
+          }
+        } catch {}
+      }
+      if (!Array.isArray(userCrossDepts) || userCrossDepts.length === 0) {
+        userCrossDepts = baseSession.crossDepartments || [];
+      }
+    }
+
     const updatedUser: UserSessionData = {
       ...baseSession,
       id: employee.userId || employee.id || baseSession.id,
@@ -242,6 +335,7 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
       permissions: userPermissions !== undefined && userPermissions !== null ? userPermissions : (isNasif ? ['*'] : []),
       roles: isNasif ? ['super_admin', 'coordinator'] : baseSession.roles || ['user'],
       allowRegularization: employee.allowRegularization !== false,
+      crossDepartments: userCrossDepts || [],
     };
 
     localStorage.setItem('jaago_user', JSON.stringify(updatedUser));
@@ -270,6 +364,11 @@ export function syncEmployeeToLocalUser(employee: FullEmployeeProfile) {
     window.dispatchEvent(
       new CustomEvent('jaago_user_updated', {
         detail: { user: updatedUser, employee },
+      })
+    );
+    window.dispatchEvent(
+      new CustomEvent('jaago_cross_departments_updated', {
+        detail: { crossDepartments: updatedUser.crossDepartments || [] },
       })
     );
   } catch (err) {

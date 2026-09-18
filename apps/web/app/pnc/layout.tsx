@@ -52,6 +52,7 @@ export default function PnCLayout({
 }) {
   const pathname = usePathname();
   const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [mounted, setMounted] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -400,6 +401,7 @@ export default function PnCLayout({
 
   // Load saved theme or sync from DOM on mount
   useEffect(() => {
+    setMounted(true);
     if (typeof window === 'undefined') return;
 
     const applyTheme = (savedTheme: ThemeMode | null) => {
@@ -490,13 +492,16 @@ export default function PnCLayout({
     return { label: 'Dashboard', href: '/pnc' };
   };
   const currentCrumb = getBreadcrumb();
-  const isDashboard = pathname === '/pnc' || pathname === '/pnc/';
+  const isDashboard = Boolean(pathname && (pathname === '/pnc' || pathname === '/pnc/'));
 
   return (
-    <div className={`min-h-screen ${isDashboard && theme === 'dark' ? 'bg-transparent' : 'bg-background'} text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden`}>
+    <div
+      suppressHydrationWarning
+      className={`min-h-screen ${mounted && isDashboard && theme === 'dark' ? 'bg-transparent' : 'bg-background'} text-foreground flex flex-col md:flex-row antialiased font-sans select-none relative overflow-x-hidden`}
+    >
       <RouteProgressBar />
       {/* ── Dashboard ONLY Fullscreen Background (Chalkboard & Stationery Theme - Dark Mode Only) ── */}
-      {isDashboard && theme === 'dark' && (
+      {mounted && isDashboard && theme === 'dark' && (
         <div className="fixed inset-0 w-full h-full -z-10 overflow-hidden pointer-events-none select-none bg-black">
           <Image
             src="/pnc-bg-stationery.jpg"

@@ -26,6 +26,7 @@ export const ALL_EMPLOYEE_COLUMNS: EmployeeColumnConfig[] = [
   { key: 'branch', label: 'Branch / Campus', category: 'Work Information', defaultVisible: false, minWidth: '150px' },
   { key: 'project', label: 'Project', category: 'Work Information', defaultVisible: false, minWidth: '140px' },
   { key: 'team', label: 'Team / Squad', category: 'Work Information', defaultVisible: false, minWidth: '140px' },
+  { key: 'crossDepartments', label: 'Cross Departments', category: 'Work Information', defaultVisible: false, minWidth: '180px' },
   { key: 'supervisor', label: 'Supervisor', category: 'Work Information', defaultVisible: false, minWidth: '150px' },
   { key: 'secondarySupervisor', label: 'Secondary Supervisor', category: 'Work Information', defaultVisible: false, minWidth: '150px' },
   { key: 'workLocation', label: 'Work Location', category: 'Work Information', defaultVisible: false, minWidth: '140px' },

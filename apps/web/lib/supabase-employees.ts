@@ -25,6 +25,40 @@ export function mapRowToEmployeeProfile(row: any): FullEmployeeProfile {
     department: row.department || '',
     project: row.project || '',
     team: row.team || '',
+    crossDepartments: (() => {
+      let depts: string[] = [];
+      if (Array.isArray(row.cross_departments)) {
+        depts = row.cross_departments.filter((c: any) => typeof c === 'string' && c.trim());
+      } else if (typeof row.cross_departments === 'string' && row.cross_departments.trim()) {
+        if (row.cross_departments.startsWith('[')) {
+          try {
+            const p = JSON.parse(row.cross_departments);
+            if (Array.isArray(p)) depts = p.filter((c: any) => typeof c === 'string' && c.trim());
+          } catch {
+            depts = [];
+          }
+        } else {
+          depts = row.cross_departments.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+      }
+      if (depts.length === 0 && typeof window !== 'undefined') {
+        try {
+          const code = row.code || '';
+          const rawCode = localStorage.getItem(`jaago_employee_cross_departments_${code}`);
+          if (rawCode) {
+            const parsed = JSON.parse(rawCode);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+          const rawMap = localStorage.getItem('jaago_cross_departments_map');
+          if (rawMap) {
+            const map = JSON.parse(rawMap);
+            const list = map[code] || map[row.id] || (row.work_email ? map[row.work_email.toLowerCase().trim()] : null);
+            if (Array.isArray(list) && list.length > 0) return list;
+          }
+        } catch {}
+      }
+      return depts;
+    })(),
     supervisor: row.supervisor || '',
     secondarySupervisor: row.secondary_supervisor || '',
     workLocation: row.work_location || 'Banani, Dhaka',
@@ -210,6 +244,9 @@ export function mapEmployeeProfileToPayload(profile: FullEmployeeProfile): Recor
     department: profile.department,
     project: profile.project,
     team: profile.team || null,
+    cross_departments: Array.isArray(profile.crossDepartments)
+      ? profile.crossDepartments.filter(Boolean)
+      : [],
     supervisor: profile.supervisor || null,
     secondary_supervisor: profile.secondarySupervisor || null,
     work_location: profile.workLocation || null,

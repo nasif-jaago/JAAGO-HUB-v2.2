@@ -19,6 +19,7 @@ export const EMPLOYEE_CSV_COLUMNS: CSVColumnDefinition[] = [
   { header: 'Department', key: 'department', aliases: ['department', 'dept', 'department_id', 'department_name', 'dept_name', 'parent_department', 'parent department'], defaultValue: 'Program Implementation' },
   { header: 'Project', key: 'project', aliases: ['project', 'project_name', 'cost_center', 'program'], defaultValue: 'General Operations' },
   { header: 'Team', key: 'team', aliases: ['team', 'squad', 'team_name', 'unit'], defaultValue: '' },
+  { header: 'Cross Departments', key: 'crossDepartments', aliases: ['cross_departments', 'cross departments', 'cross_department', 'cross department', 'collaborative_departments'], defaultValue: '' },
   { header: 'Supervisor', key: 'supervisor', aliases: ['supervisor', 'reporting_to', 'line_manager', 'parent_id', 'manager_id', 'coach_id', 'manager'], defaultValue: '' },
   { header: 'Secondary Supervisor', key: 'secondarySupervisor', aliases: ['secondary_supervisor', 'secondary supervisor', 'co_manager'], defaultValue: '' },
   { header: 'Work Location', key: 'workLocation', aliases: ['work_location', 'work location', 'location', 'work_address', 'work address'], defaultValue: 'Banani, Dhaka' },
@@ -146,7 +147,7 @@ export function exportEmployeesToComprehensiveCSV(employees: FullEmployeeProfile
   const dataRows = employees.map((emp) => {
     return EMPLOYEE_CSV_COLUMNS.map((col) => {
       let val: any = emp[col.key];
-      if (col.key === 'childrenNames' && Array.isArray(val)) {
+      if ((col.key === 'childrenNames' || col.key === 'crossDepartments') && Array.isArray(val)) {
         val = val.join('; ');
       }
       return escapeCSVValue(val !== undefined ? val : col.defaultValue ?? '');
@@ -482,11 +483,11 @@ export function parseComprehensiveEmployeeCSV(csvText: string): {
 
       const cleanVal = cellVal.replace(/^["']|["']$/g, '').trim();
 
-      if (colDef.key === 'childrenNames') {
+      if (colDef.key === 'childrenNames' || colDef.key === 'crossDepartments') {
         if (cleanVal) {
-          rowObj.childrenNames = cleanVal.split(/[;,]/).map((s: string) => s.trim()).filter(Boolean);
+          rowObj[colDef.key] = cleanVal.split(/[;,]/).map((s: string) => s.trim()).filter(Boolean);
         } else {
-          rowObj.childrenNames = [];
+          rowObj[colDef.key] = [];
         }
       } else if (colDef.type === 'number') {
         const num = parseFloat(cleanVal.replace(/[^0-9.-]/g, ''));
@@ -527,6 +528,7 @@ export function parseComprehensiveEmployeeCSV(csvText: string): {
       department: rowObj.department || 'Program Implementation',
       project: rowObj.project || 'General Operations',
       team: rowObj.team || '',
+      crossDepartments: Array.isArray(rowObj.crossDepartments) ? rowObj.crossDepartments : [],
       supervisor: rowObj.supervisor || '',
       secondarySupervisor: rowObj.secondarySupervisor || '',
       workLocation: rowObj.workLocation || 'Banani, Dhaka',

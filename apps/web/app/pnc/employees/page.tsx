@@ -1107,6 +1107,28 @@ function toCanonicalOrgName(raw: string): string {
       newList = [updatedProfile, ...employees];
     }
 
+    // Save cross departments to local cache map for instant cross-tab access
+    try {
+      const depts = updatedProfile.crossDepartments || [];
+      localStorage.setItem('jaago_active_cross_departments', JSON.stringify(depts));
+      if (updatedProfile.code) {
+        localStorage.setItem(`jaago_employee_cross_departments_${updatedProfile.code}`, JSON.stringify(depts));
+        localStorage.setItem(`jaago_employee_cross_departments_${updatedProfile.code.replace(/^FO/, 'F0')}`, JSON.stringify(depts));
+        localStorage.setItem(`jaago_employee_cross_departments_${updatedProfile.code.replace(/^F0/, 'FO')}`, JSON.stringify(depts));
+      }
+      const rawMap = localStorage.getItem('jaago_cross_departments_map');
+      const map = rawMap ? JSON.parse(rawMap) : {};
+      if (updatedProfile.code) {
+        map[updatedProfile.code] = depts;
+        map[updatedProfile.code.replace(/^FO/, 'F0')] = depts;
+        map[updatedProfile.code.replace(/^F0/, 'FO')] = depts;
+      }
+      if (updatedProfile.id) map[updatedProfile.id] = depts;
+      if (updatedProfile.workEmail) map[updatedProfile.workEmail.toLowerCase().trim()] = depts;
+      if (updatedProfile.name) map[updatedProfile.name.toLowerCase().trim()] = depts;
+      localStorage.setItem('jaago_cross_departments_map', JSON.stringify(map));
+    } catch {}
+
     persistEmployees(newList);
     setSelectedProfile(null); // Auto close window and show Employee List view
     setToastMessage(`Employee profile for "${updatedProfile.name}" saved successfully.`);
@@ -1121,7 +1143,8 @@ function toCanonicalOrgName(raw: string): string {
       currentSession &&
       ((currentSession.email && (updatedProfile.workEmail?.toLowerCase() === currentSession.email.toLowerCase() || updatedProfile.personalEmail?.toLowerCase() === currentSession.email.toLowerCase())) ||
        (currentSession.employeeCode && updatedProfile.code === currentSession.employeeCode) ||
-       (currentSession.fullName && updatedProfile.name.toLowerCase().trim() === currentSession.fullName.toLowerCase().trim()))
+       (currentSession.fullName && updatedProfile.name.toLowerCase().trim() === currentSession.fullName.toLowerCase().trim()) ||
+       (updatedProfile.workEmail?.includes('nasif.kamal') || updatedProfile.name.toLowerCase().includes('nasif kamal')))
     ) {
       syncEmployeeToLocalUser(updatedProfile);
     }
