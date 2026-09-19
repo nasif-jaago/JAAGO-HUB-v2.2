@@ -33,6 +33,8 @@ const PUBLIC_API_PATHS = [
   '/api/v1/emails/regularization-notification',
   '/api/v1/procurement/requests/notify-step',
   '/api/v1/workflows',
+  '/api/v1/download',
+  '/api/v1/download/app',
   '/api/mcp',
   '/health',
 ];
