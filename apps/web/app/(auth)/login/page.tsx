@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,6 +13,10 @@ import {
   X,
   Send,
   ArrowRight,
+  Download,
+  Smartphone,
+  Share2,
+  Check,
 } from 'lucide-react';
 import {
   isAllowedWorkDomain,
@@ -41,6 +45,144 @@ export default function LoginPage() {
   const [forgotSuccess, setForgotSuccess] = useState('');
   const [forgotError, setForgotError] = useState('');
   const [forgotResetUrl, setForgotResetUrl] = useState('');
+
+  // Mobile Download & Platform Detection State
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [detectedPlatform, setDetectedPlatform] = useState<'android' | 'ios' | 'windows' | 'mac' | 'desktop'>('android');
+  const [downloadStarted, setDownloadStarted] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Email input auto-adjusting font size state & ref
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const [emailFontSize, setEmailFontSize] = useState<number | null>(null);
+
+  // Dynamically auto-adjust font size so placeholder or long email address fits inside the block without clipping
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const adjustEmailFontSize = () => {
+      const input = emailInputRef.current;
+      if (!input) return;
+
+      const placeholderText = 'Please input your official email address.';
+      const currentText = email || placeholderText;
+
+      // Available width: input inner width minus left padding (16px), right icon area (44px), and safety margin (12px)
+      const availableWidth = input.clientWidth - 72;
+      if (availableWidth <= 0) return;
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const computedStyle = window.getComputedStyle(input);
+      const fontFamily = computedStyle.fontFamily || 'sans-serif';
+      const fontWeight = computedStyle.fontWeight || '500';
+
+      // Measure text width at 14px (base text-sm)
+      ctx.font = `${fontWeight} 14px ${fontFamily}`;
+      const textWidth = ctx.measureText(currentText).width;
+
+      if (textWidth > availableWidth) {
+        // Calculate proportional scale down, clamped between 10.5px and 14px
+        const optimalSize = Math.max(10.5, Math.min(14, (availableWidth / textWidth) * 14));
+        setEmailFontSize(Number(optimalSize.toFixed(1)));
+      } else {
+        setEmailFontSize(null);
+      }
+    };
+
+    adjustEmailFontSize();
+
+    // Re-adjust once custom fonts finish loading
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      document.fonts.ready.then(() => {
+        adjustEmailFontSize();
+      });
+    }
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && emailInputRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        adjustEmailFontSize();
+      });
+      resizeObserver.observe(emailInputRef.current);
+    }
+
+    window.addEventListener('resize', adjustEmailFontSize);
+
+    return () => {
+      if (resizeObserver) resizeObserver.disconnect();
+      window.removeEventListener('resize', adjustEmailFontSize);
+    };
+  }, [email]);
+
+  // Platform Detection & PWA Install Prompt Listener
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const ua = navigator.userAgent || '';
+    if (/android/i.test(ua)) {
+      setDetectedPlatform('android');
+    } else if (/iphone|ipad|ipod/i.test(ua)) {
+      setDetectedPlatform('ios');
+    } else if (/win/i.test(ua)) {
+      setDetectedPlatform('windows');
+    } else if (/mac/i.test(ua)) {
+      setDetectedPlatform('mac');
+    } else {
+      setDetectedPlatform('desktop');
+    }
+
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const triggerApkDownload = () => {
+    if (typeof window === 'undefined') return;
+    setDownloadStarted(true);
+    const link = document.createElement('a');
+    link.href = '/api/v1/download/app';
+    link.download = 'jaago-hub-v2.2.apk';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => setDownloadStarted(false), 4000);
+  };
+
+  const handleDownloadClick = () => {
+    if (detectedPlatform === 'android') {
+      triggerApkDownload();
+    }
+    setShowDownloadModal(true);
+  };
+
+  const handlePwaInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choiceResult = await deferredPrompt.userChoice;
+      if (choiceResult?.outcome === 'accepted') {
+        setDeferredPrompt(null);
+        setShowDownloadModal(false);
+      }
+    }
+  };
+
+  const handleCopyApkLink = () => {
+    if (typeof window === 'undefined') return;
+    const downloadUrl = `${window.location.origin}/api/v1/download/app`;
+    navigator.clipboard.writeText(downloadUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
 
   // Auto-detect OAuth redirect session, password recovery, or query error parameters
   useEffect(() => {
@@ -290,6 +432,25 @@ export default function LoginPage() {
 
       {/* ── MAIN FROSTED GLASS LOGIN CARD ── */}
       <div className="relative z-10 w-full max-w-[420px] rounded-[32px] border border-white/40 bg-black/40 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] backdrop-blur-2xl p-7 sm:p-9 space-y-6 text-white animate-in fade-in zoom-in-95 duration-300">
+        {/* ── TOP-RIGHT: DOWNLOAD ANDROID APP (COMPACT PILL, NEON BLUE ICON, MATCHING MARK) ── */}
+        <div className="absolute top-3 right-3 sm:top-4 sm:right-4 z-20">
+          <button
+            type="button"
+            onClick={handleDownloadClick}
+            className="flex items-center space-x-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 border border-white/20 hover:border-[#00F0FF]/60 hover:shadow-[0_0_12px_rgba(0,240,255,0.3)] backdrop-blur-md shadow-md text-white transition-all duration-200 group cursor-pointer"
+            title="Download JAAGO Android App"
+            aria-label="Download Android App"
+          >
+            {/* Neon Blue Download Icon */}
+            <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-[#00F0FF] drop-shadow-[0_0_8px_rgba(0,240,255,0.9)] group-hover:scale-110 transition-transform duration-200 flex-shrink-0" />
+
+            {/* Label: Download Android App */}
+            <span className="text-[8.5px] sm:text-[9.5px] font-bold text-white/90 group-hover:text-white tracking-tight whitespace-nowrap leading-none">
+              Download Android App
+            </span>
+          </button>
+        </div>
+
         {/* Brand Header */}
         <div className="text-center space-y-2">
           <div className="inline-block rounded-2xl overflow-hidden mb-1">
@@ -332,12 +493,14 @@ export default function LoginPage() {
           {/* User Email Field */}
           <div className="relative">
             <input
+              ref={emailInputRef}
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="User Name / Work Email"
-              className="w-full pl-4 pr-11 py-3.5 bg-white/10 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
+              placeholder="Please input your official email address."
+              style={{ fontSize: emailFontSize ? `${emailFontSize}px` : undefined }}
+              className="w-full h-[50px] pl-4 pr-11 py-3.5 bg-white/10 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] focus:bg-white/15 backdrop-blur-md text-xs sm:text-[13px] md:text-sm font-medium transition shadow-inner"
             />
             <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-black">
               <User className="h-5 w-5 text-black" />
@@ -352,7 +515,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
-              className="w-full pl-4 pr-11 py-3.5 bg-white/10 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
+              className="w-full h-[50px] pl-4 pr-11 py-3.5 bg-white/10 border border-white/30 rounded-2xl text-white placeholder:text-white/60 focus:outline-none focus:ring-2 focus:ring-[#FFE600] focus:bg-white/15 backdrop-blur-md text-sm font-medium transition shadow-inner"
             />
             <button
               type="button"
@@ -559,6 +722,131 @@ export default function LoginPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+      {/* ── DOWNLOAD APP MODAL (AUTO-ADJUSTED FOR ALL PLATFORMS) ── */}
+      {showDownloadModal && (
+        <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-black/75 border border-white/40 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-4 backdrop-blur-2xl text-white animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-white/20 pb-3">
+              <div className="flex items-center space-x-3">
+                <div className="h-10 w-10 rounded-2xl bg-[#00F0FF]/15 border border-[#00F0FF]/40 flex items-center justify-center text-white shadow-md">
+                  <Smartphone className="h-5 w-5 text-[#00F0FF] drop-shadow-[0_0_6px_rgba(0,240,255,0.8)]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">JAAGO HUB Android App</h3>
+                  <p className="text-[11px] text-white/70">Official Field &amp; Enterprise Edition v2.2</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDownloadModal(false)}
+                className="p-1.5 rounded-xl hover:bg-white/10 text-white/70 hover:text-white transition cursor-pointer"
+                aria-label="Close modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Platform Awareness Tag */}
+            <div className="px-3 py-1.5 rounded-xl bg-white/10 border border-white/20 flex items-center justify-between text-[11px]">
+              <span className="text-white/70">Your Device:</span>
+              <span className="font-semibold text-emerald-300 flex items-center space-x-1">
+                {detectedPlatform === 'android' && <span>📱 Android Device</span>}
+                {detectedPlatform === 'ios' && <span>🍎 Apple iOS Device</span>}
+                {detectedPlatform === 'windows' && <span>💻 Windows PC</span>}
+                {detectedPlatform === 'mac' && <span>💻 macOS System</span>}
+                {detectedPlatform === 'desktop' && <span>💻 Desktop System</span>}
+              </span>
+            </div>
+
+            {/* Direct APK Download Button */}
+            <button
+              type="button"
+              onClick={triggerApkDownload}
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-[#698a3b] to-[#4d6b27] hover:from-[#7aa046] hover:to-[#5a7d30] border border-white/30 text-white font-extrabold shadow-lg transition active:scale-[0.98] flex items-center justify-between cursor-pointer"
+            >
+              <div className="flex items-center space-x-3 text-left">
+                <div className="p-2 rounded-xl bg-white/20">
+                  <Download className="h-5 w-5 text-[#00F0FF] drop-shadow-[0_0_6px_rgba(0,240,255,0.8)]" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold leading-tight">Download Android APK</div>
+                  <div className="text-[10px] text-white/80 font-normal">Direct package (jaago-hub-v2.2.apk)</div>
+                </div>
+              </div>
+              {downloadStarted ? (
+                <span className="text-xs bg-white/25 px-2 py-1 rounded-lg font-bold">Starting...</span>
+              ) : (
+                <ArrowRight className="h-4 w-4 text-white/80" />
+              )}
+            </button>
+
+            {/* PWA Install Button (if browser prompt is available) */}
+            {deferredPrompt && (
+              <button
+                type="button"
+                onClick={handlePwaInstall}
+                className="w-full py-2.5 px-4 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold text-xs flex items-center justify-center space-x-2 transition cursor-pointer"
+              >
+                <Smartphone className="h-4 w-4 text-[#00F0FF]" />
+                <span>Install Directly on Device (PWA)</span>
+              </button>
+            )}
+
+            {/* Platform Guidance Box */}
+            <div className="p-3.5 rounded-2xl bg-white/5 border border-white/15 space-y-2 text-xs">
+              <div className="font-bold text-white flex items-center justify-between">
+                <span>Installation Guidance</span>
+                <span className="text-[10px] text-white/60 font-normal">Auto-Adjusted</span>
+              </div>
+
+              {detectedPlatform === 'android' ? (
+                <ol className="list-decimal list-inside space-y-1 text-white/80 text-[11px] leading-relaxed">
+                  <li>Download the APK using the button above.</li>
+                  <li>Tap the downloaded file from notifications or your Downloads folder.</li>
+                  <li>If prompted, select <strong>Allow from this source</strong> to install.</li>
+                </ol>
+              ) : detectedPlatform === 'ios' ? (
+                <div className="space-y-1 text-white/80 text-[11px] leading-relaxed">
+                  <p>For iOS (iPhone / iPad):</p>
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Open this page in <strong>Safari</strong>.</li>
+                    <li>Tap the <strong>Share</strong> button (box with arrow).</li>
+                    <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+                  </ol>
+                </div>
+              ) : (
+                <div className="space-y-2 text-[11px] text-white/80 leading-relaxed">
+                  <p>To transfer the Android App to your phone or tablet:</p>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyApkLink}
+                      className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 border border-white/25 text-white font-semibold text-[11px] transition flex items-center space-x-1.5 cursor-pointer"
+                    >
+                      {copiedLink ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Share2 className="h-3.5 w-3.5" />}
+                      <span>{copiedLink ? 'Link Copied!' : 'Copy Mobile Download Link'}</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-white/60">
+                    Send the copied link to your phone via WhatsApp or email to install directly.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer Action */}
+            <div className="pt-1 text-center">
+              <button
+                type="button"
+                onClick={() => setShowDownloadModal(false)}
+                className="w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/25 text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer"
+              >
+                Close &amp; Return to Login
+              </button>
+            </div>
           </div>
         </div>
       )}
