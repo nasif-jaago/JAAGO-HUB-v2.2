@@ -29,6 +29,7 @@ export interface EnterpriseTableProps<T> {
   renderKanbanCard?: ((item: T) => React.ReactNode) | undefined;
   onRowClick?: ((item: T) => void) | undefined;
   pageSizeOptions?: number[] | undefined;
+  hideToolbar?: boolean | undefined;
 }
 
 export function EnterpriseTable<T extends Record<string, any>>({
@@ -41,6 +42,7 @@ export function EnterpriseTable<T extends Record<string, any>>({
   renderKanbanCard,
   onRowClick,
   pageSizeOptions = [10, 25, 50],
+  hideToolbar = false,
 }: EnterpriseTableProps<T>) {
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
@@ -149,60 +151,62 @@ export function EnterpriseTable<T extends Record<string, any>>({
   return (
     <div className="space-y-4">
       {/* ── CONTROLS TOOLBAR ── */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border border-border shadow-xl">
-        <div className="flex items-center space-x-3 flex-1">
-          {title && <h3 className="font-black text-sm text-foreground mr-2">{title}</h3>}
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder={searchPlaceholder}
-              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-surface border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
-            />
+      {!hideToolbar && (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border border-border shadow-xl">
+          <div className="flex items-center space-x-3 flex-1">
+            {title && <h3 className="font-black text-sm text-foreground mr-2">{title}</h3>}
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder={searchPlaceholder}
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-surface border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {/* View switcher if kanban provided */}
+            {renderKanbanCard && (
+              <div className="flex items-center bg-surface p-0.5 rounded-xl border border-border">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded-lg text-xs transition ${
+                    viewMode === 'list' ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground'
+                  }`}
+                  title="List View"
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setViewMode('kanban')}
+                  className={`p-1.5 rounded-lg text-xs transition ${
+                    viewMode === 'kanban' ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground'
+                  }`}
+                  title="Kanban Cards"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Export CSV */}
+            <button
+              onClick={exportCSV}
+              className="px-3 py-1.5 rounded-xl bg-surface border border-border hover:border-primary/40 text-muted-foreground hover:text-foreground text-xs font-semibold flex items-center space-x-1.5 transition"
+              title="Export CSV"
+            >
+              <Download className="h-3.5 w-3.5 text-primary" />
+              <span>Export</span>
+            </button>
           </div>
         </div>
-
-        <div className="flex items-center space-x-2">
-          {/* View switcher if kanban provided */}
-          {renderKanbanCard && (
-            <div className="flex items-center bg-surface p-0.5 rounded-xl border border-border">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded-lg text-xs transition ${
-                  viewMode === 'list' ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground'
-                }`}
-                title="List View"
-              >
-                <LayoutList className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => setViewMode('kanban')}
-                className={`p-1.5 rounded-lg text-xs transition ${
-                  viewMode === 'kanban' ? 'bg-primary text-primary-foreground font-black' : 'text-muted-foreground'
-                }`}
-                title="Kanban Cards"
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* Export CSV */}
-          <button
-            onClick={exportCSV}
-            className="px-3 py-1.5 rounded-xl bg-surface border border-border hover:border-primary/40 text-muted-foreground hover:text-foreground text-xs font-semibold flex items-center space-x-1.5 transition"
-            title="Export CSV"
-          >
-            <Download className="h-3.5 w-3.5 text-primary" />
-            <span>Export</span>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* ── TABLE OR KANBAN VIEW ── */}
       {viewMode === 'list' ? (

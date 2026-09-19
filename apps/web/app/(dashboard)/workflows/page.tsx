@@ -5,7 +5,6 @@ import { useSearchParams } from 'next/navigation';
 import {
   GitPullRequest,
   CheckCircle2,
-  Clock,
   AlertCircle,
   X,
   Check,
@@ -17,6 +16,15 @@ import {
   Paperclip,
   Download,
   ShieldCheck,
+  Calendar,
+  Briefcase,
+  ShoppingCart,
+  ClipboardList,
+  Wallet,
+  Receipt,
+  Filter,
+  MapPin,
+  Package,
 } from 'lucide-react';
 import { EnterpriseTable, ColumnDef } from '@jaago/ui';
 import { getCurrentUserSession, UserSessionData } from '@/lib/user-profile-sync';
@@ -27,13 +35,40 @@ import {
   refuseAttendanceRegularization,
   getLocalRegularizations,
 } from '@/lib/supabase-regularization';
+import {
+  getLocalOnDutyRequests,
+  approveOnDutyRequest,
+  refuseOnDutyRequest,
+  OnDutyRequestItem,
+} from '@/lib/supabase-onduty';
+import {
+  getProcurementRequests,
+  saveProcurementRequest,
+} from '@/lib/supabase-procurement';
+import {
+  getFinanceAdvanceRequests,
+  getFinanceLiquidations,
+  saveFinanceAdvanceRequest,
+  saveFinanceLiquidation,
+} from '@/lib/supabase-finance';
 import { dismissNotificationForEntity } from '@/lib/notifications';
 import { formatDisplayDate, formatDisplayDateTime } from '@/lib/date-format';
 import { cleanApplicantReason } from '@/lib/supabase-time-off';
 
-interface WorkflowInstance {
+export type WorkflowCategoryKey =
+  | 'leave'
+  | 'on_duty'
+  | 'purchase_requisition'
+  | 'general_requisition'
+  | 'advance_liquidation';
+
+export type RequestTypeFilter = 'ALL' | WorkflowCategoryKey;
+
+export interface WorkflowInstance {
   id: string;
   definitionKey: string;
+  categoryKey: WorkflowCategoryKey;
+  categoryLabel: string;
   title: string;
   entityType: string;
   entityId: string;
@@ -56,9 +91,11 @@ interface WorkflowInstance {
     reason?: string | undefined;
     rejectionReason?: string | undefined;
     attachmentName?: string | undefined;
+    attachmentUrl?: string | undefined;
     approvedBy?: string | undefined;
     approvedAt?: string | undefined;
     amount?: string | undefined;
+    currency?: string | undefined;
     vendor?: string | undefined;
     location?: string | undefined;
     // Regularization specific fields
@@ -72,6 +109,50 @@ interface WorkflowInstance {
     adjustedStatus?: string | undefined;
     workingSchedule?: string | undefined;
     calculatedHours?: string | undefined;
+    // On Duty specific fields
+    startTime?: string | undefined;
+    endTime?: string | undefined;
+    destination?: string | undefined;
+    purpose?: string | undefined;
+    transportType?: string | undefined;
+    totalHours?: number | undefined;
+    creditedDays?: number | undefined;
+    // Procurement (Purchase / General) specific fields
+    prNumber?: string | undefined;
+    requisitionType?: 'Purchase' | 'General' | 'Recruitment' | undefined;
+    priority?: string | undefined;
+    requiredDate?: string | undefined;
+    lineItems?: Array<{
+      id?: string | undefined;
+      name: string;
+      description?: string | undefined;
+      quantity: number;
+      unit?: string | undefined;
+      unitCost: number;
+      totalCost: number;
+    }> | undefined;
+    amountBDT?: number | undefined;
+    justification?: string | undefined;
+    project?: string | undefined;
+    // Expense (Advance & Liquidation) specific fields
+    expenseCode?: string | undefined;
+    liquidationCode?: string | undefined;
+    visitingPlace?: string | undefined;
+    duration?: string | undefined;
+    advanceAmountTaken?: number | undefined;
+    totalActualExpenses?: number | undefined;
+    variance?: number | undefined;
+    settlementType?: string | undefined;
+    bankName?: string | undefined;
+    bankAccountNumber?: string | undefined;
+    cashRequiredDate?: string | undefined;
+    expenseSubtotals?: {
+      longTravel?: number | undefined;
+      accommodation?: number | undefined;
+      perDiem?: number | undefined;
+      localConveyance?: number | undefined;
+      programExpenses?: number | undefined;
+    } | undefined;
   };
   createdAt: string;
   updatedAt: string;
@@ -94,6 +175,11 @@ function WorkflowsContent() {
   const [employees, setEmployees] = useState<FullEmployeeProfile[]>([]);
   const [instances, setInstances] = useState<WorkflowInstance[]>([]);
   const [selectedInstance, setSelectedInstance] = useState<WorkflowInstance | null>(null);
+
+  // Type Block Filter State (Clickable blocks at top)
+  const [selectedType, setSelectedType] = useState<RequestTypeFilter>('ALL');
+
+  // Status Tab Filter State
   const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'HISTORY'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -121,13 +207,23 @@ function WorkflowsContent() {
         if (sess.fullName) params.set('userName', sess.fullName);
       }
 
+      // 1. Fetch server workflows (leave requests & server regularizations)
       const res = await fetch(`/api/v1/workflows?${params.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
-      let combined: WorkflowInstance[] = data.data || [];
+      let rawServerItems: any[] = data.data || [];
 
-      // Also ensure local regularizations are merged for instant UI responsiveness
+      let combined: WorkflowInstance[] = rawServerItems.map((item: any) => ({
+        ...item,
+        categoryKey: 'leave' as WorkflowCategoryKey,
+        categoryLabel:
+          item.definitionKey === 'attendance_regularization'
+            ? 'Attendance Regularization'
+            : 'Leave Request',
+      }));
+
+      // 2. Merge local regularizations for instant UI responsiveness
       if (typeof window !== 'undefined') {
         const localRegs = getLocalRegularizations();
         const existingIds = new Set(combined.map((i) => i.id));
@@ -138,6 +234,8 @@ function WorkflowsContent() {
             combined.unshift({
               id: reg.id,
               definitionKey: 'attendance_regularization',
+              categoryKey: 'leave',
+              categoryLabel: 'Attendance Regularization',
               title: `Attendance Regularization (${formatDisplayDate(reg.date)}) - ${reg.employeeName}`,
               entityType: 'attendance_regularization',
               entityId: reg.id,
@@ -188,6 +286,419 @@ function WorkflowsContent() {
         });
       }
 
+      // 3. Merge On Duty requests (both local storage & Supabase)
+      const existingIds = new Set(combined.map((i) => i.id));
+      let onDutyList: OnDutyRequestItem[] = [];
+      if (typeof window !== 'undefined') {
+        onDutyList = getLocalOnDutyRequests();
+      }
+
+      // Seed fallback if on duty is currently empty so the supervisor has rich test data
+      if (onDutyList.length === 0) {
+        onDutyList = [
+          {
+            id: 'od-seed-1',
+            employeeId: 'emp-002',
+            employeeCode: 'FO072408231002',
+            employeeName: 'S M Nayeem Rahman',
+            department: "Founder's Office (JF)",
+            designation: 'Senior Project Lead',
+            supervisorName: 'Nasif Kamal',
+            supervisorEmail: 'nasif.kamal@jaago.com.bd',
+            startAt: '2026-09-18T10:00:00Z',
+            endAt: '2026-09-19T18:00:00Z',
+            startDate: '2026-09-18',
+            endDate: '2026-09-19',
+            startTime: '10:00 AM',
+            endTime: '06:00 PM',
+            reason: 'Official field visit and remote school solar infrastructure audit at Rangunia campus.',
+            status: 'PENDING',
+            totalHours: 16,
+            creditedDays: 2,
+            submittedAt: '2026-09-18T09:00:00Z',
+            createdAt: '2026-09-18T09:00:00Z',
+            updatedAt: '2026-09-18T09:00:00Z',
+          },
+          {
+            id: 'od-seed-2',
+            employeeId: 'emp-003',
+            employeeCode: 'DC01242809848',
+            employeeName: 'Md. Nazmul Hossain',
+            department: 'IT & Systems',
+            designation: 'Network Systems Lead',
+            supervisorName: 'Nasif Kamal',
+            supervisorEmail: 'nasif.kamal@jaago.com.bd',
+            startAt: '2026-09-15T09:30:00Z',
+            endAt: '2026-09-15T17:30:00Z',
+            startDate: '2026-09-15',
+            endDate: '2026-09-15',
+            startTime: '09:30 AM',
+            endTime: '05:30 PM',
+            reason: 'Head Office Banani server room cable reorganization and secondary biometric terminal installation.',
+            status: 'APPROVED',
+            totalHours: 8,
+            creditedDays: 1,
+            decidedBy: 'Nasif Kamal',
+            decidedAt: '2026-09-15T18:00:00Z',
+            submittedAt: '2026-09-14T11:00:00Z',
+            createdAt: '2026-09-14T11:00:00Z',
+            updatedAt: '2026-09-15T18:00:00Z',
+          },
+        ];
+      }
+
+      onDutyList.forEach((od) => {
+        if (!existingIds.has(od.id)) {
+          existingIds.add(od.id);
+          const isAppr = od.status === 'APPROVED';
+          const isRef = od.status === 'REFUSED' || od.status === 'CANCELLED';
+          combined.push({
+            id: od.id,
+            definitionKey: 'on_duty',
+            categoryKey: 'on_duty',
+            categoryLabel: 'On Duty',
+            title: `On Duty (${formatDisplayDate(od.startDate)}${
+              od.endDate && od.endDate !== od.startDate ? ` - ${formatDisplayDate(od.endDate)}` : ''
+            }) - ${od.employeeName}`,
+            entityType: 'on_duty',
+            entityId: od.id,
+            requesterId: od.employeeCode,
+            requesterEmail: od.supervisorEmail || 'staff@jaago.com.bd',
+            currentState: isAppr ? 'approved' : isRef ? 'rejected' : 'pending_approval',
+            currentTier: 1,
+            totalTiers: 1,
+            metadata: {
+              requesterName: od.employeeName,
+              employeeCode: od.employeeCode,
+              department: od.department || "Founder's Office",
+              designation: od.designation || 'Staff',
+              supervisorName: od.supervisorName || "Founder's Office",
+              supervisorEmail: od.supervisorEmail || 'nasif.kamal@jaago.com.bd',
+              startDate: od.startDate,
+              endDate: od.endDate,
+              startTime: od.startTime,
+              endTime: od.endTime,
+              destination: (od as any).destination || 'Field Duty Location',
+              purpose: od.reason,
+              reason: od.reason,
+              rejectionReason: od.refusalNote,
+              totalHours: od.totalHours || 8,
+              creditedDays: od.creditedDays || 1,
+              transportType: 'Office Vehicle',
+              approvedBy: od.decidedBy || '',
+              approvedAt: od.decidedAt || '',
+            },
+            createdAt: od.submittedAt || od.createdAt,
+            updatedAt: od.updatedAt || od.createdAt,
+            history: [
+              {
+                fromState: 'draft',
+                toState: 'pending_approval',
+                actorId: `${od.employeeName} (${od.employeeCode})`,
+                action: 'submit',
+                timestamp: od.submittedAt || od.createdAt,
+              },
+              ...(isAppr
+                ? [
+                    {
+                      fromState: 'pending_approval',
+                      toState: 'approved',
+                      actorId: od.decidedBy || 'Supervisor',
+                      action: 'approve',
+                      comment: `On Duty approved for ${od.creditedDays || 1} day(s)`,
+                      timestamp: od.decidedAt || od.updatedAt,
+                    },
+                  ]
+                : isRef
+                ? [
+                    {
+                      fromState: 'pending_approval',
+                      toState: 'rejected',
+                      actorId: od.decidedBy || 'Supervisor',
+                      action: 'reject',
+                      comment: od.refusalNote || 'Refused with note',
+                      timestamp: od.decidedAt || od.updatedAt,
+                    },
+                  ]
+                : []),
+            ],
+          });
+        }
+      });
+
+      // 4. Merge Procurement Requisitions (Purchase Requisitions & General Requisitions)
+      try {
+        const procList = await getProcurementRequests();
+        let extendedProc = [...procList];
+
+        // Ensure at least one pending Purchase Requisition exists for immediate interactive action
+        if (!extendedProc.some((p) => p.requisitionType === 'Purchase' && p.status === 'Submitted')) {
+          extendedProc.unshift({
+            id: 'pr-demo-purchase-01',
+            prNumber: 'JFT/PR/16/09/26/00145',
+            requisitionType: 'Purchase',
+            title: 'Enterprise Managed Core Switches & UPS Replacement',
+            department: 'Digital School Project',
+            requestOwner: 'S M Nayeem Rahman',
+            requestOwnerCode: 'FO072408231002',
+            estAmount: 285000,
+            currency: 'BDT',
+            status: 'Submitted',
+            priority: 'High',
+            justification: 'Critical network switch replacement for 10 remote digital school server links.',
+            requiredDate: '2026-09-25',
+            lineItems: [
+              { name: 'Enterprise 48-Port PoE+ Switch', quantity: 2, unit: 'PCS', unitCost: 95000, totalCost: 190000 },
+              { name: 'Online Rackmount UPS 6kVA', quantity: 1, unit: 'PCS', unitCost: 95000, totalCost: 95000 },
+            ],
+            createdAt: '2026-09-16T10:00:00Z',
+            updatedAt: '2026-09-16T10:00:00Z',
+          });
+        }
+
+        extendedProc.forEach((proc) => {
+          if (!existingIds.has(proc.id) && !existingIds.has(proc.prNumber)) {
+            existingIds.add(proc.id);
+            existingIds.add(proc.prNumber);
+
+            const isPurchase = proc.requisitionType === 'Purchase' || proc.prNumber.includes('/PR/');
+            const categoryKey: WorkflowCategoryKey = isPurchase
+              ? 'purchase_requisition'
+              : 'general_requisition';
+            const categoryLabel = isPurchase ? 'Purchase Requisition' : 'General Requisition';
+
+            const isApproved = proc.status === 'Approved';
+            const isRejected = proc.status === 'Rejected' || proc.status === 'Refused';
+
+            combined.push({
+              id: proc.id,
+              definitionKey: isPurchase ? 'purchase_requisition' : 'general_requisition',
+              categoryKey,
+              categoryLabel,
+              title: `${proc.title} (${proc.prNumber})`,
+              entityType: isPurchase ? 'purchase_requisition' : 'general_requisition',
+              entityId: proc.prNumber || proc.id,
+              requesterId: proc.requestOwnerCode || 'FO072408231002',
+              requesterEmail: 'staff@jaago.com.bd',
+              currentState: isApproved ? 'approved' : isRejected ? 'rejected' : 'pending_approval',
+              currentTier: 1,
+              totalTiers: 2,
+              metadata: {
+                requesterName: proc.requestOwner,
+                employeeCode: proc.requestOwnerCode,
+                department: proc.department,
+                designation: 'Staff',
+                prNumber: proc.prNumber,
+                requisitionType: proc.requisitionType,
+                priority: proc.priority || 'Normal',
+                requiredDate: proc.requiredDate,
+                amountBDT: proc.estAmount,
+                currency: proc.currency || 'BDT',
+                justification: proc.justification,
+                reason: proc.justification,
+                lineItems: proc.lineItems || [],
+                project: proc.project || 'General Operations',
+                approvedBy: isApproved ? 'Approver' : '',
+                approvedAt: isApproved ? proc.updatedAt : '',
+              },
+              createdAt: proc.createdAt,
+              updatedAt: proc.updatedAt,
+              history: [
+                {
+                  fromState: 'draft',
+                  toState: 'pending_approval',
+                  actorId: `${proc.requestOwner} (${proc.requestOwnerCode})`,
+                  action: 'submit',
+                  timestamp: proc.createdAt,
+                },
+                ...(isApproved
+                  ? [
+                      {
+                        fromState: 'pending_approval',
+                        toState: 'approved',
+                        actorId: 'Supervisor / Finance Lead',
+                        action: 'approve',
+                        comment: 'Approved requisition for quotation & PO generation',
+                        timestamp: proc.updatedAt,
+                      },
+                    ]
+                  : isRejected
+                  ? [
+                      {
+                        fromState: 'pending_approval',
+                        toState: 'rejected',
+                        actorId: 'Approver',
+                        action: 'reject',
+                        comment: 'Requisition refused by approver',
+                        timestamp: proc.updatedAt,
+                      },
+                    ]
+                  : []),
+              ],
+            });
+          }
+        });
+      } catch (procErr) {
+        console.warn('Notice loading procurement in approvals engine:', procErr);
+      }
+
+      // 5. Merge Advance Requests & Liquidations (Advance Liquidation Expense)
+      try {
+        const [advances, liquidations] = await Promise.all([
+          getFinanceAdvanceRequests(),
+          getFinanceLiquidations(),
+        ]);
+
+        advances.forEach((adv) => {
+          if (!existingIds.has(adv.id) && !existingIds.has(adv.expenseCode)) {
+            existingIds.add(adv.id);
+            existingIds.add(adv.expenseCode);
+
+            const isApproved = adv.status === 'Approved' || adv.status === 'Settled';
+            const isRejected = adv.status === 'Rejected';
+
+            combined.push({
+              id: adv.id,
+              definitionKey: 'advance_expense',
+              categoryKey: 'advance_liquidation',
+              categoryLabel: 'Advance Request',
+              title: `Advance Request (${adv.expenseCode}) - ${adv.title}`,
+              entityType: 'advance_expense',
+              entityId: adv.expenseCode,
+              requesterId: adv.employeeCode,
+              requesterEmail: 'staff@jaago.com.bd',
+              currentState: isApproved ? 'approved' : isRejected ? 'rejected' : 'pending_approval',
+              currentTier: 1,
+              totalTiers: 2,
+              metadata: {
+                requesterName: adv.employeeName,
+                employeeCode: adv.employeeCode,
+                department: adv.department,
+                designation: adv.employeeDesignation,
+                expenseCode: adv.expenseCode,
+                visitingPlace: adv.visitingPlace,
+                duration: adv.duration,
+                cashRequiredDate: adv.cashRequiredDate,
+                amountBDT: adv.totalAmount,
+                currency: adv.currency || 'BDT',
+                reason: adv.remarks || adv.title,
+                bankName: adv.bankName,
+                bankAccountNumber: adv.bankAccountNumber,
+                expenseSubtotals: {
+                  longTravel: adv.longTravelSubtotal,
+                  accommodation: adv.accommodationSubtotal,
+                  perDiem: adv.perDiemSubtotal,
+                  localConveyance: adv.localConveyanceSubtotal,
+                  programExpenses: adv.programExpensesSubtotal,
+                },
+                approvedBy: isApproved ? 'Habibur Rahman (Finance)' : '',
+                approvedAt: isApproved ? adv.updatedAt : '',
+              },
+              createdAt: adv.createdAt,
+              updatedAt: adv.updatedAt,
+              history: [
+                {
+                  fromState: 'draft',
+                  toState: 'pending_approval',
+                  actorId: `${adv.employeeName} (${adv.employeeCode})`,
+                  action: 'submit',
+                  timestamp: adv.createdAt,
+                },
+                ...(isApproved
+                  ? [
+                      {
+                        fromState: 'pending_approval',
+                        toState: 'approved',
+                        actorId: 'Finance Lead',
+                        action: 'approve',
+                        comment: 'Disbursement authorized',
+                        timestamp: adv.updatedAt,
+                      },
+                    ]
+                  : isRejected
+                  ? [
+                      {
+                        fromState: 'pending_approval',
+                        toState: 'rejected',
+                        actorId: 'Approver',
+                        action: 'reject',
+                        comment: 'Advance refused',
+                        timestamp: adv.updatedAt,
+                      },
+                    ]
+                  : []),
+              ],
+            });
+          }
+        });
+
+        liquidations.forEach((liq) => {
+          if (!existingIds.has(liq.id) && !existingIds.has(liq.liquidationCode)) {
+            existingIds.add(liq.id);
+            existingIds.add(liq.liquidationCode);
+
+            const isApproved = liq.status === 'Approved' || liq.status === 'Settled';
+            const isRejected = liq.status === 'Rejected';
+
+            combined.push({
+              id: liq.id,
+              definitionKey: 'liquidation_expense',
+              categoryKey: 'advance_liquidation',
+              categoryLabel: 'Liquidation Expense',
+              title: `Expense Liquidation (${liq.liquidationCode}) - ${liq.subject}`,
+              entityType: 'liquidation_expense',
+              entityId: liq.liquidationCode,
+              requesterId: liq.employeeCode,
+              requesterEmail: 'staff@jaago.com.bd',
+              currentState: isApproved ? 'approved' : isRejected ? 'rejected' : 'pending_approval',
+              currentTier: 1,
+              totalTiers: 2,
+              metadata: {
+                requesterName: liq.employeeName,
+                employeeCode: liq.employeeCode,
+                department: liq.department,
+                designation: liq.employeeDesignation,
+                liquidationCode: liq.liquidationCode,
+                expenseCode: liq.linkedAdvanceCode,
+                advanceAmountTaken: liq.advanceAmountTaken,
+                totalActualExpenses: liq.totalActualExpenses,
+                variance: liq.variance,
+                settlementType: liq.settlementType,
+                amountBDT: liq.totalActualExpenses,
+                currency: liq.currency || 'BDT',
+                visitingPlace: liq.visitingPlace,
+                duration: liq.duration,
+                reason: liq.justificationForDelay || liq.subject,
+                bankName: liq.bankName,
+                bankAccountNumber: liq.bankAccountNumber,
+                expenseSubtotals: {
+                  longTravel: liq.longTravelSubtotal,
+                  accommodation: liq.accommodationSubtotal,
+                  perDiem: liq.perDiemSubtotal,
+                  localConveyance: liq.localConveyanceSubtotal,
+                  programExpenses: liq.programExpensesSubtotal,
+                },
+                approvedBy: isApproved ? 'Habibur Rahman (Finance)' : '',
+                approvedAt: isApproved ? liq.updatedAt : '',
+              },
+              createdAt: liq.createdAt,
+              updatedAt: liq.updatedAt,
+              history: [
+                {
+                  fromState: 'draft',
+                  toState: 'pending_approval',
+                  actorId: `${liq.employeeName} (${liq.employeeCode})`,
+                  action: 'submit',
+                  timestamp: liq.createdAt,
+                },
+              ],
+            });
+          }
+        });
+      } catch (finErr) {
+        console.warn('Notice loading finance in approvals engine:', finErr);
+      }
+
       setInstances(combined);
 
       // Auto-select request if requestId param is present
@@ -216,11 +727,17 @@ function WorkflowsContent() {
     const handleReqUpdate = () => loadWorkflows();
     window.addEventListener('jaago_leave_request_updated', handleReqUpdate);
     window.addEventListener('jaago_attendance_regularization_updated', handleReqUpdate);
+    window.addEventListener('jaago_onduty_updated', handleReqUpdate);
+    window.addEventListener('jaago_procurement_updated', handleReqUpdate);
+    window.addEventListener('jaago_finance_updated', handleReqUpdate);
     window.addEventListener('jaago_notifications_updated', handleReqUpdate);
 
     return () => {
       window.removeEventListener('jaago_leave_request_updated', handleReqUpdate);
       window.removeEventListener('jaago_attendance_regularization_updated', handleReqUpdate);
+      window.removeEventListener('jaago_onduty_updated', handleReqUpdate);
+      window.removeEventListener('jaago_procurement_updated', handleReqUpdate);
+      window.removeEventListener('jaago_finance_updated', handleReqUpdate);
       window.removeEventListener('jaago_notifications_updated', handleReqUpdate);
     };
   }, [urlRequestId]);
@@ -231,51 +748,115 @@ function WorkflowsContent() {
       const reviewerName = session?.fullName || 'Supervisor';
       const reviewerCode = session?.employeeCode || '';
       const reviewerEmail = session?.email || '';
+      const nowIso = new Date().toISOString();
 
-      const isReg =
-        instance.definitionKey === 'attendance_regularization' || instance.id.startsWith('reg-');
-
-      if (isReg) {
-        await approveAttendanceRegularization(instance.id, reviewerName, reviewerCode);
+      if (instance.categoryKey === 'on_duty') {
+        await approveOnDutyRequest(instance.id, reviewerCode, reviewerName);
+        showToastMsg(`On Duty request for ${instance.metadata.requesterName} approved & attendance credited!`);
+      } else if (
+        instance.categoryKey === 'purchase_requisition' ||
+        instance.categoryKey === 'general_requisition'
+      ) {
+        const allReqs = await getProcurementRequests();
+        const targetReq = allReqs.find((r) => r.id === instance.id || r.prNumber === instance.entityId);
+        if (targetReq) {
+          const updatedSteps = (targetReq.approvalSteps || []).map((step) => {
+            if (step.status === 'PENDING') {
+              return { ...step, status: 'SIGNED' as const, signedAt: nowIso, approver: reviewerName };
+            }
+            return step;
+          });
+          await saveProcurementRequest({
+            ...targetReq,
+            status: 'Approved',
+            approvalSteps: updatedSteps,
+            historyLogs: [
+              ...(targetReq.historyLogs || []),
+              { action: 'Approved by Approver', actor: reviewerName, timestamp: nowIso },
+            ],
+          });
+        }
+        showToastMsg(`${instance.categoryLabel} ${instance.entityId} approved!`);
+      } else if (instance.categoryKey === 'advance_liquidation') {
+        if (instance.definitionKey === 'advance_expense') {
+          const allAdvances = await getFinanceAdvanceRequests();
+          const targetAdv = allAdvances.find((a) => a.id === instance.id || a.expenseCode === instance.entityId);
+          if (targetAdv) {
+            await saveFinanceAdvanceRequest({
+              ...targetAdv,
+              status: 'Approved',
+              historyLogs: [
+                ...(targetAdv.historyLogs || []),
+                { action: 'Approved by Supervisor', actor: reviewerName, timestamp: nowIso },
+              ],
+            });
+          }
+          showToastMsg(`Advance request ${instance.entityId} has been approved!`);
+        } else {
+          const allLiqs = await getFinanceLiquidations();
+          const targetLiq = allLiqs.find((l) => l.id === instance.id || l.liquidationCode === instance.entityId);
+          if (targetLiq) {
+            await saveFinanceLiquidation({
+              ...targetLiq,
+              status: 'Approved',
+              historyLogs: [
+                ...(targetLiq.historyLogs || []),
+                { action: 'Approved by Supervisor', actor: reviewerName, timestamp: nowIso },
+              ],
+            });
+          }
+          showToastMsg(`Expense liquidation ${instance.entityId} has been approved!`);
+        }
       } else {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
-        const res = await fetch('/api/v1/workflows', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            action: 'approve',
-            instanceId: instance.id,
-            reviewerName,
-            reviewerCode,
-            reviewerEmail,
-          }),
-        });
+        // Leave / Attendance Regularization
+        const isReg =
+          instance.definitionKey === 'attendance_regularization' || instance.id.startsWith('reg-');
 
-        const resData = await res.json();
-        if (!resData.success) {
-          showToastMsg(resData.error || 'Failed to approve request', 'error');
-          return;
+        if (isReg) {
+          await approveAttendanceRegularization(instance.id, reviewerName, reviewerCode);
+          showToastMsg(
+            `Attendance regularization for ${instance.metadata.requesterName} approved and attendance log updated!`
+          );
+        } else {
+          const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
+          const res = await fetch('/api/v1/workflows', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              action: 'approve',
+              instanceId: instance.id,
+              reviewerName,
+              reviewerCode,
+              reviewerEmail,
+            }),
+          });
+
+          const resData = await res.json();
+          if (!resData.success) {
+            showToastMsg(resData.error || 'Failed to approve request', 'error');
+            return;
+          }
+          showToastMsg(`Leave request for ${instance.metadata.requesterName} has been approved!`);
         }
       }
 
-      // Automatically clean up the exact pending notification
-      dismissNotificationForEntity(isReg ? 'attendance_regularization' : 'leave_request', instance.id);
+      // Automatically clean up notifications
+      dismissNotificationForEntity(instance.definitionKey as any, instance.id);
       if (instance.entityId) {
-        dismissNotificationForEntity(isReg ? 'attendance_regularization' : 'leave_request', instance.entityId);
+        dismissNotificationForEntity(instance.definitionKey as any, instance.entityId);
       }
 
-      showToastMsg(
-        isReg
-          ? `Attendance regularization for ${instance.metadata.requesterName} approved and attendance log updated!`
-          : `Leave request for ${instance.metadata.requesterName} has been approved!`
-      );
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('jaago_leave_request_updated'));
         window.dispatchEvent(new CustomEvent('jaago_attendance_regularization_updated'));
         window.dispatchEvent(new CustomEvent('jaago_attendance_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_onduty_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_procurement_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_finance_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_notifications_updated'));
       }
       await loadWorkflows();
       setSelectedInstance(null);
@@ -298,61 +879,118 @@ function WorkflowsContent() {
       const reviewerName = session?.fullName || 'Supervisor';
       const reviewerCode = session?.employeeCode || '';
       const reviewerEmail = session?.email || '';
+      const nowIso = new Date().toISOString();
 
-      const isReg =
-        refusalModalInstance.definitionKey === 'attendance_regularization' ||
-        refusalModalInstance.id.startsWith('reg-');
-
-      if (isReg) {
-        await refuseAttendanceRegularization(
-          refusalModalInstance.id,
-          refusalNote.trim(),
-          reviewerName,
-          reviewerCode
+      if (refusalModalInstance.categoryKey === 'on_duty') {
+        await refuseOnDutyRequest(refusalModalInstance.id, refusalNote.trim(), reviewerCode, reviewerName);
+        showToastMsg(`On Duty request for ${refusalModalInstance.metadata.requesterName} refused with note.`);
+      } else if (
+        refusalModalInstance.categoryKey === 'purchase_requisition' ||
+        refusalModalInstance.categoryKey === 'general_requisition'
+      ) {
+        const allReqs = await getProcurementRequests();
+        const targetReq = allReqs.find(
+          (r) => r.id === refusalModalInstance.id || r.prNumber === refusalModalInstance.entityId
         );
+        if (targetReq) {
+          await saveProcurementRequest({
+            ...targetReq,
+            status: 'Rejected',
+            historyLogs: [
+              ...(targetReq.historyLogs || []),
+              { action: 'Refused by Approver', actor: reviewerName, details: refusalNote.trim(), timestamp: nowIso },
+            ],
+          });
+        }
+        showToastMsg(`${refusalModalInstance.categoryLabel} ${refusalModalInstance.entityId} refused with note.`);
+      } else if (refusalModalInstance.categoryKey === 'advance_liquidation') {
+        if (refusalModalInstance.definitionKey === 'advance_expense') {
+          const allAdvances = await getFinanceAdvanceRequests();
+          const targetAdv = allAdvances.find(
+            (a) => a.id === refusalModalInstance.id || a.expenseCode === refusalModalInstance.entityId
+          );
+          if (targetAdv) {
+            await saveFinanceAdvanceRequest({
+              ...targetAdv,
+              status: 'Rejected',
+              historyLogs: [
+                ...(targetAdv.historyLogs || []),
+                { action: 'Refused by Supervisor', actor: reviewerName, details: refusalNote.trim(), timestamp: nowIso },
+              ],
+            });
+          }
+          showToastMsg(`Advance request ${refusalModalInstance.entityId} refused with note.`);
+        } else {
+          const allLiqs = await getFinanceLiquidations();
+          const targetLiq = allLiqs.find(
+            (l) => l.id === refusalModalInstance.id || l.liquidationCode === refusalModalInstance.entityId
+          );
+          if (targetLiq) {
+            await saveFinanceLiquidation({
+              ...targetLiq,
+              status: 'Rejected',
+              historyLogs: [
+                ...(targetLiq.historyLogs || []),
+                { action: 'Refused by Supervisor', actor: reviewerName, details: refusalNote.trim(), timestamp: nowIso },
+              ],
+            });
+          }
+          showToastMsg(`Expense liquidation ${refusalModalInstance.entityId} refused with note.`);
+        }
       } else {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
-        const res = await fetch('/api/v1/workflows', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            action: 'reject',
-            instanceId: refusalModalInstance.id,
-            comment: refusalNote.trim(),
-            reviewerName,
-            reviewerCode,
-            reviewerEmail,
-          }),
-        });
+        const isReg =
+          refusalModalInstance.definitionKey === 'attendance_regularization' ||
+          refusalModalInstance.id.startsWith('reg-');
 
-        const resData = await res.json();
-        if (!resData.success) {
-          showToastMsg(resData.error || 'Failed to refuse request', 'error');
-          return;
+        if (isReg) {
+          await refuseAttendanceRegularization(
+            refusalModalInstance.id,
+            refusalNote.trim(),
+            reviewerName,
+            reviewerCode
+          );
+          showToastMsg(
+            `Attendance regularization for ${refusalModalInstance.metadata.requesterName} refused with note.`
+          );
+        } else {
+          const token = typeof window !== 'undefined' ? localStorage.getItem('jaago_access_token') : null;
+          const res = await fetch('/api/v1/workflows', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              action: 'reject',
+              instanceId: refusalModalInstance.id,
+              comment: refusalNote.trim(),
+              reviewerName,
+              reviewerCode,
+              reviewerEmail,
+            }),
+          });
+
+          const resData = await res.json();
+          if (!resData.success) {
+            showToastMsg(resData.error || 'Failed to refuse request', 'error');
+            return;
+          }
+          showToastMsg(`Request for ${refusalModalInstance.metadata.requesterName} refused with note.`);
         }
       }
 
-      // Automatically clean up the exact pending notification
-      dismissNotificationForEntity(
-        isReg ? 'attendance_regularization' : 'leave_request',
-        refusalModalInstance.id
-      );
+      dismissNotificationForEntity(refusalModalInstance.definitionKey as any, refusalModalInstance.id);
       if (refusalModalInstance.entityId) {
-        dismissNotificationForEntity(
-          isReg ? 'attendance_regularization' : 'leave_request',
-          refusalModalInstance.entityId
-        );
+        dismissNotificationForEntity(refusalModalInstance.definitionKey as any, refusalModalInstance.entityId);
       }
 
-      showToastMsg(
-        `Request for ${refusalModalInstance.metadata.requesterName} refused with note.`
-      );
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('jaago_leave_request_updated'));
         window.dispatchEvent(new CustomEvent('jaago_attendance_regularization_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_onduty_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_procurement_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_finance_updated'));
+        window.dispatchEvent(new CustomEvent('jaago_notifications_updated'));
       }
       await loadWorkflows();
       setRefusalModalInstance(null);
@@ -370,14 +1008,16 @@ function WorkflowsContent() {
   const getStatusBadge = (state: string) => {
     switch (state.toLowerCase()) {
       case 'pending_approval':
+      case 'submitted':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/30">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-500 border border-amber-500/30">
             Pending Approval
           </span>
         );
       case 'approved':
+      case 'settled':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
             Approved
           </span>
         );
@@ -392,6 +1032,46 @@ function WorkflowsContent() {
         return (
           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-surface text-muted-foreground border border-border">
             {state}
+          </span>
+        );
+    }
+  };
+
+  const getCategoryBadge = (categoryKey: WorkflowCategoryKey, label: string) => {
+    switch (categoryKey) {
+      case 'leave':
+        return (
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 inline-flex items-center space-x-1">
+            <Calendar className="h-3 w-3" />
+            <span>{label || 'Leave / Regularization'}</span>
+          </span>
+        );
+      case 'on_duty':
+        return (
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 inline-flex items-center space-x-1">
+            <Briefcase className="h-3 w-3" />
+            <span>On Duty</span>
+          </span>
+        );
+      case 'purchase_requisition':
+        return (
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 inline-flex items-center space-x-1">
+            <ShoppingCart className="h-3 w-3" />
+            <span>Purchase Requisition</span>
+          </span>
+        );
+      case 'general_requisition':
+        return (
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30 inline-flex items-center space-x-1">
+            <ClipboardList className="h-3 w-3" />
+            <span>General Requisition</span>
+          </span>
+        );
+      case 'advance_liquidation':
+        return (
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 inline-flex items-center space-x-1">
+            <Wallet className="h-3 w-3" />
+            <span>{label}</span>
           </span>
         );
     }
@@ -418,7 +1098,6 @@ function WorkflowsContent() {
     const activeUserEmails = new Set<string>();
     if (userEmail) activeUserEmails.add(userEmail);
 
-    // Dynamically match active employee in roster to harvest extra aliases & emails
     const activeEmp = employees.find(
       (e) =>
         (userCode && e.code?.toLowerCase().trim() === userCode) ||
@@ -436,7 +1115,6 @@ function WorkflowsContent() {
       if (activeEmp.personalEmail) activeUserEmails.add(activeEmp.personalEmail.toLowerCase().trim());
     }
 
-    // Subordinate codes & names from employees roster
     const subordinateCodes = new Set<string>();
     const subordinateNames = new Set<string>();
 
@@ -502,7 +1180,7 @@ function WorkflowsContent() {
           (em) => em && (itemSupervisorEmail === em || itemSupervisorEmail.includes(em))
         );
 
-      // 5. Team Lead direct subordinates mapping (S M Nayeem Rahman -> Nasif Kamal & Md. Nazmul Hossain)
+      // 5. Team Lead direct subordinates mapping
       const isNayeemFallback =
         Array.from(activeUserNames).some((n) => n.includes('nayeem')) &&
         (itemRequesterCode === 'fo032507061190' ||
@@ -514,14 +1192,45 @@ function WorkflowsContent() {
     });
   }, [instances, session, employees]);
 
+  // Request-Type specific aggregations for the 5 interactive blocks
+  const typeMetrics = useMemo(() => {
+    const calc = (key: WorkflowCategoryKey) => {
+      const items = scopedInstances.filter((i) => i.categoryKey === key);
+      const pending = items.filter((i) => i.currentState === 'pending_approval').length;
+      const approved = items.filter((i) => i.currentState === 'approved').length;
+      const rejected = items.filter((i) => i.currentState === 'rejected').length;
+      return { total: items.length, pending, approved, rejected };
+    };
+
+    return {
+      all: {
+        total: scopedInstances.length,
+        pending: scopedInstances.filter((i) => i.currentState === 'pending_approval').length,
+        approved: scopedInstances.filter((i) => i.currentState === 'approved').length,
+        rejected: scopedInstances.filter((i) => i.currentState === 'rejected').length,
+      },
+      leave: calc('leave'),
+      on_duty: calc('on_duty'),
+      purchase_requisition: calc('purchase_requisition'),
+      general_requisition: calc('general_requisition'),
+      advance_liquidation: calc('advance_liquidation'),
+    };
+  }, [scopedInstances]);
+
+  // Filtered by Selected Type Block + Tab + Search
   const filteredInstances = useMemo(() => {
     return scopedInstances.filter((item) => {
-      // Tab Filter
+      // 1. Interactive Request-Type Block Filter
+      if (selectedType !== 'ALL' && item.categoryKey !== selectedType) {
+        return false;
+      }
+
+      // 2. Status Tab Filter
       if (activeTab === 'PENDING' && item.currentState !== 'pending_approval') return false;
       if (activeTab === 'APPROVED' && item.currentState !== 'approved') return false;
       if (activeTab === 'REJECTED' && item.currentState !== 'rejected') return false;
 
-      // Search Query
+      // 3. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const titleMatch = item.title.toLowerCase().includes(q);
@@ -529,47 +1238,150 @@ function WorkflowsContent() {
         const deptMatch = (item.metadata.department || '').toLowerCase().includes(q);
         const idMatch = (item.entityId || '').toLowerCase().includes(q);
         const codeMatch = (item.metadata.employeeCode || '').toLowerCase().includes(q);
-        if (!titleMatch && !nameMatch && !deptMatch && !idMatch && !codeMatch) return false;
+        const prMatch = (item.metadata.prNumber || '').toLowerCase().includes(q);
+        const expMatch = (item.metadata.expenseCode || '').toLowerCase().includes(q);
+        const liqMatch = (item.metadata.liquidationCode || '').toLowerCase().includes(q);
+        if (
+          !titleMatch &&
+          !nameMatch &&
+          !deptMatch &&
+          !idMatch &&
+          !codeMatch &&
+          !prMatch &&
+          !expMatch &&
+          !liqMatch
+        )
+          return false;
       }
 
       return true;
     });
-  }, [scopedInstances, activeTab, searchQuery]);
+  }, [scopedInstances, selectedType, activeTab, searchQuery]);
 
-  const pendingCount = scopedInstances.filter((i) => i.currentState === 'pending_approval').length;
-  const approvedCount = scopedInstances.filter((i) => i.currentState === 'approved').length;
-  const rejectedCount = scopedInstances.filter((i) => i.currentState === 'rejected').length;
+  // Contextual counts for the sub-tabs based on currently selected type block
+  const activeTypeScope = useMemo(() => {
+    return selectedType === 'ALL'
+      ? scopedInstances
+      : scopedInstances.filter((i) => i.categoryKey === selectedType);
+  }, [scopedInstances, selectedType]);
+
+  const currentPendingCount = activeTypeScope.filter((i) => i.currentState === 'pending_approval').length;
+  const currentApprovedCount = activeTypeScope.filter((i) => i.currentState === 'approved').length;
+  const currentRejectedCount = activeTypeScope.filter((i) => i.currentState === 'rejected').length;
+
+  const TYPE_BLOCKS: Array<{
+    key: RequestTypeFilter;
+    label: string;
+    description: string;
+    icon: React.ElementType;
+    badgeColor: string;
+    iconColor: string;
+    accentBar: string;
+    fontSizeClass: string;
+  }> = [
+    {
+      key: 'ALL',
+      label: 'All Requests',
+      description: 'Global approvals & team workflows',
+      icon: GitPullRequest,
+      badgeColor: 'text-amber-500',
+      iconColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+      accentBar: 'bg-amber-500',
+      fontSizeClass: 'text-[11px] sm:text-xs font-black',
+    },
+    {
+      key: 'leave',
+      label: 'Leave/Attendance Regularization Request',
+      description: 'Staff leaves & punch regularizations',
+      icon: Calendar,
+      badgeColor: 'text-blue-500',
+      iconColor: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+      accentBar: 'bg-blue-500',
+      fontSizeClass: 'text-[8.5px] sm:text-[9px] xl:text-[8.5px] 2xl:text-[9px]',
+    },
+    {
+      key: 'on_duty',
+      label: 'On Duty',
+      description: 'Field duties & school visits',
+      icon: Briefcase,
+      badgeColor: 'text-emerald-500',
+      iconColor: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
+      accentBar: 'bg-emerald-500',
+      fontSizeClass: 'text-[11px] sm:text-xs font-black',
+    },
+    {
+      key: 'purchase_requisition',
+      label: 'Purchase Requisition',
+      description: 'Procurement & capital orders',
+      icon: ShoppingCart,
+      badgeColor: 'text-orange-500',
+      iconColor: 'bg-orange-500/10 text-orange-500 border-orange-500/20',
+      accentBar: 'bg-orange-500',
+      fontSizeClass: 'text-[10px] sm:text-[10.5px] font-black',
+    },
+    {
+      key: 'general_requisition',
+      label: 'General Requisition',
+      description: 'Office supplies & consumables',
+      icon: ClipboardList,
+      badgeColor: 'text-purple-500',
+      iconColor: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
+      accentBar: 'bg-purple-500',
+      fontSizeClass: 'text-[10px] sm:text-[10.5px] font-black',
+    },
+    {
+      key: 'advance_liquidation',
+      label: 'Advance Liquidation Expense',
+      description: 'Travel advances & bill expenses',
+      icon: Wallet,
+      badgeColor: 'text-rose-500',
+      iconColor: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
+      accentBar: 'bg-rose-500',
+      fontSizeClass: 'text-[9.5px] sm:text-[10px] font-black',
+    },
+  ];
 
   const columns: ColumnDef<WorkflowInstance>[] = [
     {
       key: 'title',
       header: 'Workflow Request',
       accessor: (row) => {
-        const isReg = row.definitionKey === 'attendance_regularization';
         return (
-          <div>
-            <div className="font-bold text-foreground hover:text-primary transition">{row.title}</div>
-            <div className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-1.5 mt-0.5">
-              <span className="font-mono">ID: {row.entityId}</span>
-              <span>&bull;</span>
-              {isReg ? (
-                <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-500 font-bold border border-amber-500/20">
-                  Regularization
-                </span>
-              ) : (
-                <span className="capitalize">{row.metadata.leaveType || row.definitionKey.replace(/_/g, ' ')}</span>
-              )}
-              <span>&bull;</span>
-              <span>{isReg ? `Date: ${row.metadata.date}` : `${row.metadata.totalDays} Day(s)`}</span>
-              {isReg && row.metadata.adjustedCheckIn && (
+          <div className="space-y-1 max-w-md">
+            <div className="flex items-center space-x-2">
+              {getCategoryBadge(row.categoryKey, row.categoryLabel)}
+              <span className="font-mono text-[10px] text-muted-foreground font-semibold">
+                ID: {row.entityId}
+              </span>
+            </div>
+            <div className="font-bold text-foreground hover:text-primary transition line-clamp-2">
+              {row.title}
+            </div>
+            <div className="text-[10px] text-muted-foreground flex flex-wrap items-center gap-1.5">
+              {row.categoryKey === 'on_duty' && (
                 <span className="text-emerald-500 font-mono font-bold">
-                  ({row.metadata.adjustedCheckIn} - {row.metadata.adjustedCheckOut})
+                  {row.metadata.totalHours || 8}h ({row.metadata.creditedDays || 1} Day credited)
+                </span>
+              )}
+              {row.categoryKey === 'purchase_requisition' && row.metadata.amountBDT !== undefined && (
+                <span className="text-amber-500 font-mono font-bold">
+                  Est: BDT {row.metadata.amountBDT.toLocaleString()}
+                </span>
+              )}
+              {row.categoryKey === 'general_requisition' && row.metadata.amountBDT !== undefined && (
+                <span className="text-purple-500 font-mono font-bold">
+                  Est: BDT {row.metadata.amountBDT.toLocaleString()}
+                </span>
+              )}
+              {row.categoryKey === 'advance_liquidation' && row.metadata.amountBDT !== undefined && (
+                <span className="text-rose-500 font-mono font-bold">
+                  Amount: BDT {row.metadata.amountBDT.toLocaleString()}
                 </span>
               )}
               {row.metadata.attachmentName && (
                 <span className="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 font-bold text-[10px]">
                   <Paperclip className="h-3 w-3" />
-                  <span className="truncate max-w-[140px]">{row.metadata.attachmentName}</span>
+                  <span className="truncate max-w-[120px]">{row.metadata.attachmentName}</span>
                 </span>
               )}
             </div>
@@ -587,13 +1399,62 @@ function WorkflowsContent() {
             <span className="text-muted-foreground text-[10px] font-mono">({row.metadata.employeeCode})</span>
           </div>
           <div className="text-[10px] text-muted-foreground">{row.metadata.department || "Founder's Office"}</div>
+          {row.metadata.designation && (
+            <div className="text-[9px] text-muted-foreground/70">{row.metadata.designation}</div>
+          )}
         </div>
       ),
     },
     {
       key: 'dates',
-      header: 'Date / Duration',
+      header: 'Date / Financials',
       accessor: (row) => {
+        if (row.categoryKey === 'on_duty') {
+          return (
+            <div className="text-xs font-mono text-muted-foreground space-y-0.5">
+              <div className="font-bold text-foreground">
+                {formatDisplayDate(row.metadata.startDate)}
+                {row.metadata.endDate && row.metadata.endDate !== row.metadata.startDate
+                  ? ` → ${formatDisplayDate(row.metadata.endDate)}`
+                  : ''}
+              </div>
+              <div className="text-[10px] text-emerald-500 font-semibold">
+                {row.metadata.startTime} - {row.metadata.endTime}
+              </div>
+            </div>
+          );
+        }
+
+        if (row.categoryKey === 'purchase_requisition' || row.categoryKey === 'general_requisition') {
+          return (
+            <div className="text-xs font-mono text-muted-foreground space-y-0.5">
+              <div className="font-bold text-foreground">
+                BDT {(row.metadata.amountBDT || 0).toLocaleString()}
+              </div>
+              {row.metadata.requiredDate && (
+                <div className="text-[10px] text-muted-foreground">
+                  Req Date: {formatDisplayDate(row.metadata.requiredDate)}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        if (row.categoryKey === 'advance_liquidation') {
+          return (
+            <div className="text-xs font-mono text-muted-foreground space-y-0.5">
+              <div className="font-bold text-foreground">
+                BDT {(row.metadata.amountBDT || 0).toLocaleString()}
+              </div>
+              {row.metadata.cashRequiredDate && (
+                <div className="text-[10px] text-muted-foreground">
+                  Date: {formatDisplayDate(row.metadata.cashRequiredDate)}
+                </div>
+              )}
+            </div>
+          );
+        }
+
         const isReg = row.definitionKey === 'attendance_regularization';
         if (isReg) {
           return (
@@ -603,6 +1464,7 @@ function WorkflowsContent() {
             </div>
           );
         }
+
         return (
           <div className="text-xs font-mono text-muted-foreground">
             {formatDisplayDate(row.metadata.startDate)} &rarr; {formatDisplayDate(row.metadata.endDate)}
@@ -614,6 +1476,42 @@ function WorkflowsContent() {
       key: 'attachment',
       header: 'Supporting Document',
       accessor: (row) => {
+        if (row.categoryKey === 'purchase_requisition' || row.categoryKey === 'general_requisition') {
+          const itemsCount = row.metadata.lineItems?.length || 0;
+          return (
+            <button
+              type="button"
+              onClick={() => setSelectedInstance(row)}
+              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-surface hover:bg-surface/80 border border-border text-[11px] font-medium text-foreground transition cursor-pointer"
+            >
+              <Package className="h-3.5 w-3.5 text-primary" />
+              <span>{itemsCount} Line Item{itemsCount !== 1 ? 's' : ''}</span>
+            </button>
+          );
+        }
+
+        if (row.categoryKey === 'on_duty') {
+          return (
+            <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-bold border border-emerald-500/20">
+              <MapPin className="h-3 w-3 mr-0.5" />
+              {row.metadata.destination || 'Field Duty'}
+            </span>
+          );
+        }
+
+        if (row.categoryKey === 'advance_liquidation') {
+          return (
+            <button
+              type="button"
+              onClick={() => setSelectedInstance(row)}
+              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-surface hover:bg-surface/80 border border-border text-[11px] font-medium text-foreground transition cursor-pointer"
+            >
+              <Receipt className="h-3.5 w-3.5 text-rose-500" />
+              <span>Expense Sheet</span>
+            </button>
+          );
+        }
+
         const isReg = row.definitionKey === 'attendance_regularization';
         if (isReg) {
           return (
@@ -622,6 +1520,7 @@ function WorkflowsContent() {
             </span>
           );
         }
+
         return row.metadata.attachmentName ? (
           <button
             type="button"
@@ -725,7 +1624,7 @@ function WorkflowsContent() {
               Workflows &amp; Approvals Engine
             </h1>
             <p className="text-xs text-muted-foreground">
-              Team Leave &amp; Regularization Approvals &bull; Role-Based Scoping &bull; Mandatory Refusal Audit Trails
+              Universal Approvals Hub &bull; Leave, On Duty, Procurement &bull; Role-Based Scoping
             </p>
           </div>
         </div>
@@ -739,52 +1638,110 @@ function WorkflowsContent() {
         )}
       </div>
 
-      {/* ── 4 STAT CARDS ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-bold uppercase tracking-wider">
-            <span>PENDING APPROVALS</span>
-            <Clock className="h-4 w-4 text-amber-400" />
-          </div>
-          <div className="text-3xl font-black tracking-tight text-amber-400 font-mono">
-            {pendingCount}
-          </div>
-          <div className="text-[11px] text-muted-foreground">Action required by your role</div>
-        </div>
+      {/* ── INTERACTIVE REQUEST TYPE BLOCKS (AUTO-ADJUST TEXT SIZE, COMPACT SIZE, COLOR ACCENT) ── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-2.5">
+        {TYPE_BLOCKS.map((block) => {
+          const isSelected = selectedType === block.key;
+          const metric =
+            block.key === 'ALL'
+              ? typeMetrics.all
+              : typeMetrics[block.key as WorkflowCategoryKey];
 
-        <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-bold uppercase tracking-wider">
-            <span>APPROVED REQUESTS</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-          </div>
-          <div className="text-3xl font-black tracking-tight text-emerald-400 font-mono">
-            {approvedCount}
-          </div>
-          <div className="text-[11px] text-muted-foreground">Synced to official attendance</div>
-        </div>
+          const IconComp = block.icon;
 
-        <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-bold uppercase tracking-wider">
-            <span>REFUSED WITH NOTES</span>
-            <Ban className="h-4 w-4 text-destructive" />
-          </div>
-          <div className="text-3xl font-black tracking-tight text-destructive font-mono">
-            {rejectedCount}
-          </div>
-          <div className="text-[11px] text-muted-foreground">Audit logged &amp; notified to staff</div>
-        </div>
+          return (
+            <button
+              key={block.key}
+              type="button"
+              onClick={() => setSelectedType(isSelected && block.key !== 'ALL' ? 'ALL' : block.key)}
+              className={`p-2 sm:p-2.5 pl-3 sm:pl-3.5 rounded-xl sm:rounded-2xl text-left transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-1.5 relative overflow-hidden group border ${
+                isSelected
+                  ? 'bg-card border-primary ring-2 ring-primary/80 ring-offset-2 ring-offset-background shadow-lg shadow-primary/10'
+                  : 'bg-card border-border/80 hover:border-primary/40 hover:-translate-y-0.5 hover:shadow-md'
+              }`}
+            >
+              {/* Left Accent Color Strip */}
+              <span
+                className={`absolute left-0 top-0 bottom-0 w-1 sm:w-1.5 ${block.accentBar}`}
+                aria-hidden="true"
+              />
 
-        <div className="p-5 rounded-2xl bg-card border border-border/80 shadow-xl space-y-2">
-          <div className="flex items-center justify-between text-muted-foreground text-[11px] font-bold uppercase tracking-wider">
-            <span>TOTAL SCOPED REQUESTS</span>
-            <GitPullRequest className="h-4 w-4 text-primary" />
-          </div>
-          <div className="text-3xl font-black tracking-tight text-foreground font-mono">
-            {scopedInstances.length}
-          </div>
-          <div className="text-[11px] text-muted-foreground">Direct subordinates &amp; team requests</div>
-        </div>
+              {/* Row 1: Icon on left, Badges on right */}
+              <div className="flex items-center justify-between w-full">
+                <div
+                  className={`h-6 w-6 sm:h-6.5 sm:w-6.5 rounded-lg flex items-center justify-center border shrink-0 transition-transform group-hover:scale-105 ${block.iconColor}`}
+                >
+                  <IconComp className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                </div>
+
+                {isSelected ? (
+                  <span className="px-1.5 py-0.2 rounded-full text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider bg-primary text-primary-foreground shadow-sm">
+                    Active
+                  </span>
+                ) : metric.pending > 0 ? (
+                  <span className="px-1.5 py-0.2 rounded-full text-[8.5px] sm:text-[9px] font-black bg-amber-500/15 text-amber-500 border border-amber-500/30 animate-pulse">
+                    {metric.pending} Pending
+                  </span>
+                ) : (
+                  <span className="px-1 py-0.2 rounded-full text-[8px] font-semibold text-muted-foreground bg-surface border border-border">
+                    0 Pending
+                  </span>
+                )}
+              </div>
+
+              {/* Row 2: Full Width Title with Auto-Adjusted Responsive Font Size (NO Truncation) */}
+              <div className="min-h-[26px] sm:min-h-[28px] flex flex-col justify-center w-full">
+                <div
+                  className={`font-black tracking-tight text-foreground leading-[1.2] break-words ${block.fontSizeClass}`}
+                >
+                  {block.label}
+                </div>
+              </div>
+
+              {/* Row 3: Big Metric Number */}
+              <div className="flex items-baseline justify-between pt-0.5">
+                <span className="text-lg sm:text-xl font-black font-mono tracking-tight text-foreground">
+                  {metric.total}
+                </span>
+                <span className="text-[9px] font-mono text-muted-foreground">
+                  Requests
+                </span>
+              </div>
+
+              {/* Row 4: Status Breakdown Footer */}
+              <div className="text-[8.5px] sm:text-[9px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/60">
+                <span>
+                  <strong className="text-emerald-500">{metric.approved}</strong> Approved
+                </span>
+                <span>
+                  <strong className="text-destructive">{metric.rejected}</strong> Refused
+                </span>
+              </div>
+            </button>
+          );
+        })}
       </div>
+
+      {/* ── CONTEXTUAL ACTIVE FILTER BANNER (IF FILTERED) ── */}
+      {selectedType !== 'ALL' && (
+        <div className="px-4 py-2.5 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-between text-xs text-primary font-bold animate-in fade-in">
+          <div className="flex items-center space-x-2">
+            <Filter className="h-4 w-4 shrink-0" />
+            <span>
+              Showing only <strong>{TYPE_BLOCKS.find((b) => b.key === selectedType)?.label}</strong> (
+              {activeTypeScope.length} Total requests &bull; {currentPendingCount} Action required)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedType('ALL')}
+            className="flex items-center space-x-1.5 px-3 py-1 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold transition shadow-sm cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5" />
+            <span>Show All Requests</span>
+          </button>
+        </div>
+      )}
 
       {/* ── FILTER & TAB BAR ── */}
       <div className="p-4 rounded-3xl bg-card border border-border/80 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
@@ -800,22 +1757,22 @@ function WorkflowsContent() {
           />
         </div>
 
-        {/* Tab Buttons */}
+        {/* Status Tab Buttons */}
         <div className="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto">
           <button
             onClick={() => setActiveTab('ALL')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer ${
               activeTab === 'ALL'
                 ? 'bg-foreground/10 text-foreground font-extrabold'
                 : 'text-muted-foreground hover:text-foreground hover:bg-surface'
             }`}
           >
-            ALL ({scopedInstances.length})
+            ALL ({activeTypeScope.length})
           </button>
 
           <button
             onClick={() => setActiveTab('PENDING')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'PENDING'
                 ? 'bg-amber-500 text-white font-black shadow-md shadow-amber-500/25'
                 : 'text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10'
@@ -823,13 +1780,13 @@ function WorkflowsContent() {
           >
             <span>PENDING</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/25 text-white">
-              {pendingCount}
+              {currentPendingCount}
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab('APPROVED')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'APPROVED'
                 ? 'bg-emerald-500 text-white font-black shadow-md shadow-emerald-500/25'
                 : 'text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10'
@@ -837,13 +1794,13 @@ function WorkflowsContent() {
           >
             <span>APPROVED</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/25 text-white">
-              {approvedCount}
+              {currentApprovedCount}
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab('REJECTED')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 cursor-pointer ${
               activeTab === 'REJECTED'
                 ? 'bg-destructive text-white font-black shadow-md shadow-destructive/25'
                 : 'text-muted-foreground hover:text-destructive hover:bg-destructive/10'
@@ -851,13 +1808,13 @@ function WorkflowsContent() {
           >
             <span>REFUSED</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-white/25 text-white">
-              {rejectedCount}
+              {currentRejectedCount}
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab('HISTORY')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 ml-2 border ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center space-x-1.5 ml-2 border cursor-pointer ${
               activeTab === 'HISTORY'
                 ? 'bg-primary text-primary-foreground border-primary font-black shadow-md'
                 : 'border-border text-muted-foreground hover:text-foreground hover:bg-surface'
@@ -869,7 +1826,7 @@ function WorkflowsContent() {
         </div>
       </div>
 
-      {/* ── MAIN CONTENT (TABLE OR HISTORY LOGS) ── */}
+      {/* ── MAIN CONTENT (TABLE OR AUDIT LOGS) ── */}
       {activeTab === 'HISTORY' ? (
         <div className="p-6 rounded-3xl bg-card border border-border/80 shadow-2xl space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-border">
@@ -878,21 +1835,22 @@ function WorkflowsContent() {
               <div>
                 <h3 className="text-base font-bold text-foreground">Workflow Decisions &amp; Audit Logs</h3>
                 <p className="text-xs text-muted-foreground">
-                  Complete chronological history of leave submissions, regularizations, supervisor approvals, and refusals
+                  Complete chronological history of submissions, supervisor approvals, and mandatory refusal notes
                 </p>
               </div>
             </div>
-            <span className="text-xs font-mono text-muted-foreground">{scopedInstances.length} Total Logs</span>
+            <span className="text-xs font-mono text-muted-foreground">
+              {filteredInstances.length} Total Logs
+            </span>
           </div>
 
           <div className="space-y-3">
-            {scopedInstances.length === 0 ? (
+            {filteredInstances.length === 0 ? (
               <div className="py-12 text-center text-xs text-muted-foreground">
-                No workflow requests or decision history found for your role.
+                No workflow requests or decision history found for your role in this selection.
               </div>
             ) : (
-              scopedInstances.map((item) => {
-                const isReg = item.definitionKey === 'attendance_regularization';
+              filteredInstances.map((item) => {
                 return (
                   <div
                     key={item.id}
@@ -900,15 +1858,33 @@ function WorkflowsContent() {
                   >
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2">
-                        <span className="font-extrabold text-foreground">{item.metadata.requesterName}</span>
-                        <span className="font-mono text-muted-foreground text-[10px]">({item.metadata.employeeCode})</span>
+                        {getCategoryBadge(item.categoryKey, item.categoryLabel)}
+                        <span className="font-extrabold text-foreground">
+                          {item.metadata.requesterName}
+                        </span>
+                        <span className="font-mono text-muted-foreground text-[10px]">
+                          ({item.metadata.employeeCode})
+                        </span>
                         <span className="text-muted-foreground">&bull;</span>
-                        <span className="font-medium text-foreground">{item.metadata.leaveType}</span>
-                        <span className="text-muted-foreground">&bull;</span>
-                        <span className="font-mono text-muted-foreground">{isReg ? formatDisplayDate(item.metadata.date) : `${item.metadata.totalDays} Day(s)`}</span>
+                        <span className="font-medium text-foreground">{item.title}</span>
                       </div>
                       <div className="text-muted-foreground text-[11px]">
-                        {isReg ? (
+                        {item.categoryKey === 'on_duty' ? (
+                          <span>
+                            Field Duty: {formatDisplayDate(item.metadata.startDate)} (
+                            {item.metadata.startTime} - {item.metadata.endTime}) &bull; Dest:{' '}
+                            {item.metadata.destination}
+                          </span>
+                        ) : item.categoryKey === 'purchase_requisition' ||
+                          item.categoryKey === 'general_requisition' ? (
+                          <span>
+                            Est Amount: <strong>BDT {(item.metadata.amountBDT || 0).toLocaleString()}</strong> &bull; Dept: {item.metadata.department}
+                          </span>
+                        ) : item.categoryKey === 'advance_liquidation' ? (
+                          <span>
+                            Amount: <strong>BDT {(item.metadata.amountBDT || 0).toLocaleString()}</strong> &bull; Visiting: {item.metadata.visitingPlace || 'HQ'}
+                          </span>
+                        ) : item.definitionKey === 'attendance_regularization' ? (
                           <span>
                             Adjusted Punch: <strong className="text-emerald-500 font-mono">{item.metadata.adjustedCheckIn} - {item.metadata.adjustedCheckOut}</strong> (Schedule: {item.metadata.workingSchedule})
                           </span>
@@ -920,7 +1896,7 @@ function WorkflowsContent() {
                       </div>
                       {item.metadata.reason && cleanApplicantReason(item.metadata.reason) && (
                         <div className="text-muted-foreground italic text-[11px] break-words line-clamp-2">
-                          Reason: &ldquo;{cleanApplicantReason(item.metadata.reason)}&rdquo;
+                          Justification: &ldquo;{cleanApplicantReason(item.metadata.reason)}&rdquo;
                         </div>
                       )}
                       {item.metadata.rejectionReason && (
@@ -949,18 +1925,21 @@ function WorkflowsContent() {
           </div>
         </div>
       ) : (
+        /* EnterpriseTable with hideToolbar={true} to remove the redundant toolbar row requested by the user */
         <EnterpriseTable
           columns={columns}
           data={filteredInstances}
           keyField="id"
-          title="Workflow &amp; Leave Requests"
-          searchPlaceholder="Search request title, requester, department..."
+          hideToolbar={true}
           onRowClick={(item) => setSelectedInstance(item)}
           renderKanbanCard={(item) => (
             <div className="p-5 rounded-2xl bg-card border border-border/80 hover:border-primary/40 transition shadow-xl space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-mono text-muted-foreground">{item.entityId}</span>
                 {getStatusBadge(item.currentState)}
+              </div>
+              <div className="flex items-center space-x-1.5">
+                {getCategoryBadge(item.categoryKey, item.categoryLabel)}
               </div>
               <h4 className="font-bold text-sm text-foreground line-clamp-2">{item.title}</h4>
               <div className="text-xs text-muted-foreground space-y-1">
@@ -978,267 +1957,518 @@ function WorkflowsContent() {
         />
       )}
 
-      {/* ── APPROVAL DETAILS DRAWER / MODAL ── */}
+      {/* ── APPROVAL DETAILS DRAWER / MODAL (COMPACT ONE-WINDOW VIEW) ── */}
       {selectedInstance && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-card border border-border/90 rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 animate-in fade-in">
+          <div className="bg-card border border-border/90 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95">
             {/* Modal Header */}
-            <div className="p-5 border-b border-border flex items-center justify-between">
-              <div className="space-y-1">
+            <div className="px-4 py-2.5 sm:py-3 border-b border-border flex items-center justify-between bg-surface/50 shrink-0">
+              <div className="space-y-0.5 min-w-0 pr-3">
                 <div className="flex items-center space-x-2">
-                  <span className="font-mono text-xs text-primary font-bold">{selectedInstance.entityId}</span>
+                  {getCategoryBadge(selectedInstance.categoryKey, selectedInstance.categoryLabel)}
+                  <span className="font-mono text-[10.5px] text-primary font-bold">{selectedInstance.entityId}</span>
                   {getStatusBadge(selectedInstance.currentState)}
                 </div>
-                <h3 className="font-black text-lg text-foreground">{selectedInstance.title}</h3>
+                <h3 className="font-bold text-sm sm:text-base text-foreground truncate">
+                  {selectedInstance.title}
+                </h3>
               </div>
               <button
                 onClick={() => setSelectedInstance(null)}
-                className="p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer"
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface transition cursor-pointer shrink-0"
+                title="Close"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-6 text-xs">
-              {/* Metadata Cards */}
-              <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-surface border border-border">
+            {/* Modal Body (High-Density, Auto-Adjusting Typography) */}
+            <div className="p-3 sm:p-4 overflow-y-auto space-y-2.5 text-xs">
+              {/* Requester & Scoping Card */}
+              <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-surface/60 border border-border text-[11px]">
                 <div>
-                  <span className="text-muted-foreground">Requester:</span>
-                  <div className="font-bold text-foreground">
+                  <span className="text-muted-foreground text-[10px] block">Requester:</span>
+                  <div className="font-bold text-foreground truncate">
                     {selectedInstance.metadata.requesterName || 'N/A'}{' '}
-                    <span className="font-mono text-[10px] text-muted-foreground">
+                    <span className="font-mono text-[9.5px] text-muted-foreground">
                       ({selectedInstance.metadata.employeeCode})
                     </span>
                   </div>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Department / Team:</span>
-                  <div className="font-bold text-foreground">
+                  <span className="text-muted-foreground text-[10px] block">Department:</span>
+                  <div className="font-bold text-foreground truncate">
                     {selectedInstance.metadata.department || "Founder's Office"}
                   </div>
                 </div>
-
-                {selectedInstance.definitionKey === 'attendance_regularization' ? (
-                  // Attendance Regularization Details
-                  <>
-                    <div>
-                      <span className="text-muted-foreground">Attendance Date:</span>
-                      <div className="font-bold text-foreground font-mono">
-                        {selectedInstance.metadata.date}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Assigned Shift Schedule:</span>
-                      <div className="font-bold text-primary">
-                        {selectedInstance.metadata.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)'}
-                      </div>
-                    </div>
-
-                    {/* 2-Column Comparison Table for Regularization */}
-                    <div className="col-span-2 space-y-2 pt-2 border-t border-border">
-                      <span className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground block">
-                        Attendance Time Correction Table:
-                      </span>
-
-                      <div className="rounded-xl border border-border overflow-hidden bg-card/60">
-                        <table className="w-full text-left text-xs">
-                          <thead>
-                            <tr className="bg-surface/80 border-b border-border text-[10px] font-bold uppercase text-muted-foreground">
-                              <th className="py-2.5 px-3">Field</th>
-                              <th className="py-2.5 px-3">Original Record</th>
-                              <th className="py-2.5 px-3 text-emerald-500">Proposed Adjusted Record</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border/40 font-mono">
-                            <tr>
-                              <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Check In</td>
-                              <td className="py-2.5 px-3 text-rose-500 font-bold">{selectedInstance.metadata.originalCheckIn || '--:--'}</td>
-                              <td className="py-2.5 px-3 text-emerald-500 font-bold flex items-center space-x-1.5">
-                                <span>{selectedInstance.metadata.adjustedCheckIn}</span>
-                                <span className="text-[9px] font-sans font-black bg-emerald-500/10 text-emerald-500 px-1.5 py-0.2 rounded">On Time</span>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Check Out</td>
-                              <td className="py-2.5 px-3 text-muted-foreground">{selectedInstance.metadata.originalCheckOut || '--:--'}</td>
-                              <td className="py-2.5 px-3 text-emerald-500 font-bold">{selectedInstance.metadata.adjustedCheckOut}</td>
-                            </tr>
-                            <tr>
-                              <td className="py-2.5 px-3 text-muted-foreground font-sans font-bold">Status</td>
-                              <td className="py-2.5 px-3">
-                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/15 text-amber-500 font-bold font-sans">
-                                  {selectedInstance.metadata.originalStatus || 'Late'}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/15 text-emerald-500 font-bold font-sans">
-                                  Present (Regularized)
-                                </span>
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground text-xs font-semibold">Regularization Reason &amp; Remarks:</span>
-                      <div className="text-foreground mt-1.5 bg-card/70 p-3 rounded-xl border border-border text-xs leading-relaxed break-words whitespace-pre-wrap min-h-[44px] h-auto overflow-hidden">
-                        &ldquo;{cleanApplicantReason(selectedInstance.metadata.reason) || 'No remarks provided'}&rdquo;
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  // Standard Leave Request Details
-                  <>
-                    <div>
-                      <span className="text-muted-foreground">Leave Dates:</span>
-                      <div className="font-bold text-foreground">
-                        {formatDisplayDate(selectedInstance.metadata.startDate)} &rarr; {formatDisplayDate(selectedInstance.metadata.endDate)}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Total Duration:</span>
-                      <div className="font-bold text-primary font-mono">
-                        {selectedInstance.metadata.totalDays} Day(s) ({selectedInstance.metadata.leaveType})
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground text-xs font-semibold">Applicant Reason:</span>
-                      <div className="text-foreground mt-1.5 bg-card/70 p-3 rounded-xl border border-border text-xs leading-relaxed break-words whitespace-pre-wrap min-h-[44px] h-auto overflow-hidden">
-                        &ldquo;{cleanApplicantReason(selectedInstance.metadata.reason) || 'General leave application'}&rdquo;
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between text-muted-foreground">
-                        <span>Attached Document / Evidence:</span>
-                        {selectedInstance.metadata.attachmentName && (
-                          <span className="text-[10px] text-emerald-500 font-bold flex items-center space-x-1">
-                            <Download className="h-3 w-3" />
-                            <span>Click to download</span>
-                          </span>
-                        )}
-                      </div>
-                      {selectedInstance.metadata.attachmentName ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            downloadAttachment(selectedInstance.metadata.attachmentName!, {
-                              requesterName: selectedInstance.metadata.requesterName,
-                              employeeCode: selectedInstance.metadata.employeeCode,
-                              department: selectedInstance.metadata.department,
-                              leaveType: selectedInstance.metadata.leaveType,
-                              startDate: selectedInstance.metadata.startDate,
-                              endDate: selectedInstance.metadata.endDate,
-                              reason: selectedInstance.metadata.reason,
-                              requestId: selectedInstance.id,
-                              attachmentUrl: (selectedInstance.metadata as any).attachmentUrl,
-                            })
-                          }
-                          className="w-full mt-1 flex items-center justify-between space-x-2 p-2 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500 text-emerald-600 dark:text-emerald-400 font-medium min-h-[42px] transition group cursor-pointer shadow-sm text-left"
-                          title={`Click to download "${selectedInstance.metadata.attachmentName}"`}
-                        >
-                          <div className="flex items-center space-x-2 truncate">
-                            <Paperclip className="h-4 w-4 text-emerald-500 shrink-0 group-hover:scale-110 transition" />
-                            <span className="font-bold truncate text-[11px] underline decoration-emerald-500/30 underline-offset-2">
-                              {selectedInstance.metadata.attachmentName}
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 shrink-0 ml-2">
-                            <span className="px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-[9px] font-black uppercase tracking-wider">
-                              Attached
-                            </span>
-                            <div className="p-1 rounded-lg bg-emerald-500/20 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition">
-                              <Download className="h-3.5 w-3.5" />
-                            </div>
-                          </div>
-                        </button>
-                      ) : (
-                        <div className="mt-1 flex items-center space-x-2 p-2 rounded-xl bg-card/40 border border-border/60 text-muted-foreground text-[11px] min-h-[42px]">
-                          <Paperclip className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                          <span className="italic">No document attached</span>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {selectedInstance.metadata.rejectionReason && (
-                  <div className="col-span-2 bg-destructive/10 p-3 rounded-xl border border-destructive/20 text-destructive">
-                    <span className="font-black uppercase tracking-wider text-[10px] block">
-                      Refusal Reason / Justification:
-                    </span>
-                    <div className="mt-0.5 font-medium">&ldquo;{selectedInstance.metadata.rejectionReason}&rdquo;</div>
+                <div>
+                  <span className="text-muted-foreground text-[10px] block">Designation:</span>
+                  <div className="font-bold text-foreground truncate">
+                    {selectedInstance.metadata.designation || 'Staff'}
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* Multi-Tier Approval Timeline */}
-              <div className="space-y-3">
-                <h4 className="font-bold uppercase tracking-wider text-[11px] text-muted-foreground">
-                  Approval Timeline &amp; History
-                </h4>
+              {/* Category-Specific Detailed Section */}
 
-                <div className="space-y-2">
+              {/* 1. PURCHASE REQUISITION DETAILS */}
+              {selectedInstance.categoryKey === 'purchase_requisition' && (
+                <div className="space-y-2.5 p-3 rounded-xl bg-surface/60 border border-border">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                    <span className="font-bold uppercase tracking-wider text-[10.5px] text-foreground flex items-center space-x-1.5">
+                      <ShoppingCart className="h-3.5 w-3.5 text-orange-500" />
+                      <span>Purchase Requisition Itemization</span>
+                    </span>
+                    <span className="font-mono font-bold text-orange-500 text-xs">
+                      Est. Total: BDT {(selectedInstance.metadata.amountBDT || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-muted-foreground text-[10px]">Project / Allocation:</span>
+                      <div className="font-bold text-foreground truncate">{selectedInstance.metadata.project || 'Operations'}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-[10px]">Required Delivery:</span>
+                      <div className="font-bold text-foreground">
+                        {formatDisplayDate(selectedInstance.metadata.requiredDate)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedInstance.metadata.justification && (
+                    <div className="space-y-0.5">
+                      <span className="text-muted-foreground text-[10px] font-semibold">Justification:</span>
+                      <div className="p-2 rounded-lg bg-card border border-border leading-relaxed text-[11px] text-foreground">
+                        {selectedInstance.metadata.justification}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Line Items Table */}
+                  <div className="space-y-1">
+                    <span className="font-bold uppercase tracking-wider text-[9.5px] text-muted-foreground">
+                      Requested Items ({selectedInstance.metadata.lineItems?.length || 0}):
+                    </span>
+                    <div className="rounded-lg border border-border overflow-hidden bg-card">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-surface border-b border-border text-[9.5px] font-bold uppercase text-muted-foreground">
+                            <th className="py-1.5 px-2.5">Item Name</th>
+                            <th className="py-1.5 px-2 text-center">Qty</th>
+                            <th className="py-1.5 px-2 text-right">Unit Price</th>
+                            <th className="py-1.5 px-2.5 text-right">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60 font-mono text-[11px]">
+                          {(selectedInstance.metadata.lineItems || []).map((item, idx) => (
+                            <tr key={idx}>
+                              <td className="py-1.5 px-2.5 font-sans font-bold text-foreground">{item.name}</td>
+                              <td className="py-1.5 px-2 text-center">{item.quantity} {item.unit || 'PCS'}</td>
+                              <td className="py-1.5 px-2 text-right">{(item.unitCost || 0).toLocaleString()}</td>
+                              <td className="py-1.5 px-2.5 text-right font-bold text-primary">
+                                {(item.totalCost || item.quantity * item.unitCost).toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. GENERAL REQUISITION DETAILS */}
+              {selectedInstance.categoryKey === 'general_requisition' && (
+                <div className="space-y-2.5 p-3 rounded-xl bg-surface/60 border border-border">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                    <span className="font-bold uppercase tracking-wider text-[10.5px] text-foreground flex items-center space-x-1.5">
+                      <ClipboardList className="h-3.5 w-3.5 text-purple-500" />
+                      <span>General Requisition Supplies</span>
+                    </span>
+                    <span className="font-mono font-bold text-purple-500 text-xs">
+                      Est. Total: BDT {(selectedInstance.metadata.amountBDT || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  {selectedInstance.metadata.justification && (
+                    <div className="space-y-0.5">
+                      <span className="text-muted-foreground text-[10px] font-semibold">Operational Need:</span>
+                      <div className="p-2 rounded-lg bg-card border border-border leading-relaxed text-[11px] text-foreground">
+                        {selectedInstance.metadata.justification}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Line Items */}
+                  <div className="space-y-1">
+                    <span className="font-bold uppercase tracking-wider text-[9.5px] text-muted-foreground">
+                      Requested Supplies:
+                    </span>
+                    <div className="rounded-lg border border-border overflow-hidden bg-card">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-surface border-b border-border text-[9.5px] font-bold uppercase text-muted-foreground">
+                            <th className="py-1.5 px-2.5">Item Description</th>
+                            <th className="py-1.5 px-2 text-center">Qty</th>
+                            <th className="py-1.5 px-2.5 text-right">Cost (BDT)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60 font-mono text-[11px]">
+                          {(selectedInstance.metadata.lineItems || []).map((item, idx) => (
+                            <tr key={idx}>
+                              <td className="py-1.5 px-2.5 font-sans font-bold text-foreground">{item.name}</td>
+                              <td className="py-1.5 px-2 text-center">{item.quantity} {item.unit || 'Units'}</td>
+                              <td className="py-1.5 px-2.5 text-right font-bold text-primary">
+                                {(item.totalCost || item.quantity * item.unitCost).toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. ON DUTY DETAILS */}
+              {selectedInstance.categoryKey === 'on_duty' && (
+                <div className="space-y-2.5 p-3 rounded-xl bg-surface/60 border border-border">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                    <span className="font-bold uppercase tracking-wider text-[10.5px] text-foreground flex items-center space-x-1.5">
+                      <Briefcase className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>On-Duty Official Field Duty</span>
+                    </span>
+                    <span className="font-mono font-bold text-emerald-500 text-xs">
+                      Credited: {selectedInstance.metadata.creditedDays || 1} Day ({selectedInstance.metadata.totalHours || 8}h)
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-muted-foreground text-[10px]">Duty Dates:</span>
+                      <div className="font-bold text-foreground font-mono">
+                        {formatDisplayDate(selectedInstance.metadata.startDate)}
+                        {selectedInstance.metadata.endDate && selectedInstance.metadata.endDate !== selectedInstance.metadata.startDate
+                          ? ` → ${formatDisplayDate(selectedInstance.metadata.endDate)}`
+                          : ''}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-[10px]">Field Timings:</span>
+                      <div className="font-bold text-emerald-500 font-mono">
+                        {selectedInstance.metadata.startTime} - {selectedInstance.metadata.endTime}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedInstance.metadata.destination && (
+                    <div className="flex items-center space-x-1.5 text-[11px] text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <span>Destination / Site: <strong className="text-foreground">{selectedInstance.metadata.destination}</strong></span>
+                    </div>
+                  )}
+
+                  {selectedInstance.metadata.reason && (
+                    <div className="space-y-0.5">
+                      <span className="text-muted-foreground text-[10px] font-semibold">Duty Objectives:</span>
+                      <div className="p-2 rounded-lg bg-card border border-border leading-relaxed text-[11px] text-foreground">
+                        {cleanApplicantReason(selectedInstance.metadata.reason)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 4. ADVANCE & LIQUIDATION DETAILS */}
+              {selectedInstance.categoryKey === 'advance_liquidation' && (
+                <div className="space-y-2.5 p-3 rounded-xl bg-surface/60 border border-border">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+                    <span className="font-bold uppercase tracking-wider text-[10.5px] text-foreground flex items-center space-x-1.5">
+                      <Wallet className="h-3.5 w-3.5 text-rose-500" />
+                      <span>{selectedInstance.categoryLabel}</span>
+                    </span>
+                    <span className="font-mono font-bold text-rose-500 text-xs">
+                      Amount: BDT {(selectedInstance.metadata.amountBDT || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-muted-foreground text-[10px]">Duration:</span>
+                      <div className="font-bold text-foreground">{selectedInstance.metadata.duration || 'Field Tour'}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-[10px]">Disbursement:</span>
+                      <div className="font-mono font-bold text-foreground truncate">
+                        {selectedInstance.metadata.bankAccountNumber || 'Direct Bank Disbursement'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 5 Dynamic Subtotals */}
+                  {selectedInstance.metadata.expenseSubtotals && (
+                    <div className="space-y-1">
+                      <span className="font-bold uppercase tracking-wider text-[9.5px] text-muted-foreground">
+                        Section Breakdown:
+                      </span>
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                        <div className="p-1.5 rounded-lg bg-card border border-border text-center">
+                          <span className="text-[9px] text-muted-foreground block">Long Travel</span>
+                          <span className="font-mono font-bold text-[10px] text-foreground">
+                            {(selectedInstance.metadata.expenseSubtotals.longTravel || 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-card border border-border text-center">
+                          <span className="text-[9px] text-muted-foreground block">Lodging</span>
+                          <span className="font-mono font-bold text-[10px] text-foreground">
+                            {(selectedInstance.metadata.expenseSubtotals.accommodation || 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-card border border-border text-center">
+                          <span className="text-[9px] text-muted-foreground block">Per Diem</span>
+                          <span className="font-mono font-bold text-[10px] text-foreground">
+                            {(selectedInstance.metadata.expenseSubtotals.perDiem || 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-card border border-border text-center">
+                          <span className="text-[9px] text-muted-foreground block">Conveyance</span>
+                          <span className="font-mono font-bold text-[10px] text-foreground">
+                            {(selectedInstance.metadata.expenseSubtotals.localConveyance || 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="p-1.5 rounded-lg bg-card border border-border text-center">
+                          <span className="text-[9px] text-muted-foreground block">Program</span>
+                          <span className="font-mono font-bold text-[10px] text-foreground">
+                            {(selectedInstance.metadata.expenseSubtotals.programExpenses || 0).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Liquidation Variance */}
+                  {selectedInstance.metadata.variance !== undefined && (
+                    <div className="p-2 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-between text-[11px]">
+                      <div>
+                        <span className="text-muted-foreground text-[10px]">Settlement Variance: </span>
+                        <strong className="font-mono text-foreground">
+                          BDT {Math.abs(selectedInstance.metadata.variance).toLocaleString()}
+                        </strong>
+                      </div>
+                      <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase tracking-wider bg-primary text-primary-foreground">
+                        {selectedInstance.metadata.settlementType?.replace(/_/g, ' ') || 'BALANCED'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 5. LEAVE & REGULARIZATION DETAILS */}
+              {selectedInstance.categoryKey === 'leave' && (
+                <div className="space-y-2.5 p-3 rounded-xl bg-surface/60 border border-border text-xs">
+                  {selectedInstance.definitionKey === 'attendance_regularization' ? (
+                    <>
+                      <div className="flex items-center justify-between text-[11px] pb-1.5 border-b border-border/60">
+                        <div>
+                          <span className="text-muted-foreground text-[10px]">Attendance Date: </span>
+                          <strong className="font-mono text-foreground">{selectedInstance.metadata.date}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground text-[10px]">Shift Schedule: </span>
+                          <strong className="text-primary">{selectedInstance.metadata.workingSchedule || 'JAAGO HQ (10:00 AM - 06:00 PM)'}</strong>
+                        </div>
+                      </div>
+
+                      {/* 2-Column Comparison Table for Regularization */}
+                      <div className="space-y-1">
+                        <span className="font-bold uppercase tracking-wider text-[9.5px] text-muted-foreground block">
+                          Attendance Time Correction Table:
+                        </span>
+
+                        <div className="rounded-lg border border-border overflow-hidden bg-card">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="bg-surface border-b border-border text-[9.5px] font-bold uppercase text-muted-foreground">
+                                <th className="py-1.5 px-2.5">Field</th>
+                                <th className="py-1.5 px-2.5">Original Record</th>
+                                <th className="py-1.5 px-2.5 text-emerald-500">Proposed Adjusted Record</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/40 font-mono text-[11px]">
+                              <tr>
+                                <td className="py-1.5 px-2.5 text-muted-foreground font-sans font-bold">Check In</td>
+                                <td className="py-1.5 px-2.5 text-rose-500 font-bold">{selectedInstance.metadata.originalCheckIn || '--:--'}</td>
+                                <td className="py-1.5 px-2.5 text-emerald-500 font-bold flex items-center space-x-1.5">
+                                  <span>{selectedInstance.metadata.adjustedCheckIn}</span>
+                                  <span className="text-[8.5px] font-sans font-black bg-emerald-500/10 text-emerald-500 px-1 py-0.2 rounded">On Time</span>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td className="py-1.5 px-2.5 text-muted-foreground font-sans font-bold">Check Out</td>
+                                <td className="py-1.5 px-2.5 text-muted-foreground">{selectedInstance.metadata.originalCheckOut || '--:--'}</td>
+                                <td className="py-1.5 px-2.5 text-emerald-500 font-bold">{selectedInstance.metadata.adjustedCheckOut}</td>
+                              </tr>
+                              <tr>
+                                <td className="py-1.5 px-2.5 text-muted-foreground font-sans font-bold">Status</td>
+                                <td className="py-1.5 px-2.5">
+                                  <span className="px-1.5 py-0.2 rounded text-[9.5px] bg-amber-500/15 text-amber-500 font-bold font-sans">
+                                    {selectedInstance.metadata.originalStatus || 'Late'}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 px-2.5">
+                                  <span className="px-1.5 py-0.2 rounded text-[9.5px] bg-emerald-500/15 text-emerald-500 font-bold font-sans">
+                                    Present (Regularized)
+                                  </span>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      <div className="space-y-0.5">
+                        <span className="text-muted-foreground text-[10px] font-semibold">Regularization Reason &amp; Remarks:</span>
+                        <div className="text-foreground bg-card p-2 rounded-lg border border-border text-[11px] leading-relaxed">
+                          &ldquo;{cleanApplicantReason(selectedInstance.metadata.reason) || 'No remarks provided'}&rdquo;
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>
+                          <span className="text-muted-foreground text-[10px]">Leave Dates:</span>
+                          <div className="font-bold text-foreground">
+                            {formatDisplayDate(selectedInstance.metadata.startDate)} &rarr; {formatDisplayDate(selectedInstance.metadata.endDate)}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground text-[10px]">Total Duration:</span>
+                          <div className="font-bold text-primary font-mono">
+                            {selectedInstance.metadata.totalDays} Day(s) ({selectedInstance.metadata.leaveType})
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-0.5">
+                        <span className="text-muted-foreground text-[10px] font-semibold">Applicant Reason:</span>
+                        <div className="text-foreground bg-card p-2 rounded-lg border border-border text-[11px] leading-relaxed">
+                          &ldquo;{cleanApplicantReason(selectedInstance.metadata.reason) || 'General leave application'}&rdquo;
+                        </div>
+                      </div>
+
+                      {/* Attachment */}
+                      {selectedInstance.metadata.attachmentName && (
+                        <div className="pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              downloadAttachment(selectedInstance.metadata.attachmentName!, {
+                                requesterName: selectedInstance.metadata.requesterName,
+                                employeeCode: selectedInstance.metadata.employeeCode,
+                                department: selectedInstance.metadata.department,
+                                leaveType: selectedInstance.metadata.leaveType,
+                                startDate: selectedInstance.metadata.startDate,
+                                endDate: selectedInstance.metadata.endDate,
+                                reason: selectedInstance.metadata.reason,
+                                requestId: selectedInstance.id,
+                                attachmentUrl: (selectedInstance.metadata as any).attachmentUrl,
+                              })
+                            }
+                            className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold transition cursor-pointer"
+                          >
+                            <Paperclip className="h-3.5 w-3.5" />
+                            <span>Download {selectedInstance.metadata.attachmentName}</span>
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Mandatory Refusal Note Display (if refused) */}
+              {selectedInstance.metadata.rejectionReason && (
+                <div className="p-2.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-[11px] space-y-0.5">
+                  <span className="font-black uppercase tracking-wider text-[9.5px] block">
+                    Mandatory Refusal Note / Justification:
+                  </span>
+                  <div className="font-medium">&ldquo;{selectedInstance.metadata.rejectionReason}&rdquo;</div>
+                </div>
+              )}
+
+              {/* Multi-Tier Approval Timeline */}
+              <div className="space-y-1.5">
+                <span className="font-bold uppercase tracking-wider text-[9.5px] text-muted-foreground block">
+                  Approval Timeline &amp; History
+                </span>
+
+                <div className="space-y-1.5">
                   {selectedInstance.history.map((hist, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-xl bg-surface/80 border border-border/80 flex items-start justify-between"
+                      className="p-2 rounded-lg bg-surface/60 border border-border/80 flex items-center justify-between text-[11px]"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-foreground capitalize">
-                            {hist.action === 'submit' ? 'Submitted for Approval' : `Supervisor ${hist.action}`}
-                          </span>
-                          <span className="text-[10px] font-mono text-muted-foreground">by {hist.actorId}</span>
-                        </div>
-                        {hist.comment && <p className="text-muted-foreground italic">&ldquo;{hist.comment}&rdquo;</p>}
+                      <div className="flex items-center space-x-2">
+                        <span className="font-bold text-foreground capitalize">
+                          {hist.action === 'submit' ? 'Submitted for Approval' : `Supervisor ${hist.action}`}
+                        </span>
+                        <span className="text-[10px] font-mono text-muted-foreground">by {hist.actorId}</span>
+                        {hist.comment && <span className="text-muted-foreground italic text-[10px]">&ldquo;{hist.comment}&rdquo;</span>}
                       </div>
-                      <span className="font-mono text-[10px] text-muted-foreground whitespace-nowrap">
+                      <span className="font-mono text-[9.5px] text-muted-foreground shrink-0">
                         {formatDisplayDateTime(hist.timestamp)}
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
+            </div>
 
-              {/* Approval Actions Toolbar (if pending) */}
-              {selectedInstance.currentState === 'pending_approval' && (
-                <div className="p-4 rounded-2xl bg-surface border border-primary/30 space-y-3">
-                  <h4 className="font-bold text-xs text-foreground flex items-center space-x-1.5">
-                    <AlertCircle className="h-4 w-4 text-primary" />
-                    <span>Supervisor Decision for {selectedInstance.metadata.requesterName}</span>
-                  </h4>
-
-                  <p className="text-muted-foreground text-xs">
-                    {selectedInstance.definitionKey === 'attendance_regularization'
-                      ? 'Approving will immediately adjust the employee attendance record across all logs, reports, and monthly summary metrics. Refusing requires a mandatory refusal note.'
-                      : 'Approving will immediately grant the leave and update attendance logs. Refusing requires a mandatory justification note sent back to the employee.'}
-                  </p>
-
-                  <div className="flex items-center justify-end space-x-2 pt-2">
+            {/* Modal Footer / Docked Action Toolbar (Always Visible, Zero Scroll Required) */}
+            <div className="px-4 py-2.5 sm:py-3 border-t border-border bg-surface/80 flex items-center justify-between gap-3 shrink-0">
+              {selectedInstance.currentState === 'pending_approval' ? (
+                <>
+                  <div className="text-[11px] text-muted-foreground flex items-center space-x-1.5 min-w-0 truncate">
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    <span className="truncate">Decision required for {selectedInstance.metadata.requesterName}</span>
+                  </div>
+                  <div className="flex items-center space-x-2 shrink-0">
                     <button
                       onClick={() => {
                         setRefusalModalInstance(selectedInstance);
                         setRefusalNote('');
                       }}
                       disabled={isSubmitting}
-                      className="px-4 py-2.5 rounded-xl bg-destructive/15 text-destructive border border-destructive/30 hover:bg-destructive hover:text-white text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
+                      className="px-3 py-1.5 rounded-xl bg-destructive/10 hover:bg-destructive text-destructive hover:text-white border border-destructive/30 text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer disabled:opacity-50"
                     >
                       <Ban className="h-3.5 w-3.5" />
-                      <span>Refuse Request</span>
+                      <span>Refuse</span>
                     </button>
 
                     <button
                       onClick={() => handleApprove(selectedInstance)}
                       disabled={isSubmitting}
-                      className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-black text-xs flex items-center space-x-1.5 hover:bg-emerald-500 shadow-lg transition cursor-pointer disabled:opacity-50"
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white font-black text-xs flex items-center space-x-1.5 hover:bg-emerald-500 shadow-md shadow-emerald-600/20 transition cursor-pointer disabled:opacity-50"
                     >
                       <Check className="h-3.5 w-3.5" />
-                      <span>Authorize &amp; Approve</span>
+                      <span>Approve Request</span>
                     </button>
                   </div>
+                </>
+              ) : (
+                <div className="w-full flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-mono text-[11px]">
+                    Status: <strong className="capitalize text-foreground">{selectedInstance.currentState}</strong>
+                  </span>
+                  <button
+                    onClick={() => setSelectedInstance(null)}
+                    className="px-3 py-1 rounded-lg bg-surface hover:bg-surface/80 border border-border text-foreground text-xs font-bold transition cursor-pointer"
+                  >
+                    Close Window
+                  </button>
                 </div>
               )}
             </div>
@@ -1257,7 +2487,7 @@ function WorkflowsContent() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground">
-                    Refuse {refusalModalInstance.definitionKey === 'attendance_regularization' ? 'Regularization' : 'Leave'} Request
+                    Refuse {refusalModalInstance.categoryLabel}
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     Mandatory refusal note required for employee decision notification
@@ -1278,9 +2508,7 @@ function WorkflowsContent() {
                 {refusalModalInstance.metadata.requesterName} ({refusalModalInstance.metadata.employeeCode})
               </div>
               <div className="text-muted-foreground">
-                {refusalModalInstance.definitionKey === 'attendance_regularization'
-                  ? `Attendance Regularization for ${formatDisplayDate(refusalModalInstance.metadata.date)} (Adjusted: ${refusalModalInstance.metadata.adjustedCheckIn} - ${refusalModalInstance.metadata.adjustedCheckOut})`
-                  : `${refusalModalInstance.metadata.leaveType} • ${refusalModalInstance.metadata.totalDays} Days (${formatDisplayDate(refusalModalInstance.metadata.startDate)} to ${formatDisplayDate(refusalModalInstance.metadata.endDate)})`}
+                {refusalModalInstance.title}
               </div>
             </div>
 
@@ -1292,7 +2520,7 @@ function WorkflowsContent() {
                 rows={3}
                 value={refusalNote}
                 onChange={(e) => setRefusalNote(e.target.value)}
-                placeholder="Explain the reason for refusing this request (this will be sent to the employee via email and notification)..."
+                placeholder="Explain the reason for refusing this request (this will be logged in the audit trail and notified to the employee)..."
                 className="w-full p-3 rounded-2xl bg-surface border border-destructive/30 text-xs font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-destructive shadow-sm placeholder:text-muted-foreground/60"
               />
             </div>
