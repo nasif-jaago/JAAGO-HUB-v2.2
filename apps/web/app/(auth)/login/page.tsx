@@ -803,11 +803,16 @@ export default function LoginPage() {
               </div>
 
               {detectedPlatform === 'android' ? (
-                <ol className="list-decimal list-inside space-y-1 text-white/80 text-[11px] leading-relaxed">
-                  <li>Download the APK using the button above.</li>
-                  <li>Tap the downloaded file from notifications or your Downloads folder.</li>
-                  <li>If prompted, select <strong>Allow from this source</strong> to install.</li>
-                </ol>
+                <div className="space-y-1.5 text-white/80 text-[11px] leading-relaxed">
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li>Download the APK using the button above.</li>
+                    <li>Tap <strong>&ldquo;Open&rdquo;</strong> directly from your Chrome download notification.</li>
+                    <li>If prompted, select <strong>Allow from this source</strong> to install.</li>
+                  </ol>
+                  <p className="text-[10px] text-white/60 border-t border-white/10 pt-1 leading-tight">
+                    * If blocked (&ldquo;not allowed by this user&rdquo;), ensure phone is in the main <strong>Owner</strong> account and uninstall any older test version first.
+                  </p>
+                </div>
               ) : detectedPlatform === 'ios' ? (
                 <div className="space-y-1 text-white/80 text-[11px] leading-relaxed">
                   <p>For iOS (iPhone / iPad):</p>
