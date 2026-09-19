@@ -613,13 +613,19 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Footer info */}
-        <p className="text-center text-xs text-white/70 pt-1 font-medium tracking-wide flex items-center justify-center">
-          <span>JAAGO Foundation ERP</span>
-          <sup className="ml-1 inline-flex items-center justify-center text-[8.5px] font-bold lowercase border border-white/60 rounded-full px-1.5 py-0.5 leading-none -translate-y-0.5">
-            t4d
-          </sup>
-        </p>
+        {/* Footer info & Auto-Adjusting Standard Copyright Policy */}
+        <div className="pt-2 border-t border-white/15 text-center space-y-1">
+          <p className="text-xs text-white/75 font-medium tracking-wide flex items-center justify-center">
+            <span>JAAGO Foundation ERP</span>
+            <sup className="ml-1 inline-flex items-center justify-center text-[8.5px] font-bold lowercase border border-white/60 rounded-full px-1.5 py-0.5 leading-none -translate-y-0.5">
+              t4d
+            </sup>
+          </p>
+
+          <p className="text-[10px] text-white/50 leading-tight font-normal select-none">
+            &copy; {new Date().getFullYear()} JAAGO Foundation. All rights reserved.
+          </p>
+        </div>
       </div>
 
       {/* ── FORGOT PASSWORD MODAL (FROSTED GLASS) ── */}
@@ -725,6 +731,7 @@ export default function LoginPage() {
           </div>
         </div>
       )}
+
       {/* ── DOWNLOAD APP MODAL (AUTO-ADJUSTED FOR ALL PLATFORMS) ── */}
       {showDownloadModal && (
         <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-center justify-center p-4">
